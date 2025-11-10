@@ -1,0 +1,105 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment
+.env
+.env.local
+*.env
+
+# Models and data (large files)
+data/models/*.gguf
+data/models/*.bin
+data/models/*.safetensors
+data/models/*.pth
+data/models/*.pt
+data/models/*.ckpt
+data/vectors/chroma_db/
+data/cache/**
+data/logs/*.log
+
+# Fine-tuning outputs
+finetuning/outputs/**/*.bin
+finetuning/outputs/**/*.safetensors
+finetuning/outputs/**/*.pth
+finetuning/datasets/**/*.jsonl
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+.cache/
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Keep directory structure
+!data/.gitkeep
+!data/models/.gitkeep
+!data/vectors/.gitkeep
+!data/cache/.gitkeep
+!data/logs/.gitkeep
