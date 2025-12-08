@@ -10,7 +10,7 @@ python-multipart==0.0.6
 ollama==0.1.6
 llama-cpp-python==0.2.32
 transformers==4.36.2
-torch==2.1.2
+torch==2.8.0
 accelerate==0.25.0
 bitsandbytes==0.41.3
 optimum==1.16.1
