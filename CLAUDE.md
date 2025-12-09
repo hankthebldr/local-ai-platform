@@ -246,9 +246,40 @@ Edit `models/download.py` → `MODEL_REGISTRY`:
 - No automated tests yet
 - No Docker deployment yet
 
+## Enterprise Deployment
+
+**⚠️ IMPORTANT**: This codebase is currently **NOT production-ready** for enterprise deployment.
+
+See `ENTERPRISE_DEPLOYMENT_GAPS.md` for a comprehensive analysis of gaps and required improvements.
+
+**Current Production Readiness**: ~15%
+
+**Critical Blockers**:
+- No authentication/authorization (API_KEY defined but not implemented in api/main.py:23)
+- No testing infrastructure (0% test coverage)
+- No monitoring/observability (Prometheus client installed but unused)
+- No CI/CD pipeline
+- No high availability (single instance, no load balancing)
+- CORS configured to allow all origins (security risk at api/main.py:49)
+
+**Minimum Requirements for Production**:
+1. Implement JWT/API key authentication middleware
+2. Add rate limiting per user/API key
+3. Configure proper CORS policies
+4. Create comprehensive test suite (target: 70%+ coverage)
+5. Implement Prometheus metrics + Grafana dashboards
+6. Set up CI/CD pipeline with automated testing
+7. Containerize with Docker and deploy to Kubernetes
+8. Add health check endpoints (liveness/readiness)
+9. Implement structured logging with correlation IDs
+10. Set up automated backups and disaster recovery
+
+**Recommended Path**: Follow the 4-phase implementation roadmap in `ENTERPRISE_DEPLOYMENT_GAPS.md` (estimated 8-12 weeks with 2-3 engineers).
+
 ## References
 
 - Ollama API: https://github.com/ollama/ollama/blob/main/docs/api.md
 - OpenAI API: https://platform.openai.com/docs/api-reference
 - See PROJECT_PLAN.md for detailed architecture and roadmap
 - See README.md for user-facing documentation
+- See ENTERPRISE_DEPLOYMENT_GAPS.md for production deployment requirements
