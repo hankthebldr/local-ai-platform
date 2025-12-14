@@ -62,15 +62,36 @@ ollama list
 ollama run mistral "Explain quantum computing"
 ```
 
-### Testing
+### Testing & Verification
 ```bash
-# Run tests (when implemented)
-pytest tests/
-pytest tests/test_api.py -v
-
-# Test API endpoint
+# Health check
 curl http://localhost:8000/health
+
+# List available models
 curl http://localhost:8000/v1/models
+
+# Test chat completion
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "mistral",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+
+# Test text completion
+curl http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "mistral",
+    "prompt": "Once upon a time"
+  }'
+
+# Check Ollama status
+systemctl --user status ollama.service
+curl http://localhost:11434/api/tags
+
+# Run tests (when implemented)
+pytest tests/ -v
 ```
 
 ### Development
@@ -166,17 +187,19 @@ All API endpoints convert between OpenAI format (for client compatibility) and n
 
 ## Project Status & Phase
 
-**Current**: Phase 1 - Foundation Setup
-- ✓ Core infrastructure (Ollama, FastAPI skeleton)
-- ✓ Model download system with comprehensive registry
-- ✓ CLI chat interface with rich formatting
-- ✓ Basic API with OpenAI compatibility
-- ⏳ Router/service layer implementation
-- ⏳ Streaming support
+**Current**: Phase 1 - Foundation Setup (Mostly Complete)
+- ✓ Core infrastructure (Ollama + systemd service)
+- ✓ Model download system with comprehensive registry (11 models)
+- ✓ CLI chat interface with modern color scheme
+- ✓ Functional API with OpenAI compatibility (chat/completions endpoints working)
+- ✓ Installation automation via `setup/install.sh`
+- ⏳ Router/service layer implementation (directories created, not populated)
+- ⏳ Streaming support (API structure ready, not implemented)
 - ⏳ RAG implementation
+- ⏳ Automated tests
 
 **Next Phases**:
-- Phase 2: Multiple inference engines (vLLM, llama.cpp), Web UI
+- Phase 2: Streaming responses, multiple inference engines (vLLM, llama.cpp), Web UI
 - Phase 3: Fine-tuning pipeline (Axolotl/Unsloth)
 - Phase 4: RAG with Chroma, LangChain integration
 - Phase 5: Docker deployment, optimization
@@ -217,34 +240,110 @@ Edit `models/download.py` → `MODEL_REGISTRY`:
 }
 ```
 
-### API Endpoint Pattern
-1. Define Pydantic model for request
-2. Call Ollama API via requests
-3. Convert response to OpenAI format
-4. Handle errors with HTTPException
+### API Endpoint Pattern (current implementation in `api/main.py`)
+Current approach (inline, not using routers):
+1. Define Pydantic models for request/response
+2. Import `requests` inside endpoint (not at module level - could be improved)
+3. For chat: Build prompt from messages array → call Ollama `/api/generate` → convert to OpenAI format
+4. For completions: Direct pass-through to Ollama with format conversion
+5. Handle errors with HTTPException and 500 status
+
+Future refactoring should:
+- Move business logic to `api/services/ollama_service.py`
+- Move endpoints to `api/routers/chat.py` and `api/routers/completions.py`
+- Import requests at module level for better performance
+- Add proper token counting
+- Implement streaming support
 
 ### CLI Tool Pattern (see `cli/chat.py`)
-- Use Rich for formatting (Console, Panel, Markdown)
-- Maintain conversation history
-- Implement commands with `/` prefix
-- Handle Ctrl+C gracefully
+- Use Rich library for formatting (Console, Panel, Markdown)
+- Modern color scheme: bright_magenta for user, bright_blue for AI, bright_cyan for commands
+- Maintain conversation history in memory (not persisted)
+- Implement commands with `/` prefix (`/help`, `/clear`, `/models`, `/exit`)
+- Handle Ctrl+C gracefully (continue session, not exit)
+- Markdown rendering for AI responses
 
 ## Development Workflow
 
 1. Always activate venv first: `source venv/bin/activate`
 2. Make changes to code
 3. Test manually with CLI/API
-4. Format with black before committing
+4. Format with black before committing: `black api/ cli/ models/`
 5. No CI/CD setup yet - manual testing only
 
-## Known Limitations
+### Common Development Tasks
 
-- Router/service layers in `api/` are skeleton directories (not implemented)
-- Streaming responses not yet implemented
-- Fine-tuning pipeline planned but not built
-- RAG system planned but not built
-- No automated tests yet
-- No Docker deployment yet
+**Adding a streaming endpoint**:
+- Ollama supports streaming via `"stream": true` in request
+- Response comes as newline-delimited JSON (NDJSON)
+- Use FastAPI's `StreamingResponse` with generator function
+- See Ollama API docs for response format
+
+**Adding a new inference backend**:
+1. Create service in `api/services/<backend>_service.py`
+2. Implement same interface: `generate(prompt, model, **kwargs)`
+3. Add backend selection logic in API endpoints or create new router
+4. Update configuration to specify which backend to use
+
+**Implementing router/service separation**:
+1. Create `api/services/ollama_service.py` with business logic from `api/main.py`
+2. Create routers in `api/routers/` (e.g., `chat.py`, `completions.py`, `models.py`)
+3. Update `api/main.py` to include routers: `app.include_router(chat_router)`
+4. Move Pydantic models to `api/models.py` or keep in routers
+
+## Known Limitations & Implementation Status
+
+**API Layer**:
+- `api/main.py` has working endpoints but uses inline logic (no routers/services separation)
+- Router/service layers in `api/` are empty skeleton directories
+- Streaming responses not implemented (request model has stream parameter but not used)
+- No actual token counting (returns 0 in usage metrics)
+- No API key authentication implemented (env var defined but not enforced)
+
+**Features Not Yet Built**:
+- Fine-tuning pipeline (dependencies installed but no implementation)
+- RAG system (ChromaDB/LangChain installed but not integrated)
+- No automated tests (pytest installed, `tests/` directory empty)
+- No Docker deployment (Dockerfile/compose files planned but not created)
+- Web UI integration (Open WebUI installable but not configured)
+
+**Data Persistence**:
+- CLI conversation history is in-memory only (lost on exit)
+- No conversation logging/export
+- No metrics/usage tracking
+
+## Troubleshooting
+
+### Ollama Service Issues
+```bash
+# Check if Ollama is running
+systemctl --user status ollama.service
+
+# Start Ollama manually (for debugging)
+ollama serve
+
+# Check Ollama logs
+journalctl --user -u ollama.service -f
+
+# Test Ollama directly
+curl http://localhost:11434/api/tags
+```
+
+### API Connection Errors
+- Verify Ollama is running: `curl http://localhost:11434/api/tags`
+- Check OLLAMA_HOST in `.env` matches Ollama's actual host/port
+- Ensure no firewall blocking port 11434 or 8000
+- For "connection refused": Start Ollama service first
+
+### Model Download Issues
+- Large models require significant disk space (check `df -h`)
+- Network interruptions: Ollama downloads are resumable, re-run same command
+- For Hugging Face: May need to authenticate with `huggingface-cli login`
+
+### Performance Issues
+- CPU-bound inference: Ensure `OLLAMA_NUM_PARALLEL` not set too high (default: 2)
+- Memory issues: Use smaller models or more aggressive quantization (Q3 vs Q4)
+- Check system load: `htop` or `top` to see CPU/RAM usage
 
 ## References
 

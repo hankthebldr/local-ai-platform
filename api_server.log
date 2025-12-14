@@ -1,0 +1,20 @@
+INFO:     Will watch for changes in these directories: ['/home/henry/Projects/local-ai-platform']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [19847] using WatchFiles
+INFO:     Started server process [19860]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+🚀 Starting Local AI Platform API...
+   Ollama Host: http://localhost:11434
+   API Port: 8000
+   ✓ Ollama service is healthy
+INFO:     127.0.0.1:56426 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56442 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33154 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33166 - "POST /v1/completions HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [19860]
+👋 Shutting down Local AI Platform API...
+INFO:     Stopping reloader process [19847]

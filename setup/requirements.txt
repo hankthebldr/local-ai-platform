@@ -23,14 +23,14 @@ datasets==2.16.1
 # Vector Database & RAG
 chromadb==0.4.22
 langchain==0.1.4
-langchain-community==0.0.13
+langchain-community==0.0.14
 sentence-transformers==2.2.2
 
 # API & Web
 requests==2.31.0
 aiohttp==3.9.1
 websockets==12.0
-httpx==0.26.0
+httpx==0.25.2
 
 # Data Processing
 pandas==2.1.4
@@ -46,7 +46,6 @@ tqdm==4.66.1
 
 # Model Hub Access
 huggingface-hub==0.20.2
-huggingface-cli==0.0.1
 
 # Monitoring
 prometheus-client==0.19.0
@@ -55,7 +54,6 @@ psutil==5.9.7
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.23.2
-httpx==0.26.0
 
 # Development
 black==23.12.1

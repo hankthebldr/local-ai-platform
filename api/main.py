@@ -6,13 +6,13 @@ OpenAI-compatible API for local LLM inference
 
 import os
 from contextlib import asynccontextmanager
-from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+
+from .routers import chat, completions, models
+from .services.ollama_service import OllamaService
 
 # Load environment variables
 load_dotenv()
@@ -24,6 +24,9 @@ API_KEY = os.getenv("API_KEY")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", '["*"]')
 
+# Initialize services
+ollama_service = OllamaService(OLLAMA_HOST)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,6 +34,13 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting Local AI Platform API...")
     print(f"   Ollama Host: {OLLAMA_HOST}")
     print(f"   API Port: {API_PORT}")
+
+    # Check Ollama health
+    if ollama_service.health_check():
+        print("   ✓ Ollama service is healthy")
+    else:
+        print("   ⚠ Warning: Ollama service is not responding")
+
     yield
     print("👋 Shutting down Local AI Platform API...")
 
@@ -38,7 +48,7 @@ async def lifespan(app: FastAPI):
 # Initialize FastAPI app
 app = FastAPI(
     title="Local AI Platform API",
-    description="OpenAI-compatible API for local LLM inference",
+    description="OpenAI-compatible API for local LLM inference with streaming support",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -52,175 +62,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Models
-class Message(BaseModel):
-    role: str = Field(..., description="Role of the message sender")
-    content: str = Field(..., description="Content of the message")
-
-
-class ChatCompletionRequest(BaseModel):
-    model: str = Field(..., description="Model to use for completion")
-    messages: list[Message] = Field(..., description="List of messages")
-    temperature: Optional[float] = Field(0.7, description="Sampling temperature")
-    max_tokens: Optional[int] = Field(2048, description="Maximum tokens to generate")
-    stream: Optional[bool] = Field(False, description="Stream the response")
-
-
-class CompletionRequest(BaseModel):
-    model: str = Field(..., description="Model to use for completion")
-    prompt: str = Field(..., description="Prompt for completion")
-    temperature: Optional[float] = Field(0.7, description="Sampling temperature")
-    max_tokens: Optional[int] = Field(2048, description="Maximum tokens to generate")
-    stream: Optional[bool] = Field(False, description="Stream the response")
+# Include routers
+app.include_router(chat.router)
+app.include_router(completions.router)
+app.include_router(models.router)
 
 
 # Health check
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    ollama_healthy = ollama_service.health_check()
+
     return {
-        "status": "healthy",
+        "status": "healthy" if ollama_healthy else "degraded",
         "version": "1.0.0",
-        "ollama_host": OLLAMA_HOST
+        "ollama_host": OLLAMA_HOST,
+        "ollama_status": "healthy" if ollama_healthy else "unhealthy"
     }
-
-
-# List models
-@app.get("/v1/models")
-async def list_models():
-    """List available models"""
-    try:
-        import requests
-        response = requests.get(f"{OLLAMA_HOST}/api/tags")
-        response.raise_for_status()
-        ollama_models = response.json().get("models", [])
-
-        # Convert to OpenAI format
-        models = []
-        for model in ollama_models:
-            models.append({
-                "id": model["name"],
-                "object": "model",
-                "created": 0,
-                "owned_by": "local"
-            })
-
-        return {
-            "object": "list",
-            "data": models
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing models: {str(e)}")
-
-
-# Chat completion endpoint
-@app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
-    """OpenAI-compatible chat completion endpoint"""
-    try:
-        import requests
-
-        # Format messages for Ollama
-        prompt = ""
-        for msg in request.messages:
-            if msg.role == "system":
-                prompt += f"System: {msg.content}\n\n"
-            elif msg.role == "user":
-                prompt += f"User: {msg.content}\n\n"
-            elif msg.role == "assistant":
-                prompt += f"Assistant: {msg.content}\n\n"
-
-        prompt += "Assistant:"
-
-        # Call Ollama API
-        ollama_request = {
-            "model": request.model,
-            "prompt": prompt,
-            "temperature": request.temperature,
-            "stream": False,
-            "options": {
-                "num_predict": request.max_tokens
-            }
-        }
-
-        response = requests.post(
-            f"{OLLAMA_HOST}/api/generate",
-            json=ollama_request,
-            timeout=300
-        )
-        response.raise_for_status()
-        result = response.json()
-
-        # Convert to OpenAI format
-        return {
-            "id": "chatcmpl-local",
-            "object": "chat.completion",
-            "created": 0,
-            "model": request.model,
-            "choices": [{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": result["response"]
-                },
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating completion: {str(e)}")
-
-
-# Text completion endpoint
-@app.post("/v1/completions")
-async def completions(request: CompletionRequest):
-    """OpenAI-compatible text completion endpoint"""
-    try:
-        import requests
-
-        # Call Ollama API
-        ollama_request = {
-            "model": request.model,
-            "prompt": request.prompt,
-            "temperature": request.temperature,
-            "stream": False,
-            "options": {
-                "num_predict": request.max_tokens
-            }
-        }
-
-        response = requests.post(
-            f"{OLLAMA_HOST}/api/generate",
-            json=ollama_request,
-            timeout=300
-        )
-        response.raise_for_status()
-        result = response.json()
-
-        # Convert to OpenAI format
-        return {
-            "id": "cmpl-local",
-            "object": "text_completion",
-            "created": 0,
-            "model": request.model,
-            "choices": [{
-                "text": result["response"],
-                "index": 0,
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating completion: {str(e)}")
 
 
 # Root endpoint
@@ -244,7 +103,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "main:app",
+        "api.main:app",
         host=API_HOST,
         port=API_PORT,
         reload=True,
