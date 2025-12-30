@@ -23,7 +23,7 @@ datasets==2.16.1
 # Vector Database & RAG
 chromadb==0.4.22
 langchain==0.1.4
-langchain-community==0.0.14
+langchain-community==0.3.27
 sentence-transformers==2.2.2
 
 # API & Web
