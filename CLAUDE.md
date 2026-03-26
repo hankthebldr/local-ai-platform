@@ -4,7 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Local AI Platform is a comprehensive self-hosted infrastructure for running uncensored local LLM models with CPU-optimized inference. Built for AMD Ryzen 9 7945HX (32 threads, 60GB RAM) with focus on privacy, performance, and customization.
+Local AI Platform is a comprehensive self-hosted infrastructure for running uncensored local LLM models with CPU-optimized inference. Built for a three-machine fleet: Mac M4 Pro 48GB (dev), MS-01 64GB DDR5 (API serving), BD790i 96GB DDR5 (research/flagship) with focus on privacy, performance, and customization.
+
+> **Model Strategy & Lifecycle**: See [MODELS.md](./MODELS.md) — authoritative source for
+> flagship model selection, per-machine assignments, and install/remove sequences.
 
 **Core Architecture**: Python-based platform with Ollama as the primary inference engine, FastAPI for OpenAI-compatible API, and modular design supporting multiple LLM backends (vLLM, llama.cpp).
 
@@ -189,7 +192,7 @@ All API endpoints convert between OpenAI format (for client compatibility) and n
 
 **Current**: Phase 1 - Foundation Setup (Mostly Complete)
 - ✓ Core infrastructure (Ollama + systemd service)
-- ✓ Model download system with comprehensive registry (11 models)
+- ✓ Model download system with comprehensive registry (18 models in catalog — see MODELS.md)
 - ✓ CLI chat interface with modern color scheme
 - ✓ Functional API with OpenAI compatibility (chat/completions endpoints working)
 - ✓ Installation automation via `setup/install.sh`
