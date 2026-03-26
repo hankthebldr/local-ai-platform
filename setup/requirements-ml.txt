@@ -1,0 +1,12 @@
+# ML Dependencies — model training and fine-tuning
+-r requirements-core.txt
+torch>=2.1.2
+transformers>=4.36.2
+accelerate>=0.25.0
+bitsandbytes>=0.41.3
+optimum>=1.16.1
+peft>=0.7.1
+trl>=0.7.7
+datasets>=2.16.1
+pandas>=2.1.4
+numpy>=1.26.2

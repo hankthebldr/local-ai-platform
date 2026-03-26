@@ -37,7 +37,14 @@
       "Bash(timeout 8 python:*)",
       "Bash(pkill:*)",
       "Bash(timeout 10 python:*)",
-      "Bash(python models/download.py:*)"
+      "Bash(python models/download.py:*)",
+      "Bash(command ls:*)",
+      "Bash(python3 -m venv venv)",
+      "Bash(brew install:*)",
+      "Bash(sh)",
+      "Bash(python3 -m json.tool)",
+      "Bash(kill %1)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

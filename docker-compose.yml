@@ -1,0 +1,85 @@
+# Local AI Platform — Full Stack
+# Usage: docker compose up -d
+#
+# Services:
+#   ollama  — LLM inference engine (port 11434)
+#   api     — OpenAI-compatible API (port 8000)
+#   webui   — Open WebUI chat interface (port 8080)
+#
+# Data persistence via named volumes (survive container restarts)
+
+services:
+  # ── Ollama — LLM Inference Engine ────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: local-ai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── API Server — OpenAI-compatible endpoints ─────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: local-ai-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - ENABLE_API_AUTH=${ENABLE_API_AUTH:-false}
+      - API_KEY=${API_KEY:-}
+      - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-60}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-300}
+      - CORS_ORIGINS=["http://localhost:8080","http://localhost:3000","*"]
+    volumes:
+      - api_logs:/app/data/logs
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=3).raise_for_status()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Open WebUI — Chat Interface ──────────────────────────────────────
+  webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: local-ai-webui
+    ports:
+      - "8080:8080"
+    environment:
+      # Connect to our API server (OpenAI-compatible)
+      - OPENAI_API_BASE_URL=http://api:8000/v1
+      - OPENAI_API_KEY=${API_KEY:-sk-local}
+      # Also connect directly to Ollama for native features
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_AUTH=false
+    volumes:
+      - webui_data:/app/backend/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+    name: local-ai-ollama-data
+  api_logs:
+    name: local-ai-api-logs
+  webui_data:
+    name: local-ai-webui-data

@@ -4,6 +4,7 @@ Local AI Platform - FastAPI Server
 OpenAI-compatible API for local LLM inference
 """
 
+import json
 import os
 from contextlib import asynccontextmanager
 
@@ -13,50 +14,80 @@ from dotenv import load_dotenv
 
 from .routers import chat, completions, models
 from .services.ollama_service import OllamaService
+from .middleware import APIKeyAuthMiddleware, RateLimitMiddleware
+from .exceptions import register_exception_handlers
+from .logging_config import logger
 
 # Load environment variables
 load_dotenv()
 
-# Configuration
+# ── Configuration ──────────────────────────────────────────────────────────
+
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
-API_KEY = os.getenv("API_KEY")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", '["*"]')
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "300"))
+MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_REQUESTS", "4"))
 
-# Initialize services
+# Parse CORS origins from env (supports JSON array string)
+_cors_raw = os.getenv("CORS_ORIGINS", '["*"]')
+try:
+    CORS_ORIGINS = json.loads(_cors_raw)
+except (json.JSONDecodeError, TypeError):
+    CORS_ORIGINS = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+
+# ── Services ───────────────────────────────────────────────────────────────
+
 ollama_service = OllamaService(OLLAMA_HOST)
 
+
+# ── Lifespan ───────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for the application"""
-    print("🚀 Starting Local AI Platform API...")
-    print(f"   Ollama Host: {OLLAMA_HOST}")
-    print(f"   API Port: {API_PORT}")
+    auth_status = "enabled" if os.getenv("ENABLE_API_AUTH", "false").lower() == "true" else "disabled"
+    logger.info("Starting Local AI Platform API")
+    logger.info(f"  Ollama Host: {OLLAMA_HOST}")
+    logger.info(f"  API Port: {API_PORT}")
+    logger.info(f"  Auth: {auth_status}")
+    logger.info(f"  CORS Origins: {CORS_ORIGINS}")
+    logger.info(f"  Rate Limit: {os.getenv('RATE_LIMIT_RPM', '60')} rpm")
+    logger.info(f"  Request Timeout: {REQUEST_TIMEOUT}s")
 
-    # Check Ollama health
     if ollama_service.health_check():
-        print("   ✓ Ollama service is healthy")
+        model_list = ollama_service.list_models()
+        logger.info(f"  Ollama: healthy ({len(model_list)} models loaded)")
     else:
-        print("   ⚠ Warning: Ollama service is not responding")
+        logger.warning("  Ollama: NOT responding")
 
     yield
-    print("👋 Shutting down Local AI Platform API...")
+    logger.info("Shutting down Local AI Platform API")
 
 
-# Initialize FastAPI app
+# ── App ────────────────────────────────────────────────────────────────────
+
 app = FastAPI(
     title="Local AI Platform API",
     description="OpenAI-compatible API for local LLM inference with streaming support",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# CORS middleware
+# Register exception handlers (must come before middleware)
+register_exception_handlers(app)
+
+# Middleware (order matters: last added = first executed)
+# 1. Rate limiting runs first
+app.add_middleware(RateLimitMiddleware)
+
+# 2. Auth runs second
+app.add_middleware(APIKeyAuthMiddleware)
+
+# 3. CORS runs last (outermost)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure properly in production
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,21 +99,45 @@ app.include_router(completions.router)
 app.include_router(models.router)
 
 
-# Health check
+# ── Public Endpoints ───────────────────────────────────────────────────────
+
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint with system metrics"""
+    import psutil
+
     ollama_healthy = ollama_service.health_check()
+    model_count = 0
+    model_names = []
+    if ollama_healthy:
+        try:
+            models = ollama_service.list_models()
+            model_count = len(models)
+            model_names = [m["name"] for m in models]
+        except Exception:
+            pass
+
+    mem = psutil.virtual_memory()
 
     return {
         "status": "healthy" if ollama_healthy else "degraded",
         "version": "1.0.0",
-        "ollama_host": OLLAMA_HOST,
-        "ollama_status": "healthy" if ollama_healthy else "unhealthy"
+        "ollama": {
+            "host": OLLAMA_HOST,
+            "status": "healthy" if ollama_healthy else "unhealthy",
+            "models_loaded": model_count,
+            "models": model_names,
+        },
+        "system": {
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "cpu_count": psutil.cpu_count(),
+            "memory_total_gb": round(mem.total / (1024**3), 1),
+            "memory_used_gb": round(mem.used / (1024**3), 1),
+            "memory_percent": mem.percent,
+        },
     }
 
 
-# Root endpoint
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
@@ -94,10 +149,12 @@ async def root():
         "endpoints": {
             "chat": "/v1/chat/completions",
             "completions": "/v1/completions",
-            "models": "/v1/models"
-        }
+            "models": "/v1/models",
+        },
     }
 
+
+# ── Entrypoint ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import uvicorn
@@ -107,5 +164,5 @@ if __name__ == "__main__":
         host=API_HOST,
         port=API_PORT,
         reload=True,
-        log_level="info"
+        log_level=os.getenv("LOG_LEVEL", "info").lower(),
     )
