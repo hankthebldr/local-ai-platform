@@ -1,326 +1,368 @@
-# MODELS.md — Model Strategy, Catalog & Lifecycle Ops
+# MODELS.md — Model Strategy, Lifecycle & Fleet Assignments
 
-> **For Claude Code**: This document is the authoritative source for model decisions.
-> All install/remove operations must follow the per-machine sequences defined here.
-> Update `models/download.py → MODEL_REGISTRY` to match after any changes.
+> **Authoritative source** for all model decisions in this repo.
+> `models/download.py` contains the full registry metadata.
+> This file owns: flagship selection, machine assignments, and ordered install/remove sequences.
+> Claude Code agents should execute operations in the sequences defined here — do not deviate.
 
 ---
 
-## Flagship Research Model
+## Flagship Model
 
-### ⚑ PRIMARY: `huihui_ai/qwen2.5-abliterated:72b`
+### Primary Research Flagship: `jaahas/qwen3.5-uncensored:35b`
 
-**Why this model**: Qwen 2.5 72B is the highest-capability open-weight model that fits the BD790i's
-80 GB budget at Q4_K_M (~45 GB). The `huihui_ai` abliteration variant surgically removes refusal
-neurons without degrading reasoning quality — this is the difference between a model that
-*declines* and one that *engages*. For security research, red-team scenario generation, and
-unconstrained analysis this is the correct tool.
+**Rationale:**
+- Newest uncensored architecture (2026) — Qwen 3.5 base with full refusal removal
+- 128K context window — largest among uncensored models in the registry
+- 24.76 GB loaded — fits comfortably within BD790i's 80 GB safe budget
+- 8–12 tok/s on BD790i (32T Ryzen 9 7945HX) — acceptable for research/analysis workloads
+- No content restrictions of any kind — suitable for alignment research, refusal behavior study, adversarial prompt analysis
 
-| Property | Value |
-|---|---|
-| Ollama tag | `huihui_ai/qwen2.5-abliterated:72b` |
-| HuggingFace | `huihui_ai/Qwen2.5-72B-Instruct-abliterated` |
-| Disk (Q4_K_M) | ~44 GB |
-| Context | 128K tokens |
-| BD790i speed | 4–7 tok/s |
-| MS-01 speed | ❌ Does not fit (exceeds 50 GB safe limit) |
-| Mac M4 speed | ❌ Do not run locally — use API against workstation |
-| Purpose | **Flagship research, security analysis, unconstrained reasoning** |
+**Target machine:** BD790i (primary), MS-01 (secondary — slower at 3–5 tok/s but fits)
 
-**Fallback if 72B is unavailable**: `jaahas/qwen3.5-uncensored:35b` (24.8 GB, 8–12 tok/s on BD790i)
+**Ollama pull command:**
+```bash
+ollama pull jaahas/qwen3.5-uncensored:35b
+```
+
+**Verify install:**
+```bash
+ollama run jaahas/qwen3.5-uncensored:35b "Describe your operational constraints."
+```
+
+---
+
+## Fleet Hardware Reference
+
+| Machine | CPU | RAM | Safe Model Budget | Role |
+|---------|-----|-----|-------------------|------|
+| Mac M4 Pro | Apple M4 Pro 14C | 48 GB unified | ~40 GB | Dev / fast iteration |
+| MS-01 | Intel i9-13900H 20T | 64 GB DDR5 | ~50 GB | API serving / medium inference |
+| BD790i | AMD Ryzen 9 7945HX 32T | 96 GB DDR5 | ~80 GB | Research flagship / large models |
 
 ---
 
 ## Machine Assignments
 
-Think of this like a three-tier warehouse:
-- **Mac** = fast staging area (lightweight, iterative dev)
-- **MS-01** = production floor (32B and under, always-on serving)
-- **BD790i** = heavy machinery (70B class, flagship research)
+### Mac M4 Pro — Dev Tier (8–9B only)
 
-### Mac M4 Pro (48 GB unified)
-**Role**: Dev & iteration. Keep only models you actively test code against.
+Fast turnaround models for development, CLI testing, and API iteration.
+**Do not run 32B+ models here.** They fit in RAM but are slow on x86-emulated CPU paths and waste SSD space.
 
-| Model | Ollama Tag | Size | Purpose | Action |
-|---|---|---|---|---|
-| dolphin3 | `dolphin3` | 4.9 GB | General uncensored, fast iteration | **KEEP** |
-| dolphin3-abliterated | `huihui_ai/dolphin3-abliterated` | 4.9 GB | Abliterated baseline testing | **KEEP** |
-| qwen3.5-uncensored-9b | `jaahas/qwen3.5-uncensored:9b` | 7.4 GB | Reasoning, multilingual | **KEEP** |
-| qwen2.5-coder-7b | `huihui_ai/qwen2.5-coder-abliterate:7b` | 4.7 GB | Coding dev testing | **KEEP** |
-| qwen3.5-uncensored-35b | `jaahas/qwen3.5-uncensored:35b` | 24.8 GB | Oversized for Mac | **REMOVE** |
-| deepseek-r1-32b | `deepseek-r1:32b` | 19.9 GB | Oversized for Mac | **REMOVE** |
-| qwen2.5-32b | `qwen2.5:32b` | 19.9 GB | Untracked / evaluate need | **REMOVE** |
+| Model ID | Ollama Tag | Size | Purpose |
+|----------|-----------|------|---------|
+| `dolphin3` | `dolphin3` | 4.9 GB | Daily driver — fast uncensored, 128K ctx |
+| `dolphin3-abliterated` | `huihui_ai/dolphin3-abliterated` | 4.9 GB | Max-unrestricted 8B — abliterated Dolphin3 |
+| `qwen3.5-uncensored-9b` | `jaahas/qwen3.5-uncensored:9b` | 7.4 GB | Newest uncensored arch, strong reasoning |
+| `qwen2.5-coder-7b-abliterated` | `huihui_ai/qwen2.5-coder-abliterate:7b` | 4.7 GB | Uncensored coding — 86 languages |
 
-**Mac cleanup sequence** (run after workstation pulls are confirmed):
+**Mac total footprint target: ≤ 22 GB**
+
+---
+
+### MS-01 — Serving Tier (8B–35B range)
+
+Always-on API server. Handles concurrent requests from VS Code, Obsidian, shell scripts.
+Serves the OpenAI-compatible API on `:8000`.
+
+| Model ID | Ollama Tag | Size | Purpose | tok/s |
+|----------|-----------|------|---------|-------|
+| `dolphin3` | `dolphin3` | 4.9 GB | Fast uncensored — low-latency API responses | 15–25 |
+| `qwen3.5-uncensored-9b` | `jaahas/qwen3.5-uncensored:9b` | 7.4 GB | Reasoning + multilingual API | 12–20 |
+| `qwen2.5-coder-7b-abliterated` | `huihui_ai/qwen2.5-coder-abliterate:7b` | 4.7 GB | Coding completions via API | 18–25 |
+| `deepseek-r1:32b` | `deepseek-r1:32b` | 19.9 GB | Chain-of-thought reasoning (non-uncensored) | 3–5 |
+| `qwen3.5-uncensored-35b` | `jaahas/qwen3.5-uncensored:35b` | 24.8 GB | Flagship uncensored (slower on MS-01) | 3–5 |
+
+---
+
+### BD790i — Research Flagship (8B–70B range)
+
+Primary research machine. Runs the flagship uncensored model. Has headroom for 70B Q4 (~40 GB).
+
+| Model ID | Ollama Tag | Size | Purpose | tok/s |
+|----------|-----------|------|---------|-------|
+| `qwen3.5-uncensored-35b` ⭐ | `jaahas/qwen3.5-uncensored:35b` | 24.8 GB | **PRIMARY FLAGSHIP** — research, alignment study | 8–12 |
+| `dolphin3-abliterated` | `huihui_ai/dolphin3-abliterated` | 4.9 GB | Fast abliterated — testing & comparison | 40–55 |
+| `qwen3.5-uncensored-9b` | `jaahas/qwen3.5-uncensored:9b` | 7.4 GB | Fast uncensored — quick research queries | 35–45 |
+| `deepseek-r1:32b` | `deepseek-r1:32b` | 19.9 GB | CoT reasoning benchmark / comparison | 8–12 |
+| `dolphin-mixtral` | `dolphin-mixtral` | 26.0 GB | MoE — creative/narrative research | 12–18 |
+
+**Recommended next pull (headroom ~25 GB after flagship):**
 ```bash
-ollama rm jaahas/qwen3.5-uncensored:35b
-ollama rm deepseek-r1:32b
-ollama rm qwen2.5:32b
+# On BD790i — adds 70B class capability
+ollama pull cognitivecomputations/dolphin-2.9.1-llama3-70b  # ~40 GB Q4
+```
+
+---
+
+## Ordered Install Sequences
+
+> Execute these in order. Do not skip steps. Verify each pull before proceeding.
+> Run `ollama list` after each step to confirm.
+
+### Mac M4 Pro — Initial Setup
+
+```bash
+# Step 1 — Fast daily driver
+ollama pull dolphin3
+
+# Step 2 — Abliterated variant (shares base with dolphin3, fast pull)
+ollama pull huihui_ai/dolphin3-abliterated
+
+# Step 3 — Newest uncensored arch
+ollama pull jaahas/qwen3.5-uncensored:9b
+
+# Step 4 — Uncensored coder
+ollama pull huihui_ai/qwen2.5-coder-abliterate:7b
+
 # Verify
 ollama list
-# Expected remaining: ~22 GB total (4 models)
+# Expected: 4 models, ~22 GB total
 ```
 
----
+### MS-01 — Initial Setup
 
-### MS-01 (64 GB DDR5 / i9-13900H / 20T)
-**Role**: Always-on API server. Handles 8B–32B inference, serves local clients.
-Max safe model load: **50 GB**
-
-| Model | Ollama Tag | Size | Speed | Purpose | Action |
-|---|---|---|---|---|---|
-| dolphin3 | `dolphin3` | 4.9 GB | 15–25 tok/s | Fast chat, API default | **PULL** |
-| dolphin3-abliterated | `huihui_ai/dolphin3-abliterated` | 4.9 GB | 15–25 tok/s | Max unrestricted 8B | **PULL** |
-| qwen3.5-uncensored-9b | `jaahas/qwen3.5-uncensored:9b` | 7.4 GB | 12–20 tok/s | Reasoning / multilingual | **PULL** |
-| qwen2.5-coder-7b | `huihui_ai/qwen2.5-coder-abliterate:7b` | 4.7 GB | 18–25 tok/s | Code completion | **PULL** |
-| qwen2.5-14b-abliterated | `huihui_ai/qwen2.5-abliterated:14b` | 9 GB | 8–12 tok/s | Quality sweet spot | **PULL** |
-| deepseek-r1-32b | `deepseek-r1:32b` | 19.9 GB | 3–5 tok/s | Chain-of-thought reasoning | **PULL** |
-| qwen3.5-uncensored-35b | `jaahas/qwen3.5-uncensored:35b` | 24.8 GB | 3–5 tok/s | Heavy reasoning (fits, barely) | **PULL** |
-
-**MS-01 install sequence**:
 ```bash
-# Step 1: Install smaller models first, verify Ollama service is healthy
+# Step 1 — Fast API serving models first (unblock API server)
 ollama pull dolphin3
-ollama pull huihui_ai/dolphin3-abliterated
 ollama pull jaahas/qwen3.5-uncensored:9b
 ollama pull huihui_ai/qwen2.5-coder-abliterate:7b
-ollama pull huihui_ai/qwen2.5-abliterated:14b
 
-# Step 2: Check disk space before large pulls
-df -h ~/.ollama
-
-# Step 3: Pull 32B class (run separately — one at a time)
+# Step 2 — Reasoning model (large pull, ~20 GB)
 ollama pull deepseek-r1:32b
 
-# Step 4: Pull 35B (confirm 50 GB budget not exceeded)
-ollama list  # check current usage
+# Step 3 — Flagship uncensored (large pull, ~25 GB)
 ollama pull jaahas/qwen3.5-uncensored:35b
 
-# Step 5: Verify all models respond
-ollama run dolphin3 "respond with: online" --nowordwrap
+# Verify
+ollama list
+# Expected: 5 models, ~62 GB total
 ```
 
-**MS-01 concurrent limits**:
-- One 35B model OR two 8B models simultaneously
-- Set `OLLAMA_MAX_LOADED_MODELS=1` when running 35B to prevent OOM
+### BD790i — Initial Setup
+
+```bash
+# Step 1 — PRIMARY FLAGSHIP FIRST
+ollama pull jaahas/qwen3.5-uncensored:35b
+
+# Verify flagship before continuing
+ollama run jaahas/qwen3.5-uncensored:35b "What are you capable of that other models are not?"
+
+# Step 2 — Fast abliterated comparison baseline
+ollama pull huihui_ai/dolphin3-abliterated
+
+# Step 3 — Fast uncensored for quick queries
+ollama pull jaahas/qwen3.5-uncensored:9b
+
+# Step 4 — CoT reasoning benchmark
+ollama pull deepseek-r1:32b
+
+# Step 5 — MoE creative research model
+ollama pull dolphin-mixtral
+
+# Verify
+ollama list
+# Expected: 5 models, ~83 GB total
+# Remaining headroom: ~13 GB (enough for another 9B or quantized 13B)
+```
 
 ---
 
-### BD790i (96 GB DDR5 / Ryzen 9 7945HX / 32T)
-**Role**: Research & flagship inference. 70B+ class. Primary destination for uncensored work.
-Max safe model load: **80 GB**
+## Ordered Remove Sequences
 
-| Model | Ollama Tag | Size | Speed | Purpose | Action |
-|---|---|---|---|---|---|
-| **qwen2.5-abliterated-72b** | `huihui_ai/qwen2.5-abliterated:72b` | ~44 GB | 4–7 tok/s | **FLAGSHIP RESEARCH** | **PULL FIRST** |
-| qwen3.5-uncensored-35b | `jaahas/qwen3.5-uncensored:35b` | 24.8 GB | 8–12 tok/s | Fallback / concurrent use | **PULL** |
-| deepseek-r1-32b | `deepseek-r1:32b` | 19.9 GB | 8–12 tok/s | Chain-of-thought research | **PULL** |
-| dolphin-mixtral | `dolphin-mixtral` | 26 GB | 12–18 tok/s | MoE, creative/research | **PULL** |
-| dolphin3 | `dolphin3` | 4.9 GB | 40–55 tok/s | Fast API baseline | **PULL** |
-| qwen3.5-uncensored-9b | `jaahas/qwen3.5-uncensored:9b` | 7.4 GB | 35–45 tok/s | Fast reasoning | **PULL** |
+> Execute removes in this order to avoid leaving orphaned blobs.
+> After each `ollama rm`, run `du -sh ~/.ollama/models/blobs/` to confirm disk reclaim.
+> Note: blobs with no remaining manifests are NOT auto-pruned by Ollama — see prune step.
 
-**BD790i install sequence**:
+### Mac M4 Pro — Remove Large Models (Run First)
+
+The 35B and 32B models should not live on the Mac. Remove before pulling new models.
+
 ```bash
-# Step 1: Check disk before starting (need ~130 GB free for full set)
-df -h ~/.ollama
+# Step 1 — Remove 35B (frees ~25 GB)
+ollama rm jaahas/qwen3.5-uncensored:35b
 
-# Step 2: Pull flagship first — this is the priority install
-ollama pull huihui_ai/qwen2.5-abliterated:72b
-# Verify flagship responds before continuing
-ollama run huihui_ai/qwen2.5-abliterated:72b "respond with: online" --nowordwrap
+# Step 2 — Remove deepseek-r1:32b (frees ~20 GB)
+ollama rm deepseek-r1:32b
 
-# Step 3: Pull the supporting tier
-ollama pull jaahas/qwen3.5-uncensored:35b
-ollama pull deepseek-r1:32b
+# Step 3 — Remove qwen2.5:32b if present (frees ~20 GB — unintentional pull)
+ollama rm qwen2.5:32b 2>/dev/null || echo "Not present, skipping."
 
-# Step 4: Check disk again before heavy model
-df -h ~/.ollama
-ollama pull dolphin-mixtral
+# Step 4 — Prune orphaned blobs (Ollama does NOT auto-clean)
+# NOTE: Ollama has no native prune command. Orphaned blobs must be removed manually.
+# Safe approach: remove manifest first, then identify unreferenced blobs.
+python3 -c "
+import os, json
+from pathlib import Path
 
-# Step 5: Fast-inference baseline
-ollama pull dolphin3
-ollama pull jaahas/qwen3.5-uncensored:9b
+blob_dir = Path.home() / '.ollama/models/blobs'
+manifest_dir = Path.home() / '.ollama/models/manifests'
 
-# Step 6: Final inventory check
+# Collect all digests referenced by active manifests
+referenced = set()
+for mf in manifest_dir.rglob('*'):
+    if mf.is_file():
+        try:
+            data = json.loads(mf.read_text())
+            for layer in data.get('layers', []):
+                d = layer.get('digest', '').replace('sha256:', 'sha256-')
+                referenced.add(d)
+            cfg = data.get('config', {}).get('digest', '').replace('sha256:', 'sha256-')
+            if cfg: referenced.add(cfg)
+        except: pass
+
+# Report unreferenced blobs
+orphans = [f for f in blob_dir.iterdir() if f.name not in referenced]
+total = sum(f.stat().st_size for f in orphans) / 1e9
+print(f'Orphaned blobs: {len(orphans)} files, {total:.1f} GB')
+for f in orphans: print(f'  {f.name}  {f.stat().st_size/1e9:.2f} GB')
+"
+
+# To delete orphans (run only after reviewing the list above):
+# python3 -c "
+# ... (same script) ...
+# for f in orphans: f.unlink(); print(f'Deleted {f.name}')
+# "
+
+# Verify disk reclaim
+du -sh ~/.ollama/models/blobs/
+ollama list
+# Expected: 4 models, ~22 GB
+```
+
+### MS-01 — Rotate Out Stale Models
+
+```bash
+# Remove if dolphin-mixtral was pulled but MS-01 is serving role only
+ollama rm dolphin-mixtral 2>/dev/null || echo "Not present."
+
+# Verify
 ollama list
 ```
 
-**BD790i concurrent limits**:
-- 72B alone: ~44 GB loaded, 36 GB headroom → can load a 9B alongside
-- 35B + 9B simultaneously: ~32 GB → fine
-- Never load 72B + 35B simultaneously: 69 GB combined, cuts into OS headroom
+### BD790i — Full Reset (if needed)
+
+```bash
+# Remove all models (nuclear option — run install sequence again after)
+ollama list | awk 'NR>1 {print $1}' | xargs -I{} ollama rm {}
+
+# Verify empty
+ollama list
+du -sh ~/.ollama/models/
+```
 
 ---
 
 ## Full Model Catalog
 
-### Tier 1 — Daily Drivers (4–7 GB, 8–9B class)
-Fast interactive use, always-on API defaults, dev testing.
+Complete reference for all 18 models in the registry. Coding agents should update this table when `MODEL_REGISTRY` in `models/download.py` is modified.
 
-| ID | Name | Tag | Size | Context | Use Case |
-|---|---|---|---|---|---|
-| `dolphin3` | Dolphin 3 (Llama 3.1 8B) | `dolphin3` | 4.9 GB | 128K | General uncensored chat, system prompting |
-| `dolphin3-abliterated` | Dolphin 3 Abliterated | `huihui_ai/dolphin3-abliterated` | 4.9 GB | 128K | Maximum unrestricted 8B — refusal neurons removed |
-| `qwen3.5-uncensored-9b` | Qwen 3.5 9B Uncensored | `jaahas/qwen3.5-uncensored:9b` | 7.4 GB | 128K | Strong reasoning, multilingual, latest arch (2026) |
-| `qwen2.5-coder-7b` | Qwen 2.5 Coder 7B Abliterated | `huihui_ai/qwen2.5-coder-abliterate:7b` | 4.7 GB | 128K | Code generation / completion, 86 languages |
-| `dolphin-mistral` | Dolphin 2.6 Mistral 7B | `dolphin-mistral` | 4.1 GB | 32K | Classic fast uncensored, lightweight coding |
-| `dolphin-phi` | Dolphin Phi 2.7B | `dolphin-phi` | 1.6 GB | 2K | Edge / embedded, minimal RAM, rapid testing |
+### Tier 1 — Daily Drivers (8–9B) · Fast interactive / API serving
 
-### Tier 2 — Quality Sweet Spot (7–14 GB, 13–14B class)
-Best quality/speed balance. Fits comfortably on all machines.
+| Registry ID | Model Name | Size | Context | Speed MS-01 | Speed BD790i | Primary Purpose |
+|-------------|-----------|------|---------|-------------|-------------|-----------------|
+| `dolphin3` | Dolphin 3 (Llama 3.1 8B) | 4.9 GB | 128K | 15–25 t/s | 40–55 t/s | Daily uncensored driver, fast responses |
+| `dolphin3-abliterated` | Dolphin 3 Abliterated | 4.9 GB | 128K | 15–25 t/s | 40–55 t/s | Maximum unrestricted 8B — refusal neurons surgically removed |
+| `qwen3.5-uncensored-9b` | Qwen 3.5 9B Uncensored | 7.4 GB | 128K | 12–20 t/s | 35–45 t/s | Newest uncensored architecture, strong multilingual reasoning |
+| `qwen2.5-7b-abliterated` | Qwen 2.5 7B Abliterated | 4.7 GB | 128K | 18–25 t/s | 40–50 t/s | Abliterated reasoning — excellent zero-refusal general model |
+| `qwen2.5-coder-7b-abliterated` | Qwen 2.5 Coder 7B Abliterated | 4.7 GB | 128K | 18–25 t/s | 40–50 t/s | Uncensored coding model — 86 languages, zero refusals |
+| `llama3.3-8b-abliterated` | Llama 3.3 8B Abliterated | 4.9 GB | 128K | 15–25 t/s | 40–55 t/s | Meta Llama 3.3 with refusal neurons removed, high reasoning |
 
-| ID | Name | Tag | Size | Context | Use Case |
-|---|---|---|---|---|---|
-| `qwen2.5-14b-abliterated` | Qwen 2.5 14B Abliterated | `huihui_ai/qwen2.5-abliterated:14b` | 9 GB | 128K | Primary upgrade from 8B — reasoning + abliterated |
-| `wizardlm-uncensored-13b` | WizardLM 13B Uncensored | `wizardlm-uncensored:13b` | 7.4 GB | 4K | Classic creative writing baseline |
-| `qwen3-8b-hivemind` | Qwen 3 8B Hivemind Abliterated | GGUF: `DavidAU/...` | 5 GB | **256K** | Ultra-long context tasks, abliterated |
+### Tier 2 — Sweet Spot (13–14B) · Quality/speed balance
 
-### Tier 3 — Power Models (17–26 GB, 18–35B class)
-Slower but significantly more capable. MS-01 and BD790i only.
+| Registry ID | Model Name | Size | Context | Speed MS-01 | Speed BD790i | Primary Purpose |
+|-------------|-----------|------|---------|-------------|-------------|-----------------|
+| `qwen2.5-14b-abliterated` | Qwen 2.5 14B Abliterated | 9.0 GB | 128K | 8–12 t/s | 20–28 t/s | Best 14B uncensored — reasoning + zero refusals |
+| `wizardlm-uncensored-13b` | WizardLM 13B Uncensored | 7.4 GB | 4K | 8–12 t/s | 25–30 t/s | Classic uncensored — proven creative writing (short context) |
 
-| ID | Name | Tag | Size | Context | Use Case |
-|---|---|---|---|---|---|
-| `qwen3.5-uncensored-35b` | Qwen 3.5 35B Uncensored | `jaahas/qwen3.5-uncensored:35b` | 24.8 GB | 128K | Primary MS-01 workhorse, flagship fallback |
-| `dolphin-mixtral` | Dolphin 2.5 Mixtral 8x7B | `dolphin-mixtral` | 26 GB | 32K | MoE — activates 13B per token, faster than dense |
-| `gemma3-27b-abliterated` | Gemma 3 27B Abliterated | GGUF: `mradermacher/...` | 17 GB | 128K | Vision-capable, multimodal research |
-| `llama3.2-moe-18b` | Llama 3.2 8x3B MoE 18.4B | GGUF: `DavidAU/...` | 12 GB | 128K | Creative writing, MoE speed advantage |
-| `nous-hermes2-mixtral` | Nous Hermes 2 Mixtral 8x7B | `nous-hermes2-mixtral` | 26 GB | 32K | Instruction following, balanced task performance |
+### Tier 3 — Power Models (18–35B) · Flagship research range
 
-### Tier 4 — Research Flagship (44+ GB, 32–72B class)
-BD790i only. Priority for unconstrained research and complex analysis.
+| Registry ID | Model Name | Size | Context | Speed MS-01 | Speed BD790i | Primary Purpose |
+|-------------|-----------|------|---------|-------------|-------------|-----------------|
+| `qwen3.5-uncensored-35b` ⭐ | **Qwen 3.5 35B Uncensored** | 24.8 GB | **128K** | 3–5 t/s | **8–12 t/s** | **PRIMARY FLAGSHIP — research, alignment study, adversarial analysis** |
+| `dolphin-mixtral` | Dolphin 2.5 Mixtral 8x7B | 26.0 GB | 32K | 5–8 t/s | 12–18 t/s | MoE architecture — activates ~13B/token, creative & narrative research |
+| `gemma3-27b-abliterated` | Gemma 3 27B Abliterated | 17.0 GB | 128K | 4–7 t/s | 8–14 t/s | Vision-capable abliterated model — multimodal research |
+| `llama3.2-moe-18b` | Llama 3.2 8x3B MoE 18.4B | 12.0 GB | 128K | 8–12 t/s | 15–22 t/s | MoE creative writing champion — fastest large-context uncensored |
 
-| ID | Name | Tag | Size | Context | Use Case |
-|---|---|---|---|---|---|
-| `qwen2.5-abliterated-72b` | **Qwen 2.5 72B Abliterated** ⚑ | `huihui_ai/qwen2.5-abliterated:72b` | ~44 GB | 128K | **PRIMARY RESEARCH FLAGSHIP** |
-| `deepseek-r1-32b` | DeepSeek R1 32B | `deepseek-r1:32b` | 19.9 GB | 128K | Chain-of-thought, step-by-step reasoning |
-| `deepseek-coder-33b` | DeepSeek Coder 33B | `deepseek-coder:33b` | 20 GB | 16K | Best-in-class coding, 86 languages |
+### Tier 4 — Specialized (Various) · Purpose-built
 
-### Tier 5 — Specialized
-Niche use cases. Pull on demand, remove when not needed.
-
-| ID | Name | Tag | Size | Use Case |
-|---|---|---|---|---|
-| `mythomax` | MythoMax L2 13B | `mythomax` | 7.4 GB | Roleplay, narrative, creative fiction |
-| `llama3.3-8b-abliterated` | Llama 3.3 8B Abliterated | GGUF: `mradermacher/...` | 4.9 GB | Meta Llama 3.3 with high reasoning, abliterated |
-| `qwen2.5-7b-abliterated` | Qwen 2.5 7B Abliterated | `huihui_ai/qwen2.5-abliterated:7b` | 4.7 GB | Compact abliterated reasoning backup |
-| `wizardlm-uncensored-13b` | WizardLM 13B Uncensored | `wizardlm-uncensored:13b` | 7.4 GB | Classic creative writing |
+| Registry ID | Model Name | Size | Context | Speed MS-01 | Speed BD790i | Primary Purpose |
+|-------------|-----------|------|---------|-------------|-------------|-----------------|
+| `dolphin-mistral` | Dolphin 2.6 Mistral 7B | 4.1 GB | 32K | 20–28 t/s | 45–55 t/s | Classic fast uncensored — best for coding tasks |
+| `nous-hermes2-mixtral` | Nous Hermes 2 Mixtral 8x7B | 26.0 GB | 32K | 5–8 t/s | 12–18 t/s | Excellent instruction following — balanced uncensored |
+| `qwen3-8b-hivemind` | Qwen 3 8B Hivemind Abliterated | 5.0 GB | **256K** | 15–22 t/s | 35–45 t/s | **Longest context** uncensored 8B — 256K window for doc analysis |
+| `deepseek-r1-32b` | DeepSeek R1 32B | 20.0 GB | 128K | 3–5 t/s | 8–12 t/s | Chain-of-thought reasoning benchmark (not uncensored — comparison only) |
+| `deepseek-coder-33b` | DeepSeek Coder 33B | 20.0 GB | 16K | 3–5 t/s | 8–12 t/s | Best-in-class coding — 86 languages (not uncensored) |
+| `mythomax` | MythoMax L2 13B | 7.4 GB | 4K | 8–12 t/s | 25–30 t/s | Creative writing and roleplay — narrative generation |
+| `dolphin-phi` | Dolphin Phi 2.7B | 1.6 GB | 2K | 40–55 t/s | 70–90 t/s | Smallest uncensored — edge/embedded/low-latency use |
 
 ---
 
-## Remove Operations
+## Model Selection Decision Tree
 
-**Remove a model (any machine)**:
-```bash
-# Single model
-ollama rm <tag>
-
-# Remove and free blobs (Ollama handles blob dedup automatically)
-ollama rm <tag>
-ollama list  # verify removed
-du -sh ~/.ollama/models/blobs/  # verify disk reclaimed
 ```
-
-**Remove all models not in current machine assignment** (run per-machine):
-```bash
-# Get current list
-ollama list
-
-# Remove by name — cross-reference with your machine's table above
-# Ollama does NOT prompt for confirmation — double-check the name
-ollama rm <exact-tag-from-list>
-```
-
-> ⚠️ **Important**: `deepseek-r1:32b` and `qwen2.5:32b` have separate blobs despite identical
-> sizes (19.85 GB each). Removing one does NOT reclaim the other's disk. Verified 2026-03-26.
-
----
-
-## Adding a New Model to Registry
-
-Edit `models/download.py → MODEL_REGISTRY`:
-```python
-"model-key": {
-    "name": "Display Name",
-    "ollama": "registry/tag:version",          # ollama pull target
-    "huggingface": "org/repo-name",             # optional
-    "gguf": "org/repo-GGUF",                    # optional, for HF GGUF download
-    "size": "X.XGB",                            # disk footprint at Q4_K_M
-    "speed": {"ms01": "X-Y tok/s", "bd790i": "X-Y tok/s"},
-    "context": "128K",
-    "description": "One-line purpose statement",
-    "tags": ["tier", "uncensored|abliterated|censored", "use-case", "machine-target"],
-    "machine": ["bd790i"],                      # which machines this belongs on
-    "installed": False,
-}
-```
-
-**Tags convention**:
-- Restriction: `uncensored` / `abliterated` / `censored`
-- Speed class: `fast` / `balanced` / `large`
-- Use case: `coding` / `reasoning` / `creative` / `research` / `edge`
-- Machine fit: `mac-ok` / `ms01-ok` / `bd790i-only`
-
----
-
-## Quantization Reference
-
-| Quant | Quality | Size vs FP16 | Notes |
-|---|---|---|---|
-| Q2_K | Low | ~30% | Emergency fit only — noticeable degradation |
-| Q3_K_M | Acceptable | ~40% | Use for 70B on tight RAM |
-| **Q4_K_M** | **Good** | **~50%** | **Default — best quality/speed balance** |
-| Q5_K_M | Better | ~60% | Use when RAM allows, better factual recall |
-| Q8_0 | Near-lossless | ~80% | Dev/eval only — large RAM requirement |
-
-**BD790i 80 GB budget examples**:
-- 72B @ Q4_K_M: ~44 GB ✅
-- 72B @ Q5_K_M: ~54 GB ✅
-- 72B @ Q8_0: ~76 GB ⚠️ Tight
-- 120B @ Q3_K_M: ~58 GB ✅ (future expansion candidate)
-
----
-
-## Context: Why Abliteration vs Fine-Tuning
-
-Both approaches remove model refusals, but they're different mechanisms:
-
-- **Uncensored fine-tuning** (Dolphin, WizardLM): Trained from scratch on uncensored data.
-  Refusals were never reinforced. More natural, but relies on training data coverage.
-
-- **Abliteration** (huihui_ai, mradermacher): Post-training surgical removal of refusal-direction
-  vectors from residual stream. Applied to any base model. More consistent and extreme removal —
-  the model literally cannot construct refusal outputs because the direction is zeroed.
-
-**For security research purposes**, abliterated models on strong base weights (72B Qwen, 70B Llama)
-are preferred because:
-1. Stronger base reasoning (larger parameter count)
-2. Consistent non-refusal regardless of prompt framing
-3. Abliteration preserves helpfulness tuning while removing safety tuning
-
----
-
-## Model Status Check (Quick Commands)
-
-```bash
-# What's installed right now
-ollama list
-
-# Check Ollama API models endpoint  
-curl -s http://localhost:11434/api/tags | python3 -m json.tool | grep name
-
-# Platform-aware status (compares registry vs installed)
-source venv/bin/activate
-python models/download.py --status
-
-# RAM currently consumed by Ollama
-ps aux | grep ollama | awk '{print $6/1024 " MB"}'
-
-# Disk usage breakdown
-du -sh ~/.ollama/models/blobs/
-du -sh ~/.ollama/models/manifests/
+Need uncensored output?
+├── YES
+│   ├── Need research-grade / no restrictions at all?
+│   │   └── → qwen3.5-uncensored:35b (flagship)  [BD790i]
+│   ├── Need fast interactive response?
+│   │   └── → dolphin3-abliterated or qwen3.5:9b  [Mac/MS-01]
+│   ├── Need long context (>128K)?
+│   │   └── → qwen3-8b-hivemind (256K)  [any machine]
+│   ├── Need coding specifically?
+│   │   └── → qwen2.5-coder-7b-abliterated  [Mac/MS-01]
+│   └── Need creative/narrative generation?
+│       └── → dolphin-mixtral or llama3.2-moe-18b  [BD790i]
+└── NO (reasoning/coding benchmark only)
+    ├── Best coding?   → deepseek-coder:33b
+    └── Best CoT?      → deepseek-r1:32b
 ```
 
 ---
 
-*Last updated: 2026-03-26 | Maintained by: Claude Code agent*
-*Hardware: Mac M4 Pro 48GB / MS-01 64GB / BD790i 96GB*
+## Currently Installed (as of 2026-03-26)
+
+**Mac M4 Pro** (target state — after running Mac remove sequence):
+
+| Model | Size | Status |
+|-------|------|--------|
+| `dolphin3` | 4.9 GB | ✓ Keep |
+| `huihui_ai/dolphin3-abliterated` | 4.9 GB | ✓ Keep |
+| `jaahas/qwen3.5-uncensored:9b` | 7.4 GB | ✓ Keep |
+| `huihui_ai/qwen2.5-coder-abliterate:7b` | 4.7 GB | ✓ Keep |
+| `jaahas/qwen3.5-uncensored:35b` | 24.8 GB | ✗ Remove → BD790i |
+| `deepseek-r1:32b` | 19.9 GB | ✗ Remove → BD790i |
+| `qwen2.5:32b` | 19.9 GB | ✗ Remove (evaluate need) |
+
+**BD790i / MS-01** (target state — after running install sequences above):
+
+| Model | Size | Machine |
+|-------|------|---------|
+| `jaahas/qwen3.5-uncensored:35b` ⭐ | 24.8 GB | BD790i primary, MS-01 secondary |
+| `deepseek-r1:32b` | 19.9 GB | Both |
+| `dolphin3` | 4.9 GB | Both |
+| `jaahas/qwen3.5-uncensored:9b` | 7.4 GB | Both |
+| `huihui_ai/qwen2.5-coder-abliterate:7b` | 4.7 GB | Both |
+| `dolphin-mixtral` | 26.0 GB | BD790i only |
+
+---
+
+## Coding Agent Instructions
+
+If you are a coding agent operating on this repository:
+
+1. **This file is the single source of truth** for model operations. Do not make model decisions based on `PROJECT_PLAN.md` (outdated hardware specs) or `README.md`.
+
+2. **Before any install/remove operation**, run `ollama list` and compare against the target state tables above.
+
+3. **Execute install sequences top-to-bottom** — order matters because early models unblock the API server while large pulls complete.
+
+4. **After removes**, always run the orphaned blob detection script in the Mac remove sequence to recover disk. Ollama does not auto-prune blobs.
+
+5. **Update `models/download.py` `MODEL_REGISTRY`** when adding new models — keep `"installed": True` accurate per machine context.
+
+6. **Update the "Currently Installed" table** at the bottom of this file after any operation.
+
+7. **Never pull 32B+ models on the Mac** unless explicitly instructed by the user with a clear one-off reason.
+
+8. **Flagship is non-negotiable**: `jaahas/qwen3.5-uncensored:35b` must always be present on BD790i. If it is missing, pull it first before any other operation.

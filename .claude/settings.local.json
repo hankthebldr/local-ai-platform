@@ -44,7 +44,11 @@
       "Bash(sh)",
       "Bash(python3 -m json.tool)",
       "Bash(kill %1)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(xargs kill:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(python -c \"from api.routers.inventory import router; print\\(''Router imported OK, routes:'', [r.path for r in router.routes]\\)\")",
+      "Bash(python -c \"from api.main import app; print\\(''App loaded OK, routes:'', len\\(app.routes\\)\\)\")"
     ],
     "deny": [],
     "ask": []

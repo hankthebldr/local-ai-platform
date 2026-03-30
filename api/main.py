@@ -6,13 +6,16 @@ OpenAI-compatible API for local LLM inference
 
 import json
 import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
-from .routers import chat, completions, models
+from .routers import chat, completions, models, inventory
 from .services.ollama_service import OllamaService
 from .middleware import APIKeyAuthMiddleware, RateLimitMiddleware
 from .exceptions import register_exception_handlers
@@ -97,6 +100,7 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(completions.router)
 app.include_router(models.router)
+app.include_router(inventory.router)
 
 
 # ── Public Endpoints ───────────────────────────────────────────────────────
@@ -138,9 +142,30 @@ async def health_check():
     }
 
 
+# ── Dashboard & Static Files ──────────────────────────────────────────────
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+
 @app.get("/")
+@app.head("/")
 async def root():
-    """Root endpoint with API information"""
+    """Serve the HTML dashboard"""
+    index = STATIC_DIR / "index.html"
+    if index.exists():
+        return FileResponse(index, media_type="text/html")
+    # Fallback to JSON if static files missing
+    return {
+        "message": "Local AI Platform API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
+@app.get("/api/info")
+async def api_info():
+    """JSON API information endpoint"""
     return {
         "message": "Local AI Platform API",
         "version": "1.0.0",

@@ -1,0 +1,7 @@
+{
+  "searxng_url": "",
+  "brave_api_key": "",
+  "search_timeout": 10,
+  "max_results": 5,
+  "default_backend": "duckduckgo"
+}

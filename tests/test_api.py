@@ -52,6 +52,13 @@ class TestPublicEndpoints:
     def test_root(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
+        # Root serves HTML dashboard or JSON fallback
+        content_type = resp.headers.get("content-type", "")
+        assert "text/html" in content_type or "application/json" in content_type
+
+    def test_api_info(self, client):
+        resp = client.get("/api/info")
+        assert resp.status_code == 200
         data = resp.json()
         assert data["version"] == "1.0.0"
         assert "endpoints" in data
