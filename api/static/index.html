@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js" crossorigin="anonymous"></script>
 <style>
 /* ── DESIGN TOKENS ──────────────────────────────────────────────── */
 :root {
@@ -801,8 +802,157 @@ body::after {
 .dashboard-grid .panel:nth-child(3) { animation-delay: 0.15s; }
 .dashboard-grid .panel:nth-child(4) { animation-delay: 0.2s; }
 
+/* ── RESEARCH TAB ───────────────────────────────────────────────── */
+.research-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  height: calc(100vh - 220px);
+  min-height: 500px;
+}
+.research-left, .research-right { display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+
+/* Graph panel */
+.graph-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.graph-panel .panel-label { position: absolute; top: 10px; left: 14px; z-index: 2; }
+.graph-controls {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  display: flex; gap: 6px;
+}
+.graph-controls button {
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--text-dim); font-family: var(--mono); font-size: 0.65rem;
+  padding: 4px 8px; cursor: pointer; border-radius: 2px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.graph-controls button:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+#graph-svg { width: 100%; height: 100%; }
+
+/* Graph legend */
+.graph-legend {
+  position: absolute; bottom: 10px; left: 14px; z-index: 2;
+  display: flex; gap: 12px; font-size: 0.62rem; color: var(--text-dim);
+}
+.legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+/* Node tooltip */
+.graph-tooltip {
+  position: fixed; z-index: 100; pointer-events: none;
+  background: rgba(6, 10, 16, 0.95); border: 1px solid var(--border);
+  padding: 10px 14px; font-family: var(--mono); font-size: 0.7rem;
+  color: var(--text); max-width: 280px; display: none;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+}
+.graph-tooltip strong { color: var(--cyan); display: block; margin-bottom: 4px; }
+.graph-tooltip .tt-meta { color: var(--text-dim); font-size: 0.62rem; }
+
+/* Deep Research panel */
+.deep-dive-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 14px;
+  flex: 0 0 auto;
+}
+.deep-dive-form { display: flex; gap: 8px; margin-top: 10px; }
+.deep-dive-form input {
+  flex: 1; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 0.75rem;
+  padding: 8px 12px; outline: none;
+  transition: border-color 0.2s;
+}
+.deep-dive-form input:focus { border-color: var(--cyan-dim); }
+.deep-dive-options { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+.deep-dive-options label { font-size: 0.65rem; color: var(--text-dim); }
+.deep-dive-options select, .deep-dive-options input[type=number] {
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 0.65rem;
+  padding: 4px 8px;
+}
+.depth-label { margin-left: auto; font-size: 0.62rem; color: var(--text-muted); }
+
+/* Research results */
+.research-results-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+.research-results-panel .panel-label { margin-bottom: 10px; }
+.research-empty { font-size: 0.72rem; color: var(--text-muted); text-align: center; padding: 40px 20px; }
+
+/* Research progress steps */
+.research-steps { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.research-step {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.68rem; color: var(--text-dim);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.research-step.active { border-color: var(--cyan-dim); color: var(--cyan); }
+.research-step.done { border-color: var(--green-dim); color: var(--green); }
+.step-icon { font-size: 0.8rem; }
+
+/* Synthesis output */
+.synthesis-block {
+  font-size: 0.75rem; line-height: 1.7;
+  border-top: 1px solid var(--border);
+  padding-top: 14px; margin-top: 14px;
+}
+.synthesis-block h2, .synthesis-block h3 {
+  color: var(--cyan); font-family: var(--sans);
+  margin: 12px 0 6px; font-size: 0.82rem;
+}
+.synthesis-block p { margin-bottom: 8px; color: var(--text); }
+.synthesis-block ul, .synthesis-block ol { padding-left: 18px; margin-bottom: 8px; }
+.synthesis-block li { margin-bottom: 4px; color: var(--text); }
+.synthesis-block code { color: var(--amber); font-size: 0.7rem; background: var(--bg); padding: 1px 4px; }
+.synthesis-block strong { color: var(--text); }
+.synthesis-block a { color: var(--cyan); text-decoration: none; }
+.synthesis-block a:hover { text-decoration: underline; }
+
+/* Source chips below synthesis */
+.res-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.res-source-chip {
+  background: var(--bg); border: 1px solid var(--border);
+  padding: 3px 8px; font-size: 0.62rem; color: var(--text-dim);
+  text-decoration: none; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.res-source-chip:hover { border-color: var(--cyan-dim); color: var(--cyan); }
+
+/* Session detail panel (opens on node click) */
+.session-detail-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+  padding: 14px;
+  max-height: 240px;
+  overflow-y: auto;
+  display: none;
+}
+.session-detail-panel.open { display: block; }
+.session-detail-panel .panel-label { margin-bottom: 8px; }
+.session-meta { font-size: 0.68rem; color: var(--text-dim); margin-bottom: 8px; }
+.session-topics { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.session-topic {
+  background: var(--cyan-ghost); border: 1px solid var(--cyan-dim);
+  color: var(--cyan); font-size: 0.62rem; padding: 2px 7px;
+}
+.session-preview { font-size: 0.68rem; color: var(--text-dim); line-height: 1.5; white-space: pre-wrap; }
+
 /* ── RESPONSIVE ─────────────────────────────────────────────────── */
 @media (max-width: 800px) {
+  .research-layout { grid-template-columns: 1fr; height: auto; }
+  .research-left, .research-right { min-height: 300px; }
+}
   .dashboard-grid { grid-template-columns: 1fr; }
   .dashboard-grid .panel-system,
   .dashboard-grid .panel-models,
@@ -848,6 +998,7 @@ body::after {
     <button class="tab-btn" onclick="switchTab('inventory')">Models<span class="tab-count" id="inv-count"></span></button>
     <button class="tab-btn" onclick="switchTab('memory')">Memory<span class="tab-count" id="mem-count"></span></button>
     <button class="tab-btn" onclick="switchTab('discover')">Discover<span class="tab-count" id="disc-count"></span></button>
+    <button class="tab-btn" onclick="switchTab('research')">Research<span class="tab-count" id="res-count"></span></button>
   </div>
 
   <!-- ═══ TAB: DASHBOARD ═══════════════════════════════════════════ -->
@@ -913,7 +1064,10 @@ body::after {
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="chat-header">
           <div class="panel-label" style="margin-bottom:0">Chat Interface</div>
-          <select class="model-select" id="model-select"><option>loading...</option></select>
+          <div style="display:flex;align-items:center;gap:8px">
+            <select class="model-select" id="model-select"><option>loading...</option></select>
+            <button class="action-btn" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border);display:none">EXPORT</button>
+          </div>
         </div>
         <div class="chat-messages" id="messages">
           <div class="msg system-msg">Select a model and start chatting. All inference runs locally.</div>
@@ -1049,6 +1203,72 @@ body::after {
     </div>
   </div>
 
+  <!-- ═══ TAB: RESEARCH ════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-research">
+
+    <div class="research-layout">
+
+      <!-- LEFT: Knowledge Graph + Session Detail -->
+      <div class="research-left">
+        <div class="graph-panel panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">Knowledge Graph</div>
+          <div class="graph-controls">
+            <button onclick="rebuildGraph()" title="Rebuild from exports">Rebuild</button>
+            <button onclick="resetGraphZoom()" title="Reset zoom">Reset</button>
+          </div>
+          <svg id="graph-svg"></svg>
+          <div class="graph-legend">
+            <span><span class="legend-dot" style="background:var(--cyan)"></span>Session</span>
+            <span><span class="legend-dot" style="background:var(--amber)"></span>Topic</span>
+            <span><span class="legend-dot" style="background:var(--purple)"></span>Source</span>
+          </div>
+        </div>
+        <div class="session-detail-panel" id="session-detail">
+          <div class="panel-label" id="session-detail-title">Session</div>
+          <div class="session-meta" id="session-detail-meta"></div>
+          <div class="session-topics" id="session-detail-topics"></div>
+          <div class="session-preview" id="session-detail-preview"></div>
+          <div style="margin-top:8px">
+            <button class="action-btn" onclick="loadSessionIntoChat()" style="font-size:0.65rem;padding:4px 10px">Open in Chat</button>
+            <button class="action-btn" onclick="deepDiveFromSession()" style="font-size:0.65rem;padding:4px 10px;border-color:var(--amber);color:var(--amber)">Deep Dive</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Deep Research + Results -->
+      <div class="research-right">
+        <div class="deep-dive-panel panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">Deep Research Mode</div>
+          <div class="deep-dive-form">
+            <input type="text" id="research-topic" placeholder="Enter research topic or question..." autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')runDeepDive()" />
+            <button class="action-btn pull" id="dive-btn" onclick="runDeepDive()">DIVE</button>
+          </div>
+          <div class="deep-dive-options">
+            <label>Model</label>
+            <select id="res-model-select"><option>loading...</option></select>
+            <label style="margin-left:8px">Depth</label>
+            <input type="number" id="res-depth" value="3" min="1" max="5" style="width:52px" />
+            <span class="depth-label" id="depth-hint">3 sub-questions</span>
+          </div>
+        </div>
+
+        <div class="research-results-panel panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">Research Results</div>
+          <div id="research-output">
+            <div class="research-empty">Enter a topic above and click DIVE to start deep research.<br><br>The model will decompose your topic, search each angle, then synthesize a structured report.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Graph tooltip (global) -->
+  <div class="graph-tooltip" id="graph-tooltip"></div>
+
   <!-- FOOTER -->
   <div class="footer">
     <div class="footer-links">
@@ -1074,6 +1294,7 @@ function switchTab(name) {
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
   if (name === 'memory') loadMemory();
   if (name === 'discover' && !discoverLoaded) loadDiscovery();
+  if (name === 'research') initResearch();
 }
 
 /* ── CLOCK ──────────────────────────────────────────────────────── */
@@ -1293,7 +1514,15 @@ function renderSources(sources) {
 }
 
 /* ── CHAT ────────────────────────────────────────────────────────── */
-const chatHistory = [];
+// Enriched chat history: each entry has { role, content, timestamp, sources?, usage?, model? }
+const chatHistory = [];       // Sent to API (role + content only)
+const chatMetadata = [];      // Full metadata per message for export
+const sessionStart = new Date();
+
+function updateExportBtn() {
+  const btn = document.getElementById('export-btn');
+  if (chatMetadata.length > 0) btn.style.display = 'inline-block';
+}
 
 async function sendMessage() {
   const input = document.getElementById('prompt');
@@ -1303,8 +1532,11 @@ async function sendMessage() {
   const model = document.getElementById('model-select').value;
   const messages = document.getElementById('messages');
   const btn = document.getElementById('send-btn');
+  const now = new Date();
 
   chatHistory.push({ role: 'user', content: text });
+  chatMetadata.push({ role: 'user', content: text, timestamp: now.toISOString(), model });
+
   const searchBadge = webSearchEnabled ? ' <span style="color:var(--amber);font-size:0.6rem;vertical-align:middle">&#x1F310; SEARCH</span>' : '';
   messages.innerHTML += `<div class="msg user">${esc(text)}${searchBadge}</div>`;
   input.value = '';
@@ -1336,7 +1568,18 @@ async function sendMessage() {
     } else {
       const content = d.choices?.[0]?.message?.content || '(empty response)';
       const sources = d.sources || [];
+      const usage = d.usage || {};
+
       chatHistory.push({ role: 'assistant', content });
+      chatMetadata.push({
+        role: 'assistant',
+        content,
+        timestamp: new Date().toISOString(),
+        model,
+        sources,
+        usage,
+        web_search: webSearchEnabled,
+      });
 
       const citedContent = renderCitations(content, sources);
       const sourcesHtml = renderSources(sources);
@@ -1351,9 +1594,93 @@ async function sendMessage() {
   btn.disabled = false;
   btn.textContent = 'TRANSMIT';
   messages.scrollTop = messages.scrollHeight;
+  updateExportBtn();
 }
 
 function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+/* ── SESSION EXPORT ──────────────────────────────────────────────── */
+
+function generateSessionMarkdown() {
+  const model = document.getElementById('model-select').value;
+  const now = new Date();
+  const durationMs = now - sessionStart;
+  const durationMin = Math.floor(durationMs / 60000);
+  const durationSec = Math.floor((durationMs % 60000) / 1000);
+  const msgCount = chatMetadata.length;
+  const totalTokens = chatMetadata.reduce((sum, m) => sum + (m.usage?.total_tokens || 0), 0);
+  const hadSearch = chatMetadata.some(m => m.web_search);
+
+  let md = `# Chat Session \u2014 ${now.toLocaleDateString()} ${now.toLocaleTimeString()}\n\n`;
+  md += `| Field | Value |\n|-------|-------|\n`;
+  md += `| Model | ${model} |\n`;
+  md += `| Duration | ${durationMin}m ${durationSec}s |\n`;
+  md += `| Messages | ${msgCount} |\n`;
+  md += `| Total Tokens | ${totalTokens.toLocaleString()} |\n`;
+  md += `| Web Search | ${hadSearch ? 'Used' : 'Off'} |\n`;
+  md += `\n---\n\n`;
+
+  for (const msg of chatMetadata) {
+    if (msg.role === 'user') {
+      md += `## User\n${msg.content}\n\n`;
+    } else if (msg.role === 'assistant') {
+      md += `## Assistant\n${msg.content}\n`;
+      if (msg.sources && msg.sources.length > 0) {
+        md += `\n### Sources\n`;
+        msg.sources.forEach((s, i) => {
+          md += `${i + 1}. [${s.title}](${s.url}) \u2014 ${s.snippet}\n`;
+        });
+      }
+      if (msg.usage && msg.usage.total_tokens) {
+        md += `\n*Tokens: ${msg.usage.prompt_tokens} prompt + ${msg.usage.completion_tokens} completion = ${msg.usage.total_tokens} total*\n`;
+      }
+      md += `\n`;
+    }
+    md += `---\n\n`;
+  }
+
+  return md;
+}
+
+function generateFilename() {
+  const now = new Date();
+  const model = document.getElementById('model-select').value;
+  const modelShort = model.replace(/[/:]/g, '-').replace(/:latest$/, '');
+  const dateStr = now.toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+  return `${dateStr}-${modelShort}.md`;
+}
+
+async function exportSession() {
+  if (chatMetadata.length === 0) return;
+
+  const md = generateSessionMarkdown();
+  const filename = generateFilename();
+
+  // 1. Browser download
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  // 2. Save to server
+  try {
+    await fetch('/api/exports/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, content: md }),
+    });
+  } catch(e) {
+    // Silent fail for server save — download already succeeded
+  }
+
+  // Brief visual feedback
+  const btn = document.getElementById('export-btn');
+  btn.textContent = 'SAVED!';
+  setTimeout(() => { btn.textContent = 'EXPORT'; }, 1500);
+}
 
 document.getElementById('prompt').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -1758,6 +2085,411 @@ function renderDiscovery() {
       </div>
     `;
   }).join('');
+}
+
+/* ── RESEARCH TAB ────────────────────────────────────────────────── */
+let graphData = null;
+let graphSim = null;
+let selectedNode = null;
+let researchLoaded = false;
+
+function initResearch() {
+  if (researchLoaded) return;
+  researchLoaded = true;
+  loadGraphData();
+  populateResModelSelect();
+  document.getElementById('res-depth').addEventListener('input', function() {
+    document.getElementById('depth-hint').textContent = this.value + ' sub-questions';
+  });
+}
+
+async function populateResModelSelect() {
+  const sel = document.getElementById('res-model-select');
+  try {
+    const r = await fetch('/v1/models');
+    const d = await r.json();
+    const models = d.data || [];
+    sel.innerHTML = models.map(m => `<option value="${esc(m.id)}">${esc(m.id)}</option>`).join('');
+    if (!sel.innerHTML) sel.innerHTML = '<option value="dolphin3:latest">dolphin3:latest</option>';
+  } catch {
+    sel.innerHTML = '<option value="dolphin3:latest">dolphin3:latest</option>';
+  }
+}
+
+async function loadGraphData() {
+  try {
+    const r = await fetch('/api/graph');
+    graphData = await r.json();
+    renderGraph(graphData);
+    updateResCount();
+  } catch (e) {
+    console.error('Graph load failed', e);
+  }
+}
+
+async function rebuildGraph() {
+  try {
+    await fetch('/api/graph/rebuild', { method: 'POST' });
+    await loadGraphData();
+  } catch (e) {
+    console.error('Rebuild failed', e);
+  }
+}
+
+function updateResCount() {
+  const el = document.getElementById('res-count');
+  if (graphData) el.textContent = graphData.session_count || '';
+  else el.textContent = '';
+}
+
+function resetGraphZoom() {
+  if (!graphSim) return;
+  const svg = d3.select('#graph-svg');
+  svg.transition().duration(500).call(
+    d3.zoom().transform,
+    d3.zoomIdentity
+  );
+}
+
+function renderGraph(data) {
+  const svgEl = document.getElementById('graph-svg');
+  const W = svgEl.clientWidth || 600;
+  const H = svgEl.clientHeight || 400;
+
+  d3.select('#graph-svg').selectAll('*').remove();
+
+  if (!data || !data.nodes || data.nodes.length === 0) {
+    d3.select('#graph-svg').append('text')
+      .attr('x', W / 2).attr('y', H / 2)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'JetBrains Mono, monospace')
+      .attr('font-size', '12px')
+      .attr('fill', '#556677')
+      .text('No sessions exported yet. Export a chat to build the graph.');
+    return;
+  }
+
+  const svg = d3.select('#graph-svg');
+  const g = svg.append('g');
+
+  // Zoom + pan
+  const zoom = d3.zoom()
+    .scaleExtent([0.2, 4])
+    .on('zoom', (e) => g.attr('transform', e.transform));
+  svg.call(zoom);
+
+  const nodeColor = (d) => {
+    if (d.type === 'session') return 'var(--cyan)';
+    if (d.type === 'topic')   return 'var(--amber)';
+    if (d.type === 'source')  return 'var(--purple)';
+    return 'var(--text-dim)';
+  };
+
+  const nodeRadius = (d) => {
+    if (d.type === 'session') return 10;
+    if (d.type === 'topic')   return 7 + Math.min((d.session_count || 1) * 1.5, 10);
+    if (d.type === 'source')  return 6 + Math.min((d.citation_count || 1) * 1.5, 8);
+    return 6;
+  };
+
+  const linkColor = (d) => {
+    if (d.type === 'related') return '#00d4ff25';
+    if (d.type === 'cites')   return '#b388ff25';
+    return '#ff8c0025';
+  };
+
+  const nodes = data.nodes.map(d => ({ ...d }));
+  const links = data.links.map(d => ({ ...d }));
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+      if (d.type === 'related') return 120;
+      return 70;
+    }).strength(0.5))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 6));
+  graphSim = sim;
+
+  // Links
+  const link = g.append('g').selectAll('line')
+    .data(links).enter().append('line')
+    .attr('stroke', linkColor)
+    .attr('stroke-width', d => d.type === 'related' ? (d.weight || 1) * 0.5 + 0.5 : 1)
+    .attr('stroke-dasharray', d => d.type === 'mentions' ? '3,3' : 'none');
+
+  // Nodes
+  const node = g.append('g').selectAll('circle')
+    .data(nodes).enter().append('circle')
+    .attr('r', nodeRadius)
+    .attr('fill', nodeColor)
+    .attr('fill-opacity', 0.85)
+    .attr('stroke', nodeColor)
+    .attr('stroke-width', 1.5)
+    .attr('stroke-opacity', 0.4)
+    .style('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end',   (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+    )
+    .on('mouseover', (e, d) => showTooltip(e, d))
+    .on('mousemove', (e) => moveTooltip(e))
+    .on('mouseout', () => hideTooltip())
+    .on('click', (e, d) => { e.stopPropagation(); selectNode(d); });
+
+  // Labels for session nodes only
+  const label = g.append('g').selectAll('text')
+    .data(nodes.filter(d => d.type === 'session')).enter().append('text')
+    .attr('font-family', 'JetBrains Mono, monospace')
+    .attr('font-size', '9px')
+    .attr('fill', 'var(--text-dim)')
+    .attr('text-anchor', 'middle')
+    .attr('dy', d => nodeRadius(d) + 12)
+    .text(d => (d.label || d.id).slice(0, 24))
+    .style('pointer-events', 'none');
+
+  sim.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('cx', d => d.x).attr('cy', d => d.y);
+    label.attr('x', d => d.x).attr('y', d => d.y);
+  });
+
+  // Deselect on background click
+  svg.on('click', () => {
+    selectedNode = null;
+    document.getElementById('session-detail').classList.remove('open');
+    node.attr('stroke-width', 1.5);
+  });
+}
+
+function showTooltip(e, d) {
+  const tt = document.getElementById('graph-tooltip');
+  let html = `<strong>${esc(d.label || d.id)}</strong>`;
+  if (d.type === 'session') {
+    html += `<div class="tt-meta">Session · ${d.model || ''}</div>`;
+    if (d.topics && d.topics.length) html += `<div class="tt-meta">${d.topics.slice(0,4).join(', ')}</div>`;
+  } else if (d.type === 'topic') {
+    html += `<div class="tt-meta">Topic · ${d.session_count || 1} sessions</div>`;
+  } else if (d.type === 'source') {
+    html += `<div class="tt-meta">Source · ${d.citation_count || 1} citations</div>`;
+  }
+  tt.innerHTML = html;
+  tt.style.display = 'block';
+  moveTooltip(e);
+}
+function moveTooltip(e) {
+  const tt = document.getElementById('graph-tooltip');
+  tt.style.left = (e.clientX + 14) + 'px';
+  tt.style.top  = (e.clientY - 10) + 'px';
+}
+function hideTooltip() {
+  document.getElementById('graph-tooltip').style.display = 'none';
+}
+
+function selectNode(d) {
+  selectedNode = d;
+  const panel = document.getElementById('session-detail');
+  if (d.type !== 'session') { panel.classList.remove('open'); return; }
+
+  document.getElementById('session-detail-title').textContent = d.label || d.filename;
+  document.getElementById('session-detail-meta').textContent =
+    [d.model, d.date, d.filename].filter(Boolean).join(' · ');
+  document.getElementById('session-detail-topics').innerHTML =
+    (d.topics || []).map(t => `<span class="session-topic">${esc(t)}</span>`).join('');
+  document.getElementById('session-detail-preview').textContent =
+    (d.preview || '').slice(0, 300).replace(/^#+[^\n]*\n?/gm, '').trim();
+  panel.classList.add('open');
+}
+
+function loadSessionIntoChat() {
+  if (!selectedNode || selectedNode.type !== 'session') return;
+  const topic = selectedNode.label || selectedNode.filename;
+  document.getElementById('prompt').value = `Continuing our discussion on: ${topic}`;
+  switchTab('dashboard');
+  document.getElementById('prompt').focus();
+}
+
+function deepDiveFromSession() {
+  if (!selectedNode || selectedNode.type !== 'session') return;
+  document.getElementById('research-topic').value = selectedNode.label || selectedNode.filename;
+  document.getElementById('session-detail').classList.remove('open');
+  runDeepDive();
+}
+
+/* ── Deep Research ──────────────────────────────────────────────── */
+async function runDeepDive() {
+  const topic = document.getElementById('research-topic').value.trim();
+  if (!topic) return;
+  const model = document.getElementById('res-model-select').value;
+  const depth = parseInt(document.getElementById('res-depth').value) || 3;
+
+  const out = document.getElementById('research-output');
+  const btn = document.getElementById('dive-btn');
+  btn.disabled = true;
+  btn.textContent = 'RESEARCHING...';
+
+  // Show progress UI
+  out.innerHTML = `
+    <div class="research-steps" id="res-steps">
+      <div class="research-step active" id="step-decompose"><span class="step-icon">🔬</span> Decomposing topic into sub-questions...</div>
+      <div class="research-step" id="step-search"><span class="step-icon">🌐</span> Searching each angle...</div>
+      <div class="research-step" id="step-synth"><span class="step-icon">🧠</span> Synthesizing report...</div>
+    </div>
+  `;
+
+  try {
+    // Tick step 1 → 2 after a beat
+    await new Promise(r => setTimeout(r, 600));
+    document.getElementById('step-decompose').classList.add('done');
+    document.getElementById('step-decompose').classList.remove('active');
+    document.getElementById('step-search').classList.add('active');
+
+    const resp = await fetch('/api/research/deep-dive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, model, depth }),
+    });
+
+    document.getElementById('step-search').classList.add('done');
+    document.getElementById('step-search').classList.remove('active');
+    document.getElementById('step-synth').classList.add('active');
+
+    await new Promise(r => setTimeout(r, 300));
+
+    const data = await resp.json();
+
+    document.getElementById('step-synth').classList.add('done');
+    document.getElementById('step-synth').classList.remove('active');
+
+    renderResearchResults(data);
+
+    // Rebuild graph after research (new session may be added via export)
+    await loadGraphData();
+  } catch (e) {
+    out.innerHTML = `<div class="research-empty" style="color:var(--red)">Research failed: ${esc(String(e))}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'DIVE';
+  }
+}
+
+function renderResearchResults(data) {
+  const out = document.getElementById('research-output');
+
+  // Sub-question pills
+  const pills = (data.sub_questions || []).map(q =>
+    `<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;font-size:0.62rem;color:var(--text-dim);margin:2px;display:inline-block">${esc(q)}</span>`
+  ).join('');
+
+  // Source chips
+  const chips = (data.sources || []).map(s =>
+    `<a class="res-source-chip" href="${esc(s.url || '#')}" target="_blank" rel="noopener" title="${esc(s.title || s.url || '')}">${esc(s.title || s.url || '')}</a>`
+  ).join('');
+
+  // Render synthesis markdown (basic)
+  const synthesis = renderMarkdownBasic(data.synthesis || '');
+
+  out.innerHTML = `
+    <div style="margin-bottom:10px">
+      <div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:6px">SUB-QUESTIONS</div>
+      ${pills || '<span style="color:var(--text-muted);font-size:0.65rem">none</span>'}
+    </div>
+    <div class="synthesis-block">${synthesis}</div>
+    ${chips ? `<div style="margin-top:12px;font-size:0.62rem;color:var(--text-muted);margin-bottom:6px">SOURCES</div><div class="res-sources">${chips}</div>` : ''}
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="action-btn" onclick="exportResearch()" style="font-size:0.65rem;padding:4px 10px">Export as MD</button>
+    </div>
+  `;
+
+  // Store for export
+  window._lastResearch = data;
+}
+
+function renderMarkdownBasic(text) {
+  if (!text) return '';
+  let html = esc(text);
+  // Headings
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+  // Bold
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  // Code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Citations [N] → links
+  html = html.replace(/\[(\d+)\]/g, '<sup style="color:var(--amber)">[$1]</sup>');
+  // Bullet lists
+  html = html.replace(/^[•\-\*] (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+  // Numbered lists
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  // Paragraphs (double newlines)
+  html = html.replace(/\n{2,}/g, '</p><p>');
+  html = '<p>' + html + '</p>';
+  // Single newlines
+  html = html.replace(/([^>])\n([^<])/g, '$1<br>$2');
+  // Cleanup empty p tags
+  html = html.replace(/<p>\s*<\/p>/g, '');
+  html = html.replace(/<p>(<h[23]>)/g, '$1');
+  html = html.replace(/(<\/h[23]>)<\/p>/g, '$1');
+  html = html.replace(/<p>(<ul>)/g, '$1');
+  html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+  return html;
+}
+
+async function exportResearch() {
+  const d = window._lastResearch;
+  if (!d) return;
+  const ts = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+  const topic_slug = d.topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+  const filename = `research-${ts}-${topic_slug}.md`;
+
+  const lines = [
+    `# Research: ${d.topic}`,
+    ``,
+    `| Field | Value |`,
+    `|-------|-------|`,
+    `| Model | ${d.model} |`,
+    `| Sub-questions | ${(d.sub_questions || []).length} |`,
+    `| Sources | ${(d.sources || []).length} |`,
+    ``,
+    `---`,
+    ``,
+    `## Sub-Questions Explored`,
+    ...(d.sub_questions || []).map((q, i) => `${i + 1}. ${q}`),
+    ``,
+    `## Research Report`,
+    ``,
+    d.synthesis || '',
+    ``,
+    `## Sources`,
+    ...(d.sources || []).map((s, i) => `${i + 1}. [${s.title || s.url}](${s.url})`),
+  ];
+  const content = lines.join('\n');
+
+  // Browser download
+  const blob = new Blob([content], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  // Server save
+  try {
+    await fetch('/api/exports/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, content }),
+    });
+    // Rebuild graph to include new research export
+    await loadGraphData();
+  } catch {}
 }
 
 /* ── INIT ────────────────────────────────────────────────────────── */
