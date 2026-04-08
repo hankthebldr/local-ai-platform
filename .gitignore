@@ -107,3 +107,9 @@ $RECYCLE.BIN/
 
 # Workflow run data (persisted locally)
 data/workflows/*/
+
+# Desktop app build artifacts
+desktop/dist/
+desktop/build/
+*.app
+*.dmg
