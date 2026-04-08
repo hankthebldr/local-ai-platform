@@ -1089,7 +1089,142 @@ body::after {
   .inv-grid { grid-template-columns: 1fr; }
   .mem-grid { grid-template-columns: 1fr; }
   .tab-btn { padding: 10px 14px; font-size: 0.65rem; }
+  .agent-grid { grid-template-columns: 1fr !important; }
 }
+
+/* ── AGENTS TAB ──────────────────────────────────────────────── */
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+@media (max-width: 1000px) {
+  .agent-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.agent-card {
+  position: relative;
+  background: var(--bg-panel);
+  border: 1px solid #ffffff08;
+  padding: 18px;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+.agent-card:hover { border-color: var(--cyan-dim); box-shadow: var(--glow-cyan); }
+.agent-card-top { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.agent-icon { font-size: 2rem; line-height: 1; flex-shrink: 0; }
+.agent-card-info { flex: 1; min-width: 0; }
+.agent-card-name { font-size: 0.85rem; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.agent-card-desc { font-size: 0.7rem; color: var(--text-dim); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.agent-card-model { display: inline-block; font-size: 0.58rem; padding: 2px 8px; background: var(--cyan-ghost); border: 1px solid var(--cyan-dim); color: var(--cyan); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 6px; }
+.agent-card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.agent-tag { font-size: 0.56rem; padding: 1px 6px; background: #ffffff06; border: 1px solid #ffffff10; color: var(--text-dim); }
+.agent-starters { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.agent-starter {
+  font-size: 0.62rem; padding: 3px 8px; background: var(--bg-deep); border: 1px solid var(--border);
+  color: var(--text-dim); cursor: pointer; transition: all 0.2s ease;
+}
+.agent-starter:hover { border-color: var(--cyan-dim); color: var(--cyan); }
+.agent-card-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: auto; padding-top: 10px; border-top: 1px solid #ffffff06; }
+
+.agent-builder {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 20px;
+  margin-bottom: 16px;
+  display: none;
+}
+.agent-builder.open { display: block; animation: fadeInUp 0.3s ease; }
+.agent-builder-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.agent-builder-full { grid-column: 1 / -1; }
+.agent-builder label { display: block; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+.agent-builder input, .agent-builder select, .agent-builder textarea {
+  width: 100%; background: var(--bg-deep); border: 1px solid var(--border); color: var(--text);
+  font-family: var(--mono); font-size: 0.75rem; padding: 8px 10px; outline: none;
+}
+.agent-builder input:focus, .agent-builder select:focus, .agent-builder textarea:focus { border-color: var(--cyan-dim); }
+.agent-builder textarea.sys-prompt { min-height: 140px; resize: vertical; font-family: var(--mono); font-size: 0.72rem; line-height: 1.5; }
+.agent-builder .ctx-row { display: flex; gap: 6px; margin-bottom: 4px; }
+.agent-builder .ctx-row select { width: 120px; flex-shrink: 0; }
+.agent-builder .ctx-row input { flex: 1; }
+.agent-builder .starter-row { display: flex; gap: 6px; margin-bottom: 4px; }
+.agent-builder .starter-row input { flex: 1; }
+.agent-builder-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; padding-top: 12px; border-top: 1px solid #ffffff06; }
+
+.agent-chat {
+  display: none;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 16px;
+}
+.agent-chat.open { display: block; animation: fadeInUp 0.3s ease; }
+.agent-chat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.agent-chat-title { display: flex; align-items: center; gap: 10px; }
+.agent-chat-title .agent-icon { font-size: 1.4rem; }
+.agent-chat-title .name { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.agent-chat-messages {
+  min-height: 240px; max-height: 400px; overflow-y: auto;
+  padding: 12px; background: var(--bg-deep); border: 1px solid #ffffff06;
+  margin-bottom: 12px; font-size: 0.82rem; line-height: 1.6; scroll-behavior: smooth;
+}
+.agent-chat-messages .msg.assistant::before { content: attr(data-agent-label); }
+.agent-chat-starters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+
+/* ── INVENTORY ENHANCEMENTS ──────────────────────────────────── */
+.inv-sort-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.65rem; }
+.inv-sort-bar label { color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; }
+.inv-sort-bar select { background: var(--bg-deep); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 0.65rem; padding: 4px 8px; }
+.inv-card-status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.inv-card-status-dot.loaded { background: var(--green); box-shadow: var(--glow-green); animation: pulse-glow 2.5s ease-in-out infinite; }
+.inv-card-status-dot.installed-idle { background: var(--text-muted); }
+.inv-card-quant { font-size: 0.6rem; padding: 1px 6px; background: var(--bg-deep); border: 1px solid var(--border); color: var(--text-dim); display: inline-block; margin-left: 4px; }
+.inv-card-params { font-size: 0.6rem; padding: 1px 6px; background: var(--cyan-ghost); border: 1px solid var(--cyan-dim); color: var(--cyan); display: inline-block; }
+
+/* ── WORKFLOW RESULTS ENHANCEMENTS ───────────────────────────── */
+.wf-summary-bar {
+  display: flex; gap: 20px; padding: 12px 16px; background: #ffffff04;
+  border: 1px solid #ffffff08; margin-bottom: 14px; font-size: 0.72rem;
+}
+.wf-summary-bar .wf-summary-item { color: var(--text-dim); }
+.wf-summary-bar .wf-summary-item strong { color: var(--cyan); font-weight: 600; }
+.wf-timeline { margin-bottom: 16px; padding: 8px 0; }
+.wf-timeline-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 0.65rem; }
+.wf-timeline-label { width: 100px; text-align: right; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.wf-timeline-bar-bg { flex: 1; height: 14px; background: var(--border); position: relative; overflow: hidden; }
+.wf-timeline-bar-fill { height: 100%; transition: width 0.3s ease; }
+.wf-timeline-bar-fill.completed { background: var(--green); box-shadow: var(--glow-green); }
+.wf-timeline-bar-fill.failed { background: var(--red); box-shadow: var(--glow-red); }
+.wf-timeline-bar-fill.skipped { background: var(--text-muted); }
+.wf-timeline-dur { width: 50px; font-size: 0.62rem; color: var(--text-dim); flex-shrink: 0; }
+.wf-step-card {
+  background: #ffffff04; border: 1px solid #ffffff08; margin-bottom: 8px;
+  transition: all 0.2s ease; cursor: pointer;
+}
+.wf-step-card:hover { border-color: var(--cyan-dim); }
+.wf-step-card.completed { border-left: 3px solid var(--green-dim); }
+.wf-step-card.failed { border-left: 3px solid var(--red-dim); }
+.wf-step-card.skipped { border-left: 3px solid var(--text-muted); }
+.wf-step-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; font-size: 0.78rem;
+}
+.wf-step-card-header .step-name { color: var(--text); font-weight: 500; }
+.wf-step-card-header .step-meta { display: flex; gap: 12px; font-size: 0.68rem; color: var(--text-dim); }
+.wf-step-card-body {
+  display: none; padding: 0 14px 14px; font-size: 0.72rem; border-top: 1px solid #ffffff06;
+}
+.wf-step-card-body.open { display: block; }
+.wf-step-output {
+  background: var(--bg-deep); border: 1px solid var(--border); padding: 10px 12px;
+  margin-top: 8px; font-size: 0.7rem; line-height: 1.5; max-height: 300px;
+  overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+}
+.wf-step-output code { color: var(--amber); font-size: 0.68rem; }
+.wf-gate-result { display: flex; align-items: center; gap: 6px; font-size: 0.65rem; margin-top: 6px; }
+.wf-gate-result .gate-pass { color: var(--green); }
+.wf-gate-result .gate-fail { color: var(--red); }
+.wf-step-actions { display: flex; gap: 8px; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -1133,6 +1268,7 @@ body::after {
     <button class="tab-btn" onclick="switchTab('discover')">Discover<span class="tab-count" id="disc-count"></span></button>
     <button class="tab-btn" onclick="switchTab('research')">Research<span class="tab-count" id="res-count"></span></button>
     <button class="tab-btn" onclick="switchTab('workflows')">Workflows</button>
+    <button class="tab-btn" onclick="switchTab('agents')">Agents<span class="tab-count" id="agents-count"></span></button>
   </div>
 
   <!-- ═══ TAB: DASHBOARD ═══════════════════════════════════════════ -->
@@ -1278,6 +1414,14 @@ body::after {
       <button class="filter-btn" onclick="setFilter('reasoning', this)">Reasoning</button>
     </div>
 
+    <div class="inv-sort-bar">
+      <label>Sort by:</label>
+      <select id="inv-sort" onchange="renderCatalog()">
+        <option value="name">Name</option>
+        <option value="size">Size</option>
+        <option value="status">Status (installed first)</option>
+      </select>
+    </div>
     <div class="inv-stats" id="inv-stats"></div>
     <div class="inv-grid" id="inv-grid">
       <div class="model-empty">Loading catalog...</div>
@@ -1459,6 +1603,113 @@ body::after {
     </div>
   </div>
 
+  <!-- ═══ TAB: AGENTS ═══════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-agents">
+
+    <!-- Agent Builder (hidden by default) -->
+    <div class="agent-builder" id="agent-builder">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="panel-label" style="margin-bottom:0" id="agent-builder-title">New Agent</div>
+        <button class="action-btn" onclick="hideAgentBuilder()" style="font-size:0.9rem;padding:2px 10px;border:none">&times;</button>
+      </div>
+      <div class="agent-builder-grid">
+        <div>
+          <label>Name</label>
+          <input type="text" id="ab-name" placeholder="My Agent" oninput="autoAgentId()" />
+        </div>
+        <div>
+          <label>ID (auto-generated)</label>
+          <input type="text" id="ab-id" placeholder="my-agent" />
+        </div>
+        <div>
+          <label>Icon (emoji)</label>
+          <input type="text" id="ab-icon" placeholder="🛡️" maxlength="4" style="width:80px" />
+        </div>
+        <div>
+          <label>Tags (comma-separated)</label>
+          <input type="text" id="ab-tags" placeholder="coding, assistant, research" />
+        </div>
+        <div class="agent-builder-full">
+          <label>Description</label>
+          <input type="text" id="ab-desc" placeholder="A helpful agent for..." />
+        </div>
+        <div>
+          <label>Model (exact)</label>
+          <select id="ab-model"><option value="">-- use role instead --</option></select>
+        </div>
+        <div>
+          <label>Role (if no model)</label>
+          <select id="ab-role">
+            <option value="">-- none --</option>
+            <option value="reasoning">Reasoning</option>
+            <option value="fast">Fast</option>
+            <option value="coding">Coding</option>
+            <option value="uncensored">Uncensored</option>
+            <option value="general">General</option>
+          </select>
+        </div>
+        <div class="agent-builder-full">
+          <label>System Prompt</label>
+          <textarea class="sys-prompt" id="ab-system-prompt" placeholder="You are a helpful assistant that..."></textarea>
+        </div>
+        <div class="agent-builder-full">
+          <label>Conversation Starters</label>
+          <div id="ab-starters-list"></div>
+          <button class="action-btn" onclick="addStarterInput()" style="margin-top:4px;font-size:0.6rem;padding:3px 10px">+ Add Starter</button>
+        </div>
+        <div class="agent-builder-full">
+          <label>Context Sources</label>
+          <div id="ab-ctx-list"></div>
+          <button class="action-btn" onclick="addCtxInput()" style="margin-top:4px;font-size:0.6rem;padding:3px 10px">+ Add Source</button>
+        </div>
+        <div class="agent-builder-full">
+          <label>Tools</label>
+          <div style="display:flex;gap:16px;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="ab-tool-search" /> <span style="font-size:0.7rem;color:var(--text)">Web Search</span></label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="ab-tool-workflow" /> <span style="font-size:0.7rem;color:var(--text)">Workflow Runner</span></label>
+          </div>
+        </div>
+      </div>
+      <div class="agent-builder-actions">
+        <button class="action-btn" onclick="hideAgentBuilder()">Cancel</button>
+        <button class="action-btn pull" onclick="saveAgent()" id="ab-save-btn">Save Agent</button>
+      </div>
+    </div>
+
+    <!-- Agent Chat (hidden by default) -->
+    <div class="agent-chat" id="agent-chat">
+      <div class="agent-chat-header">
+        <div class="agent-chat-title">
+          <span class="agent-icon" id="ac-icon"></span>
+          <span class="name" id="ac-name">Agent</span>
+        </div>
+        <button class="action-btn" onclick="closeAgentChat()">Back to Gallery</button>
+      </div>
+      <div class="agent-chat-starters" id="ac-starters"></div>
+      <div class="agent-chat-messages" id="ac-messages">
+        <div class="msg system-msg">Start a conversation with this agent.</div>
+      </div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="ac-prompt" type="text" placeholder="Message this agent..." autocomplete="off" spellcheck="false" />
+        <button class="send-btn" id="ac-send-btn" onclick="sendAgentMessage()">TRANSMIT</button>
+      </div>
+    </div>
+
+    <!-- Agent Gallery -->
+    <div id="agent-gallery">
+      <div class="panel" style="margin-bottom:16px">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="panel-label" style="margin-bottom:0">Agent Gallery</div>
+          <button class="action-btn pull" onclick="showAgentBuilder()">+ New Agent</button>
+        </div>
+      </div>
+      <div class="agent-grid" id="agents-grid">
+        <div class="model-empty">Loading agents...</div>
+      </div>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <div class="footer">
     <div class="footer-links">
@@ -1486,6 +1737,7 @@ function switchTab(name) {
   if (name === 'discover' && !discoverLoaded) loadDiscovery();
   if (name === 'research') initResearch();
   if (name === 'workflows') loadWorkflowsTab();
+  if (name === 'agents') loadAgentsTab();
 }
 
 /* ── CLOCK ──────────────────────────────────────────────────────── */
@@ -1940,6 +2192,17 @@ function renderCatalog() {
     );
   }
 
+  // Sorting
+  const sortBy = (document.getElementById('inv-sort') || {}).value || 'name';
+  filtered = [...filtered].sort((a, b) => {
+    if (sortBy === 'status') return (b.installed ? 1 : 0) - (a.installed ? 1 : 0) || a.name.localeCompare(b.name);
+    if (sortBy === 'size') {
+      const sA = parseFloat(a.size) || 0, sB = parseFloat(b.size) || 0;
+      return sA - sB;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
   const installed = filtered.filter(m => m.installed).length;
   document.getElementById('inv-stats').innerHTML =
     `<span class="inv-stat">Showing <strong>${filtered.length}</strong> models</span>` +
@@ -1953,15 +2216,29 @@ function renderCatalog() {
 
   document.getElementById('inv-grid').innerHTML = filtered.map(m => {
     const badgeClass = m.installed ? 'installed' : 'available';
-    const badgeText = m.installed ? 'installed' : 'available';
     const fitClass = m.fits_ram === false ? ' no-fit' : '';
     const tags = (m.tags || []).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('');
 
+    // Status dot: green pulsing if loaded in memory, grey if just installed
+    const isLoaded = m.loaded_in_memory || false;
+    const statusDot = m.installed
+      ? `<span class="inv-card-status-dot ${isLoaded ? 'loaded' : 'installed-idle'}"></span>`
+      : '';
+    const badgeText = m.installed ? (isLoaded ? 'loaded' : 'installed') : 'available';
+
+    // Quantization and params display
+    const quantBadge = m.quantization ? `<span class="inv-card-quant">${esc(m.quantization)}</span>` : '';
+    const paramsBadge = m.parameters ? `<span class="inv-card-params">${esc(m.parameters)}</span>` : '';
+
     let actions = '';
     if (m.installed) {
-      actions = `<button class="action-btn remove" onclick="removeModel('${esc(m.ollama || m.id)}')">Remove</button>`;
+      if (isLoaded) {
+        actions += `<button class="action-btn unload" onclick="unloadModelFromInv('${esc(m.ollama || m.id)}')">Unload</button>`;
+      }
+      actions += `<button class="action-btn remove" onclick="removeModel('${esc(m.ollama || m.id)}')">Remove</button>`;
     } else if (m.ollama) {
-      actions = `<button class="action-btn pull" id="pull-btn-${m.id}" onclick="pullModel('${esc(m.ollama)}', '${m.id}')">Pull</button>`;
+      const sizeHint = m.size ? ` (${m.size})` : '';
+      actions = `<button class="action-btn pull" id="pull-btn-${m.id}" onclick="pullModel('${esc(m.ollama)}', '${m.id}')">Pull${sizeHint}</button>`;
     } else if (m.gguf) {
       actions = `<span style="font-size:0.65rem;color:var(--text-muted)">GGUF only</span>`;
     }
@@ -1970,7 +2247,7 @@ function renderCatalog() {
       <div class="inv-card ${badgeClass}${fitClass}">
         <div class="inv-card-header">
           <div>
-            <div class="inv-card-name">${esc(m.name)}</div>
+            <div class="inv-card-name">${statusDot}${esc(m.name)} ${quantBadge} ${paramsBadge}</div>
             <div class="inv-card-id">${esc(m.id)}</div>
           </div>
           <span class="inv-card-badge ${badgeClass}">${badgeText}</span>
@@ -1989,6 +2266,18 @@ function renderCatalog() {
       </div>
     `;
   }).join('');
+}
+
+async function unloadModelFromInv(name) {
+  try {
+    await fetch('/api/inventory/unload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: name })
+    });
+    catalogLoaded = false;
+    loadCatalog();
+  } catch(e) {}
 }
 
 async function pullModel(ollamaName, modelId) {
@@ -2803,25 +3092,63 @@ async function runWorkflow() {
     });
     pipeline.innerHTML = pipeHtml;
 
-    // Build results table
-    let statusColor = run.status === 'completed' ? 'var(--green)' : 'var(--red)';
-    let html = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="font-size:0.8rem;color:${statusColor};text-transform:uppercase;letter-spacing:0.1em;font-weight:600">${run.status}</span>
-        <span class="wf-run-id">${run.run_id}</span>
-      </div>
-    `;
+    // Reuse viewRun to display the detailed results
+    // Store the run data and render via the shared approach
+    const steps = run.step_results || [];
+    const statusColor = run.status === 'completed' ? 'var(--green)' : 'var(--red)';
+    const totalTokens = steps.reduce((s, st) => s + ((st.token_count || {}).total_tokens || 0), 0);
+    const totalDuration = steps.reduce((s, st) => s + (st.duration_seconds || 0), 0);
+    const modelsUsed = [...new Set(steps.map(s => s.model_used).filter(Boolean))];
+    const maxDur = Math.max(...steps.map(s => s.duration_seconds || 0), 0.1);
 
-    (run.step_results || []).forEach(step => {
+    let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <span style="font-size:0.8rem;color:${statusColor};text-transform:uppercase;letter-spacing:0.1em;font-weight:600">${run.status}</span>
+      <span class="wf-run-id">${run.run_id}</span>
+    </div>`;
+
+    html += `<div class="wf-summary-bar">
+      <span class="wf-summary-item">Steps: <strong>${steps.length}</strong></span>
+      <span class="wf-summary-item">Tokens: <strong>${totalTokens.toLocaleString()}</strong></span>
+      <span class="wf-summary-item">Duration: <strong>${totalDuration.toFixed(1)}s</strong></span>
+      <span class="wf-summary-item">Models: <strong>${modelsUsed.join(', ') || '-'}</strong></span>
+    </div>`;
+
+    // Timeline
+    html += `<div class="wf-timeline"><div style="font-size:0.62rem;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em">Execution Timeline</div>`;
+    steps.forEach(step => {
+      const dur = step.duration_seconds || 0;
+      const pct = maxDur > 0 ? (dur / maxDur) * 100 : 0;
+      html += `<div class="wf-timeline-row">
+        <span class="wf-timeline-label">${esc(step.step_id)}</span>
+        <div class="wf-timeline-bar-bg"><div class="wf-timeline-bar-fill ${step.status}" style="width:${pct}%"></div></div>
+        <span class="wf-timeline-dur">${dur.toFixed(1)}s</span>
+      </div>`;
+    });
+    html += `</div>`;
+
+    // Expandable step cards
+    steps.forEach((step, idx) => {
       const dur = step.duration_seconds ? step.duration_seconds.toFixed(1) + 's' : '-';
       const tokens = step.token_count ? step.token_count.total_tokens : 0;
       html += `
-        <div class="wf-result-step ${step.status}">
-          <span class="step-name">${esc(step.step_id)}</span>
-          <span class="step-model">${esc(step.model_used || '-')}</span>
-          <span class="step-dur">${dur}</span>
-          <span class="step-tokens">${tokens} tok</span>
-          <span style="color:${step.status === 'completed' ? 'var(--green)' : 'var(--red)'};font-size:0.68rem">${step.status}</span>
+        <div class="wf-step-card ${step.status}" onclick="toggleStepCard(this)">
+          <div class="wf-step-card-header">
+            <span class="step-name">${esc(step.step_id)}</span>
+            <span class="step-meta">
+              <span>${esc(step.model_used || '-')}</span>
+              <span>${dur}</span>
+              <span>${tokens} tok</span>
+              <span style="color:${step.status === 'completed' ? 'var(--green)' : 'var(--red)'};font-size:0.68rem">${step.status}</span>
+            </span>
+          </div>
+          <div class="wf-step-card-body">
+            <div style="margin-top:8px;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Output</div>
+            <div class="wf-step-output" id="wf-run-step-output-${idx}">(click View Artifacts to load)</div>
+            <div class="wf-step-actions">
+              <button class="action-btn" onclick="event.stopPropagation();loadStepArtifact('${esc(run.run_id)}','${esc(step.step_id)}',${idx})" style="font-size:0.6rem;padding:3px 10px">View Artifacts</button>
+              <button class="action-btn" onclick="event.stopPropagation();copyStepOutput(${idx})" style="font-size:0.6rem;padding:3px 10px">Copy Output</button>
+            </div>
+          </div>
         </div>
       `;
     });
@@ -2831,6 +3158,16 @@ async function runWorkflow() {
     }
 
     content.innerHTML = html;
+
+    // Pre-populate outputs
+    steps.forEach((step, idx) => {
+      const outputEl = document.getElementById(`wf-run-step-output-${idx}`);
+      if (outputEl) {
+        const output = step.output || step.result || step.raw_output || '';
+        if (typeof output === 'object') outputEl.textContent = JSON.stringify(output, null, 2);
+        else outputEl.textContent = String(output) || '(no output)';
+      }
+    });
 
     // Refresh recent runs
     await loadRecentRuns();
@@ -2884,7 +3221,7 @@ async function viewRun(runId) {
     document.getElementById('wf-detail-name').textContent = run.workflow_id;
     document.getElementById('wf-detail-desc').textContent = `Run: ${runId}`;
 
-    // Build pipeline from step results
+    // Build pipeline from step results with color-coded status
     const pipeline = document.getElementById('wf-pipeline');
     let pipeHtml = '';
     (run.step_results || []).forEach((step, i) => {
@@ -2906,25 +3243,487 @@ async function viewRun(runId) {
 
     // Build results
     const content = document.getElementById('wf-results-content');
-    let statusColor = run.status === 'completed' ? 'var(--green)' : 'var(--red)';
-    let html = `<div style="margin-bottom:12px;font-size:0.8rem;color:${statusColor};text-transform:uppercase;letter-spacing:0.1em;font-weight:600">${run.status}</div>`;
-    (run.step_results || []).forEach(step => {
+    const steps = run.step_results || [];
+    const statusColor = run.status === 'completed' ? 'var(--green)' : 'var(--red)';
+
+    // Calculate summary stats
+    const totalTokens = steps.reduce((s, st) => s + ((st.token_count || {}).total_tokens || 0), 0);
+    const totalDuration = steps.reduce((s, st) => s + (st.duration_seconds || 0), 0);
+    const modelsUsed = [...new Set(steps.map(s => s.model_used).filter(Boolean))];
+    const maxDur = Math.max(...steps.map(s => s.duration_seconds || 0), 0.1);
+
+    let html = '';
+
+    // Status + run ID header
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <span style="font-size:0.8rem;color:${statusColor};text-transform:uppercase;letter-spacing:0.1em;font-weight:600">${run.status}</span>
+      <span class="wf-run-id">${runId}</span>
+    </div>`;
+
+    // Pipeline summary bar
+    html += `<div class="wf-summary-bar">
+      <span class="wf-summary-item">Steps: <strong>${steps.length}</strong></span>
+      <span class="wf-summary-item">Tokens: <strong>${totalTokens.toLocaleString()}</strong></span>
+      <span class="wf-summary-item">Duration: <strong>${totalDuration.toFixed(1)}s</strong></span>
+      <span class="wf-summary-item">Models: <strong>${modelsUsed.join(', ') || '-'}</strong></span>
+    </div>`;
+
+    // Execution timeline visualization
+    html += `<div class="wf-timeline">
+      <div style="font-size:0.62rem;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em">Execution Timeline</div>`;
+    steps.forEach(step => {
+      const dur = step.duration_seconds || 0;
+      const pct = maxDur > 0 ? (dur / maxDur) * 100 : 0;
+      html += `<div class="wf-timeline-row">
+        <span class="wf-timeline-label" title="${esc(step.step_id)}">${esc(step.step_id)}</span>
+        <div class="wf-timeline-bar-bg"><div class="wf-timeline-bar-fill ${step.status}" style="width:${pct}%"></div></div>
+        <span class="wf-timeline-dur">${dur.toFixed(1)}s</span>
+      </div>`;
+    });
+    html += `</div>`;
+
+    // Expandable step cards
+    steps.forEach((step, idx) => {
       const dur = step.duration_seconds ? step.duration_seconds.toFixed(1) + 's' : '-';
       const tokens = step.token_count ? step.token_count.total_tokens : 0;
+      const retries = step.retry_count || 0;
+      const retryBadge = retries > 0 ? ` <span style="color:var(--amber);font-size:0.6rem">(${retries} retries)</span>` : '';
+
+      // Quality gates display
+      let gatesHtml = '';
+      if (step.quality_gates && step.quality_gates.length > 0) {
+        gatesHtml = step.quality_gates.map(g => {
+          const passed = g.passed !== false;
+          return `<div class="wf-gate-result">
+            <span class="${passed ? 'gate-pass' : 'gate-fail'}">${passed ? '&#10003;' : '&#10007;'}</span>
+            <span style="color:var(--text-dim)">${esc(g.name || g.field || 'gate')}</span>
+            <span style="color:var(--text-muted);font-size:0.6rem">${esc(g.operator || '')}</span>
+          </div>`;
+        }).join('');
+      }
+
       html += `
-        <div class="wf-result-step ${step.status}">
-          <span class="step-name">${esc(step.step_id)}</span>
-          <span class="step-model">${esc(step.model_used || '-')}</span>
-          <span class="step-dur">${dur}</span>
-          <span class="step-tokens">${tokens} tok</span>
+        <div class="wf-step-card ${step.status}" onclick="toggleStepCard(this)">
+          <div class="wf-step-card-header">
+            <span class="step-name">${esc(step.step_id)}${retryBadge}</span>
+            <span class="step-meta">
+              <span>${esc(step.model_used || '-')}</span>
+              <span>${dur}</span>
+              <span>${tokens} tok</span>
+              <span style="color:${step.status === 'completed' ? 'var(--green)' : step.status === 'failed' ? 'var(--red)' : 'var(--text-muted)'}">${step.status}</span>
+            </span>
+          </div>
+          <div class="wf-step-card-body" id="wf-step-body-${idx}">
+            ${gatesHtml ? '<div style="margin-top:8px;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Quality Gates</div>' + gatesHtml : ''}
+            <div style="margin-top:8px;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Output</div>
+            <div class="wf-step-output" id="wf-step-output-${idx}">Loading...</div>
+            <div class="wf-step-actions">
+              <button class="action-btn" onclick="event.stopPropagation();loadStepArtifact('${esc(runId)}','${esc(step.step_id)}',${idx})" style="font-size:0.6rem;padding:3px 10px">View Artifacts</button>
+              <button class="action-btn" onclick="event.stopPropagation();copyStepOutput(${idx})" style="font-size:0.6rem;padding:3px 10px">Copy Output</button>
+            </div>
+          </div>
         </div>
       `;
     });
+
+    if (run.error) {
+      html += `<div style="margin-top:10px;padding:10px;background:var(--red-dim);border:1px solid var(--red);font-size:0.72rem;color:var(--text)">${esc(run.error)}</div>`;
+    }
+
     content.innerHTML = html;
+
+    // Pre-populate step outputs from the run data
+    steps.forEach((step, idx) => {
+      const outputEl = document.getElementById(`wf-step-output-${idx}`);
+      if (outputEl) {
+        const output = step.output || step.result || step.raw_output || '';
+        if (typeof output === 'object') {
+          outputEl.textContent = JSON.stringify(output, null, 2);
+        } else {
+          outputEl.textContent = String(output) || '(no output)';
+        }
+      }
+    });
+
   } catch (e) {
     console.error('Failed to load run:', e);
   }
 }
+
+function toggleStepCard(el) {
+  const body = el.querySelector('.wf-step-card-body');
+  if (body) body.classList.toggle('open');
+}
+
+async function loadStepArtifact(runId, stepId, idx) {
+  const outputEl = document.getElementById(`wf-step-output-${idx}`);
+  if (!outputEl) return;
+  outputEl.textContent = 'Loading artifacts...';
+  try {
+    const resp = await fetch(`/api/workflows/runs/${runId}/artifacts/${stepId}`);
+    const data = await resp.json();
+    outputEl.textContent = typeof data === 'object' ? JSON.stringify(data, null, 2) : String(data);
+  } catch (e) {
+    outputEl.textContent = 'Failed to load artifacts: ' + e.message;
+  }
+}
+
+function copyStepOutput(idx) {
+  const outputEl = document.getElementById(`wf-step-output-${idx}`);
+  if (!outputEl) return;
+  navigator.clipboard.writeText(outputEl.textContent).then(() => {
+    // Brief feedback - flash border
+    outputEl.style.borderColor = 'var(--green)';
+    setTimeout(() => { outputEl.style.borderColor = ''; }, 800);
+  }).catch(() => {});
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   AGENTS TAB
+   ══════════════════════════════════════════════════════════════════ */
+
+let agentsLoaded = false;
+let agentsData = [];
+let currentAgentChatId = null;
+let agentChatHistory = [];
+
+async function loadAgentsTab() {
+  try {
+    const resp = await fetch('/api/agents');
+    agentsData = await resp.json();
+    if (Array.isArray(agentsData)) {
+      document.getElementById('agents-count').textContent = agentsData.length > 0 ? `(${agentsData.length})` : '';
+      renderAgentGallery();
+    }
+    agentsLoaded = true;
+  } catch (e) {
+    document.getElementById('agents-grid').innerHTML =
+      `<div class="model-empty" style="color:var(--red)">Failed to load agents: ${esc(String(e))}</div>`;
+  }
+}
+
+function renderAgentGallery() {
+  const grid = document.getElementById('agents-grid');
+  if (!agentsData || agentsData.length === 0) {
+    grid.innerHTML = '<div class="model-empty">No agents yet. Click "+ New Agent" to create one.</div>';
+    return;
+  }
+
+  grid.innerHTML = agentsData.map(agent => {
+    const icon = agent.icon || '\u{1F6E1}';
+    const desc = (agent.description || '').slice(0, 100) + ((agent.description || '').length > 100 ? '...' : '');
+    const modelBadge = agent.model || agent.role || 'general';
+    const tags = (agent.tags || []).map(t => `<span class="agent-tag">${esc(t)}</span>`).join('');
+    const starters = (agent.conversation_starters || []).slice(0, 3).map(s =>
+      `<span class="agent-starter" onclick="event.stopPropagation();startAgentChatWithPrompt('${esc(agent.id)}','${esc(s)}')">${esc(s.length > 40 ? s.slice(0, 37) + '...' : s)}</span>`
+    ).join('');
+
+    return `
+      <div class="agent-card">
+        <div class="agent-card-top">
+          <span class="agent-icon">${icon}</span>
+          <div class="agent-card-info">
+            <div class="agent-card-name">${esc(agent.name)}</div>
+            <div class="agent-card-desc">${esc(desc)}</div>
+          </div>
+        </div>
+        <span class="agent-card-model">${esc(modelBadge)}</span>
+        <div class="agent-card-tags">${tags}</div>
+        ${starters ? `<div class="agent-starters">${starters}</div>` : ''}
+        <div class="agent-card-actions">
+          <button class="action-btn" onclick="showAgentBuilder('${esc(agent.id)}')" style="font-size:0.6rem;padding:3px 10px">Edit</button>
+          <button class="action-btn remove" onclick="deleteAgent('${esc(agent.id)}')" style="font-size:0.6rem;padding:3px 10px">Delete</button>
+          <button class="action-btn pull" onclick="startAgentChat('${esc(agent.id)}')" style="font-size:0.6rem;padding:3px 10px">Chat</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function showAgentBuilder(agentId) {
+  const builder = document.getElementById('agent-builder');
+  builder.classList.add('open');
+  document.getElementById('agent-gallery').style.display = 'none';
+  document.getElementById('agent-chat').classList.remove('open');
+
+  // Populate model dropdown
+  populateAgentModelSelect();
+
+  // Clear or populate form
+  if (agentId) {
+    const agent = agentsData.find(a => a.id === agentId);
+    if (agent) {
+      document.getElementById('agent-builder-title').textContent = 'Edit Agent';
+      document.getElementById('ab-id').value = agent.id;
+      document.getElementById('ab-name').value = agent.name || '';
+      document.getElementById('ab-icon').value = agent.icon || '';
+      document.getElementById('ab-desc').value = agent.description || '';
+      document.getElementById('ab-system-prompt').value = agent.system_prompt || '';
+      document.getElementById('ab-tags').value = (agent.tags || []).join(', ');
+      document.getElementById('ab-role').value = agent.role || '';
+      // Model will be set after dropdown populates
+      setTimeout(() => { document.getElementById('ab-model').value = agent.model || ''; }, 200);
+      document.getElementById('ab-tool-search').checked = (agent.tools || []).includes('web_search');
+      document.getElementById('ab-tool-workflow').checked = (agent.tools || []).includes('workflow');
+
+      // Starters
+      const startersDiv = document.getElementById('ab-starters-list');
+      startersDiv.innerHTML = '';
+      (agent.conversation_starters || []).forEach(s => addStarterInput(s));
+
+      // Context sources
+      const ctxDiv = document.getElementById('ab-ctx-list');
+      ctxDiv.innerHTML = '';
+      (agent.context_sources || []).forEach(c => addCtxInput(c.type, c.value));
+
+      builder.dataset.editId = agentId;
+    }
+  } else {
+    document.getElementById('agent-builder-title').textContent = 'New Agent';
+    document.getElementById('ab-id').value = '';
+    document.getElementById('ab-name').value = '';
+    document.getElementById('ab-icon').value = '';
+    document.getElementById('ab-desc').value = '';
+    document.getElementById('ab-system-prompt').value = '';
+    document.getElementById('ab-tags').value = '';
+    document.getElementById('ab-role').value = '';
+    document.getElementById('ab-model').value = '';
+    document.getElementById('ab-tool-search').checked = false;
+    document.getElementById('ab-tool-workflow').checked = false;
+    document.getElementById('ab-starters-list').innerHTML = '';
+    document.getElementById('ab-ctx-list').innerHTML = '';
+    delete builder.dataset.editId;
+  }
+}
+
+function hideAgentBuilder() {
+  document.getElementById('agent-builder').classList.remove('open');
+  document.getElementById('agent-gallery').style.display = '';
+}
+
+async function populateAgentModelSelect() {
+  const sel = document.getElementById('ab-model');
+  try {
+    const r = await fetch('/v1/models');
+    const d = await r.json();
+    const models = d.data || [];
+    sel.innerHTML = '<option value="">-- use role instead --</option>' +
+      models.map(m => `<option value="${esc(m.id)}">${esc(m.id)}</option>`).join('');
+  } catch {
+    sel.innerHTML = '<option value="">-- use role instead --</option>';
+  }
+}
+
+function autoAgentId() {
+  const name = document.getElementById('ab-name').value;
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  document.getElementById('ab-id').value = id;
+}
+
+function addStarterInput(value) {
+  const div = document.getElementById('ab-starters-list');
+  const row = document.createElement('div');
+  row.className = 'starter-row';
+  row.innerHTML = `<input type="text" value="${esc(value || '')}" placeholder="Ask me about..." />
+    <button class="action-btn remove" onclick="this.parentElement.remove()" style="font-size:0.6rem;padding:3px 8px">X</button>`;
+  div.appendChild(row);
+}
+
+function addCtxInput(type, value) {
+  const div = document.getElementById('ab-ctx-list');
+  const row = document.createElement('div');
+  row.className = 'ctx-row';
+  row.innerHTML = `<select>
+      <option value="file" ${type === 'file' ? 'selected' : ''}>File</option>
+      <option value="url" ${type === 'url' ? 'selected' : ''}>URL</option>
+      <option value="directory" ${type === 'directory' ? 'selected' : ''}>Directory</option>
+      <option value="workflow" ${type === 'workflow' ? 'selected' : ''}>Workflow</option>
+    </select>
+    <input type="text" value="${esc(value || '')}" placeholder="path or URL..." />
+    <button class="action-btn remove" onclick="this.parentElement.remove()" style="font-size:0.6rem;padding:3px 8px">X</button>`;
+  div.appendChild(row);
+}
+
+async function saveAgent() {
+  const builder = document.getElementById('agent-builder');
+  const editId = builder.dataset.editId;
+
+  const tools = [];
+  if (document.getElementById('ab-tool-search').checked) tools.push('web_search');
+  if (document.getElementById('ab-tool-workflow').checked) tools.push('workflow');
+
+  const starters = [];
+  document.querySelectorAll('#ab-starters-list .starter-row input').forEach(inp => {
+    if (inp.value.trim()) starters.push(inp.value.trim());
+  });
+
+  const ctxSources = [];
+  document.querySelectorAll('#ab-ctx-list .ctx-row').forEach(row => {
+    const type = row.querySelector('select').value;
+    const val = row.querySelector('input').value.trim();
+    if (val) ctxSources.push({ type, value: val });
+  });
+
+  const tagsStr = document.getElementById('ab-tags').value;
+  const tags = tagsStr.split(',').map(t => t.trim()).filter(Boolean);
+
+  const body = {
+    id: document.getElementById('ab-id').value.trim(),
+    name: document.getElementById('ab-name').value.trim(),
+    icon: document.getElementById('ab-icon').value.trim() || '\u{1F6E1}',
+    description: document.getElementById('ab-desc').value.trim(),
+    system_prompt: document.getElementById('ab-system-prompt').value,
+    model: document.getElementById('ab-model').value || null,
+    role: document.getElementById('ab-role').value || null,
+    tags,
+    tools,
+    conversation_starters: starters,
+    context_sources: ctxSources,
+  };
+
+  if (!body.id || !body.name) {
+    alert('Name and ID are required.');
+    return;
+  }
+
+  const btn = document.getElementById('ab-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    const method = editId ? 'PUT' : 'POST';
+    const url = editId ? `/api/agents/${editId}` : '/api/agents';
+    const resp = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (resp.ok) {
+      hideAgentBuilder();
+      await loadAgentsTab();
+    } else {
+      const err = await resp.json();
+      alert('Save failed: ' + (err.detail || err.message || 'Unknown error'));
+    }
+  } catch (e) {
+    alert('Save failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Agent';
+  }
+}
+
+async function deleteAgent(id) {
+  if (!confirm(`Delete agent "${id}"? This cannot be undone.`)) return;
+  try {
+    const resp = await fetch(`/api/agents/${id}`, { method: 'DELETE' });
+    if (resp.ok) await loadAgentsTab();
+  } catch (e) {
+    alert('Delete failed: ' + e.message);
+  }
+}
+
+function startAgentChat(agentId) {
+  const agent = agentsData.find(a => a.id === agentId);
+  if (!agent) return;
+
+  currentAgentChatId = agentId;
+  agentChatHistory = [];
+
+  document.getElementById('agent-gallery').style.display = 'none';
+  document.getElementById('agent-builder').classList.remove('open');
+
+  const chatPanel = document.getElementById('agent-chat');
+  chatPanel.classList.add('open');
+
+  document.getElementById('ac-icon').textContent = agent.icon || '\u{1F6E1}';
+  document.getElementById('ac-name').textContent = agent.name;
+
+  // Starters
+  const startersDiv = document.getElementById('ac-starters');
+  startersDiv.innerHTML = (agent.conversation_starters || []).map(s =>
+    `<span class="agent-starter" onclick="startAgentChatWithPrompt('${esc(agentId)}','${esc(s)}')">${esc(s)}</span>`
+  ).join('');
+
+  document.getElementById('ac-messages').innerHTML =
+    `<div class="msg system-msg">Chatting with ${esc(agent.name)}. ${esc(agent.description || '')}</div>`;
+
+  document.getElementById('ac-prompt').focus();
+}
+
+function startAgentChatWithPrompt(agentId, prompt) {
+  startAgentChat(agentId);
+  document.getElementById('ac-prompt').value = prompt;
+  sendAgentMessage();
+}
+
+function closeAgentChat() {
+  document.getElementById('agent-chat').classList.remove('open');
+  document.getElementById('agent-gallery').style.display = '';
+  currentAgentChatId = null;
+  agentChatHistory = [];
+}
+
+async function sendAgentMessage() {
+  const input = document.getElementById('ac-prompt');
+  const text = input.value.trim();
+  if (!text || !currentAgentChatId) return;
+
+  const agent = agentsData.find(a => a.id === currentAgentChatId);
+  const messages = document.getElementById('ac-messages');
+  const btn = document.getElementById('ac-send-btn');
+
+  agentChatHistory.push({ role: 'user', content: text });
+
+  messages.innerHTML += `<div class="msg user">${esc(text)}</div>`;
+  input.value = '';
+  btn.disabled = true;
+  btn.textContent = 'SENDING...';
+
+  const typingId = 'ac-typing-' + Date.now();
+  messages.innerHTML += `<div class="typing-indicator" id="${typingId}"><span class="dot"></span><span class="dot"></span><span class="dot"></span> generating</div>`;
+  messages.scrollTop = messages.scrollHeight;
+
+  try {
+    const resp = await fetch(`/api/agents/${currentAgentChatId}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: agentChatHistory }),
+    });
+    const d = await resp.json();
+    const ti = document.getElementById(typingId);
+    if (ti) ti.remove();
+
+    if (d.error) {
+      messages.innerHTML += `<div class="msg system-msg" style="color:var(--red)">${esc(d.error.message || d.error.detail || 'Unknown error')}</div>`;
+    } else {
+      const content = d.choices?.[0]?.message?.content || d.content || d.response || '(empty response)';
+      agentChatHistory.push({ role: 'assistant', content });
+
+      const agentLabel = `${agent ? agent.icon || '' : ''} ${agent ? agent.name : 'AI'}`;
+      messages.innerHTML += `<div class="msg assistant" data-agent-label="${esc(agentLabel)}">${esc(content)}</div>`;
+    }
+  } catch (e) {
+    const ti = document.getElementById(typingId);
+    if (ti) ti.remove();
+    messages.innerHTML += `<div class="msg system-msg" style="color:var(--red)">Connection error: ${esc(e.message)}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'TRANSMIT';
+  messages.scrollTop = messages.scrollHeight;
+}
+
+// Agent chat enter key handler
+document.addEventListener('DOMContentLoaded', () => {
+  const acPrompt = document.getElementById('ac-prompt');
+  if (acPrompt) {
+    acPrompt.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAgentMessage(); }
+    });
+  }
+});
 
 /* ── INIT ────────────────────────────────────────────────────────── */
 loadStatus();
