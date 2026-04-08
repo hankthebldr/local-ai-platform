@@ -1,12 +1,87 @@
 # Local AI Platform
 
-> **Enterprise-Grade Self-Hosted LLM Infrastructure**
-> CPU-optimized local model deployment with OpenAI-compatible API, privacy-first architecture, and comprehensive model management.
+> **Cortex — Self-Hosted AI Infrastructure with Multi-Agent Workflows**
+> Local LLM inference, YAML-backed custom agents, DAG workflow orchestration, and a Cortex-branded mission control dashboard. Privacy-first, runs entirely on your hardware.
 
-[![Status](https://img.shields.io/badge/status-alpha-yellow)](https://github.com/yourusername/local-ai-platform)
-[![Phase](https://img.shields.io/badge/phase-1%20foundation-blue)](PROJECT_PLAN.md)
-[![Python](https://img.shields.io/badge/python-3.10+-green)](https://www.python.org/)
+[![Status](https://img.shields.io/badge/status-beta-green)](https://github.com/hankthebldr/local-ai-platform)
+[![Tests](https://img.shields.io/badge/tests-276%20passing-brightgreen)]()
+[![Python](https://img.shields.io/badge/python-3.9+-green)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+---
+
+## Quick Start (Local Development)
+
+```bash
+# 1. Clone and enter
+git clone https://github.com/hankthebldr/local-ai-platform.git
+cd local-ai-platform
+
+# 2. Create virtual environment and install deps
+python3 -m venv venv
+source venv/bin/activate
+pip install -r setup/requirements.txt
+
+# 3. Install Ollama (if not installed)
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# 4. Start Ollama and pull a model
+ollama serve &                     # Start in background (or use systemd)
+ollama pull deepseek-r1:32b        # Or any model you prefer
+
+# 5. Start the API server + dashboard
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 6. Open dashboard
+open http://localhost:8000          # macOS
+# or visit http://localhost:8000 in your browser
+```
+
+The dashboard provides 7 tabs: **Dashboard** (system status + chat), **Models** (install/remove/manage), **Memory** (resource usage), **Discover** (HuggingFace browser), **Research** (knowledge graph), **Workflows** (DAG runner), **Agents** (custom gems).
+
+### Native macOS App (Optional)
+
+```bash
+pip install pywebview
+python desktop/app.py              # Opens a native window with the dashboard
+```
+
+### CLI Chat
+
+```bash
+source venv/bin/activate
+python cli/chat.py --model deepseek-r1:32b
+```
+
+### Run Workflows
+
+```bash
+# Compile and inspect the execution plan
+python cli/workflow.py compile workflows/xsiam-data-model-rules.yaml
+
+# Execute with seed data
+python cli/workflow.py run workflows/xsiam-data-model-rules.yaml \
+  --seed '{"log_samples": "...", "vendor_name": "PAN-OS", "log_type": "firewall", "constraints": "XDM v3"}'
+
+# List available workflows and recent runs
+python cli/workflow.py list
+python cli/workflow.py runs
+```
+
+### Custom Agents
+
+```bash
+# List agents via API
+curl http://localhost:8000/api/agents
+
+# Chat with the XSIAM analyst agent
+curl -X POST http://localhost:8000/api/agents/xsiam-analyst/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Analyze PAN-OS firewall logs for XDM mapping"}]}'
+
+# Create agents via YAML — just add a file to agents/
+cat agents/xsiam-analyst.yaml
+```
 
 ---
 
@@ -15,46 +90,29 @@
 - [Overview](#overview)
 - [Current Status](#current-status)
 - [Features](#features)
-  - [Implemented](#implemented-features-phase-1)
-  - [Planned](#planned-features-phases-2-5)
 - [System Requirements](#system-requirements)
 - [Installation](#installation)
-  - [Prerequisites](#prerequisites)
-  - [Quick Start](#quick-start)
-  - [Manual Installation](#manual-installation)
-  - [Post-Installation](#post-installation)
-- [Usage](#usage)
-  - [CLI Chat Interface](#cli-chat-interface)
-  - [API Server](#api-server)
-  - [Model Management](#model-management)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
 - [API Reference](#api-reference)
-- [Model Registry](#model-registry)
-- [Performance Benchmarks](#performance-benchmarks)
-- [Security Considerations](#security-considerations)
-- [Troubleshooting](#troubleshooting)
 - [Development](#development)
-- [Roadmap](#roadmap)
-- [Known Limitations](#known-limitations)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Overview
 
-Local AI Platform is a comprehensive, self-hosted infrastructure for deploying and running uncensored local Large Language Models (LLMs) with enterprise-grade tooling. Built for privacy-conscious users and organizations requiring complete data sovereignty, the platform provides CPU-optimized inference, OpenAI-compatible APIs, and extensive model management capabilities.
+Local AI Platform is a self-hosted AI infrastructure with multi-agent workflow orchestration, custom agent personas, and a Cortex-branded mission control dashboard. Built for privacy-first local LLM inference using Ollama, with an OpenAI-compatible API layer.
 
-### Key Characteristics
+### Key Capabilities
 
-- **100% Local**: All inference runs locally; no data leaves your infrastructure
-- **Privacy-First**: No telemetry, tracking, or external dependencies for inference
-- **CPU-Optimized**: Designed for AMD Ryzen 9 7945HX (32 threads, 60GB RAM) without GPU requirements
-- **OpenAI-Compatible**: Drop-in replacement for OpenAI API endpoints
-- **Uncensored Models**: Focus on unrestricted model variants for maximum capability
-- **Production-Ready Architecture**: Modular design supporting multiple inference engines
+- **100% Local**: All inference runs on your hardware — no data leaves your machine
+- **Multi-Agent Workflows**: DAG-based execution engine with parallel batch scheduling, quality gates, Jinja2 prompts
+- **Custom Agents**: YAML-backed agent personas (like Claude Gems) with pinned context, tools, and conversation starters
+- **Cortex Dashboard**: 7-tab mission control UI with model management, knowledge graph, workflow runner, and agent builder
+- **OpenAI-Compatible**: Drop-in replacement API — any OpenAI client works out of the box
+- **macOS Desktop App**: Native WKWebView window via pywebview (optional)
+- **276 Tests**: Comprehensive test coverage across all components
 
 ### Target Hardware Profile
 
@@ -74,115 +132,86 @@ Local AI Platform is a comprehensive, self-hosted infrastructure for deploying a
 
 ## Current Status
 
-**Phase**: 1 - Foundation Setup (85% Complete)
-**Version**: 0.2.0-alpha
-**Last Updated**: 2025-12-13
-**Production Ready**: No (Development/Testing Only)
+**Version**: 1.0.0-beta
+**Last Updated**: 2026-04-08
+**Tests**: 276 passing
 
 ### Implementation Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Core Infrastructure | ✅ Complete | Ollama installed, systemd service configured |
-| Model Download System | ✅ Complete | 11 models in registry, multi-source support |
+| Core Infrastructure | ✅ Complete | Ollama + systemd + FastAPI server |
+| Cortex Dashboard | ✅ Complete | 7-tab mission control UI (Cortex XSIAM branding) |
+| OpenAI-Compatible API | ✅ Complete | Chat/completions with SSE streaming |
+| Model Management | ✅ Complete | 20 models in catalog, pull/remove/unload via UI |
 | CLI Chat Interface | ✅ Complete | Rich formatting, conversation history |
-| FastAPI Server | ✅ Complete | Router/service architecture implemented |
-| OpenAI API Compatibility | ✅ Complete | Chat/completions with streaming support |
-| Router/Service Separation | ✅ Complete | Modular architecture with service layer |
-| Streaming Responses | ✅ Complete | Server-Sent Events (SSE) streaming |
-| Token Counting | ✅ Complete | Actual token counts from Ollama |
-| API Tests | ✅ Complete | Unit tests with mocking |
-| Startup Scripts | ✅ Complete | start.sh, test.sh, status.sh |
-| Authentication | ❌ Not Implemented | Critical security gap |
-| Rate Limiting | ❌ Not Implemented | Planned for Phase 2 |
-| Logging Infrastructure | ⚠️ Partial | Basic uvicorn logs only |
-| Multiple Inference Engines | ❌ Not Implemented | Only Ollama (Phase 2: vLLM, llama.cpp) |
-| RAG System | ❌ Not Implemented | Phase 4 feature |
-| Fine-tuning Pipeline | ❌ Not Implemented | Phase 3 feature |
-| Web UI | ❌ Not Implemented | Open WebUI installed but unconfigured |
-| Docker Deployment | ❌ Not Implemented | Phase 5 feature |
-
-**⚠️ IMPORTANT**: This platform is in active development. Do NOT use in production environments without implementing authentication, rate limiting, and comprehensive logging.
+| Multi-Agent Workflows | ✅ Complete | DAG execution, parallel batches, quality gates, Jinja2 |
+| Custom Agents (Gems) | ✅ Complete | YAML-backed personas, context resolution, 7 API endpoints |
+| Knowledge Graph | ✅ Complete | D3.js force graph with 5 node types, search |
+| macOS Desktop App | ✅ Complete | pywebview + py2app native wrapper |
+| Authentication | ✅ Complete | API key middleware (optional, env-configured) |
+| Rate Limiting | ✅ Complete | Per-IP rate limiting middleware |
+| Test Suite | ✅ Complete | 276 tests across 18 files |
+| HuggingFace Discovery | ✅ Complete | Browse trusted authors, filter by capability |
+| Session Exports | ✅ Complete | Markdown export with knowledge graph integration |
+| Docker Deployment | ❌ Planned | Phase 5 feature |
+| RAG System | ⚠️ Deps Installed | ChromaDB/LangChain installed, not integrated |
+| Fine-tuning Pipeline | ❌ Planned | Phase 3 feature |
 
 ---
 
 ## Features
 
-### Implemented Features (Phase 1)
+### Core Features
 
-#### ✅ Ollama Integration
-- Automated installation and configuration
-- Systemd service management
-- GGUF model support
-- CPU-optimized inference with llama.cpp backend
+#### Cortex Dashboard (7 Tabs)
+- **Dashboard** — System status, loaded models, CPU/memory gauges, inline chat interface with model selector and web search
+- **Models** — 20-model catalog with search, filter (All/Installed/Available/Uncensored/Coding/Reasoning), sort, pull with size estimate, remove, unload
+- **Memory** — Real-time memory usage, disk space, running model inventory
+- **Discover** — HuggingFace model browser from trusted authors, filterable by capability
+- **Research** — D3.js knowledge graph (sessions, topics, sources, agents, workflow runs) + deep research orchestration
+- **Workflows** — DAG workflow runner with pipeline visualization, execution timeline, expandable step cards with artifacts
+- **Agents** — Custom agent gallery, visual builder form, agent-specific chat mode
 
-#### ✅ Model Management
-- **11 Pre-configured Models** in registry:
-  - Uncensored: Dolphin Mixtral, Dolphin Mistral, Nous Hermes 2, WizardLM
-  - Coding: DeepSeek Coder, CodeLlama
-  - General: OpenHermes, Neural Chat, MythoMax
-  - Large: Yi-34B (200K context), Airoboros-70B
-- Multi-source downloads: Ollama, Hugging Face, GGUF files
-- Model information and filtering by tags
-- Automatic quantization selection (Q4_K_M default)
+#### Multi-Agent Workflow Engine
+- **DAG execution** with parallel batch scheduling (Kahn's algorithm)
+- **Jinja2 prompt templates** with 11 built-in filters (`{{step.output|json}}`)
+- **6 output parsers**: JSON, JSON array, markdown sections, regex, CSV, key-value
+- **15 quality gate operators**: not_empty, contains, matches, has_key, gt, lt, etc.
+- **Conditional branching** — skip steps based on context values
+- **Loop iteration** — iterate over collections with aggregation
+- **Checkpoint/resume** — save mid-workflow, resume from failure
+- **Event bus** — pub/sub for real-time execution monitoring
 
-#### ✅ OpenAI-Compatible REST API
-- **Endpoints**:
-  - `GET /health` - Health check
-  - `GET /v1/models` - List available models
-  - `POST /v1/chat/completions` - Chat interface (messages array)
-  - `POST /v1/completions` - Text completion (single prompt)
-- FastAPI with automatic documentation at `/docs`
-- CORS support for web clients
-- Request/response format conversion (OpenAI ↔ Ollama)
+#### Custom Agents (Gems)
+- YAML-backed agent personas — local alternative to Claude Gems / OpenAI GPTs
+- 5 context source types: file, URL, graph query, workflow output, inline text
+- Tool integration: web search, workflow triggers
+- Conversation starters for quick onboarding
+- UI builder form or hand-authored YAML — both work identically
 
-#### ✅ CLI Chat Interface
-- Interactive chat sessions with conversation history
-- Rich terminal formatting with modern color scheme
-- Markdown rendering for AI responses
-- Built-in commands: `/help`, `/clear`, `/models`, `/exit`
-- Graceful error handling and interruption support
+#### macOS Desktop App
+- Native WKWebView window via pywebview (uses system WebKit, ~15MB)
+- Auto-starts Ollama and FastAPI on random port
+- Build to `.app` bundle with py2app: `./desktop/build.sh`
 
-#### ✅ Automated Installation
-- Single-script installation (`setup/install.sh`)
-- Dependency installation and verification
-- Virtual environment setup
-- System requirements checking
-- Ollama systemd service creation
+### API Endpoints
 
-### Planned Features (Phases 2-5)
-
-#### 📋 Phase 2: Enhanced Serving
-- Streaming response support (Server-Sent Events)
-- Multiple inference engines (vLLM, llama.cpp direct)
-- Load balancing across engines
-- Open WebUI integration and configuration
-- API authentication and authorization
-- Rate limiting and request throttling
-- Proper token counting implementation
-
-#### 📋 Phase 3: Fine-tuning & Customization
-- LoRA/QLoRA training pipeline
-- Axolotl/Unsloth integration
-- Dataset preparation tools
-- Adapter management and merging
-- Training monitoring and checkpointing
-
-#### 📋 Phase 4: RAG & Advanced Features
-- ChromaDB vector database integration
-- Document embedding generation
-- Semantic search and retrieval
-- LangChain integration
-- Tool/function calling support
-- Prometheus metrics and monitoring
-
-#### 📋 Phase 5: Production & Optimization
-- Docker containerization
-- Docker Compose orchestration
-- Caching strategies (prompt cache, KV cache)
-- Performance optimization
-- Comprehensive documentation
-- Automated testing suite
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | System health with CPU/memory stats |
+| `GET` | `/v1/models` | List available models (OpenAI format) |
+| `POST` | `/v1/chat/completions` | Chat completion with streaming |
+| `POST` | `/v1/completions` | Text completion with streaming |
+| `GET` | `/api/agents` | List custom agents |
+| `POST` | `/api/agents/{id}/chat` | Chat with agent (context-injected) |
+| `GET` | `/api/workflows` | List workflow definitions |
+| `POST` | `/api/workflows/run` | Execute a workflow |
+| `POST` | `/api/workflows/compile` | Compile and analyze execution plan |
+| `GET` | `/api/graph` | Knowledge graph data (D3.js) |
+| `GET` | `/api/inventory/catalog` | Full model catalog with hardware profiles |
+| `POST` | `/api/inventory/pull` | Download a model (streaming progress) |
+| `DELETE` | `/api/inventory/remove` | Remove an installed model |
 
 ---
 
@@ -232,69 +261,23 @@ Local AI Platform is a comprehensive, self-hosted infrastructure for deploying a
 
 ### Quick Start
 
-The fastest way to get started with Local AI Platform:
+See the [Quick Start section at the top of this document](#quick-start-local-development) for the fastest path to running locally.
+
+#### Recommended Models
+
+| Model | Size | Best For |
+|-------|------|----------|
+| `deepseek-r1:32b` | 20GB | Reasoning, analysis, chain-of-thought |
+| `qwen2.5:32b` | 20GB | General purpose, multilingual |
+| `dolphin3:latest` | 4GB | Fast uncensored responses |
+| `huihui_ai/qwen2.5-coder-abliterate:7b` | 4GB | Uncensored coding |
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/yourusername/local-ai-platform.git
-cd local-ai-platform
+# Pull models via Ollama
+ollama pull deepseek-r1:32b
+ollama pull dolphin3:latest
 
-# 2. Run automated installation (handles all dependencies)
-./setup/install.sh
-
-# 3. Start everything with one command
-./scripts/start.sh
-# This will:
-# - Activate virtual environment
-# - Start Ollama if not running
-# - Check for installed models
-# - Create .env from template if needed
-# - Start the API server at http://localhost:8000
-```
-
-**That's it!** The platform is now running. Open another terminal to:
-
-```bash
-# Check system status
-./scripts/status.sh
-
-# Run tests
-./scripts/test.sh
-
-# Chat with CLI
-source venv/bin/activate
-python cli/chat.py --model mistral:7b
-```
-
-#### Installed Models
-
-Currently available models on this system:
-
-| Model | Size | Quantization | Use Case |
-|-------|------|--------------|----------|
-| `mistral:7b` | 4.4 GB | Q4_K_M | General purpose, fast responses |
-| `llama3.1:8b` | 4.9 GB | Q4_K_M | Advanced reasoning, instruction following |
-| `codellama:13b` | 7.4 GB | Q4_0 | Code generation and analysis |
-| `deepseek-coder:6.7b` | 3.8 GB | Q4_0 | Coding assistance, lightweight |
-| `deepseek-coder:33b` | 18 GB | Q4_0 | Advanced coding, requires 32GB+ RAM |
-
-#### Download More Models
-
-```bash
-# See all available models in the registry
-python models/download.py --list
-
-# Download by name
-python models/download.py dolphin-mixtral  # Uncensored Mixtral variant
-python models/download.py yi-34b           # High-quality 34B model
-
-# Filter by category
-python models/download.py --filter uncensored  # Uncensored models only
-python models/download.py --filter coding      # Coding-focused models
-
-# Or use Ollama directly
-ollama pull mistral
-ollama list  # See all installed models
+# Or use the dashboard Models tab to browse, pull, and manage
 ```
 
 ### Manual Installation
