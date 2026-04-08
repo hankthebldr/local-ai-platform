@@ -969,27 +969,53 @@ body::after {
   gap: 12px;
   flex-wrap: wrap;
 }
+/* ── DAG Pipeline Visualization ─────────────────────────────────────── */
 .wf-pipeline {
-  display: flex;
-  align-items: center;
-  gap: 0;
   overflow-x: auto;
-  padding: 16px 0;
+  padding: 12px 0;
 }
-.wf-step {
+.wf-dag {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-height: 80px;
+}
+.wf-dag-batch {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 6px;
   min-width: 140px;
   position: relative;
 }
+.wf-dag-batch-label {
+  font-size: 0.52rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 2px;
+}
+.wf-dag-batch-label.parallel { color: var(--purple); }
+.wf-dag-connector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  flex-shrink: 0;
+  position: relative;
+}
+.wf-dag-connector svg { overflow: visible; }
+.wf-dag-connector line { stroke: var(--border); stroke-width: 1.5; }
+.wf-dag-connector line.done { stroke: var(--green); stroke-width: 2; }
+.wf-dag-connector line.active { stroke: var(--cyan); stroke-width: 2; stroke-dasharray: 4 3; animation: dag-flow 0.8s linear infinite; }
+@keyframes dag-flow { to { stroke-dashoffset: -7; } }
 .wf-step-box {
   background: var(--bg-deep);
   border: 1px solid var(--border);
-  padding: 12px 16px;
+  padding: 8px 12px;
   text-align: center;
   transition: all 0.3s ease;
-  width: 100%;
+  width: 130px;
   position: relative;
 }
 .wf-step-box:hover { border-color: var(--cyan-dim); }
@@ -1006,21 +1032,28 @@ body::after {
   border-color: var(--red);
   box-shadow: var(--glow-red);
 }
+.wf-step-box.skipped {
+  border-color: var(--text-muted);
+  opacity: 0.5;
+}
 .wf-step-name {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wf-step-role {
-  font-size: 0.6rem;
+  font-size: 0.54rem;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
 .wf-step-status {
-  font-size: 0.58rem;
-  margin-top: 6px;
+  font-size: 0.52rem;
+  margin-top: 4px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
@@ -1028,17 +1061,17 @@ body::after {
 .wf-step-status.running { color: var(--cyan); }
 .wf-step-status.completed { color: var(--green); }
 .wf-step-status.failed { color: var(--red); }
-
-.wf-arrow {
+.wf-step-status.skipped { color: var(--text-muted); }
+.wf-dag-stats {
   display: flex;
-  align-items: center;
-  color: var(--text-muted);
-  font-size: 1.2rem;
-  padding: 0 6px;
-  flex-shrink: 0;
+  gap: 16px;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
-.wf-arrow.active { color: var(--cyan); }
-.wf-arrow.done { color: var(--green); }
+.wf-dag-stats strong { color: var(--text); }
 
 .wf-result-step {
   display: flex;
@@ -1549,7 +1582,8 @@ body::after {
 
   <!-- TAB: WORKFLOWS -->
   <div class="tab-content" id="tab-workflows">
-    <div class="panel" style="margin-bottom:16px">
+    <!-- Top toolbar -->
+    <div class="panel" style="margin-bottom:12px">
       <span class="corner-tr"></span><span class="corner-bl"></span>
       <div class="panel-label">Workflow Runner</div>
       <div class="wf-toolbar">
@@ -1562,28 +1596,43 @@ body::after {
       </div>
     </div>
 
-    <!-- Workflow Detail (hidden until loaded) -->
+    <!-- Main workflow area: two-column layout (DAG left, inspector right) -->
     <div id="wf-detail" style="display:none">
-      <div class="panel" style="margin-bottom:16px">
-        <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div class="panel-label" id="wf-detail-name">Workflow</div>
-        <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:12px" id="wf-detail-desc"></div>
-
-        <!-- Pipeline Visualization -->
-        <div class="wf-pipeline" id="wf-pipeline"></div>
-
-        <!-- Seed Input -->
-        <div style="margin-top:16px">
-          <div style="font-size:0.65rem;color:var(--text-dim);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px">Seed Data (JSON)</div>
-          <textarea id="wf-seed" class="chat-input" style="min-height:80px;resize:vertical;font-size:0.75rem" placeholder='{"source_files": ["models/user.py"], "constraints": "PostgreSQL"}'>{}</textarea>
+      <div style="display:grid;grid-template-columns:1fr 340px;gap:12px;margin-bottom:12px">
+        <!-- LEFT: DAG Canvas -->
+        <div class="panel" style="min-height:340px;position:relative">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label" id="wf-detail-name">Workflow</div>
+          <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:8px;max-height:40px;overflow:hidden" id="wf-detail-desc"></div>
+          <div id="wf-dag-canvas" style="width:100%;min-height:260px;position:relative"></div>
+          <div class="wf-dag-stats" id="wf-dag-stats"></div>
         </div>
 
-        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:8px 28px">EXECUTE</button>
+        <!-- RIGHT: Inspector panel -->
+        <div class="panel" id="wf-inspector" style="display:flex;flex-direction:column">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label" id="wf-inspector-title">Inspector</div>
+          <div id="wf-inspector-content" style="flex:1;overflow-y:auto;font-size:0.72rem;color:var(--text-dim)">
+            <div style="padding:20px 0;text-align:center;color:var(--text-muted);font-size:0.68rem">
+              Select a node to inspect its configuration, inputs, outputs, and results.
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Run Results (shown after execution) -->
+      <!-- Seed input + Execute -->
+      <div class="panel" style="margin-bottom:12px">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="flex:1">
+            <div style="font-size:0.6rem;color:var(--text-dim);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:6px">Seed Data (JSON)</div>
+            <textarea id="wf-seed" class="chat-input" style="min-height:60px;resize:vertical;font-size:0.72rem" placeholder='{"log_samples": "...", "vendor_name": "PAN-OS"}'>{}</textarea>
+          </div>
+          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:10px 28px;margin-top:18px">EXECUTE</button>
+        </div>
+      </div>
+
+      <!-- Execution Results (timeline + step cards) -->
       <div id="wf-results" style="display:none">
         <div class="panel">
           <span class="corner-tr"></span><span class="corner-bl"></span>
@@ -3010,30 +3059,322 @@ async function loadWorkflowDetail() {
   if (!opt || !opt.value) return;
 
   try {
-    // Load via validate endpoint to parse the definition
-    const resp = await fetch('/api/workflows');
-    const workflows = await resp.json();
-    const wf = workflows.find(w => w.id === opt.dataset.id);
-    if (!wf) return;
-
-    // Fetch the actual YAML definition by running a validate
-    const defResp = await fetch(opt.value.replace(/^\.\//, '/'));
-
     document.getElementById('wf-detail-name').textContent = opt.textContent;
-    document.getElementById('wf-detail-desc').textContent = opt.dataset.desc;
+    document.getElementById('wf-detail-desc').textContent = opt.dataset.desc || '';
     document.getElementById('wf-detail').style.display = 'block';
     document.getElementById('wf-results').style.display = 'none';
 
-    // We need to get the steps - use the validate endpoint with inline definition
-    // For now, render based on what we know
-    currentWorkflowDef = { id: opt.dataset.id, name: opt.textContent, steps: wf.steps };
+    // Compile to get execution plan with DAG batches
+    const compResp = await fetch('/api/workflows/compile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workflow_id: opt.dataset.id }),
+    });
+    const compiled = await compResp.json();
+    currentWorkflowDef = compiled;
 
-    // Build pipeline visualization placeholder
-    const pipeline = document.getElementById('wf-pipeline');
-    pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
+    // Render DAG visualization
+    renderDAG(compiled.execution_plan, compiled.steps, []);
 
   } catch (e) {
     console.error('Failed to load workflow:', e);
+    document.getElementById('wf-pipeline').innerHTML =
+      `<div style="color:var(--red);font-size:0.72rem">Failed to compile: ${esc(String(e))}</div>`;
+  }
+}
+
+// ── D3.js DAG Visualization ──────────────────────────────────────────
+let _dagData = null; // { plan, stepMeta, stepResults, runId }
+
+function renderDAG(plan, stepMeta, stepResults, runId) {
+  const container = document.getElementById('wf-dag-canvas');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!plan || !plan.batches) {
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:0.72rem;padding:20px">No execution plan</div>';
+    return;
+  }
+
+  const resultMap = {};
+  (stepResults || []).forEach(r => { resultMap[r.step_id] = r; });
+  const metaMap = {};
+  (stepMeta || []).forEach(s => { metaMap[s.id] = s; });
+  _dagData = { plan, stepMeta, stepResults: resultMap, metaMap, runId };
+
+  // Layout constants
+  const nodeW = 130, nodeH = 52, padX = 60, padY = 20, batchGap = 50;
+  const maxBatchHeight = Math.max(...plan.batches.map(b => b.step_ids.length));
+  const svgW = plan.batches.length * (nodeW + batchGap) + padX * 2;
+  const svgH = maxBatchHeight * (nodeH + padY) + padY * 2 + 30;
+
+  const svg = d3.select(container).append('svg')
+    .attr('width', '100%').attr('height', svgH)
+    .attr('viewBox', `0 0 ${svgW} ${svgH}`)
+    .style('overflow', 'visible');
+
+  // Defs for arrow markers
+  svg.append('defs').append('marker')
+    .attr('id', 'dag-arrow').attr('viewBox', '0 0 10 6').attr('refX', 10).attr('refY', 3)
+    .attr('markerWidth', 8).attr('markerHeight', 6).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,0 L10,3 L0,6').attr('fill', '#3a4248');
+
+  svg.append('defs').append('marker')
+    .attr('id', 'dag-arrow-done').attr('viewBox', '0 0 10 6').attr('refX', 10).attr('refY', 3)
+    .attr('markerWidth', 8).attr('markerHeight', 6).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,0 L10,3 L0,6').attr('fill', '#00cc66');
+
+  // Compute node positions
+  const nodePositions = {};
+  plan.batches.forEach((batch, bi) => {
+    const x = padX + bi * (nodeW + batchGap);
+    const batchH = batch.step_ids.length * (nodeH + padY) - padY;
+    const yOffset = (svgH - 30 - batchH) / 2;
+    batch.step_ids.forEach((sid, si) => {
+      nodePositions[sid] = { x, y: yOffset + si * (nodeH + padY), batch: bi };
+    });
+  });
+
+  // Draw edges
+  const edges = svg.append('g').attr('class', 'dag-edges');
+  plan.batches.forEach((batch) => {
+    batch.step_ids.forEach(sid => {
+      const meta = metaMap[sid];
+      const deps = [];
+      // Collect all dependency step IDs
+      if (meta && meta.depends_on) deps.push(...meta.depends_on);
+      if (meta && meta.inputs) {
+        meta.inputs.forEach(inp => {
+          const ns = inp.split('.')[0];
+          if (ns !== 'seed' && ns !== 'shared' && ns !== 'metadata' && nodePositions[ns] && !deps.includes(ns)) {
+            deps.push(ns);
+          }
+        });
+      }
+      // If no explicit deps but not in batch 0, connect to all prior batch nodes
+      if (deps.length === 0 && batch.depends_on_batches && batch.depends_on_batches.length > 0) {
+        batch.depends_on_batches.forEach(depBi => {
+          plan.batches[depBi].step_ids.forEach(depSid => { if (!deps.includes(depSid)) deps.push(depSid); });
+        });
+      }
+
+      deps.forEach(depSid => {
+        if (!nodePositions[depSid]) return;
+        const from = nodePositions[depSid];
+        const to = nodePositions[sid];
+        const depResult = resultMap[depSid];
+        const isDone = depResult && depResult.status === 'completed';
+        const x1 = from.x + nodeW, y1 = from.y + nodeH / 2;
+        const x2 = to.x, y2 = to.y + nodeH / 2;
+        const mx = (x1 + x2) / 2;
+
+        edges.append('path')
+          .attr('d', `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`)
+          .attr('fill', 'none')
+          .attr('stroke', isDone ? '#00cc66' : '#3a4248')
+          .attr('stroke-width', isDone ? 2 : 1.5)
+          .attr('marker-end', isDone ? 'url(#dag-arrow-done)' : 'url(#dag-arrow)')
+          .attr('opacity', isDone ? 0.8 : 0.5);
+      });
+    });
+  });
+
+  // Draw batch labels
+  const labels = svg.append('g').attr('class', 'dag-labels');
+  plan.batches.forEach((batch, bi) => {
+    const x = padX + bi * (nodeW + batchGap) + nodeW / 2;
+    const isParallel = batch.step_ids.length > 1;
+    labels.append('text')
+      .attr('x', x).attr('y', svgH - 8)
+      .attr('text-anchor', 'middle')
+      .attr('fill', isParallel ? '#00C0E8' : '#3a4248')
+      .attr('font-size', '9px').attr('letter-spacing', '0.1em')
+      .text(`B${bi}${isParallel ? ' ∥' : ''}`);
+  });
+
+  // Draw nodes
+  const nodes = svg.append('g').attr('class', 'dag-nodes');
+  Object.entries(nodePositions).forEach(([sid, pos]) => {
+    const result = resultMap[sid];
+    const meta = metaMap[sid];
+    const status = result ? result.status : 'pending';
+
+    const colorMap = { completed: '#00cc66', failed: '#ff5252', running: '#00cc66', skipped: '#3a4248', pending: '#3a4248' };
+    const bgMap = { completed: '#00cc6608', failed: '#ff525208', running: '#00cc6610', skipped: '#ffffff03', pending: '#ffffff03' };
+    const borderColor = colorMap[status] || '#3a4248';
+
+    const g = nodes.append('g')
+      .attr('transform', `translate(${pos.x},${pos.y})`)
+      .style('cursor', 'pointer')
+      .on('click', () => inspectNode(sid));
+
+    // Background rect
+    g.append('rect')
+      .attr('width', nodeW).attr('height', nodeH).attr('rx', 4)
+      .attr('fill', bgMap[status]).attr('stroke', borderColor).attr('stroke-width', 1.5);
+
+    // Running glow
+    if (status === 'running') {
+      g.append('rect')
+        .attr('width', nodeW).attr('height', nodeH).attr('rx', 4)
+        .attr('fill', 'none').attr('stroke', '#00cc66').attr('stroke-width', 2)
+        .attr('opacity', 0.4)
+        .append('animate').attr('attributeName', 'opacity').attr('values', '0.2;0.6;0.2').attr('dur', '1.5s').attr('repeatCount', 'indefinite');
+    }
+
+    // Step name
+    const displayName = (meta && meta.name) ? meta.name.replace(/^\d+\.\s*/, '') : sid;
+    const truncName = displayName.length > 18 ? displayName.slice(0, 16) + '…' : displayName;
+    g.append('text')
+      .attr('x', nodeW / 2).attr('y', 18)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#eceff1').attr('font-size', '10px').attr('font-weight', '600')
+      .text(truncName);
+
+    // Step ID
+    g.append('text')
+      .attr('x', nodeW / 2).attr('y', 30)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#6b7780').attr('font-size', '8px')
+      .text(sid);
+
+    // Status / duration
+    const statusText = result && result.duration_seconds
+      ? `${result.duration_seconds.toFixed(1)}s`
+      : status;
+    g.append('text')
+      .attr('x', nodeW / 2).attr('y', 44)
+      .attr('text-anchor', 'middle')
+      .attr('fill', borderColor).attr('font-size', '8px').attr('letter-spacing', '0.08em')
+      .text(statusText.toUpperCase());
+
+    // Quality gate indicator
+    if (meta && meta.has_gates) {
+      g.append('circle').attr('cx', nodeW - 8).attr('cy', 8).attr('r', 4)
+        .attr('fill', '#8a98a0').attr('opacity', 0.7);
+      g.append('text').attr('x', nodeW - 8).attr('y', 11)
+        .attr('text-anchor', 'middle').attr('fill', '#0b0e11').attr('font-size', '6px').attr('font-weight', '700')
+        .text('G');
+    }
+  });
+
+  // Stats bar
+  const statsEl = document.getElementById('wf-dag-stats');
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <span>Steps: <strong>${plan.total_steps}</strong></span>
+      <span>Batches: <strong>${plan.total_batches}</strong></span>
+      <span>Max parallel: <strong>${plan.parallelism}</strong></span>
+      <span>Speedup: <strong>${(plan.total_steps / plan.total_batches).toFixed(1)}x</strong></span>
+    `;
+  }
+}
+
+function inspectNode(stepId) {
+  const panel = document.getElementById('wf-inspector-content');
+  const title = document.getElementById('wf-inspector-title');
+  if (!panel || !_dagData) return;
+
+  const meta = _dagData.metaMap[stepId];
+  const result = _dagData.stepResults[stepId];
+  title.textContent = stepId;
+
+  let html = '';
+
+  // Status badge
+  if (result) {
+    const statusColors = { completed: 'var(--green)', failed: 'var(--red)', running: 'var(--cyan)', skipped: 'var(--text-muted)' };
+    html += `<div style="margin-bottom:10px">
+      <span style="display:inline-block;padding:2px 10px;border:1px solid ${statusColors[result.status] || 'var(--border)'};color:${statusColors[result.status] || 'var(--text)'};font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase">${result.status}</span>
+    </div>`;
+  }
+
+  // Step metadata
+  if (meta) {
+    html += `<div style="margin-bottom:10px">`;
+    if (meta.name) html += `<div style="font-weight:600;color:var(--text);margin-bottom:4px">${esc(meta.name)}</div>`;
+    if (meta.role) html += `<div style="font-size:0.62rem;color:var(--amber)">Role: ${esc(meta.role)}</div>`;
+    if (meta.model) html += `<div style="font-size:0.62rem;color:var(--amber)">Model: ${esc(meta.model)}</div>`;
+    if (meta.output_format && meta.output_format !== 'raw') html += `<div style="font-size:0.62rem;color:var(--purple)">Output: ${esc(meta.output_format)}</div>`;
+    html += `</div>`;
+
+    // Dependencies
+    if (meta.depends_on && meta.depends_on.length > 0) {
+      html += `<div style="margin-bottom:8px"><div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Dependencies</div>`;
+      meta.depends_on.forEach(d => { html += `<span style="display:inline-block;padding:1px 6px;border:1px solid var(--border);font-size:0.6rem;margin:2px;cursor:pointer" onclick="inspectNode('${esc(d)}')">${esc(d)}</span>`; });
+      html += `</div>`;
+    }
+
+    // Inputs
+    if (meta.inputs && meta.inputs.length > 0) {
+      html += `<div style="margin-bottom:8px"><div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Inputs</div>`;
+      meta.inputs.forEach(inp => { html += `<div style="font-size:0.6rem;color:var(--text-dim);font-family:var(--mono)">${esc(inp)}</div>`; });
+      html += `</div>`;
+    }
+
+    // Outputs
+    if (meta.outputs && meta.outputs.length > 0) {
+      html += `<div style="margin-bottom:8px"><div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Outputs</div>`;
+      meta.outputs.forEach(out => { html += `<div style="font-size:0.6rem;color:var(--cyan);font-family:var(--mono)">${esc(out)}</div>`; });
+      html += `</div>`;
+    }
+  }
+
+  // Execution result details
+  if (result) {
+    html += `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px">`;
+    html += `<div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px">Execution</div>`;
+    if (result.model_used) html += `<div style="font-size:0.62rem">Model: <span style="color:var(--text)">${esc(result.model_used)}</span></div>`;
+    if (result.duration_seconds) html += `<div style="font-size:0.62rem">Duration: <span style="color:var(--text)">${result.duration_seconds.toFixed(1)}s</span></div>`;
+    if (result.token_count) html += `<div style="font-size:0.62rem">Tokens: <span style="color:var(--text)">${(result.token_count.total_tokens || 0).toLocaleString()}</span></div>`;
+    if (result.retries > 0) html += `<div style="font-size:0.62rem;color:var(--amber)">Retries: ${result.retries}</div>`;
+    if (result.cached) html += `<div style="font-size:0.62rem;color:var(--purple)">Cached result</div>`;
+    if (result.error) html += `<div style="font-size:0.62rem;color:var(--red);margin-top:4px;word-break:break-all">${esc(result.error)}</div>`;
+
+    // Gate results
+    if (result.gate_results && result.gate_results.length > 0) {
+      html += `<div style="margin-top:8px"><div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Quality Gates</div>`;
+      result.gate_results.forEach(g => {
+        const icon = g.passed ? '✓' : (g.severity === 'warning' ? '⚠' : '✗');
+        const color = g.passed ? 'var(--green)' : (g.severity === 'warning' ? 'var(--amber)' : 'var(--red)');
+        html += `<div style="font-size:0.6rem"><span style="color:${color}">${icon}</span> ${esc(g.gate)}: <span style="color:var(--text-dim)">${esc(g.reason || '')}</span></div>`;
+      });
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+
+    // Load artifacts button
+    if (_dagData.runId) {
+      html += `<div style="margin-top:10px">
+        <button class="action-btn" onclick="loadInspectorArtifact('${esc(_dagData.runId)}','${esc(stepId)}')" style="font-size:0.58rem;padding:4px 12px;width:100%">View Output</button>
+      </div>`;
+      html += `<pre id="wf-inspector-output" style="margin-top:8px;font-size:0.58rem;color:var(--text-dim);max-height:200px;overflow:auto;white-space:pre-wrap;display:none"></pre>`;
+    }
+  }
+
+  panel.innerHTML = html;
+
+  // Highlight selected node in SVG
+  d3.selectAll('.dag-nodes g rect').attr('stroke-width', 1.5);
+  d3.selectAll('.dag-nodes g').each(function() {
+    const text = d3.select(this).select('text:nth-child(3)').text();
+    if (text === stepId) d3.select(this).select('rect').attr('stroke-width', 3);
+  });
+}
+
+async function loadInspectorArtifact(runId, stepId) {
+  const outputEl = document.getElementById('wf-inspector-output');
+  if (!outputEl) return;
+  outputEl.style.display = 'block';
+  outputEl.textContent = 'Loading...';
+  try {
+    const resp = await fetch(`/api/workflows/runs/${runId}/artifacts/${stepId}`);
+    if (!resp.ok) { outputEl.textContent = `No artifacts found`; return; }
+    const data = await resp.json();
+    outputEl.textContent = JSON.stringify(data.outputs, null, 2);
+  } catch (e) {
+    outputEl.textContent = `Error: ${e}`;
   }
 }
 
@@ -3072,25 +3413,10 @@ async function runWorkflow() {
     document.getElementById('wf-results').style.display = 'block';
     const content = document.getElementById('wf-results-content');
 
-    // Build pipeline visualization with results
-    const pipeline = document.getElementById('wf-pipeline');
-    let pipeHtml = '';
-    (run.step_results || []).forEach((step, i) => {
-      if (i > 0) {
-        const arrowClass = step.status === 'completed' ? 'done' : (step.status === 'running' ? 'active' : '');
-        pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
-      }
-      pipeHtml += `
-        <div class="wf-step">
-          <div class="wf-step-box ${step.status}">
-            <div class="wf-step-name">${esc(step.step_id)}</div>
-            <div class="wf-step-role">${esc(step.model_used || '')}</div>
-            <div class="wf-step-status ${step.status}">${step.status}</div>
-          </div>
-        </div>
-      `;
-    });
-    pipeline.innerHTML = pipeHtml;
+    // Render DAG with execution results
+    if (run.execution_plan) {
+      renderDAG(run.execution_plan, currentWorkflowDef?.steps || [], run.step_results || [], run.run_id);
+    }
 
     // Reuse viewRun to display the detailed results
     // Store the run data and render via the shared approach
@@ -3221,25 +3547,16 @@ async function viewRun(runId) {
     document.getElementById('wf-detail-name').textContent = run.workflow_id;
     document.getElementById('wf-detail-desc').textContent = `Run: ${runId}`;
 
-    // Build pipeline from step results with color-coded status
-    const pipeline = document.getElementById('wf-pipeline');
-    let pipeHtml = '';
-    (run.step_results || []).forEach((step, i) => {
-      if (i > 0) {
-        const arrowClass = step.status === 'completed' ? 'done' : '';
-        pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
-      }
-      pipeHtml += `
-        <div class="wf-step">
-          <div class="wf-step-box ${step.status}">
-            <div class="wf-step-name">${esc(step.step_id)}</div>
-            <div class="wf-step-role">${esc(step.model_used || '')}</div>
-            <div class="wf-step-status ${step.status}">${step.status}</div>
-          </div>
-        </div>
-      `;
-    });
-    pipeline.innerHTML = pipeHtml;
+    // Render DAG with execution results
+    if (run.execution_plan) {
+      renderDAG(run.execution_plan, [], run.step_results || [], runId);
+    } else {
+      // Legacy run without execution plan — render flat
+      const pipeline = document.getElementById('wf-pipeline');
+      pipeline.innerHTML = (run.step_results || []).map(s =>
+        `<div class="wf-step-box ${s.status}" style="display:inline-block;margin:4px"><div class="wf-step-name">${esc(s.step_id)}</div><div class="wf-step-status ${s.status}">${s.status}</div></div>`
+      ).join('');
+    }
 
     // Build results
     const content = document.getElementById('wf-results-content');
