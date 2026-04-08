@@ -1,0 +1,163 @@
+"""
+Workflow Router — API endpoints for multi-agent workflow management
+
+Endpoints:
+  GET  /api/workflows              — List available workflow definitions
+  POST /api/workflows/validate     — Validate a workflow definition
+  POST /api/workflows/run          — Execute a workflow with seed data
+  GET  /api/workflows/runs         — List recent workflow runs
+  GET  /api/workflows/runs/{id}    — Get a specific run's status and results
+  GET  /api/workflows/runs/{id}/artifacts/{step_id} — Get a step's output
+"""
+
+import os
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel, Field
+
+from ..logging_config import logger
+from ..services.ollama_service import OllamaService
+from ..services.workflow_engine import WorkflowEngine
+from ..exceptions import WorkflowValidationError, WorkflowExecutionError
+
+router = APIRouter(prefix="/api/workflows", tags=["workflows"])
+
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+WORKFLOWS_DIR = os.getenv("WORKFLOWS_DIR", "./workflows")
+
+
+def get_ollama_service() -> OllamaService:
+    """Get or create OllamaService instance"""
+    return OllamaService(OLLAMA_HOST)
+
+
+def get_engine() -> WorkflowEngine:
+    """Get or create WorkflowEngine instance"""
+    return WorkflowEngine(get_ollama_service())
+
+
+# ── Request/Response Models ────────────────────────────────────────────────
+
+
+class WorkflowRunRequest(BaseModel):
+    """Request to execute a workflow"""
+    workflow_id: Optional[str] = None  # ID to load from workflows/ dir
+    definition: Optional[Dict[str, Any]] = None  # inline definition
+    seed: Dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowValidateRequest(BaseModel):
+    """Request to validate a workflow definition"""
+    definition: Dict[str, Any]
+    seed_keys: Optional[List[str]] = None
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────
+
+
+@router.get("")
+async def list_workflows():
+    """List all available workflow definitions from the workflows/ directory"""
+    engine = get_engine()
+    return engine.list_workflows(WORKFLOWS_DIR)
+
+
+@router.post("/validate")
+async def validate_workflow(req: WorkflowValidateRequest):
+    """Validate a workflow definition without executing it"""
+    engine = get_engine()
+    try:
+        defn = engine.load_from_dict(req.definition)
+        engine.validate(defn, seed_keys=req.seed_keys)
+        return {"valid": True, "workflow_id": defn.id, "steps": len(defn.steps)}
+    except WorkflowValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.post("/run")
+async def run_workflow(req: WorkflowRunRequest, background_tasks: BackgroundTasks):
+    """
+    Execute a workflow with seed data.
+
+    Provide either workflow_id (loads from workflows/ dir) or
+    definition (inline YAML-equivalent dict).
+    """
+    engine = get_engine()
+
+    # Load definition
+    if req.definition:
+        defn = engine.load_from_dict(req.definition)
+    elif req.workflow_id:
+        yaml_path = f"{WORKFLOWS_DIR}/{req.workflow_id}.yaml"
+        defn = engine.load(yaml_path)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either 'workflow_id' or 'definition'",
+        )
+
+    # Validate
+    try:
+        engine.validate(defn, seed_keys=list(req.seed.keys()) if req.seed else None)
+    except WorkflowValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Execute synchronously (future: background task option)
+    run = engine.run(defn, seed=req.seed)
+
+    return {
+        "run_id": run.run_id,
+        "workflow_id": run.workflow_id,
+        "status": run.status,
+        "started_at": str(run.started_at),
+        "completed_at": str(run.completed_at),
+        "step_results": [
+            {
+                "step_id": r.step_id,
+                "status": r.status,
+                "model_used": r.model_used,
+                "duration_seconds": r.duration_seconds,
+                "token_count": r.token_count,
+                "error": r.error,
+            }
+            for r in run.step_results
+        ],
+        "error": run.error,
+    }
+
+
+@router.get("/runs")
+async def list_runs(limit: int = 20):
+    """List recent workflow runs"""
+    engine = get_engine()
+    return engine.list_runs(limit=limit)
+
+
+@router.get("/runs/{run_id}")
+async def get_run(run_id: str):
+    """Get full details of a specific workflow run"""
+    engine = get_engine()
+    run_data = engine.get_run(run_id)
+    if not run_data:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+    return run_data
+
+
+@router.get("/runs/{run_id}/artifacts/{step_id}")
+async def get_artifact(run_id: str, step_id: str):
+    """Get a specific step's output artifacts"""
+    engine = get_engine()
+    run_data = engine.get_run(run_id)
+    if not run_data:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+
+    workspace = run_data.get("context", {}).get("workspace", {})
+    step_data = workspace.get(step_id)
+    if not step_data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No artifacts for step '{step_id}' in run '{run_id}'",
+        )
+
+    return {"step_id": step_id, "run_id": run_id, "outputs": step_data}

@@ -11,31 +11,32 @@
 <style>
 /* ── DESIGN TOKENS ──────────────────────────────────────────────── */
 :root {
-  --bg-deep: #060a10;
-  --bg: #0a0e14;
-  --bg-panel: rgba(10, 16, 24, 0.85);
-  --border: #1a2332;
-  --border-glow: #00d4ff18;
-  --cyan: #00d4ff;
-  --cyan-dim: #00d4ff60;
-  --cyan-ghost: #00d4ff15;
-  --amber: #ff8c00;
-  --amber-dim: #ff8c0060;
-  --green: #00ff88;
-  --green-dim: #00ff8860;
-  --red: #ff3366;
-  --red-dim: #ff336660;
-  --purple: #b388ff;
-  --purple-dim: #b388ff60;
-  --text: #d0dae8;
-  --text-dim: #556677;
-  --text-muted: #334455;
+  /* PANW Cortex Brand — dark mode palette */
+  --bg-deep: #0a0c0f;
+  --bg: #12151a;
+  --bg-panel: rgba(18, 21, 26, 0.92);
+  --border: #1e2228;
+  --border-glow: #98c23d18;
+  --cyan: #98c23d;             /* Cortex Green — official PANW brand */
+  --cyan-dim: #98c23d60;
+  --cyan-ghost: #98c23d15;
+  --amber: #8a98a0;            /* PANW grey — secondary info */
+  --amber-dim: #8a98a060;
+  --green: #98c23d;            /* Cortex Green — status/success */
+  --green-dim: #98c23d60;
+  --red: #ff5252;              /* Alert red */
+  --red-dim: #ff525260;
+  --purple: #2dabe2;           /* PANW sky blue — tertiary accent */
+  --purple-dim: #2dabe260;
+  --text: #eceff1;
+  --text-dim: #5e6872;         /* PANW medium grey */
+  --text-muted: #36424b;       /* PANW dark grey */
   --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-  --sans: 'Space Grotesk', system-ui, sans-serif;
-  --glow-cyan: 0 0 12px #00d4ff30, 0 0 4px #00d4ff20;
-  --glow-green: 0 0 12px #00ff8830, 0 0 4px #00ff8820;
-  --glow-red: 0 0 12px #ff336830, 0 0 4px #ff336820;
-  --glow-amber: 0 0 12px #ff8c0030, 0 0 4px #ff8c0020;
+  --sans: 'Space Grotesk', 'TT Hoves', system-ui, sans-serif;
+  --glow-cyan: 0 0 12px #98c23d30, 0 0 4px #98c23d20;
+  --glow-green: 0 0 12px #98c23d30, 0 0 4px #98c23d20;
+  --glow-red: 0 0 12px #ff525230, 0 0 4px #ff525220;
+  --glow-amber: 0 0 12px #8a98a030, 0 0 4px #8a98a020;
 }
 
 /* ── RESET & BASE ───────────────────────────────────────────────── */
@@ -56,9 +57,9 @@ body::before {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 20% 20%, #00d4ff06 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 80%, #ff8c0004 0%, transparent 60%),
-    linear-gradient(180deg, var(--bg-deep) 0%, #0a0e14 100%);
+    radial-gradient(ellipse 80% 50% at 20% 20%, #98c23d06 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, #78909c04 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-deep) 0%, #121518 100%);
   z-index: -2;
   pointer-events: none;
 }
@@ -82,7 +83,7 @@ body::after {
 .scanline {
   position: fixed;
   inset: 0;
-  background: linear-gradient(180deg, transparent 0%, #00d4ff04 50%, transparent 100%);
+  background: linear-gradient(180deg, transparent 0%, #98c23d04 50%, transparent 100%);
   height: 200px;
   animation: scanline 8s linear infinite;
   pointer-events: none;
@@ -174,7 +175,7 @@ body::after {
 .tab-btn.active {
   color: var(--cyan);
   border-bottom-color: var(--cyan);
-  box-shadow: 0 2px 8px #00d4ff15;
+  box-shadow: 0 2px 8px #98c23d15;
 }
 .tab-btn .tab-count {
   font-size: 0.6rem;
@@ -275,7 +276,7 @@ body::after {
 .gauge svg { transform: rotate(-90deg); }
 .gauge-track { fill: none; stroke: var(--border); stroke-width: 4; }
 .gauge-fill { fill: none; stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset 1s ease, stroke 0.5s ease; }
-.gauge-fill.cpu { stroke: var(--cyan); filter: drop-shadow(0 0 6px #00d4ff40); }
+.gauge-fill.cpu { stroke: var(--cyan); filter: drop-shadow(0 0 6px #98c23d40); }
 .gauge-fill.mem { stroke: var(--green); filter: drop-shadow(0 0 6px #00ff8840); }
 .gauge-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .gauge-value { font-size: 1.1rem; font-weight: 600; line-height: 1; }
@@ -297,7 +298,7 @@ body::after {
   transition: all 0.2s ease;
   cursor: default;
 }
-.model-item:hover { background: #00d4ff08; border-left-color: var(--cyan); }
+.model-item:hover { background: #98c23d08; border-left-color: var(--cyan); }
 .model-name { color: var(--text); font-weight: 500; }
 .model-size { color: var(--text-dim); font-size: 0.7rem; }
 .model-empty { color: var(--text-muted); font-size: 0.75rem; font-style: italic; padding: 12px 0; }
@@ -341,7 +342,7 @@ body::after {
 
 .msg { padding: 10px 14px; margin: 6px 0; max-width: 85%; position: relative; }
 .msg.user {
-  background: linear-gradient(135deg, #00d4ff10, #00d4ff05);
+  background: linear-gradient(135deg, #98c23d10, #98c23d05);
   border-left: 2px solid var(--cyan-dim);
   margin-left: auto;
   text-align: left;
@@ -529,7 +530,7 @@ body::after {
   outline: none;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
-.chat-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 8px #00d4ff10; }
+.chat-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 8px #98c23d10; }
 .chat-input::placeholder { color: var(--text-muted); }
 
 .send-btn {
@@ -546,7 +547,7 @@ body::after {
   position: relative;
   overflow: hidden;
 }
-.send-btn:hover { background: #00d4ff10; border-color: var(--cyan); box-shadow: var(--glow-cyan); }
+.send-btn:hover { background: #98c23d10; border-color: var(--cyan); box-shadow: var(--glow-cyan); }
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .send-btn:disabled:hover { background: transparent; box-shadow: none; }
 
@@ -591,7 +592,7 @@ body::after {
   transition: all 0.2s ease;
 }
 .filter-btn:hover { border-color: var(--text-dim); color: var(--text); }
-.filter-btn.active { border-color: var(--cyan); color: var(--cyan); background: #00d4ff08; }
+.filter-btn.active { border-color: var(--cyan); color: var(--cyan); background: #98c23d08; }
 
 .inv-stats {
   display: flex;
@@ -615,7 +616,7 @@ body::after {
   padding: 16px;
   transition: all 0.2s ease;
 }
-.inv-card:hover { border-color: var(--cyan-dim); background: #00d4ff06; }
+.inv-card:hover { border-color: var(--cyan-dim); background: #98c23d06; }
 .inv-card.installed { border-left: 3px solid var(--green-dim); }
 .inv-card.available { border-left: 3px solid var(--text-muted); }
 .inv-card.no-fit { opacity: 0.5; }
@@ -948,6 +949,119 @@ body::after {
 }
 .session-preview { font-size: 0.68rem; color: var(--text-dim); line-height: 1.5; white-space: pre-wrap; }
 
+/* ── WORKFLOWS TAB ─────────────────────────────────────────────── */
+.wf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.wf-pipeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  padding: 16px 0;
+}
+.wf-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 140px;
+  position: relative;
+}
+.wf-step-box {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  padding: 12px 16px;
+  text-align: center;
+  transition: all 0.3s ease;
+  width: 100%;
+  position: relative;
+}
+.wf-step-box:hover { border-color: var(--cyan-dim); }
+.wf-step-box.running {
+  border-color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+.wf-step-box.completed {
+  border-color: var(--green);
+  box-shadow: var(--glow-green);
+}
+.wf-step-box.failed {
+  border-color: var(--red);
+  box-shadow: var(--glow-red);
+}
+.wf-step-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.wf-step-role {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.wf-step-status {
+  font-size: 0.58rem;
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.wf-step-status.pending { color: var(--text-muted); }
+.wf-step-status.running { color: var(--cyan); }
+.wf-step-status.completed { color: var(--green); }
+.wf-step-status.failed { color: var(--red); }
+
+.wf-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+.wf-arrow.active { color: var(--cyan); }
+.wf-arrow.done { color: var(--green); }
+
+.wf-result-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #ffffff04;
+  border: 1px solid #ffffff08;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+}
+.wf-result-step .step-name { color: var(--text); font-weight: 500; }
+.wf-result-step .step-model { color: var(--text-dim); font-size: 0.68rem; }
+.wf-result-step .step-dur { color: var(--text-dim); font-size: 0.68rem; }
+.wf-result-step .step-tokens { color: var(--text-dim); font-size: 0.68rem; }
+.wf-result-step.completed { border-left: 2px solid var(--green-dim); }
+.wf-result-step.failed { border-left: 2px solid var(--red-dim); }
+
+.wf-run-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #ffffff04;
+  border: 1px solid #ffffff08;
+  margin-bottom: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.wf-run-item:hover { background: #98c23d08; border-color: var(--cyan-dim); }
+.wf-run-id { color: var(--text-dim); font-size: 0.68rem; }
+.wf-run-wf { color: var(--text); font-weight: 500; }
+.wf-run-status { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; }
+.wf-run-time { color: var(--text-muted); font-size: 0.65rem; }
+
 /* ── RESPONSIVE ─────────────────────────────────────────────────── */
 @media (max-width: 800px) {
   .research-layout { grid-template-columns: 1fr; height: auto; }
@@ -977,13 +1091,13 @@ body::after {
       <div class="logo-hex">
         <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
           <path d="M50 2 L93 27 L93 73 L50 98 L7 73 L7 27 Z" rx="8" fill="var(--cyan)" opacity="0.9"/>
-          <text x="50" y="42" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="26" fill="var(--bg-deep)" letter-spacing="1">OH</text>
-          <text x="50" y="72" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="26" fill="var(--bg-deep)" letter-spacing="1">NO</text>
+          <text x="50" y="42" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">COR</text>
+          <text x="50" y="68" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">TEX</text>
         </svg>
       </div>
       <div class="logo-text">
         <div class="logo-title">LOCAL <span>AI</span> PLATFORM</div>
-        <div class="logo-sub">OHNO &mdash; Mission Control</div>
+        <div class="logo-sub">CORTEX &mdash; Mission Control</div>
       </div>
     </div>
     <div class="header-status">
@@ -999,6 +1113,7 @@ body::after {
     <button class="tab-btn" onclick="switchTab('memory')">Memory<span class="tab-count" id="mem-count"></span></button>
     <button class="tab-btn" onclick="switchTab('discover')">Discover<span class="tab-count" id="disc-count"></span></button>
     <button class="tab-btn" onclick="switchTab('research')">Research<span class="tab-count" id="res-count"></span></button>
+    <button class="tab-btn" onclick="switchTab('workflows')">Workflows</button>
   </div>
 
   <!-- ═══ TAB: DASHBOARD ═══════════════════════════════════════════ -->
@@ -1269,6 +1384,62 @@ body::after {
   <!-- Graph tooltip (global) -->
   <div class="graph-tooltip" id="graph-tooltip"></div>
 
+  <!-- TAB: WORKFLOWS -->
+  <div class="tab-content" id="tab-workflows">
+    <div class="panel" style="margin-bottom:16px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">Workflow Runner</div>
+      <div class="wf-toolbar">
+        <select id="wf-select" class="model-select" style="min-width:260px">
+          <option value="">-- select workflow --</option>
+        </select>
+        <button class="action-btn" onclick="loadWorkflowDetail()" style="color:var(--cyan);border-color:var(--cyan-dim)">Load</button>
+        <div style="flex:1"></div>
+        <button class="action-btn" onclick="refreshWorkflows()">Refresh</button>
+      </div>
+    </div>
+
+    <!-- Workflow Detail (hidden until loaded) -->
+    <div id="wf-detail" style="display:none">
+      <div class="panel" style="margin-bottom:16px">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label" id="wf-detail-name">Workflow</div>
+        <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:12px" id="wf-detail-desc"></div>
+
+        <!-- Pipeline Visualization -->
+        <div class="wf-pipeline" id="wf-pipeline"></div>
+
+        <!-- Seed Input -->
+        <div style="margin-top:16px">
+          <div style="font-size:0.65rem;color:var(--text-dim);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px">Seed Data (JSON)</div>
+          <textarea id="wf-seed" class="chat-input" style="min-height:80px;resize:vertical;font-size:0.75rem" placeholder='{"source_files": ["models/user.py"], "constraints": "PostgreSQL"}'>{}</textarea>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:8px 28px">EXECUTE</button>
+        </div>
+      </div>
+
+      <!-- Run Results (shown after execution) -->
+      <div id="wf-results" style="display:none">
+        <div class="panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">Execution Results</div>
+          <div id="wf-results-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Runs -->
+    <div class="panel">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">Recent Runs</div>
+      <div id="wf-runs-list">
+        <div class="model-empty">No workflow runs yet</div>
+      </div>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <div class="footer">
     <div class="footer-links">
@@ -1278,7 +1449,7 @@ body::after {
       <a href="/v1/models">MODELS</a>
       <a href="/api/info">INFO</a>
     </div>
-    <div class="footer-meta">OHNO &mdash; LOCAL AI PLATFORM v1.0.0</div>
+    <div class="footer-meta">CORTEX &mdash; LOCAL AI PLATFORM v1.0.0</div>
   </div>
 
 </div>
@@ -1295,6 +1466,7 @@ function switchTab(name) {
   if (name === 'memory') loadMemory();
   if (name === 'discover' && !discoverLoaded) loadDiscovery();
   if (name === 'research') initResearch();
+  if (name === 'workflows') loadWorkflowsTab();
 }
 
 /* ── CLOCK ──────────────────────────────────────────────────────── */
@@ -2193,7 +2365,7 @@ function renderGraph(data) {
   };
 
   const linkColor = (d) => {
-    if (d.type === 'related') return '#00d4ff25';
+    if (d.type === 'related') return '#98c23d25';
     if (d.type === 'cites')   return '#b388ff25';
     return '#ff8c0025';
   };
@@ -2490,6 +2662,249 @@ async function exportResearch() {
     // Rebuild graph to include new research export
     await loadGraphData();
   } catch {}
+}
+
+/* ── WORKFLOWS TAB ─────────────────────────────────────────────── */
+let workflowsLoaded = false;
+let currentWorkflowDef = null;
+
+async function loadWorkflowsTab() {
+  if (!workflowsLoaded) {
+    await refreshWorkflows();
+    await loadRecentRuns();
+    workflowsLoaded = true;
+  }
+}
+
+async function refreshWorkflows() {
+  try {
+    const resp = await fetch('/api/workflows');
+    const workflows = await resp.json();
+    const sel = document.getElementById('wf-select');
+    sel.innerHTML = '<option value="">-- select workflow --</option>';
+    workflows.forEach(wf => {
+      const opt = document.createElement('option');
+      opt.value = wf.file || wf.id;
+      opt.textContent = `${wf.name} (${wf.steps} steps)`;
+      opt.dataset.id = wf.id;
+      opt.dataset.desc = wf.description || '';
+      opt.dataset.version = wf.version || '';
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('Failed to load workflows:', e);
+  }
+}
+
+async function loadWorkflowDetail() {
+  const sel = document.getElementById('wf-select');
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) return;
+
+  try {
+    // Load via validate endpoint to parse the definition
+    const resp = await fetch('/api/workflows');
+    const workflows = await resp.json();
+    const wf = workflows.find(w => w.id === opt.dataset.id);
+    if (!wf) return;
+
+    // Fetch the actual YAML definition by running a validate
+    const defResp = await fetch(opt.value.replace(/^\.\//, '/'));
+
+    document.getElementById('wf-detail-name').textContent = opt.textContent;
+    document.getElementById('wf-detail-desc').textContent = opt.dataset.desc;
+    document.getElementById('wf-detail').style.display = 'block';
+    document.getElementById('wf-results').style.display = 'none';
+
+    // We need to get the steps - use the validate endpoint with inline definition
+    // For now, render based on what we know
+    currentWorkflowDef = { id: opt.dataset.id, name: opt.textContent, steps: wf.steps };
+
+    // Build pipeline visualization placeholder
+    const pipeline = document.getElementById('wf-pipeline');
+    pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
+
+  } catch (e) {
+    console.error('Failed to load workflow:', e);
+  }
+}
+
+async function runWorkflow() {
+  const sel = document.getElementById('wf-select');
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) return;
+
+  const btn = document.getElementById('wf-run-btn');
+  btn.disabled = true;
+  btn.textContent = 'EXECUTING...';
+
+  let seed = {};
+  try {
+    seed = JSON.parse(document.getElementById('wf-seed').value || '{}');
+  } catch (e) {
+    alert('Invalid JSON in seed data');
+    btn.disabled = false;
+    btn.textContent = 'EXECUTE';
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/workflows/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workflow_id: opt.dataset.id,
+        seed: seed,
+      }),
+    });
+
+    const run = await resp.json();
+
+    // Show results
+    document.getElementById('wf-results').style.display = 'block';
+    const content = document.getElementById('wf-results-content');
+
+    // Build pipeline visualization with results
+    const pipeline = document.getElementById('wf-pipeline');
+    let pipeHtml = '';
+    (run.step_results || []).forEach((step, i) => {
+      if (i > 0) {
+        const arrowClass = step.status === 'completed' ? 'done' : (step.status === 'running' ? 'active' : '');
+        pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
+      }
+      pipeHtml += `
+        <div class="wf-step">
+          <div class="wf-step-box ${step.status}">
+            <div class="wf-step-name">${esc(step.step_id)}</div>
+            <div class="wf-step-role">${esc(step.model_used || '')}</div>
+            <div class="wf-step-status ${step.status}">${step.status}</div>
+          </div>
+        </div>
+      `;
+    });
+    pipeline.innerHTML = pipeHtml;
+
+    // Build results table
+    let statusColor = run.status === 'completed' ? 'var(--green)' : 'var(--red)';
+    let html = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:0.8rem;color:${statusColor};text-transform:uppercase;letter-spacing:0.1em;font-weight:600">${run.status}</span>
+        <span class="wf-run-id">${run.run_id}</span>
+      </div>
+    `;
+
+    (run.step_results || []).forEach(step => {
+      const dur = step.duration_seconds ? step.duration_seconds.toFixed(1) + 's' : '-';
+      const tokens = step.token_count ? step.token_count.total_tokens : 0;
+      html += `
+        <div class="wf-result-step ${step.status}">
+          <span class="step-name">${esc(step.step_id)}</span>
+          <span class="step-model">${esc(step.model_used || '-')}</span>
+          <span class="step-dur">${dur}</span>
+          <span class="step-tokens">${tokens} tok</span>
+          <span style="color:${step.status === 'completed' ? 'var(--green)' : 'var(--red)'};font-size:0.68rem">${step.status}</span>
+        </div>
+      `;
+    });
+
+    if (run.error) {
+      html += `<div style="margin-top:10px;padding:10px;background:var(--red-dim);border:1px solid var(--red);font-size:0.72rem;color:var(--text)">${esc(run.error)}</div>`;
+    }
+
+    content.innerHTML = html;
+
+    // Refresh recent runs
+    await loadRecentRuns();
+
+  } catch (e) {
+    document.getElementById('wf-results').style.display = 'block';
+    document.getElementById('wf-results-content').innerHTML =
+      `<div style="color:var(--red);font-size:0.75rem">Execution failed: ${esc(String(e))}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'EXECUTE';
+  }
+}
+
+async function loadRecentRuns() {
+  try {
+    const resp = await fetch('/api/workflows/runs?limit=10');
+    const runs = await resp.json();
+    const container = document.getElementById('wf-runs-list');
+
+    if (!runs.length) {
+      container.innerHTML = '<div class="model-empty">No workflow runs yet</div>';
+      return;
+    }
+
+    container.innerHTML = runs.map(r => {
+      const statusColor = r.status === 'completed' ? 'var(--green)' : 'var(--red)';
+      const time = r.started_at ? new Date(r.started_at).toLocaleString() : '-';
+      return `
+        <div class="wf-run-item" onclick="viewRun('${esc(r.run_id)}')">
+          <span class="wf-run-wf">${esc(r.workflow_id)}</span>
+          <span class="wf-run-status" style="color:${statusColor}">${r.status}</span>
+          <span class="wf-run-id">${(r.run_id || '').slice(0, 8)}...</span>
+          <span class="wf-run-time">${time}</span>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load runs:', e);
+  }
+}
+
+async function viewRun(runId) {
+  try {
+    const resp = await fetch(`/api/workflows/runs/${runId}`);
+    const run = await resp.json();
+
+    // Show results panel
+    document.getElementById('wf-detail').style.display = 'block';
+    document.getElementById('wf-results').style.display = 'block';
+    document.getElementById('wf-detail-name').textContent = run.workflow_id;
+    document.getElementById('wf-detail-desc').textContent = `Run: ${runId}`;
+
+    // Build pipeline from step results
+    const pipeline = document.getElementById('wf-pipeline');
+    let pipeHtml = '';
+    (run.step_results || []).forEach((step, i) => {
+      if (i > 0) {
+        const arrowClass = step.status === 'completed' ? 'done' : '';
+        pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
+      }
+      pipeHtml += `
+        <div class="wf-step">
+          <div class="wf-step-box ${step.status}">
+            <div class="wf-step-name">${esc(step.step_id)}</div>
+            <div class="wf-step-role">${esc(step.model_used || '')}</div>
+            <div class="wf-step-status ${step.status}">${step.status}</div>
+          </div>
+        </div>
+      `;
+    });
+    pipeline.innerHTML = pipeHtml;
+
+    // Build results
+    const content = document.getElementById('wf-results-content');
+    let statusColor = run.status === 'completed' ? 'var(--green)' : 'var(--red)';
+    let html = `<div style="margin-bottom:12px;font-size:0.8rem;color:${statusColor};text-transform:uppercase;letter-spacing:0.1em;font-weight:600">${run.status}</div>`;
+    (run.step_results || []).forEach(step => {
+      const dur = step.duration_seconds ? step.duration_seconds.toFixed(1) + 's' : '-';
+      const tokens = step.token_count ? step.token_count.total_tokens : 0;
+      html += `
+        <div class="wf-result-step ${step.status}">
+          <span class="step-name">${esc(step.step_id)}</span>
+          <span class="step-model">${esc(step.model_used || '-')}</span>
+          <span class="step-dur">${dur}</span>
+          <span class="step-tokens">${tokens} tok</span>
+        </div>
+      `;
+    });
+    content.innerHTML = html;
+  } catch (e) {
+    console.error('Failed to load run:', e);
+  }
 }
 
 /* ── INIT ────────────────────────────────────────────────────────── */

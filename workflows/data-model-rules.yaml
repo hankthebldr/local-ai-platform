@@ -1,0 +1,85 @@
+id: data-model-rules
+name: "Generate Data Model Rules"
+version: "1.0"
+description: "Multi-agent workflow to analyze source code and generate data model validation rules"
+
+defaults:
+  role: coding
+  temperature: 0.7
+  max_tokens: 4096
+  retries: 2
+  retry_delay: 5
+
+steps:
+  - id: analyze_schema
+    name: "Analyze Schema Structure"
+    role: reasoning
+    system_prompt: |
+      You are a senior data architect. Analyze the provided source code
+      and extract all entities, fields, types, and relationships.
+      Return structured JSON with keys: entities, relationships, field_types.
+    inputs:
+      - seed.source_files
+      - seed.constraints
+    outputs:
+      - entities
+      - relationships
+      - field_types
+    config:
+      temperature: 0.3
+
+  - id: draft_rules
+    name: "Draft Validation Rules"
+    role: coding
+    system_prompt: |
+      You are a data modeling expert. Given the analyzed schema,
+      generate comprehensive validation rules covering: type constraints,
+      referential integrity, business logic, and naming conventions.
+      Return JSON with keys: rules, rule_categories.
+    inputs:
+      - seed.constraints
+      - analyze_schema.entities
+      - analyze_schema.relationships
+      - analyze_schema.field_types
+    outputs:
+      - rules
+      - rule_categories
+    config:
+      temperature: 0.5
+
+  - id: validate_rules
+    name: "Review & Validate Rules"
+    role: reasoning
+    system_prompt: |
+      You are a QA engineer specializing in data integrity. Review the
+      drafted rules for: completeness, conflicts, redundancy, and
+      enforceability. Flag issues and suggest improvements.
+      Return JSON with keys: issues, approved_rules, suggestions.
+    inputs:
+      - analyze_schema.entities
+      - draft_rules.rules
+      - draft_rules.rule_categories
+    outputs:
+      - issues
+      - approved_rules
+      - suggestions
+    config:
+      max_tokens: 8192
+
+  - id: generate_code
+    name: "Generate Implementation Code"
+    role: coding
+    system_prompt: |
+      You are a Python developer. Generate Pydantic model validators
+      and SQLAlchemy constraints implementing the approved rules.
+      Follow the existing project conventions.
+      Return JSON with keys: pydantic_models, sqlalchemy_constraints, migration_script.
+    inputs:
+      - seed.constraints
+      - analyze_schema.entities
+      - validate_rules.approved_rules
+      - validate_rules.suggestions
+    outputs:
+      - pydantic_models
+      - sqlalchemy_constraints
+      - migration_script

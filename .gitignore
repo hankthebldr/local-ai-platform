@@ -103,3 +103,7 @@ $RECYCLE.BIN/
 !data/vectors/.gitkeep
 !data/cache/.gitkeep
 !data/logs/.gitkeep
+!data/workflows/.gitkeep
+
+# Workflow run data (persisted locally)
+data/workflows/*/

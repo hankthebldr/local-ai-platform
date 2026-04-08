@@ -274,6 +274,42 @@ Future refactoring should:
 4. Format with black before committing: `black api/ cli/ models/`
 5. No CI/CD setup yet - manual testing only
 
+### Workflow Engine
+
+The multi-agent workflow engine is the core task engine for the platform. It executes step-based workflows defined in YAML, where each step is an agent with its own system prompt, model selection, and declared inputs/outputs.
+
+**Key files:**
+- `api/models/workflow_models.py` — Pydantic data models (AgentStep, WorkflowContext, WorkflowRun)
+- `api/services/workflow_engine.py` — Engine: load YAML, validate I/O, execute, persist
+- `api/services/step_executor.py` — Single step execution with retry
+- `api/services/model_resolver.py` — Role-based model selection via inventory
+- `api/routers/workflows.py` — REST API endpoints
+- `cli/workflow.py` — CLI tool
+- `workflows/` — YAML workflow definitions
+
+**Running workflows:**
+```bash
+# CLI
+python cli/workflow.py run workflows/data-model-rules.yaml --seed '{"source_files": ["models/user.py"], "constraints": "PostgreSQL"}'
+python cli/workflow.py list
+python cli/workflow.py runs
+python cli/workflow.py status <run_id>
+
+# API
+curl -X POST http://localhost:8000/api/workflows/run \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "data-model-rules", "seed": {"source_files": ["models/user.py"]}}'
+```
+
+**Context model (three layers):**
+- `seed` — immutable user input, always available
+- `workspace` — namespaced per-step outputs (`workspace.{step_id}.{key}`)
+- `shared` — mutable cross-cutting state
+
+**Model selection:** Steps declare `role: reasoning|fast|coding|uncensored|general` (resolved via inventory) or `model: "exact-name"` (validated against Ollama).
+
+**Design doc:** `docs/plans/2026-04-06-multi-agent-workflow-engine-design.md`
+
 ### Common Development Tasks
 
 **Adding a streaming endpoint**:
