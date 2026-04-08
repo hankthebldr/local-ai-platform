@@ -276,21 +276,27 @@ Future refactoring should:
 
 ### Workflow Engine
 
-The multi-agent workflow engine is the core task engine for the platform. It executes step-based workflows defined in YAML, where each step is an agent with its own system prompt, model selection, and declared inputs/outputs.
+Best-in-class multi-agent DAG orchestrator. Executes step-based workflows defined in YAML with parallel batch scheduling, Jinja2 prompt templating, structured output parsing, quality gates, conditional branching, and checkpoint/resume.
 
-**Key files:**
-- `api/models/workflow_models.py` — Pydantic data models (AgentStep, WorkflowContext, WorkflowRun)
-- `api/services/workflow_engine.py` — Engine: load YAML, validate I/O, execute, persist
-- `api/services/step_executor.py` — Single step execution with retry
-- `api/services/model_resolver.py` — Role-based model selection via inventory
+**Architecture:**
+- `api/models/workflow_models.py` — Pydantic v2 models with enums (StepStatus, RunStatus, OutputFormat, GateOperator)
+- `api/services/workflow_compiler.py` — DAG validation, cycle detection, parallel batch scheduling (Kahn's algorithm)
+- `api/services/workflow_engine.py` — Orchestrator: compile → execute batches → persist. ThreadPoolExecutor for parallel steps.
+- `api/services/step_executor.py` — Single step: conditions → prompt render → LLM → parse → gates → context
+- `api/services/prompt_renderer.py` — Jinja2/simple template engine with 11 built-in filters
+- `api/services/output_parsers.py` — Structured extraction: JSON, JSON array, markdown sections, regex, CSV, key-value
+- `api/services/quality_gates.py` — 15 gate operators: not_empty, contains, matches, has_key, all_keys, gt, lt, etc.
+- `api/services/workflow_events.py` — Pub/sub event bus with typed events (workflow/batch/step/gate lifecycle)
+- `api/services/model_resolver.py` — Role-based model selection via Ollama inventory
 - `api/routers/workflows.py` — REST API endpoints
-- `cli/workflow.py` — CLI tool
-- `workflows/` — YAML workflow definitions
+- `cli/workflow.py` — Rich CLI with DAG tree visualization
 
 **Running workflows:**
 ```bash
 # CLI
-python cli/workflow.py run workflows/data-model-rules.yaml --seed '{"source_files": ["models/user.py"], "constraints": "PostgreSQL"}'
+python cli/workflow.py run workflows/xsiam-data-model-rules.yaml \
+  --seed '{"log_samples": "...", "vendor_name": "PAN-OS", "log_type": "firewall", "constraints": "XDM v3"}'
+python cli/workflow.py compile workflows/xsiam-data-model-rules.yaml
 python cli/workflow.py list
 python cli/workflow.py runs
 python cli/workflow.py status <run_id>
@@ -298,15 +304,29 @@ python cli/workflow.py status <run_id>
 # API
 curl -X POST http://localhost:8000/api/workflows/run \
   -H "Content-Type: application/json" \
-  -d '{"workflow_id": "data-model-rules", "seed": {"source_files": ["models/user.py"]}}'
+  -d '{"workflow_id": "xsiam-data-model-rules", "seed": {"log_samples": "...", "vendor_name": "PAN-OS"}}'
+curl -X POST http://localhost:8000/api/workflows/compile \
+  -d '{"workflow_id": "xsiam-data-model-rules", "seed_keys": ["log_samples", "vendor_name"]}'
 ```
 
+**Key features:**
+- **DAG execution** — Steps declare `depends_on` + implicit deps from input refs. Compiler builds parallel batches.
+- **Jinja2 prompts** — `system_prompt: "Analyze {{seed.data|json}}"` with filters: json, truncate, keys, count, join, etc.
+- **Output parsers** — `output_parser: {format: json}` — auto-extracts structured data from LLM responses
+- **Quality gates** — `quality_gates: [{name: check, field: data, operator: not_empty}]` — validate outputs before downstream
+- **Conditions** — `condition: {ref: step_a.status, operator: equals, value: completed}` — skip steps conditionally
+- **Loops** — `loop: {over: seed.files, as_var: file}` — iterate steps over collections
+- **Checkpoint/resume** — `engine.run(defn, seed, resume_from="checkpoint_name")`
+- **Event bus** — Subscribe to step.started, step.completed, gate.failed, etc. for real-time monitoring
+
 **Context model (three layers):**
-- `seed` — immutable user input, always available
-- `workspace` — namespaced per-step outputs (`workspace.{step_id}.{key}`)
+- `seed` — immutable user input
+- `workspace` — namespaced per-step outputs (dot-walk: `step_id.key.nested.path`)
 - `shared` — mutable cross-cutting state
 
-**Model selection:** Steps declare `role: reasoning|fast|coding|uncensored|general` (resolved via inventory) or `model: "exact-name"` (validated against Ollama).
+**Model selection:** `role: reasoning|fast|coding|uncensored|general` (resolved via inventory) or `model: "exact-name"`.
+
+**XSIAM workflow:** `workflows/xsiam-data-model-rules.yaml` — 5-step pipeline aligned with PANW normalization methodology (raw → parsed → XDM → enriched) with NICE Framework analytics mapping.
 
 **Design doc:** `docs/plans/2026-04-06-multi-agent-workflow-engine-design.md`
 

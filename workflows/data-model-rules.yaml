@@ -1,7 +1,18 @@
+# ── Data Model Rules — Generic Schema Analysis Pipeline ───────────────────
+#
+# Analyzes source code schemas and generates validation rules with
+# Pydantic models and SQLAlchemy constraints. Uses quality gates
+# and structured JSON output parsing.
+
 id: data-model-rules
 name: "Generate Data Model Rules"
-version: "1.0"
+version: "1.1"
 description: "Multi-agent workflow to analyze source code and generate data model validation rules"
+
+metadata:
+  author: "Local AI Platform"
+  category: "data-engineering"
+  tags: ["data-model", "validation", "pydantic", "sqlalchemy"]
 
 defaults:
   role: coding
@@ -25,6 +36,13 @@ steps:
       - entities
       - relationships
       - field_types
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "has_entities"
+        field: "entities"
+        operator: not_empty
+        message: "No entities extracted from source code"
     config:
       temperature: 0.3
 
@@ -44,6 +62,8 @@ steps:
     outputs:
       - rules
       - rule_categories
+    output_parser:
+      format: json
     config:
       temperature: 0.5
 
@@ -63,6 +83,13 @@ steps:
       - issues
       - approved_rules
       - suggestions
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "has_approved_rules"
+        field: "approved_rules"
+        operator: not_empty
+        message: "No rules were approved"
     config:
       max_tokens: 8192
 
@@ -83,3 +110,15 @@ steps:
       - pydantic_models
       - sqlalchemy_constraints
       - migration_script
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "has_pydantic"
+        field: "pydantic_models"
+        operator: not_empty
+        message: "No Pydantic models generated"
+      - name: "has_constraints"
+        field: "sqlalchemy_constraints"
+        operator: not_empty
+        severity: warning
+        message: "No SQLAlchemy constraints generated"

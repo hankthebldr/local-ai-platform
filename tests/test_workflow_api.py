@@ -1,8 +1,5 @@
 """Tests for workflow API endpoints"""
 import pytest
-import json
-import tempfile
-import os
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
@@ -26,26 +23,25 @@ VALID_WORKFLOW = {
 
 @pytest.fixture
 def mock_ollama():
-    with patch("api.services.ollama_service.OllamaService") as MockClass:
-        instance = MockClass.return_value
-        instance.health_check.return_value = True
-        instance.list_models.return_value = [
-            {"name": "dolphin3:8b", "size": 5000000000}
-        ]
-        instance.chat.return_value = {
-            "content": "Test output",
-            "prompt_eval_count": 10,
-            "eval_count": 20,
-        }
-        yield instance
+    mock = MagicMock()
+    mock.health_check.return_value = True
+    mock.list_models.return_value = [
+        {"name": "dolphin3:8b", "size": 5000000000}
+    ]
+    mock.chat.return_value = {
+        "content": "Test output",
+        "prompt_eval_count": 10,
+        "eval_count": 20,
+    }
+    return mock
 
 
 @pytest.fixture
 def client(mock_ollama):
-    with patch("api.routers.workflows.get_ollama_service", return_value=mock_ollama):
-        with patch("api.main.ollama_service", mock_ollama):
-            from api.main import app
-            return TestClient(app)
+    with patch("api.routers.workflows.OllamaService", return_value=mock_ollama), \
+         patch("api.main.ollama_service", mock_ollama):
+        from api.main import app
+        return TestClient(app)
 
 
 class TestWorkflowAPI:
@@ -60,7 +56,10 @@ class TestWorkflowAPI:
             json={"definition": VALID_WORKFLOW, "seed_keys": ["task"]},
         )
         assert response.status_code == 200
-        assert response.json()["valid"] is True
+        data = response.json()
+        assert data["valid"] is True
+        assert "execution_plan" in data
+        assert "parallelism" in data
 
     def test_validate_broken_workflow(self, client):
         broken = {
@@ -83,7 +82,23 @@ class TestWorkflowAPI:
         )
         assert response.status_code == 422
 
+    def test_compile_workflow(self, client):
+        response = client.post(
+            "/api/workflows/compile",
+            json={"definition": VALID_WORKFLOW, "seed_keys": ["task"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["workflow_id"] == "test-api-workflow"
+        assert "execution_plan" in data
+        assert "parallelism_analysis" in data
+        assert "steps" in data
+
     def test_list_runs(self, client):
         response = client.get("/api/workflows/runs")
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+
+    def test_get_nonexistent_run(self, client):
+        response = client.get("/api/workflows/runs/nonexistent-id")
+        assert response.status_code == 404
