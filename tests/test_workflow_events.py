@@ -91,8 +91,7 @@ class TestEventBus:
         assert bus.history_size == 0
 
     def test_max_history(self):
-        bus = WorkflowEventBus()
-        bus._max_history = 5
+        bus = WorkflowEventBus(max_history=5)
         for i in range(10):
             bus.emit("test", run_id=f"r{i}")
         assert bus.history_size == 5

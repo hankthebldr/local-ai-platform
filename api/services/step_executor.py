@@ -14,9 +14,10 @@ Features:
 
 import hashlib
 import json
+import re
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 from ..logging_config import logger
 from ..exceptions import StepExecutionError
@@ -29,11 +30,30 @@ from ..models.workflow_models import (
     StepStatus,
     WorkflowContext,
     WorkflowDefaults,
+    dot_walk,
 )
 from .ollama_service import OllamaService
 from .prompt_renderer import PromptRenderer
 from .output_parsers import OutputParser
 from .quality_gates import QualityGateEvaluator
+
+
+class _ResolvedConfig(NamedTuple):
+    """Step config with defaults applied"""
+    temperature: float
+    max_tokens: int
+    retries: int
+    retry_delay: int
+
+
+def _resolve_config(step: AgentStep, defaults: WorkflowDefaults) -> _ResolvedConfig:
+    """Merge step config overrides with workflow defaults"""
+    return _ResolvedConfig(
+        temperature=step.config.temperature if step.config.temperature is not None else defaults.temperature,
+        max_tokens=step.config.max_tokens if step.config.max_tokens is not None else defaults.max_tokens,
+        retries=step.config.retries if step.config.retries is not None else defaults.retries,
+        retry_delay=step.config.retry_delay if step.config.retry_delay is not None else defaults.retry_delay,
+    )
 
 
 class StepExecutor:
@@ -97,16 +117,13 @@ class StepExecutor:
             return self._execute_loop(step, context, resolved_model, defaults)
 
         # ── Execute with retry ────────────────────────────────────────────
-        temperature = step.config.temperature if step.config.temperature is not None else defaults.temperature
-        max_tokens = step.config.max_tokens if step.config.max_tokens is not None else defaults.max_tokens
-        retries = step.config.retries if step.config.retries is not None else defaults.retries
-        retry_delay = step.config.retry_delay if step.config.retry_delay is not None else defaults.retry_delay
+        cfg = _resolve_config(step, defaults)
 
         last_error = None
-        for attempt in range(retries + 1):
+        for attempt in range(cfg.retries + 1):
             try:
                 logger.info(
-                    f"Step '{step.id}' attempt {attempt + 1}/{retries + 1} "
+                    f"Step '{step.id}' attempt {attempt + 1}/{cfg.retries + 1} "
                     f"using model '{resolved_model}'"
                 )
 
@@ -121,8 +138,8 @@ class StepExecutor:
                 llm_result = self.ollama.chat(
                     model=resolved_model,
                     messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
+                    temperature=cfg.temperature,
+                    max_tokens=cfg.max_tokens,
                 )
 
                 content = llm_result.get("content", "")
@@ -195,22 +212,22 @@ class StepExecutor:
                 logger.warning(
                     f"Step '{step.id}' attempt {attempt + 1} failed: {last_error}"
                 )
-                if attempt < retries:
-                    backoff = retry_delay * (2 ** attempt)  # Exponential backoff
+                if attempt < cfg.retries:
+                    backoff = cfg.retry_delay * (2 ** attempt)
                     logger.info(f"Retrying in {backoff}s...")
                     time.sleep(backoff)
 
         # All retries exhausted
         result.status = StepStatus.FAILED
         result.error = last_error
-        result.retries = retries
+        result.retries = cfg.retries
         result.completed_at = datetime.utcnow()
         result.duration_seconds = (
             result.completed_at - result.started_at
         ).total_seconds()
 
         logger.error(
-            f"Step '{step.id}' failed after {retries + 1} attempts: {last_error}"
+            f"Step '{step.id}' failed after {cfg.retries + 1} attempts: {last_error}"
         )
         return result
 
@@ -218,9 +235,7 @@ class StepExecutor:
 
     def _check_conditions(self, step: AgentStep, context: WorkflowContext) -> bool:
         """Evaluate step conditions — return True if step should execute"""
-        all_conditions = list(step.conditions)
-        if step.condition:
-            all_conditions.append(step.condition)
+        all_conditions = step.all_conditions
 
         if not all_conditions:
             return True
@@ -258,7 +273,6 @@ class StepExecutor:
                 return expected in value
             return False
         if op == GateOperator.MATCHES:
-            import re
             return bool(re.search(str(expected), str(value))) if value else False
         if op == GateOperator.GT:
             try:
@@ -318,15 +332,14 @@ class StepExecutor:
                 {"role": "user", "content": prompts["user"]},
             ]
 
-            temperature = step.config.temperature if step.config.temperature is not None else defaults.temperature
-            max_tokens = step.config.max_tokens if step.config.max_tokens is not None else defaults.max_tokens
+            cfg = _resolve_config(step, defaults)
 
             try:
                 llm_result = self.ollama.chat(
                     model=resolved_model,
                     messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
+                    temperature=cfg.temperature,
+                    max_tokens=cfg.max_tokens,
                 )
 
                 content = llm_result.get("content", "")

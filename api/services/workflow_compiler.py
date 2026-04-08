@@ -104,10 +104,7 @@ class WorkflowCompiler:
 
         # Validate condition references
         for step in definition.steps:
-            all_conditions = list(step.conditions)
-            if step.condition:
-                all_conditions.append(step.condition)
-            for cond in all_conditions:
+            for cond in step.all_conditions:
                 ref_parts = cond.ref.split(".", 1)
                 if len(ref_parts) == 2:
                     ns = ref_parts[0]
@@ -202,10 +199,7 @@ class WorkflowCompiler:
                     )
 
             # Also infer from condition refs
-            all_conditions = list(step.conditions)
-            if step.condition:
-                all_conditions.append(step.condition)
-            for cond in all_conditions:
+            for cond in step.all_conditions:
                 ref_parts = cond.ref.split(".", 1)
                 if len(ref_parts) == 2:
                     ns = ref_parts[0]

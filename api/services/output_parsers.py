@@ -59,6 +59,20 @@ class OutputParser:
         # Last resort: raw
         return self._parse_raw(content, output_keys), False
 
+    def _get_parsers(self) -> Dict:
+        """Lazily build parser dispatch map (cached after first call)"""
+        if not hasattr(self, "_parsers"):
+            self._parsers = {
+                OutputFormat.RAW: self._parse_raw,
+                OutputFormat.JSON: self._parse_json,
+                OutputFormat.JSON_ARRAY: self._parse_json_array,
+                OutputFormat.MARKDOWN_SECTIONS: self._parse_markdown_sections,
+                OutputFormat.REGEX: self._parse_regex,
+                OutputFormat.KEY_VALUE: self._parse_key_value,
+                OutputFormat.CSV: self._parse_csv,
+            }
+        return self._parsers
+
     def _dispatch(
         self,
         content: str,
@@ -67,16 +81,7 @@ class OutputParser:
         config: OutputParserConfig,
     ) -> Optional[Dict[str, Any]]:
         """Route to the appropriate parser"""
-        parsers = {
-            OutputFormat.RAW: self._parse_raw,
-            OutputFormat.JSON: self._parse_json,
-            OutputFormat.JSON_ARRAY: self._parse_json_array,
-            OutputFormat.MARKDOWN_SECTIONS: self._parse_markdown_sections,
-            OutputFormat.REGEX: self._parse_regex,
-            OutputFormat.KEY_VALUE: self._parse_key_value,
-            OutputFormat.CSV: self._parse_csv,
-        }
-        parser = parsers.get(fmt)
+        parser = self._get_parsers().get(fmt)
         if parser is None:
             return None
         if fmt == OutputFormat.REGEX:

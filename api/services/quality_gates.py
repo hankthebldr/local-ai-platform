@@ -11,7 +11,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..logging_config import logger
-from ..models.workflow_models import GateOperator, QualityGate
+from ..models.workflow_models import GateOperator, QualityGate, dot_walk
 
 
 class QualityGateEvaluator:
@@ -70,19 +70,7 @@ class QualityGateEvaluator:
 
     def _resolve_field(self, field: str, outputs: Dict[str, Any]) -> Any:
         """Resolve a dotted field path against the outputs dict"""
-        parts = field.split(".")
-        value: Any = outputs
-        for part in parts:
-            if isinstance(value, dict):
-                value = value.get(part)
-            elif isinstance(value, (list, tuple)):
-                try:
-                    value = value[int(part)]
-                except (ValueError, IndexError):
-                    return None
-            else:
-                return None
-        return value
+        return dot_walk(outputs, field)
 
     def _evaluate_gate(
         self,

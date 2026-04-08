@@ -29,12 +29,16 @@ router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 WORKFLOWS_DIR = os.getenv("WORKFLOWS_DIR", "./workflows")
 
-# Shared event bus and engine instance
+# Module-level singletons — avoids per-request creation, preserves cache
 _event_bus = WorkflowEventBus()
+_engine: Optional["WorkflowEngine"] = None
 
 
 def get_engine() -> WorkflowEngine:
-    return WorkflowEngine(OllamaService(OLLAMA_HOST), event_bus=_event_bus)
+    global _engine
+    if _engine is None:
+        _engine = WorkflowEngine(OllamaService(OLLAMA_HOST), event_bus=_event_bus)
+    return _engine
 
 
 # ── Request/Response Models ──────────────────────────────────────────────
@@ -141,12 +145,11 @@ async def run_workflow(req: WorkflowRunRequest):
     else:
         raise HTTPException(status_code=400, detail="Provide workflow_id or definition")
 
+    # run() internally compiles (validates) — no need to validate separately
     try:
-        engine.validate(defn, seed_keys=list(req.seed.keys()) if req.seed else None)
+        run = engine.run(defn, seed=req.seed, resume_from=req.resume_from)
     except WorkflowValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
-
-    run = engine.run(defn, seed=req.seed, resume_from=req.resume_from)
 
     return {
         "run_id": run.run_id,

@@ -9,8 +9,7 @@ Consumers can subscribe to specific event types to build:
 - Webhook notifications
 """
 
-import asyncio
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
@@ -58,7 +57,6 @@ class EventType:
 
 # Type alias for event handlers
 EventHandler = Callable[[WorkflowEvent], None]
-AsyncEventHandler = Callable[[WorkflowEvent], Any]  # Can be async
 
 
 class WorkflowEventBus:
@@ -69,13 +67,10 @@ class WorkflowEventBus:
     to all matching subscribers in registration order.
     """
 
-    def __init__(self):
+    def __init__(self, max_history: int = 1000):
         self._handlers: Dict[str, List[EventHandler]] = defaultdict(list)
-        self._async_handlers: Dict[str, List[AsyncEventHandler]] = defaultdict(list)
         self._global_handlers: List[EventHandler] = []
-        self._async_global_handlers: List[AsyncEventHandler] = []
-        self._history: List[WorkflowEvent] = []
-        self._max_history: int = 1000
+        self._history: deque[WorkflowEvent] = deque(maxlen=max_history)
 
     # ── Subscribe ─────────────────────────────────────────────────────────
 
@@ -83,17 +78,9 @@ class WorkflowEventBus:
         """Subscribe a sync handler to a specific event type"""
         self._handlers[event_type].append(handler)
 
-    def on_async(self, event_type: str, handler: AsyncEventHandler) -> None:
-        """Subscribe an async handler to a specific event type"""
-        self._async_handlers[event_type].append(handler)
-
     def on_all(self, handler: EventHandler) -> None:
         """Subscribe a sync handler to ALL events"""
         self._global_handlers.append(handler)
-
-    def on_all_async(self, handler: AsyncEventHandler) -> None:
-        """Subscribe an async handler to ALL events"""
-        self._async_global_handlers.append(handler)
 
     def off(self, event_type: str, handler: EventHandler) -> None:
         """Unsubscribe a handler from an event type"""
@@ -124,10 +111,8 @@ class WorkflowEventBus:
             data=data or {},
         )
 
-        # Store in history
+        # Store in history (deque auto-evicts oldest when full)
         self._history.append(event)
-        if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
 
         # Dispatch to type-specific handlers
         for handler in self._handlers.get(event_type, []):
@@ -143,26 +128,7 @@ class WorkflowEventBus:
             except Exception as e:
                 logger.error(f"Global event handler error: {e}")
 
-        # Dispatch async handlers if there's a running event loop
-        try:
-            loop = asyncio.get_running_loop()
-            for handler in self._async_handlers.get(event_type, []):
-                loop.create_task(self._safe_async_dispatch(handler, event))
-            for handler in self._async_global_handlers:
-                loop.create_task(self._safe_async_dispatch(handler, event))
-        except RuntimeError:
-            pass  # No event loop — skip async handlers
-
         return event
-
-    async def _safe_async_dispatch(
-        self, handler: AsyncEventHandler, event: WorkflowEvent
-    ) -> None:
-        """Safely dispatch to an async handler"""
-        try:
-            await handler(event)
-        except Exception as e:
-            logger.error(f"Async event handler error ({event.event_type}): {e}")
 
     # ── Query ─────────────────────────────────────────────────────────────
 
@@ -173,7 +139,7 @@ class WorkflowEventBus:
         limit: int = 100,
     ) -> List[WorkflowEvent]:
         """Query event history with optional filters"""
-        events = self._history
+        events = list(self._history)
         if run_id:
             events = [e for e in events if e.run_id == run_id]
         if event_type:

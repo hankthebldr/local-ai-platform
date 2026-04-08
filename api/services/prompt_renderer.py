@@ -11,7 +11,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from ..logging_config import logger
-from ..models.workflow_models import AgentStep, WorkflowContext
+from ..models.workflow_models import AgentStep, WorkflowContext, dot_walk
 
 
 # Lightweight template engine — no Jinja2 dependency required.
@@ -123,21 +123,7 @@ _FILTER_PATTERN = re.compile(r"^(.+?)\|(\w+)(?:\((.+?)\))?$")
 
 def _resolve_var(path: str, variables: Dict[str, Any]) -> Any:
     """Resolve a dotted variable path against the variables dict"""
-    parts = path.strip().split(".")
-    value: Any = variables
-    for part in parts:
-        if isinstance(value, dict):
-            value = value.get(part)
-        elif isinstance(value, (list, tuple)):
-            try:
-                value = value[int(part)]
-            except (ValueError, IndexError):
-                return None
-        else:
-            return None
-        if value is None:
-            return None
-    return value
+    return dot_walk(variables, path.strip())
 
 
 def _apply_filter(value: Any, filter_name: str, filter_arg: Optional[str] = None) -> Any:
@@ -196,9 +182,20 @@ def _create_jinja_env() -> "Environment":
     return env
 
 
+# Module-level singleton — Jinja2 Environment is thread-safe for rendering
+_JINJA_ENV: Optional["Environment"] = None
+
+
+def _get_jinja_env() -> "Environment":
+    global _JINJA_ENV
+    if _JINJA_ENV is None:
+        _JINJA_ENV = _create_jinja_env()
+    return _JINJA_ENV
+
+
 def render_jinja2(template: str, variables: Dict[str, Any]) -> str:
     """Render a template using Jinja2 (full power: loops, conditionals, macros)"""
-    env = _create_jinja_env()
+    env = _get_jinja_env()
     try:
         tmpl = env.from_string(template)
         return tmpl.render(**variables)

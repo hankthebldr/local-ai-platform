@@ -12,12 +12,34 @@ Pydantic v2 models for:
 - Execution planning and scheduling
 """
 
+import copy
+import threading
 import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Set, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
+
+
+# ── Shared Utility ────────────────────────────────────────────────────────
+
+
+def dot_walk(data: Any, path: str) -> Any:
+    """Walk nested dicts/lists via dot notation: 'a.b.0.c'"""
+    for part in path.split("."):
+        if data is None:
+            return None
+        if isinstance(data, dict):
+            data = data.get(part)
+        elif isinstance(data, (list, tuple)):
+            try:
+                data = data[int(part)]
+            except (ValueError, IndexError):
+                return None
+        else:
+            return None
+    return data
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────
@@ -164,6 +186,14 @@ class AgentStep(BaseModel):
             raise ValueError("system_prompt must not be empty")
         return v
 
+    @property
+    def all_conditions(self) -> List["StepCondition"]:
+        """Merge singular condition and conditions list"""
+        result = list(self.conditions)
+        if self.condition:
+            result.append(self.condition)
+        return result
+
 
 # ── Workflow Definition ───────────────────────────────────────────────────
 
@@ -231,15 +261,17 @@ class WorkflowContext(BaseModel):
     workspace: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     shared: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    _snapshots: Dict[str, Dict[str, Any]] = {}  # Checkpoint snapshots
+    _snapshots: Dict[str, Dict[str, Any]] = PrivateAttr(default_factory=dict)
+    _lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
 
     def get_seed(self, key: str) -> Any:
         return self.seed.get(key)
 
     def set_workspace(self, step_id: str, key: str, value: Any) -> None:
-        if step_id not in self.workspace:
-            self.workspace[step_id] = {}
-        self.workspace[step_id][key] = value
+        with self._lock:
+            if step_id not in self.workspace:
+                self.workspace[step_id] = {}
+            self.workspace[step_id][key] = value
 
     def get_workspace(self, step_id: str, key: str) -> Any:
         return self.workspace.get(step_id, {}).get(key)
@@ -248,7 +280,8 @@ class WorkflowContext(BaseModel):
         return self.workspace.get(step_id, {})
 
     def set_shared(self, key: str, value: Any) -> None:
-        self.shared[key] = value
+        with self._lock:
+            self.shared[key] = value
 
     def get_shared(self, key: str) -> Any:
         return self.shared.get(key)
@@ -264,34 +297,17 @@ class WorkflowContext(BaseModel):
             return None
         namespace, key = parts
         if namespace == "seed":
-            return self._dot_walk(self.seed, key)
+            return dot_walk(self.seed, key)
         elif namespace == "shared":
-            return self._dot_walk(self.shared, key)
+            return dot_walk(self.shared, key)
         elif namespace == "metadata":
-            return self._dot_walk(self.metadata, key)
+            return dot_walk(self.metadata, key)
         else:
             step_data = self.workspace.get(namespace, {})
-            return self._dot_walk(step_data, key)
-
-    def _dot_walk(self, data: Any, path: str) -> Any:
-        """Walk nested dicts/lists via dot notation: 'a.b.0.c'"""
-        for part in path.split("."):
-            if data is None:
-                return None
-            if isinstance(data, dict):
-                data = data.get(part)
-            elif isinstance(data, (list, tuple)):
-                try:
-                    data = data[int(part)]
-                except (ValueError, IndexError):
-                    return None
-            else:
-                return None
-        return data
+            return dot_walk(step_data, key)
 
     def snapshot(self, name: str) -> None:
         """Create a named checkpoint of current context state"""
-        import copy
         self._snapshots[name] = {
             "seed": copy.deepcopy(self.seed),
             "workspace": copy.deepcopy(self.workspace),
