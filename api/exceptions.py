@@ -75,6 +75,57 @@ class InvalidRequestError(APIError):
         )
 
 
+class WorkflowValidationError(APIError):
+    """Raised when a workflow definition fails validation"""
+
+    def __init__(self, message: str):
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_type="invalid_request_error",
+            code="workflow_validation_failed",
+        )
+
+
+class WorkflowExecutionError(APIError):
+    """Raised when a workflow execution fails"""
+
+    def __init__(self, message: str):
+        super().__init__(
+            message=message,
+            status_code=500,
+            error_type="server_error",
+            code="workflow_execution_failed",
+        )
+
+
+class ModelResolutionError(APIError):
+    """Raised when a model role cannot be resolved to an available model"""
+
+    def __init__(self, role: str):
+        super().__init__(
+            message=f"No available model found for role '{role}'. Check that models with this role are installed.",
+            status_code=404,
+            error_type="invalid_request_error",
+            code="model_resolution_failed",
+        )
+
+
+class StepExecutionError(APIError):
+    """Raised when a single workflow step fails"""
+
+    def __init__(self, step_id: str, detail: str = ""):
+        msg = f"Step '{step_id}' failed."
+        if detail:
+            msg += f" {detail}"
+        super().__init__(
+            message=msg,
+            status_code=500,
+            error_type="server_error",
+            code="step_execution_failed",
+        )
+
+
 # ── Exception Handlers ────────────────────────────────────────────────────
 
 
