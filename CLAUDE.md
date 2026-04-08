@@ -330,6 +330,50 @@ curl -X POST http://localhost:8000/api/workflows/compile \
 
 **Design doc:** `docs/plans/2026-04-06-multi-agent-workflow-engine-design.md`
 
+### Custom Agents (Gems)
+
+YAML-backed reusable agent personas — local alternative to Claude Gems / OpenAI GPTs.
+
+**Architecture:**
+- `api/models/agent_models.py` — Pydantic models: ContextSource (5 types), AgentTool (3 types), AgentDefinition
+- `api/services/agent_service.py` — CRUD, context resolution (file/url/graph_query/workflow_output/text), message building
+- `api/routers/agents.py` — REST API: list, get, create, update, delete, chat, context preview
+- `agents/*.yaml` — Agent definitions (YAML files on disk, UI creates/edits via API)
+
+**Usage:**
+```bash
+# API
+curl http://localhost:8000/api/agents                    # List agents
+curl -X POST http://localhost:8000/api/agents/{id}/chat  # Chat with agent
+curl http://localhost:8000/api/agents/{id}/context        # Preview resolved context
+```
+
+**Context sources:** Agents can pin files, URLs, graph queries, workflow outputs, or inline text as context — resolved at chat time so agents always have fresh data.
+
+**Example:** `agents/xsiam-analyst.yaml` — XSIAM data model specialist with workflow integration.
+
+### Context Graph
+
+D3.js force-directed knowledge graph with five node types: sessions, topics, sources, agents, workflow runs.
+
+**Key files:**
+- `api/services/graph_service.py` — Builds graph from exports, agents, and workflow runs. Includes `search_nodes(query)` for agent context resolution.
+- `api/routers/graph.py` — Graph data endpoints + deep research orchestration
+
+**Node types:** session (green), topic (grey), source (blue), agent (orange), workflow_run (purple)
+
+### macOS Desktop App
+
+Native macOS app wrapping the dashboard in a WKWebView window via pywebview.
+
+**Files:**
+- `desktop/app.py` — Launcher: starts Ollama → starts FastAPI on random port → opens native window
+- `desktop/setup_app.py` — py2app build configuration
+- `desktop/build.sh` — One-command build: `./desktop/build.sh` → `desktop/dist/Local AI Platform.app`
+- `desktop/entitlements.plist` — Code signing entitlements
+
+**Run in dev mode:** `python desktop/app.py` — opens native window with dashboard.
+
 ### Common Development Tasks
 
 **Adding a streaming endpoint**:
