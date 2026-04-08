@@ -10,9 +10,17 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+
+# Import routers
+try:
+    from api.routers import skills
+    SKILLS_ROUTER_AVAILABLE = True
+except ImportError:
+    SKILLS_ROUTER_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -51,6 +59,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+if SKILLS_ROUTER_AVAILABLE:
+    app.include_router(skills.router)
 
 
 # Models
