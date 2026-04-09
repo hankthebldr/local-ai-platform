@@ -228,3 +228,33 @@ async def get_run_events(run_id: str, event_type: Optional[str] = None, limit: i
         }
         for e in events
     ]
+
+
+class WorkflowSaveRequest(BaseModel):
+    workflow_id: str
+    yaml_content: str
+
+
+@router.post("/save")
+async def save_workflow(req: WorkflowSaveRequest):
+    """Save a workflow YAML file to the workflows/ directory"""
+    import re
+    # Sanitize ID for filesystem safety
+    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '-', req.workflow_id)
+    filepath = os.path.join(WORKFLOWS_DIR, f"{safe_id}.yaml")
+
+    # Validate the YAML parses correctly
+    import yaml
+    try:
+        parsed = yaml.safe_load(req.yaml_content)
+        engine = get_engine()
+        defn = engine.load_from_dict(parsed)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Invalid workflow YAML: {e}")
+
+    # Write to disk
+    os.makedirs(WORKFLOWS_DIR, exist_ok=True)
+    with open(filepath, "w") as f:
+        f.write(req.yaml_content)
+
+    return {"saved": True, "path": filepath, "workflow_id": defn.id, "steps": len(defn.steps)}

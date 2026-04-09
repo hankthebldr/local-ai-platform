@@ -1073,6 +1073,69 @@ body::after {
 }
 .wf-dag-stats strong { color: var(--text); }
 
+/* ── Workflow Composer ─────────────────────────────────────────── */
+.wf-mode-btn {
+  padding: 4px 14px;
+  font-size: 0.65rem;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.wf-mode-btn.active {
+  background: var(--cyan-ghost);
+  color: var(--cyan);
+}
+.wf-mode-btn:hover:not(.active) { color: var(--text); }
+.composer-node {
+  position: absolute;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  padding: 0;
+  min-width: 160px;
+  cursor: grab;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  z-index: 2;
+}
+.composer-node:hover { border-color: var(--cyan-dim); }
+.composer-node.selected { border-color: var(--cyan); box-shadow: var(--glow-cyan); }
+.composer-node-header {
+  padding: 6px 10px;
+  background: var(--cyan-ghost);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.composer-node-body {
+  padding: 6px 10px;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+}
+.composer-port {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+  border: 1.5px solid var(--text-muted);
+  position: absolute;
+  cursor: crosshair;
+  z-index: 3;
+  transition: all 0.2s;
+}
+.composer-port:hover { background: var(--cyan); border-color: var(--cyan); transform: scale(1.3); }
+.composer-port.input { left: -6px; top: 50%; transform: translateY(-50%); }
+.composer-port.output { right: -6px; top: 50%; transform: translateY(-50%); }
+.composer-port.output:hover { transform: translateY(-50%) scale(1.3); }
+.composer-port.input:hover { transform: translateY(-50%) scale(1.3); }
+
 .wf-result-step {
   display: flex;
   align-items: center;
@@ -1582,17 +1645,94 @@ body::after {
 
   <!-- TAB: WORKFLOWS -->
   <div class="tab-content" id="tab-workflows">
-    <!-- Top toolbar -->
+    <!-- Top toolbar with mode toggle -->
     <div class="panel" style="margin-bottom:12px">
       <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">Workflow Runner</div>
+      <div class="panel-label">Workflows</div>
       <div class="wf-toolbar">
-        <select id="wf-select" class="model-select" style="min-width:260px">
-          <option value="">-- select workflow --</option>
-        </select>
-        <button class="action-btn" onclick="loadWorkflowDetail()" style="color:var(--cyan);border-color:var(--cyan-dim)">Load</button>
-        <div style="flex:1"></div>
-        <button class="action-btn" onclick="refreshWorkflows()">Refresh</button>
+        <!-- Mode toggle -->
+        <div style="display:flex;border:1px solid var(--border);overflow:hidden">
+          <button class="wf-mode-btn active" id="wf-mode-run" onclick="setWfMode('run')">Runner</button>
+          <button class="wf-mode-btn" id="wf-mode-compose" onclick="setWfMode('compose')">Composer</button>
+        </div>
+        <div style="width:1px;background:var(--border);margin:0 8px"></div>
+        <!-- Runner controls -->
+        <div id="wf-runner-controls" style="display:flex;gap:8px;align-items:center;flex:1">
+          <select id="wf-select" class="model-select" style="min-width:260px">
+            <option value="">-- select workflow --</option>
+          </select>
+          <button class="action-btn" onclick="loadWorkflowDetail()" style="color:var(--cyan);border-color:var(--cyan-dim)">Load</button>
+          <div style="flex:1"></div>
+          <button class="action-btn" onclick="refreshWorkflows()">Refresh</button>
+        </div>
+        <!-- Composer controls (hidden by default) -->
+        <div id="wf-composer-controls" style="display:none;gap:8px;align-items:center;flex:1">
+          <button class="action-btn" onclick="composerAddStep()" style="color:var(--cyan);border-color:var(--cyan-dim)">+ Add Step</button>
+          <div style="flex:1"></div>
+          <button class="action-btn" onclick="composerExportYaml()">Export YAML</button>
+          <button class="action-btn" onclick="composerSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Composer (hidden by default) -->
+    <div id="wf-composer" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 340px;gap:12px;margin-bottom:12px">
+        <!-- LEFT: Interactive canvas -->
+        <div class="panel" style="min-height:420px;position:relative">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">Workflow Canvas</div>
+          <div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:8px">Click + Add Step to create nodes. Drag from output port (right) to input port (left) to connect.</div>
+          <div id="composer-canvas" style="width:100%;min-height:380px;position:relative;border:1px solid var(--border);background:var(--bg-deep)"></div>
+        </div>
+        <!-- RIGHT: Step editor -->
+        <div class="panel" style="display:flex;flex-direction:column">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label" id="composer-editor-title">Step Editor</div>
+          <div id="composer-editor" style="flex:1;overflow-y:auto">
+            <div style="padding:20px 0;text-align:center;color:var(--text-muted);font-size:0.68rem">
+              Click a node to edit its properties, or click + Add Step to begin.
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Workflow metadata -->
+      <div class="panel" style="margin-bottom:12px">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">Workflow Metadata</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:0.72rem">
+          <div>
+            <div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Workflow ID</div>
+            <input type="text" id="comp-wf-id" class="chat-input" style="font-size:0.72rem;padding:6px 10px" placeholder="my-workflow" />
+          </div>
+          <div>
+            <div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Name</div>
+            <input type="text" id="comp-wf-name" class="chat-input" style="font-size:0.72rem;padding:6px 10px" placeholder="My Workflow" />
+          </div>
+          <div>
+            <div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Default Role</div>
+            <select id="comp-wf-role" class="model-select" style="font-size:0.72rem;padding:4px 8px">
+              <option value="reasoning">reasoning</option>
+              <option value="coding">coding</option>
+              <option value="fast">fast</option>
+              <option value="general" selected>general</option>
+              <option value="uncensored">uncensored</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Description</div>
+          <input type="text" id="comp-wf-desc" class="chat-input" style="font-size:0.72rem;padding:6px 10px" placeholder="What does this workflow do?" />
+        </div>
+      </div>
+      <!-- YAML Preview -->
+      <div class="panel" id="comp-yaml-panel" style="display:none">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">Generated YAML</div>
+        <pre id="comp-yaml-output" style="font-size:0.62rem;color:var(--text-dim);max-height:300px;overflow:auto;white-space:pre-wrap"></pre>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="action-btn" onclick="navigator.clipboard.writeText(document.getElementById('comp-yaml-output').textContent)" style="font-size:0.58rem;padding:4px 12px">Copy YAML</button>
+        </div>
       </div>
     </div>
 
@@ -3768,6 +3908,355 @@ function copyStepOutput(idx) {
     outputEl.style.borderColor = 'var(--green)';
     setTimeout(() => { outputEl.style.borderColor = ''; }, 800);
   }).catch(() => {});
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   WORKFLOW COMPOSER — Visual node-based workflow builder
+   ══════════════════════════════════════════════════════════════════ */
+
+let composerSteps = [];
+let composerEdges = [];
+let composerSelectedNode = null;
+let composerDragState = null; // { type: 'move'|'connect', nodeId, startX, startY }
+let composerNextId = 1;
+
+function setWfMode(mode) {
+  document.getElementById('wf-mode-run').classList.toggle('active', mode === 'run');
+  document.getElementById('wf-mode-compose').classList.toggle('active', mode === 'compose');
+  document.getElementById('wf-runner-controls').style.display = mode === 'run' ? 'flex' : 'none';
+  document.getElementById('wf-composer-controls').style.display = mode === 'compose' ? 'flex' : 'none';
+  document.getElementById('wf-composer').style.display = mode === 'compose' ? 'block' : 'none';
+  document.getElementById('wf-detail').style.display = mode === 'run' ? '' : 'none';
+  if (mode === 'compose') composerRender();
+}
+
+function composerAddStep() {
+  const id = `step_${composerNextId++}`;
+  const yOffset = composerSteps.length * 80;
+  composerSteps.push({
+    id,
+    name: `New Step ${composerSteps.length + 1}`,
+    role: 'general',
+    system_prompt: 'You are a helpful assistant.',
+    inputs: [],
+    outputs: ['result'],
+    x: 40 + (composerSteps.length % 3) * 200,
+    y: 30 + Math.floor(composerSteps.length / 3) * 100,
+    output_format: 'raw',
+  });
+  composerSelectNode(id);
+  composerRender();
+}
+
+function composerRender() {
+  const canvas = document.getElementById('composer-canvas');
+  if (!canvas) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width || 700;
+  const h = Math.max(rect.height, 380);
+
+  // Clear and create SVG for edges + HTML nodes overlay
+  canvas.innerHTML = '';
+
+  // SVG for edges
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', h);
+  svg.style.position = 'absolute';
+  svg.style.top = '0';
+  svg.style.left = '0';
+  svg.style.pointerEvents = 'none';
+
+  // Arrow marker
+  const defs = document.createElementNS(svgNs, 'defs');
+  const marker = document.createElementNS(svgNs, 'marker');
+  marker.setAttribute('id', 'comp-arrow');
+  marker.setAttribute('viewBox', '0 0 10 6');
+  marker.setAttribute('refX', '10');
+  marker.setAttribute('refY', '3');
+  marker.setAttribute('markerWidth', '8');
+  marker.setAttribute('markerHeight', '6');
+  marker.setAttribute('orient', 'auto');
+  const arrowPath = document.createElementNS(svgNs, 'path');
+  arrowPath.setAttribute('d', 'M0,0 L10,3 L0,6');
+  arrowPath.setAttribute('fill', '#00cc66');
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // Draw edges
+  composerEdges.forEach(edge => {
+    const from = composerSteps.find(s => s.id === edge.from);
+    const to = composerSteps.find(s => s.id === edge.to);
+    if (!from || !to) return;
+    const x1 = from.x + 160, y1 = from.y + 30;
+    const x2 = to.x, y2 = to.y + 30;
+    const mx = (x1 + x2) / 2;
+    const path = document.createElementNS(svgNs, 'path');
+    path.setAttribute('d', `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#00cc66');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('marker-end', 'url(#comp-arrow)');
+    path.setAttribute('opacity', '0.7');
+    svg.appendChild(path);
+  });
+
+  canvas.appendChild(svg);
+
+  // Render nodes as HTML
+  composerSteps.forEach(step => {
+    const node = document.createElement('div');
+    node.className = `composer-node ${composerSelectedNode === step.id ? 'selected' : ''}`;
+    node.style.left = step.x + 'px';
+    node.style.top = step.y + 'px';
+    node.dataset.id = step.id;
+
+    const roleColors = {
+      reasoning: 'var(--purple)', coding: 'var(--cyan)', fast: 'var(--amber)',
+      uncensored: 'var(--red)', general: 'var(--text-dim)',
+    };
+    const roleColor = roleColors[step.role] || 'var(--text-dim)';
+
+    node.innerHTML = `
+      <div class="composer-node-header">
+        <span style="color:${roleColor};font-size:0.5rem">&#9679;</span>
+        ${esc(step.name)}
+      </div>
+      <div class="composer-node-body">
+        <div style="color:${roleColor};font-size:0.54rem;text-transform:uppercase;letter-spacing:0.08em">${esc(step.role)}</div>
+        <div style="margin-top:2px;font-size:0.54rem">${step.outputs.map(o => `<span style="color:var(--cyan)">${esc(o)}</span>`).join(', ')}</div>
+      </div>
+      <div class="composer-port input" title="Input — drag connection here"></div>
+      <div class="composer-port output" title="Output — drag from here to connect"></div>
+    `;
+
+    // Click to select
+    node.addEventListener('click', (e) => {
+      if (e.target.classList.contains('composer-port')) return;
+      composerSelectNode(step.id);
+    });
+
+    // Drag to move
+    node.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('composer-port')) return;
+      e.preventDefault();
+      composerDragState = { type: 'move', nodeId: step.id, startX: e.clientX - step.x, startY: e.clientY - step.y };
+    });
+
+    // Output port — start connection drag
+    const outPort = node.querySelector('.composer-port.output');
+    outPort.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      composerDragState = { type: 'connect', fromId: step.id, startX: e.clientX, startY: e.clientY };
+    });
+
+    canvas.appendChild(node);
+  });
+
+  // Canvas-level mouse handlers for dragging
+  canvas.onmousemove = (e) => {
+    if (!composerDragState) return;
+    if (composerDragState.type === 'move') {
+      const step = composerSteps.find(s => s.id === composerDragState.nodeId);
+      if (step) {
+        step.x = Math.max(0, e.clientX - composerDragState.startX);
+        step.y = Math.max(0, e.clientY - composerDragState.startY);
+        composerRender();
+      }
+    }
+  };
+  canvas.onmouseup = (e) => {
+    if (!composerDragState) return;
+    if (composerDragState.type === 'connect') {
+      // Find the node under the cursor
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      const nodeEl = target?.closest?.('.composer-node');
+      if (nodeEl && nodeEl.dataset.id !== composerDragState.fromId) {
+        const toId = nodeEl.dataset.id;
+        // Avoid duplicates
+        if (!composerEdges.some(ed => ed.from === composerDragState.fromId && ed.to === toId)) {
+          composerEdges.push({ from: composerDragState.fromId, to: toId });
+          // Auto-add input reference
+          const toStep = composerSteps.find(s => s.id === toId);
+          const fromStep = composerSteps.find(s => s.id === composerDragState.fromId);
+          if (toStep && fromStep) {
+            fromStep.outputs.forEach(out => {
+              const ref = `${composerDragState.fromId}.${out}`;
+              if (!toStep.inputs.includes(ref)) toStep.inputs.push(ref);
+            });
+          }
+          composerRender();
+          composerSelectNode(toId);
+        }
+      }
+    }
+    composerDragState = null;
+  };
+}
+
+function composerSelectNode(nodeId) {
+  composerSelectedNode = nodeId;
+  const step = composerSteps.find(s => s.id === nodeId);
+  const editor = document.getElementById('composer-editor');
+  const title = document.getElementById('composer-editor-title');
+  if (!step || !editor) return;
+
+  title.textContent = step.id;
+
+  editor.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:0.72rem">
+      <div>
+        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Step ID</label>
+        <input type="text" value="${esc(step.id)}" class="chat-input" style="font-size:0.72rem;padding:5px 8px"
+          onchange="composerUpdateStep('${esc(step.id)}','id',this.value)" />
+      </div>
+      <div>
+        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Name</label>
+        <input type="text" value="${esc(step.name)}" class="chat-input" style="font-size:0.72rem;padding:5px 8px"
+          onchange="composerUpdateStep('${esc(step.id)}','name',this.value)" />
+      </div>
+      <div>
+        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Role</label>
+        <select class="model-select" style="font-size:0.72rem;padding:4px 8px"
+          onchange="composerUpdateStep('${esc(step.id)}','role',this.value)">
+          ${['reasoning','coding','fast','general','uncensored'].map(r =>
+            `<option value="${r}" ${step.role===r?'selected':''}>${r}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">System Prompt</label>
+        <textarea class="chat-input" style="font-size:0.68rem;padding:5px 8px;min-height:80px;resize:vertical"
+          onchange="composerUpdateStep('${esc(step.id)}','system_prompt',this.value)">${esc(step.system_prompt)}</textarea>
+      </div>
+      <div>
+        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Output Keys (comma-separated)</label>
+        <input type="text" value="${step.outputs.join(', ')}" class="chat-input" style="font-size:0.72rem;padding:5px 8px"
+          onchange="composerUpdateStep('${esc(step.id)}','outputs',this.value.split(',').map(s=>s.trim()).filter(Boolean))" />
+      </div>
+      <div>
+        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Output Format</label>
+        <select class="model-select" style="font-size:0.72rem;padding:4px 8px"
+          onchange="composerUpdateStep('${esc(step.id)}','output_format',this.value)">
+          ${['raw','json','json_array','markdown_sections','key_value','csv','regex'].map(f =>
+            `<option value="${f}" ${step.output_format===f?'selected':''}>${f}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Inputs (auto-populated from connections)</label>
+        <div style="font-size:0.62rem;color:var(--text-dim);font-family:var(--mono)">
+          ${step.inputs.length ? step.inputs.map(i => `<div>${esc(i)}</div>`).join('') : '<span style="color:var(--text-muted)">No inputs — connect from another step</span>'}
+        </div>
+      </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <button class="action-btn" onclick="composerDeleteStep('${esc(step.id)}')" style="font-size:0.58rem;padding:4px 12px;color:var(--red);border-color:var(--red-dim)">Delete Step</button>
+      </div>
+    </div>
+  `;
+
+  // Re-render to update selection highlight
+  composerRender();
+}
+
+function composerUpdateStep(stepId, field, value) {
+  const step = composerSteps.find(s => s.id === stepId);
+  if (!step) return;
+  if (field === 'id') {
+    // Update all references
+    const oldId = step.id;
+    step.id = value;
+    composerEdges.forEach(e => { if (e.from === oldId) e.from = value; if (e.to === oldId) e.to = value; });
+    composerSteps.forEach(s => {
+      s.inputs = s.inputs.map(i => i.startsWith(oldId + '.') ? value + i.substring(oldId.length) : i);
+    });
+    composerSelectedNode = value;
+  } else {
+    step[field] = value;
+  }
+  composerRender();
+}
+
+function composerDeleteStep(stepId) {
+  composerSteps = composerSteps.filter(s => s.id !== stepId);
+  composerEdges = composerEdges.filter(e => e.from !== stepId && e.to !== stepId);
+  composerSteps.forEach(s => {
+    s.inputs = s.inputs.filter(i => !i.startsWith(stepId + '.'));
+  });
+  if (composerSelectedNode === stepId) {
+    composerSelectedNode = null;
+    document.getElementById('composer-editor').innerHTML =
+      '<div style="padding:20px 0;text-align:center;color:var(--text-muted);font-size:0.68rem">Step deleted. Select another node or add a new one.</div>';
+    document.getElementById('composer-editor-title').textContent = 'Step Editor';
+  }
+  composerRender();
+}
+
+function composerExportYaml() {
+  const id = document.getElementById('comp-wf-id')?.value || 'my-workflow';
+  const name = document.getElementById('comp-wf-name')?.value || 'My Workflow';
+  const desc = document.getElementById('comp-wf-desc')?.value || '';
+  const role = document.getElementById('comp-wf-role')?.value || 'general';
+
+  let yaml = `id: ${id}\nname: "${name}"\nversion: "1.0"\n`;
+  if (desc) yaml += `description: "${desc}"\n`;
+  yaml += `\ndefaults:\n  role: ${role}\n  temperature: 0.7\n  max_tokens: 4096\n  retries: 2\n  retry_delay: 5\n`;
+  yaml += `\nsteps:\n`;
+
+  composerSteps.forEach(step => {
+    // Compute depends_on from edges
+    const deps = composerEdges.filter(e => e.to === step.id).map(e => e.from);
+    yaml += `  - id: ${step.id}\n`;
+    yaml += `    name: "${step.name}"\n`;
+    yaml += `    role: ${step.role}\n`;
+    yaml += `    system_prompt: |\n`;
+    step.system_prompt.split('\n').forEach(line => { yaml += `      ${line}\n`; });
+    if (step.inputs.length) {
+      yaml += `    inputs:\n`;
+      step.inputs.forEach(i => { yaml += `      - ${i}\n`; });
+    }
+    yaml += `    outputs:\n`;
+    step.outputs.forEach(o => { yaml += `      - ${o}\n`; });
+    if (deps.length) {
+      yaml += `    depends_on:\n`;
+      deps.forEach(d => { yaml += `      - ${d}\n`; });
+    }
+    if (step.output_format !== 'raw') {
+      yaml += `    output_parser:\n      format: ${step.output_format}\n`;
+    }
+    yaml += `\n`;
+  });
+
+  document.getElementById('comp-yaml-panel').style.display = 'block';
+  document.getElementById('comp-yaml-output').textContent = yaml;
+}
+
+async function composerSave() {
+  composerExportYaml();
+  const yaml = document.getElementById('comp-yaml-output').textContent;
+  const id = document.getElementById('comp-wf-id')?.value || 'my-workflow';
+
+  try {
+    const resp = await fetch(`/api/workflows/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workflow_id: id, yaml_content: yaml }),
+    });
+    if (resp.ok) {
+      alert('Workflow saved to workflows/' + id + '.yaml');
+      refreshWorkflows();
+    } else {
+      const err = await resp.json();
+      alert('Save failed: ' + (err.detail || JSON.stringify(err)));
+    }
+  } catch (e) {
+    // Fallback: just show the YAML for manual copy
+    alert('API save not available. Copy the YAML from the preview below and save manually to workflows/' + id + '.yaml');
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════
