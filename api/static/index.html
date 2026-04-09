@@ -3242,56 +3242,100 @@ function renderDAG(plan, stepMeta, stepResults, runId) {
   (stepMeta || []).forEach(s => { metaMap[s.id] = s; });
   _dagData = { plan, stepMeta, stepResults: resultMap, metaMap, runId };
 
-  // Layout constants
-  const nodeW = 130, nodeH = 52, padX = 60, padY = 20, batchGap = 50;
+  // Role → color mapping
+  const roleColors = {
+    reasoning: '#00C0E8', coding: '#00cc66', fast: '#8a98a0',
+    uncensored: '#ff5252', general: '#6b7780',
+  };
+
+  // Layout
+  const nodeW = 150, nodeH = 68, padX = 50, padY = 16, batchGap = 44;
+  const phaseH = 18; // Phase label height
   const maxBatchHeight = Math.max(...plan.batches.map(b => b.step_ids.length));
   const svgW = plan.batches.length * (nodeW + batchGap) + padX * 2;
-  const svgH = maxBatchHeight * (nodeH + padY) + padY * 2 + 30;
+  const svgH = maxBatchHeight * (nodeH + padY) + padY * 2 + phaseH + 28;
 
   const svg = d3.select(container).append('svg')
-    .attr('width', '100%').attr('height', svgH)
+    .attr('width', '100%').attr('height', Math.max(svgH, 300))
     .attr('viewBox', `0 0 ${svgW} ${svgH}`)
     .style('overflow', 'visible');
 
-  // Defs for arrow markers
-  svg.append('defs').append('marker')
-    .attr('id', 'dag-arrow').attr('viewBox', '0 0 10 6').attr('refX', 10).attr('refY', 3)
+  // Zoom + pan
+  const zoomG = svg.append('g').attr('class', 'dag-zoom-root');
+  const zoom = d3.zoom()
+    .scaleExtent([0.3, 3])
+    .on('zoom', (event) => { zoomG.attr('transform', event.transform); });
+  svg.call(zoom);
+
+  // Zoom controls
+  const zoomBar = document.createElement('div');
+  zoomBar.style.cssText = 'position:absolute;top:4px;right:4px;display:flex;gap:4px;z-index:5';
+  zoomBar.innerHTML = `
+    <button onclick="d3.select('#wf-dag-canvas svg').call(d3.zoom().scaleExtent([0.3,3]).on('zoom',e=>d3.select('.dag-zoom-root').attr('transform',e.transform)).scaleTo,1.3)" style="width:24px;height:24px;background:var(--bg);border:1px solid var(--border);color:var(--text);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">+</button>
+    <button onclick="d3.select('#wf-dag-canvas svg').call(d3.zoom().scaleExtent([0.3,3]).on('zoom',e=>d3.select('.dag-zoom-root').attr('transform',e.transform)).scaleTo,0.7)" style="width:24px;height:24px;background:var(--bg);border:1px solid var(--border);color:var(--text);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">−</button>
+    <button onclick="d3.select('#wf-dag-canvas svg').transition().call(d3.zoom().scaleExtent([0.3,3]).on('zoom',e=>d3.select('.dag-zoom-root').attr('transform',e.transform)).transform,d3.zoomIdentity)" style="width:24px;height:24px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center">⟲</button>
+  `;
+  container.appendChild(zoomBar);
+
+  // All drawing goes into zoomG from here
+  const defs = svg.append('defs');
+  defs.append('marker').attr('id', 'dag-arrow').attr('viewBox', '0 0 10 6').attr('refX', 10).attr('refY', 3)
     .attr('markerWidth', 8).attr('markerHeight', 6).attr('orient', 'auto')
     .append('path').attr('d', 'M0,0 L10,3 L0,6').attr('fill', '#3a4248');
-
-  svg.append('defs').append('marker')
-    .attr('id', 'dag-arrow-done').attr('viewBox', '0 0 10 6').attr('refX', 10).attr('refY', 3)
+  defs.append('marker').attr('id', 'dag-arrow-done').attr('viewBox', '0 0 10 6').attr('refX', 10).attr('refY', 3)
     .attr('markerWidth', 8).attr('markerHeight', 6).attr('orient', 'auto')
     .append('path').attr('d', 'M0,0 L10,3 L0,6').attr('fill', '#00cc66');
 
-  // Compute node positions
+  // Compute positions
   const nodePositions = {};
   plan.batches.forEach((batch, bi) => {
     const x = padX + bi * (nodeW + batchGap);
     const batchH = batch.step_ids.length * (nodeH + padY) - padY;
-    const yOffset = (svgH - 30 - batchH) / 2;
+    const yOffset = phaseH + (svgH - phaseH - 24 - batchH) / 2;
     batch.step_ids.forEach((sid, si) => {
       nodePositions[sid] = { x, y: yOffset + si * (nodeH + padY), batch: bi };
     });
   });
 
-  // Draw edges
-  const edges = svg.append('g').attr('class', 'dag-edges');
+  // Phase labels at top
+  const phases = zoomG.append('g').attr('class', 'dag-phases');
+  plan.batches.forEach((batch, bi) => {
+    const x = padX + bi * (nodeW + batchGap);
+    const isParallel = batch.step_ids.length > 1;
+    // Phase background
+    phases.append('rect')
+      .attr('x', x - 4).attr('y', 0).attr('width', nodeW + 8).attr('height', phaseH)
+      .attr('rx', 2).attr('fill', isParallel ? '#00C0E808' : '#ffffff04')
+      .attr('stroke', isParallel ? '#00C0E815' : '#ffffff08').attr('stroke-width', 1);
+    // Phase text
+    const phaseLabel = isParallel ? `PARALLEL (${batch.step_ids.length})` : `BATCH ${bi}`;
+    phases.append('text')
+      .attr('x', x + nodeW / 2).attr('y', 12)
+      .attr('text-anchor', 'middle')
+      .attr('fill', isParallel ? '#00C0E8' : '#6b7780')
+      .attr('font-size', '8px').attr('letter-spacing', '0.12em').attr('font-weight', '600')
+      .text(phaseLabel);
+  });
+
+  // Draw edges with data flow labels
+  const edgesG = zoomG.append('g').attr('class', 'dag-edges');
   plan.batches.forEach((batch) => {
     batch.step_ids.forEach(sid => {
       const meta = metaMap[sid];
       const deps = [];
-      // Collect all dependency step IDs
+      const depOutputs = {}; // depSid → [output keys consumed]
       if (meta && meta.depends_on) deps.push(...meta.depends_on);
       if (meta && meta.inputs) {
         meta.inputs.forEach(inp => {
-          const ns = inp.split('.')[0];
-          if (ns !== 'seed' && ns !== 'shared' && ns !== 'metadata' && nodePositions[ns] && !deps.includes(ns)) {
-            deps.push(ns);
+          const parts = inp.split('.');
+          const ns = parts[0];
+          if (ns !== 'seed' && ns !== 'shared' && ns !== 'metadata' && nodePositions[ns]) {
+            if (!deps.includes(ns)) deps.push(ns);
+            if (!depOutputs[ns]) depOutputs[ns] = [];
+            if (parts[1] && !depOutputs[ns].includes(parts[1])) depOutputs[ns].push(parts[1]);
           }
         });
       }
-      // If no explicit deps but not in batch 0, connect to all prior batch nodes
       if (deps.length === 0 && batch.depends_on_batches && batch.depends_on_batches.length > 0) {
         batch.depends_on_batches.forEach(depBi => {
           plan.batches[depBi].step_ids.forEach(depSid => { if (!deps.includes(depSid)) deps.push(depSid); });
@@ -3308,104 +3352,139 @@ function renderDAG(plan, stepMeta, stepResults, runId) {
         const x2 = to.x, y2 = to.y + nodeH / 2;
         const mx = (x1 + x2) / 2;
 
-        edges.append('path')
+        edgesG.append('path')
           .attr('d', `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`)
           .attr('fill', 'none')
           .attr('stroke', isDone ? '#00cc66' : '#3a4248')
           .attr('stroke-width', isDone ? 2 : 1.5)
           .attr('marker-end', isDone ? 'url(#dag-arrow-done)' : 'url(#dag-arrow)')
-          .attr('opacity', isDone ? 0.8 : 0.5);
+          .attr('opacity', isDone ? 0.7 : 0.4);
+
+        // Data flow label on edge
+        const outputs = depOutputs[depSid];
+        if (outputs && outputs.length > 0) {
+          const labelText = outputs.length <= 2 ? outputs.join(', ') : outputs.slice(0, 2).join(', ') + '…';
+          const lx = mx, ly = (y1 + y2) / 2 - 4;
+          edgesG.append('text')
+            .attr('x', lx).attr('y', ly)
+            .attr('text-anchor', 'middle')
+            .attr('fill', isDone ? '#00cc6680' : '#6b778060')
+            .attr('font-size', '7px').attr('font-style', 'italic')
+            .text(labelText);
+        }
       });
     });
   });
 
-  // Draw batch labels
-  const labels = svg.append('g').attr('class', 'dag-labels');
-  plan.batches.forEach((batch, bi) => {
-    const x = padX + bi * (nodeW + batchGap) + nodeW / 2;
-    const isParallel = batch.step_ids.length > 1;
-    labels.append('text')
-      .attr('x', x).attr('y', svgH - 8)
-      .attr('text-anchor', 'middle')
-      .attr('fill', isParallel ? '#00C0E8' : '#3a4248')
-      .attr('font-size', '9px').attr('letter-spacing', '0.1em')
-      .text(`B${bi}${isParallel ? ' ∥' : ''}`);
-  });
-
   // Draw nodes
-  const nodes = svg.append('g').attr('class', 'dag-nodes');
+  const nodesG = zoomG.append('g').attr('class', 'dag-nodes');
   Object.entries(nodePositions).forEach(([sid, pos]) => {
     const result = resultMap[sid];
     const meta = metaMap[sid];
     const status = result ? result.status : 'pending';
 
-    const colorMap = { completed: '#00cc66', failed: '#ff5252', running: '#00cc66', skipped: '#3a4248', pending: '#3a4248' };
-    const bgMap = { completed: '#00cc6608', failed: '#ff525208', running: '#00cc6610', skipped: '#ffffff03', pending: '#ffffff03' };
-    const borderColor = colorMap[status] || '#3a4248';
+    const statusColors = { completed: '#00cc66', failed: '#ff5252', running: '#00cc66', skipped: '#6b7780', pending: '#3a4248' };
+    const borderColor = statusColors[status] || '#3a4248';
+    const role = meta?.role || 'general';
+    const roleColor = roleColors[role] || '#6b7780';
 
-    const g = nodes.append('g')
+    const g = nodesG.append('g')
       .attr('transform', `translate(${pos.x},${pos.y})`)
       .style('cursor', 'pointer')
       .on('click', () => inspectNode(sid));
 
-    // Background rect
+    // Node background
     g.append('rect')
       .attr('width', nodeW).attr('height', nodeH).attr('rx', 4)
-      .attr('fill', bgMap[status]).attr('stroke', borderColor).attr('stroke-width', 1.5);
+      .attr('fill', status === 'completed' ? '#00cc6606' : status === 'failed' ? '#ff525206' : '#ffffff03')
+      .attr('stroke', borderColor).attr('stroke-width', 1.5);
+
+    // Role color bar (left edge)
+    g.append('rect')
+      .attr('x', 0).attr('y', 0).attr('width', 3).attr('height', nodeH).attr('rx', 1)
+      .attr('fill', roleColor);
 
     // Running glow
     if (status === 'running') {
-      g.append('rect')
-        .attr('width', nodeW).attr('height', nodeH).attr('rx', 4)
-        .attr('fill', 'none').attr('stroke', '#00cc66').attr('stroke-width', 2)
-        .attr('opacity', 0.4)
+      g.append('rect').attr('width', nodeW).attr('height', nodeH).attr('rx', 4)
+        .attr('fill', 'none').attr('stroke', '#00cc66').attr('stroke-width', 2).attr('opacity', 0.4)
         .append('animate').attr('attributeName', 'opacity').attr('values', '0.2;0.6;0.2').attr('dur', '1.5s').attr('repeatCount', 'indefinite');
     }
 
-    // Step name
+    // Step number + name (line 1)
+    const stepIdx = plan.step_order.indexOf(sid) + 1;
     const displayName = (meta && meta.name) ? meta.name.replace(/^\d+\.\s*/, '') : sid;
-    const truncName = displayName.length > 18 ? displayName.slice(0, 16) + '…' : displayName;
+    const truncName = displayName.length > 20 ? displayName.slice(0, 18) + '…' : displayName;
     g.append('text')
-      .attr('x', nodeW / 2).attr('y', 18)
-      .attr('text-anchor', 'middle')
-      .attr('fill', '#eceff1').attr('font-size', '10px').attr('font-weight', '600')
-      .text(truncName);
+      .attr('x', 10).attr('y', 16)
+      .attr('fill', '#eceff1').attr('font-size', '9px').attr('font-weight', '600')
+      .text(`${stepIdx}. ${truncName}`);
 
-    // Step ID
+    // Role badge (line 2)
     g.append('text')
-      .attr('x', nodeW / 2).attr('y', 30)
-      .attr('text-anchor', 'middle')
-      .attr('fill', '#6b7780').attr('font-size', '8px')
-      .text(sid);
+      .attr('x', 10).attr('y', 28)
+      .attr('fill', roleColor).attr('font-size', '7px').attr('letter-spacing', '0.1em')
+      .text(role.toUpperCase());
 
-    // Status / duration
+    // Output format indicator
+    const outFmt = meta?.output_format;
+    if (outFmt && outFmt !== 'raw') {
+      g.append('text')
+        .attr('x', nodeW - 8).attr('y', 28)
+        .attr('text-anchor', 'end')
+        .attr('fill', '#6b7780').attr('font-size', '7px')
+        .text(outFmt);
+    }
+
+    // Output keys (line 3) — shows what this step produces
+    const outputs = meta?.outputs || [];
+    const outText = outputs.length <= 3 ? outputs.join(', ') : outputs.slice(0, 2).join(', ') + ` +${outputs.length - 2}`;
+    g.append('text')
+      .attr('x', 10).attr('y', 40)
+      .attr('fill', '#00cc6680').attr('font-size', '7px')
+      .text(`→ ${outText}`);
+
+    // Status / duration (line 4)
     const statusText = result && result.duration_seconds
-      ? `${result.duration_seconds.toFixed(1)}s`
+      ? `${result.duration_seconds.toFixed(1)}s · ${((result.token_count||{}).total_tokens||0).toLocaleString()} tok`
       : status;
     g.append('text')
-      .attr('x', nodeW / 2).attr('y', 44)
-      .attr('text-anchor', 'middle')
-      .attr('fill', borderColor).attr('font-size', '8px').attr('letter-spacing', '0.08em')
+      .attr('x', 10).attr('y', 54)
+      .attr('fill', borderColor).attr('font-size', '7px').attr('letter-spacing', '0.06em')
       .text(statusText.toUpperCase());
 
-    // Quality gate indicator
+    // Gate badge (top right)
     if (meta && meta.has_gates) {
-      g.append('circle').attr('cx', nodeW - 8).attr('cy', 8).attr('r', 4)
-        .attr('fill', '#8a98a0').attr('opacity', 0.7);
-      g.append('text').attr('x', nodeW - 8).attr('y', 11)
-        .attr('text-anchor', 'middle').attr('fill', '#0b0e11').attr('font-size', '6px').attr('font-weight', '700')
-        .text('G');
+      const gateCount = meta.has_gates === true ? '?' : meta.has_gates;
+      g.append('rect').attr('x', nodeW - 24).attr('y', 4).attr('width', 18).attr('height', 12).attr('rx', 2)
+        .attr('fill', '#8a98a020').attr('stroke', '#8a98a040').attr('stroke-width', 1);
+      g.append('text').attr('x', nodeW - 15).attr('y', 13)
+        .attr('text-anchor', 'middle').attr('fill', '#8a98a0').attr('font-size', '7px').attr('font-weight', '600')
+        .text('QG');
+    }
+
+    // Seed inputs indicator (top left, if step reads from seed)
+    const hasSeedInputs = meta?.inputs?.some(i => i.startsWith('seed.'));
+    if (hasSeedInputs) {
+      g.append('circle').attr('cx', nodeW - 8).attr('cy', nodeH - 8).attr('r', 3)
+        .attr('fill', '#00C0E8').attr('opacity', 0.6);
     }
   });
 
-  // Stats bar
+  // Legend at bottom
   const statsEl = document.getElementById('wf-dag-stats');
   if (statsEl) {
     statsEl.innerHTML = `
       <span>Steps: <strong>${plan.total_steps}</strong></span>
       <span>Batches: <strong>${plan.total_batches}</strong></span>
-      <span>Max parallel: <strong>${plan.parallelism}</strong></span>
+      <span>Max ∥: <strong>${plan.parallelism}</strong></span>
       <span>Speedup: <strong>${(plan.total_steps / plan.total_batches).toFixed(1)}x</strong></span>
+      <span style="margin-left:12px;border-left:1px solid var(--border);padding-left:12px">
+        <span style="color:#00C0E8">■</span> reasoning
+        <span style="color:#00cc66;margin-left:6px">■</span> coding
+        <span style="color:#8a98a0;margin-left:6px">■</span> fast
+        <span style="color:#6b7780;margin-left:6px">■</span> general
+      </span>
     `;
   }
 }
@@ -4107,54 +4186,101 @@ function composerSelectNode(nodeId) {
 
   title.textContent = step.id;
 
+  const roleDescs = {
+    reasoning: 'Deep analysis, chain-of-thought, review tasks',
+    coding: 'Code generation, rule writing, structured output',
+    fast: 'Quick classification, simple extraction',
+    general: 'Versatile — any task type',
+    uncensored: 'Unrestricted output, no safety filters',
+  };
+
+  const fmtDescs = {
+    raw: 'Full LLM text as-is',
+    json: 'Parse as JSON object → named output keys',
+    json_array: 'Parse as JSON array',
+    markdown_sections: 'Split by ## headings',
+    key_value: 'Parse key: value lines',
+    csv: 'Parse CSV/TSV tabular data',
+    regex: 'Extract via regex named groups',
+  };
+
   editor.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:8px;font-size:0.72rem">
-      <div>
-        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Step ID</label>
-        <input type="text" value="${esc(step.id)}" class="chat-input" style="font-size:0.72rem;padding:5px 8px"
-          onchange="composerUpdateStep('${esc(step.id)}','id',this.value)" />
-      </div>
-      <div>
-        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Name</label>
-        <input type="text" value="${esc(step.name)}" class="chat-input" style="font-size:0.72rem;padding:5px 8px"
-          onchange="composerUpdateStep('${esc(step.id)}','name',this.value)" />
-      </div>
-      <div>
-        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Role</label>
-        <select class="model-select" style="font-size:0.72rem;padding:4px 8px"
-          onchange="composerUpdateStep('${esc(step.id)}','role',this.value)">
-          ${['reasoning','coding','fast','general','uncensored'].map(r =>
-            `<option value="${r}" ${step.role===r?'selected':''}>${r}</option>`
-          ).join('')}
-        </select>
-      </div>
-      <div>
-        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">System Prompt</label>
-        <textarea class="chat-input" style="font-size:0.68rem;padding:5px 8px;min-height:80px;resize:vertical"
-          onchange="composerUpdateStep('${esc(step.id)}','system_prompt',this.value)">${esc(step.system_prompt)}</textarea>
-      </div>
-      <div>
-        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Output Keys (comma-separated)</label>
-        <input type="text" value="${step.outputs.join(', ')}" class="chat-input" style="font-size:0.72rem;padding:5px 8px"
-          onchange="composerUpdateStep('${esc(step.id)}','outputs',this.value.split(',').map(s=>s.trim()).filter(Boolean))" />
-      </div>
-      <div>
-        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Output Format</label>
-        <select class="model-select" style="font-size:0.72rem;padding:4px 8px"
-          onchange="composerUpdateStep('${esc(step.id)}','output_format',this.value)">
-          ${['raw','json','json_array','markdown_sections','key_value','csv','regex'].map(f =>
-            `<option value="${f}" ${step.output_format===f?'selected':''}>${f}</option>`
-          ).join('')}
-        </select>
-      </div>
-      <div>
-        <label style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:3px">Inputs (auto-populated from connections)</label>
-        <div style="font-size:0.62rem;color:var(--text-dim);font-family:var(--mono)">
-          ${step.inputs.length ? step.inputs.map(i => `<div>${esc(i)}</div>`).join('') : '<span style="color:var(--text-muted)">No inputs — connect from another step</span>'}
+    <div style="display:flex;flex-direction:column;gap:0;font-size:0.72rem">
+      <!-- Section 1: Identity -->
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">1. Identity</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div>
+            <label style="font-size:0.54rem;color:var(--text-muted);display:block;margin-bottom:2px">Step ID</label>
+            <input type="text" value="${esc(step.id)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px"
+              onchange="composerUpdateStep('${esc(step.id)}','id',this.value)" />
+          </div>
+          <div>
+            <label style="font-size:0.54rem;color:var(--text-muted);display:block;margin-bottom:2px">Name</label>
+            <input type="text" value="${esc(step.name)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px"
+              onchange="composerUpdateStep('${esc(step.id)}','name',this.value)" />
+          </div>
         </div>
       </div>
-      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <button class="action-btn" onclick="composerDeleteStep('${esc(step.id)}')" style="font-size:0.58rem;padding:4px 12px;color:var(--red);border-color:var(--red-dim)">Delete Step</button>
+
+      <!-- Section 2: Agent Role -->
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">2. Agent Role</div>
+        <select class="model-select" style="font-size:0.68rem;padding:4px 8px;width:100%"
+          onchange="composerUpdateStep('${esc(step.id)}','role',this.value)">
+          ${Object.entries(roleDescs).map(([r, d]) =>
+            `<option value="${r}" ${step.role===r?'selected':''}>${r} — ${d}</option>`
+          ).join('')}
+        </select>
+        <div style="font-size:0.54rem;color:var(--text-muted);margin-top:3px">Determines which model is selected at runtime</div>
+      </div>
+
+      <!-- Section 3: Instructions -->
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">3. Instructions</div>
+        <label style="font-size:0.54rem;color:var(--text-muted);display:block;margin-bottom:2px">System Prompt <span style="color:var(--text-muted)">(supports {{variable}} templates)</span></label>
+        <textarea class="chat-input" style="font-size:0.64rem;padding:5px 8px;min-height:90px;resize:vertical;line-height:1.5"
+          onchange="composerUpdateStep('${esc(step.id)}','system_prompt',this.value)">${esc(step.system_prompt)}</textarea>
+        <div style="font-size:0.52rem;color:var(--text-muted);margin-top:3px">Use <code style="color:var(--cyan);font-size:0.52rem">{{step_id.output_key}}</code> to reference upstream outputs, <code style="color:var(--cyan);font-size:0.52rem">{{seed.key}}</code> for seed data</div>
+      </div>
+
+      <!-- Section 4: Data Flow -->
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">4. Data Flow</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:0.54rem;color:var(--text-muted);display:block;margin-bottom:2px">Inputs <span style="color:var(--green)">←</span></label>
+            <div style="font-size:0.6rem;font-family:var(--mono);min-height:28px;padding:4px 6px;background:var(--bg-deep);border:1px solid var(--border)">
+              ${step.inputs.length
+                ? step.inputs.map(i => `<div style="color:var(--text-dim)">${esc(i)}</div>`).join('')
+                : '<span style="color:var(--text-muted);font-style:italic">Connect upstream →</span>'}
+            </div>
+          </div>
+          <div>
+            <label style="font-size:0.54rem;color:var(--text-muted);display:block;margin-bottom:2px">Outputs <span style="color:var(--cyan)">→</span></label>
+            <input type="text" value="${step.outputs.join(', ')}" class="chat-input" style="font-size:0.64rem;padding:4px 8px"
+              placeholder="result, entities, rules"
+              onchange="composerUpdateStep('${esc(step.id)}','outputs',this.value.split(',').map(s=>s.trim()).filter(Boolean))" />
+            <div style="font-size:0.52rem;color:var(--text-muted);margin-top:2px">Comma-separated keys downstream steps can reference</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Output Parsing -->
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">5. Output Parsing</div>
+        <select class="model-select" style="font-size:0.68rem;padding:4px 8px;width:100%"
+          onchange="composerUpdateStep('${esc(step.id)}','output_format',this.value)">
+          ${Object.entries(fmtDescs).map(([f, d]) =>
+            `<option value="${f}" ${step.output_format===f?'selected':''}>${f} — ${d}</option>`
+          ).join('')}
+        </select>
+      </div>
+
+      <!-- Actions -->
+      <div style="padding:10px 0;display:flex;gap:8px;justify-content:space-between;align-items:center">
+        <button class="action-btn" onclick="composerDeleteStep('${esc(step.id)}')" style="font-size:0.56rem;padding:4px 12px;color:var(--red);border-color:var(--red-dim)">Delete Step</button>
+        <span style="font-size:0.52rem;color:var(--text-muted)">Drag output port → input port to connect</span>
       </div>
     </div>
   `;
