@@ -3381,65 +3381,111 @@ async function loadInspectorArtifact(runId, stepId) {
 async function runWorkflow() {
   const sel = document.getElementById('wf-select');
   const opt = sel.selectedOptions[0];
-  if (!opt || !opt.value) return;
-
-  const btn = document.getElementById('wf-run-btn');
-  btn.disabled = true;
-  btn.textContent = 'EXECUTING...';
-
-  let seed = {};
-  try {
-    seed = JSON.parse(document.getElementById('wf-seed').value || '{}');
-  } catch (e) {
-    alert('Invalid JSON in seed data');
-    btn.disabled = false;
-    btn.textContent = 'EXECUTE';
+  if (!opt || !opt.value) {
+    showWfMessage('info', 'Select a workflow from the dropdown and click Load first.');
     return;
   }
+
+  const btn = document.getElementById('wf-run-btn');
+  const resultsEl = document.getElementById('wf-results');
+  const content = document.getElementById('wf-results-content');
+
+  // Parse seed with user-friendly error
+  let seed = {};
+  const seedText = document.getElementById('wf-seed').value || '{}';
+  try {
+    seed = JSON.parse(seedText);
+  } catch (e) {
+    const errMsg = e.message || 'Unknown parse error';
+    const match = errMsg.match(/position (\d+)/);
+    let hint = '';
+    if (match) {
+      const pos = parseInt(match[1]);
+      const around = seedText.substring(Math.max(0, pos - 20), pos + 20);
+      hint = `<br><span style="font-family:var(--mono);font-size:0.6rem">...${esc(around)}...</span><br>Error near position ${pos}`;
+    }
+    showWfMessage('error', `<strong>Invalid JSON in seed data.</strong><br>Fix the JSON syntax and try again.${hint}<br><br><span style="font-size:0.6rem;color:var(--text-dim)">${esc(errMsg)}</span>`);
+    return;
+  }
+
+  // Check if seed is empty for workflows that need it
+  if (Object.keys(seed).length === 0 && currentWorkflowDef?.steps?.some(s => s.inputs?.some(i => i.startsWith('seed.')))) {
+    showWfMessage('warning', `<strong>Empty seed data.</strong> This workflow expects seed inputs. Provide JSON seed data or the first steps may produce generic results.<br><br><span style="font-size:0.6rem;color:var(--text-dim)">Tip: Use <code style="color:var(--cyan)">python workflows/generate_seed.py --source panos</code> to generate test data.</span>`);
+    // Don't return — allow execution with empty seed
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span style="animation:pulse-glow 1s ease-in-out infinite">EXECUTING...</span>';
+
+  // Show progress in results panel
+  resultsEl.style.display = 'block';
+  content.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:16px 0">
+    <div style="width:16px;height:16px;border:2px solid var(--cyan);border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+    <span style="font-size:0.75rem;color:var(--text-dim)">Running workflow <strong>${esc(opt.dataset.id)}</strong> with ${Object.keys(seed).length} seed keys... This may take several minutes for multi-step pipelines.</span>
+  </div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
 
   try {
     const resp = await fetch('/api/workflows/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        workflow_id: opt.dataset.id,
-        seed: seed,
-      }),
+      body: JSON.stringify({ workflow_id: opt.dataset.id, seed }),
     });
 
     const run = await resp.json();
 
-    // Show results
-    document.getElementById('wf-results').style.display = 'block';
-    const content = document.getElementById('wf-results-content');
+    // Handle HTTP errors (422 validation, 500 server, etc.)
+    if (!resp.ok) {
+      const detail = run.detail || run.error?.message || run.message || JSON.stringify(run);
+      let guidance = '';
+      if (resp.status === 422) {
+        guidance = '<br><br><strong>How to fix:</strong> Check that your seed data contains all required keys. Run <code style="color:var(--cyan)">python cli/workflow.py compile ' + esc(opt.dataset.id) + '.yaml</code> to see required inputs.';
+      } else if (resp.status === 503) {
+        guidance = '<br><br><strong>How to fix:</strong> Ollama may not be running. Start it with <code style="color:var(--cyan)">ollama serve</code> or check the Dashboard tab for connection status.';
+      } else if (resp.status === 404) {
+        guidance = '<br><br><strong>How to fix:</strong> No model matching the required role was found. Install a model with <code style="color:var(--cyan)">ollama pull deepseek-r1:32b</code> or check the Models tab.';
+      }
+      showWfMessage('error', `<strong>Workflow execution failed (${resp.status})</strong><br><br>${esc(detail)}${guidance}`);
+      return;
+    }
 
-    // Render DAG with execution results
+    // Render DAG with results
     if (run.execution_plan) {
       renderDAG(run.execution_plan, currentWorkflowDef?.steps || [], run.step_results || [], run.run_id);
     }
 
-    // Reuse viewRun to display the detailed results
-    // Store the run data and render via the shared approach
+    // Build results display
     const steps = run.step_results || [];
-    const statusColor = run.status === 'completed' ? 'var(--green)' : 'var(--red)';
+    const isSuccess = run.status === 'completed';
+    const statusColor = isSuccess ? 'var(--green)' : 'var(--red)';
     const totalTokens = steps.reduce((s, st) => s + ((st.token_count || {}).total_tokens || 0), 0);
     const totalDuration = steps.reduce((s, st) => s + (st.duration_seconds || 0), 0);
     const modelsUsed = [...new Set(steps.map(s => s.model_used).filter(Boolean))];
     const maxDur = Math.max(...steps.map(s => s.duration_seconds || 0), 0.1);
+    const completedSteps = steps.filter(s => s.status === 'completed').length;
+    const failedSteps = steps.filter(s => s.status === 'failed').length;
+    const skippedSteps = steps.filter(s => s.status === 'skipped').length;
 
-    let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <span style="font-size:0.8rem;color:${statusColor};text-transform:uppercase;letter-spacing:0.1em;font-weight:600">${run.status}</span>
-      <span class="wf-run-id">${run.run_id}</span>
+    let html = '';
+
+    // Status header
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${statusColor}"></span>
+        <span style="font-size:0.8rem;color:${statusColor};text-transform:uppercase;letter-spacing:0.1em;font-weight:600">${run.status}</span>
+      </div>
+      <span class="wf-run-id" title="Click to copy" onclick="navigator.clipboard.writeText('${run.run_id}');this.textContent='copied!';setTimeout(()=>this.textContent='${run.run_id.slice(0,12)}...',1000)" style="cursor:pointer">${run.run_id.slice(0, 12)}...</span>
     </div>`;
 
+    // Summary metrics bar
     html += `<div class="wf-summary-bar">
-      <span class="wf-summary-item">Steps: <strong>${steps.length}</strong></span>
+      <span class="wf-summary-item">Steps: <strong style="color:var(--green)">${completedSteps}</strong>${failedSteps ? ` / <strong style="color:var(--red)">${failedSteps} failed</strong>` : ''}${skippedSteps ? ` / <strong style="color:var(--text-muted)">${skippedSteps} skipped</strong>` : ''} of ${steps.length}</span>
       <span class="wf-summary-item">Tokens: <strong>${totalTokens.toLocaleString()}</strong></span>
       <span class="wf-summary-item">Duration: <strong>${totalDuration.toFixed(1)}s</strong></span>
       <span class="wf-summary-item">Models: <strong>${modelsUsed.join(', ') || '-'}</strong></span>
     </div>`;
 
-    // Timeline
+    // Execution timeline
     html += `<div class="wf-timeline"><div style="font-size:0.62rem;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em">Execution Timeline</div>`;
     steps.forEach(step => {
       const dur = step.duration_seconds || 0;
@@ -3456,20 +3502,27 @@ async function runWorkflow() {
     steps.forEach((step, idx) => {
       const dur = step.duration_seconds ? step.duration_seconds.toFixed(1) + 's' : '-';
       const tokens = step.token_count ? step.token_count.total_tokens : 0;
+      const gateCount = (step.gate_results || []).length;
+      const gatesPassed = (step.gate_results || []).filter(g => g.passed).length;
+      const statusIcon = step.status === 'completed' ? '&#10003;' : step.status === 'failed' ? '&#10007;' : step.status === 'skipped' ? '&#8709;' : '&#8230;';
+      const statusClr = step.status === 'completed' ? 'var(--green)' : step.status === 'failed' ? 'var(--red)' : 'var(--text-muted)';
+
       html += `
         <div class="wf-step-card ${step.status}" onclick="toggleStepCard(this)">
           <div class="wf-step-card-header">
-            <span class="step-name">${esc(step.step_id)}</span>
+            <span class="step-name"><span style="color:${statusClr}">${statusIcon}</span> ${esc(step.step_id)}</span>
             <span class="step-meta">
               <span>${esc(step.model_used || '-')}</span>
               <span>${dur}</span>
-              <span>${tokens} tok</span>
-              <span style="color:${step.status === 'completed' ? 'var(--green)' : 'var(--red)'};font-size:0.68rem">${step.status}</span>
+              <span>${tokens.toLocaleString()} tok</span>
+              ${gateCount ? `<span style="color:${gatesPassed === gateCount ? 'var(--green)' : 'var(--amber)'}">${gatesPassed}/${gateCount} gates</span>` : ''}
             </span>
           </div>
           <div class="wf-step-card-body">
-            <div style="margin-top:8px;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Output</div>
-            <div class="wf-step-output" id="wf-run-step-output-${idx}">(click View Artifacts to load)</div>
+            ${step.error ? `<div style="margin-top:6px;padding:6px 8px;background:var(--red-dim);border-left:2px solid var(--red);font-size:0.62rem;color:var(--text)">${esc(step.error)}</div>` : ''}
+            ${step.gate_results?.length ? `<div style="margin-top:6px;font-size:0.6rem">${step.gate_results.map(g => `<div><span style="color:${g.passed ? 'var(--green)' : g.severity === 'warning' ? 'var(--amber)' : 'var(--red)'}">${g.passed ? '&#10003;' : '&#10007;'}</span> ${esc(g.gate)}: <span style="color:var(--text-dim)">${esc(g.reason || '')}</span></div>`).join('')}</div>` : ''}
+            <div style="margin-top:8px;font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Output</div>
+            <div class="wf-step-output" id="wf-run-step-output-${idx}">(expand to load)</div>
             <div class="wf-step-actions">
               <button class="action-btn" onclick="event.stopPropagation();loadStepArtifact('${esc(run.run_id)}','${esc(step.step_id)}',${idx})" style="font-size:0.6rem;padding:3px 10px">View Artifacts</button>
               <button class="action-btn" onclick="event.stopPropagation();copyStepOutput(${idx})" style="font-size:0.6rem;padding:3px 10px">Copy Output</button>
@@ -3479,33 +3532,55 @@ async function runWorkflow() {
       `;
     });
 
+    // Error summary with guidance
     if (run.error) {
-      html += `<div style="margin-top:10px;padding:10px;background:var(--red-dim);border:1px solid var(--red);font-size:0.72rem;color:var(--text)">${esc(run.error)}</div>`;
+      let guidance = '';
+      if (run.error.includes('Model resolution')) {
+        guidance = 'Install the required model: <code style="color:var(--cyan)">ollama pull deepseek-r1:32b</code>';
+      } else if (run.error.includes('Quality gates')) {
+        guidance = 'The LLM output did not meet quality requirements. Try adjusting the temperature or using a more capable model.';
+      } else if (run.error.includes('Ollama') || run.error.includes('connection')) {
+        guidance = 'Ollama is not responding. Check: <code style="color:var(--cyan)">curl http://localhost:11434/api/tags</code>';
+      } else {
+        guidance = 'Check the failed step(s) above for details. Click a node in the DAG to inspect its configuration.';
+      }
+      html += `<div style="margin-top:12px;padding:12px;background:rgba(255,82,82,0.06);border:1px solid var(--red-dim);font-size:0.72rem">
+        <div style="color:var(--red);font-weight:600;margin-bottom:6px">Workflow Failed</div>
+        <div style="color:var(--text);margin-bottom:8px">${esc(run.error)}</div>
+        <div style="color:var(--text-dim);font-size:0.65rem">${guidance}</div>
+      </div>`;
+    }
+
+    // Success summary with next steps
+    if (isSuccess) {
+      html += `<div style="margin-top:12px;padding:12px;background:rgba(0,204,102,0.04);border:1px solid var(--green-dim);font-size:0.72rem">
+        <div style="color:var(--green);font-weight:600;margin-bottom:4px">Workflow Complete</div>
+        <div style="color:var(--text-dim);font-size:0.65rem">Results saved to <code style="color:var(--cyan)">data/workflows/${run.run_id}/</code>. Click step cards to view artifacts, or use the DAG inspector to browse outputs.</div>
+      </div>`;
     }
 
     content.innerHTML = html;
-
-    // Pre-populate outputs
-    steps.forEach((step, idx) => {
-      const outputEl = document.getElementById(`wf-run-step-output-${idx}`);
-      if (outputEl) {
-        const output = step.output || step.result || step.raw_output || '';
-        if (typeof output === 'object') outputEl.textContent = JSON.stringify(output, null, 2);
-        else outputEl.textContent = String(output) || '(no output)';
-      }
-    });
-
-    // Refresh recent runs
     await loadRecentRuns();
 
   } catch (e) {
-    document.getElementById('wf-results').style.display = 'block';
-    document.getElementById('wf-results-content').innerHTML =
-      `<div style="color:var(--red);font-size:0.75rem">Execution failed: ${esc(String(e))}</div>`;
+    let guidance = 'The server may be unreachable.';
+    if (e instanceof TypeError && e.message.includes('fetch')) {
+      guidance = 'Network error. Check that the API server is running at <code style="color:var(--cyan)">http://localhost:8000</code>';
+    }
+    showWfMessage('error', `<strong>Request failed</strong><br><br>${esc(String(e))}<br><br><span style="font-size:0.65rem;color:var(--text-dim)">${guidance}</span>`);
   } finally {
     btn.disabled = false;
     btn.textContent = 'EXECUTE';
   }
+}
+
+function showWfMessage(level, html) {
+  const resultsEl = document.getElementById('wf-results');
+  const content = document.getElementById('wf-results-content');
+  resultsEl.style.display = 'block';
+  const colors = { error: 'var(--red)', warning: 'var(--amber)', info: 'var(--cyan)' };
+  const bgs = { error: 'rgba(255,82,82,0.06)', warning: 'rgba(138,152,160,0.06)', info: 'rgba(0,204,102,0.04)' };
+  content.innerHTML = `<div style="padding:14px;background:${bgs[level]};border:1px solid ${colors[level]}30;font-size:0.72rem;color:var(--text)">${html}</div>`;
 }
 
 async function loadRecentRuns() {
