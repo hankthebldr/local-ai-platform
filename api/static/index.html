@@ -4504,14 +4504,196 @@ function dfClearConfigPanel() {
   if (title) title.textContent = 'Config';
 }
 
-/* 17. dfAutoLayout — stub */
+/* 17. dfAutoLayout — Dagre-based automatic layout */
 function dfAutoLayout() {
-  console.log('auto-layout coming in Task 5');
+  if (!dfEditor) return;
+
+  const exported = dfEditor.export();
+  const nodes = exported.drawflow.Home.data;
+  const nodeIds = Object.keys(nodes);
+
+  if (nodeIds.length === 0) return;
+
+  // Build dagre graph from current state
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  nodeIds.forEach(id => {
+    g.setNode(id, { width: 170, height: 70 });
+  });
+
+  // Add edges from connections
+  nodeIds.forEach(id => {
+    const node = nodes[id];
+    if (node.outputs && node.outputs.output_1 && node.outputs.output_1.connections) {
+      node.outputs.output_1.connections.forEach(conn => {
+        g.setEdge(id, String(conn.node));
+      });
+    }
+  });
+
+  dagre.layout(g);
+
+  // Update positions
+  nodeIds.forEach(id => {
+    const pos = g.node(id);
+    if (pos) {
+      const x = pos.x - 85;
+      const y = pos.y - 35;
+      // Update Drawflow internal state
+      nodes[id].pos_x = x;
+      nodes[id].pos_y = y;
+      // Update DOM
+      const el = document.querySelector(`#node-${id}`);
+      if (el) {
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+      }
+    }
+  });
+
+  // Force Drawflow to redraw connections
+  dfEditor.updateConnectionNodes(`node-${nodeIds[0]}`);
+  // Update all connection paths
+  nodeIds.forEach(id => {
+    try { dfEditor.updateConnectionNodes(`node-${id}`); } catch(e) {}
+  });
 }
 
-/* 18. dfImportYaml — stub */
+/* 18. dfImportYaml — modal + parse + layout + create nodes */
 function dfImportYaml() {
-  console.log('import coming in Task 5');
+  // Show a modal/overlay with a textarea to paste YAML
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:var(--bg);border:1px solid var(--border);padding:20px;width:600px;max-height:80vh;display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:0.8rem;color:var(--text);font-weight:600">Import Workflow YAML</div>
+      <div style="font-size:0.6rem;color:var(--text-dim)">Paste a workflow YAML definition below. All current nodes will be replaced.</div>
+      <textarea id="df-import-textarea" style="width:100%;min-height:300px;background:var(--bg-deep);color:var(--text);border:1px solid var(--border);font-family:var(--mono);font-size:0.65rem;padding:10px;resize:vertical"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="action-btn" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button>
+        <button class="action-btn" onclick="dfDoImport()" style="color:var(--cyan);border-color:var(--cyan-dim)">Import</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function dfDoImport() {
+  const textarea = document.getElementById('df-import-textarea');
+  if (!textarea) return;
+  const yamlText = textarea.value;
+
+  // Remove modal
+  textarea.closest('div[style*=fixed]').remove();
+
+  if (!yamlText.trim()) return;
+
+  let parsed;
+  try {
+    parsed = jsyaml.load(yamlText);
+  } catch (e) {
+    alert('Invalid YAML: ' + e.message);
+    return;
+  }
+
+  if (!parsed || !parsed.steps || !Array.isArray(parsed.steps)) {
+    alert('YAML must have a "steps" array');
+    return;
+  }
+
+  // Clear existing canvas
+  dfEditor.clear();
+  dfNodeData = {};
+
+  // Populate metadata fields
+  if (parsed.id) document.getElementById('df-wf-id').value = parsed.id;
+  if (parsed.name) document.getElementById('df-wf-name').value = parsed.name;
+  if (parsed.description) document.getElementById('df-wf-desc').value = typeof parsed.description === 'string' ? parsed.description.trim() : '';
+  if (parsed.defaults && parsed.defaults.role) document.getElementById('df-wf-role').value = parsed.defaults.role;
+
+  // Use Dagre to compute layout positions
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  // Add nodes to dagre graph
+  parsed.steps.forEach(step => {
+    g.setNode(step.id, { width: 170, height: 70 });
+  });
+
+  // Add edges from depends_on and inputs
+  const stepIds = new Set(parsed.steps.map(s => s.id));
+  parsed.steps.forEach(step => {
+    const deps = new Set();
+    if (step.depends_on) step.depends_on.forEach(d => deps.add(d));
+    if (step.inputs) {
+      step.inputs.forEach(inp => {
+        const ns = inp.split('.')[0];
+        if (ns !== 'seed' && ns !== 'shared' && ns !== 'metadata' && stepIds.has(ns)) {
+          deps.add(ns);
+        }
+      });
+    }
+    deps.forEach(dep => {
+      if (stepIds.has(dep)) g.setEdge(dep, step.id);
+    });
+  });
+
+  dagre.layout(g);
+
+  // Create Drawflow nodes at computed positions
+  const stepToNodeId = {};
+  parsed.steps.forEach(step => {
+    const pos = g.node(step.id);
+    const x = pos ? pos.x - 85 : 100;
+    const y = pos ? pos.y - 35 : 100;
+
+    const data = {
+      id: step.id,
+      name: step.name || step.id,
+      role: step.role || (parsed.defaults && parsed.defaults.role) || 'general',
+      system_prompt: step.system_prompt || '',
+      outputs: step.outputs || ['result'],
+      output_format: (step.output_parser && step.output_parser.format) || 'raw',
+      quality_gates: step.quality_gates || [],
+      inputs: step.inputs || [],
+      temperature: step.config && step.config.temperature,
+      max_tokens: step.config && step.config.max_tokens,
+      retries: step.config && step.config.retries,
+    };
+
+    const html = dfNodeHtml(data);
+    const nodeId = dfEditor.addNode(
+      data.id, 1, 1, x, y, data.id, {}, html
+    );
+    dfNodeData[nodeId] = data;
+    stepToNodeId[step.id] = nodeId;
+  });
+
+  // Create connections
+  parsed.steps.forEach(step => {
+    const deps = new Set();
+    if (step.depends_on) step.depends_on.forEach(d => deps.add(d));
+    if (step.inputs) {
+      step.inputs.forEach(inp => {
+        const ns = inp.split('.')[0];
+        if (ns !== 'seed' && ns !== 'shared' && ns !== 'metadata' && stepIds.has(ns)) {
+          deps.add(ns);
+        }
+      });
+    }
+    deps.forEach(dep => {
+      const fromId = stepToNodeId[dep];
+      const toId = stepToNodeId[step.id];
+      if (fromId && toId) {
+        dfEditor.addConnection(fromId, toId, 'output_1', 'input_1');
+      }
+    });
+  });
+
+  dfClearConfigPanel();
 }
 
 /* ══════════════════════════════════════════════════════════════════
