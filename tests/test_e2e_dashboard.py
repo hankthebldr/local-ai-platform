@@ -216,75 +216,88 @@ class TestWorkflowsTab:
 
 
 class TestWorkflowComposer:
-    def test_composer_mode_toggle(self, page: Page, server_check):
+    def test_composer_mode_shows_drawflow(self, page: Page, server_check):
+        """Switching to Composer mode shows the Drawflow canvas and palette"""
         page.goto(BASE_URL)
         page.click("button.tab-btn:has-text('Workflows')")
         page.wait_for_timeout(1000)
         page.click("#wf-mode-compose")
+        page.wait_for_timeout(500)
         expect(page.locator("#wf-composer")).to_be_visible()
-        expect(page.locator("#composer-canvas")).to_be_visible()
+        expect(page.locator("#drawflow-canvas")).to_be_visible()
+        expect(page.locator("#df-palette")).to_be_visible()
 
-    def test_add_step_creates_node(self, page: Page, server_check):
+    def test_palette_has_templates(self, page: Page, server_check):
+        """Palette shows draggable step templates"""
         page.goto(BASE_URL)
         page.click("button.tab-btn:has-text('Workflows')")
         page.wait_for_timeout(1000)
         page.click("#wf-mode-compose")
         page.wait_for_timeout(500)
-        page.click("button:has-text('+ Add Step')")
+        items = page.locator(".df-palette-item")
+        assert items.count() >= 6
+
+    def test_add_node_programmatically(self, page: Page, server_check):
+        """Adding a node via JS creates a Drawflow node"""
+        page.goto(BASE_URL)
+        page.click("button.tab-btn:has-text('Workflows')")
+        page.wait_for_timeout(1000)
+        page.click("#wf-mode-compose")
         page.wait_for_timeout(500)
-        nodes = page.locator(".composer-node")
+        page.evaluate("dfAddNodeFromTemplate('analyzer', 100, 100)")
+        page.wait_for_timeout(500)
+        nodes = page.locator(".drawflow-node")
         assert nodes.count() >= 1
 
-    def test_node_click_shows_editor(self, page: Page, server_check):
+    def test_node_click_shows_config(self, page: Page, server_check):
+        """Clicking a node shows the config panel"""
         page.goto(BASE_URL)
         page.click("button.tab-btn:has-text('Workflows')")
         page.wait_for_timeout(1000)
         page.click("#wf-mode-compose")
         page.wait_for_timeout(500)
-        page.click("button:has-text('+ Add Step')")
+        page.evaluate("dfAddNodeFromTemplate('analyzer', 100, 100)")
         page.wait_for_timeout(500)
-        page.click(".composer-node")
+        page.click(".drawflow-node")
         page.wait_for_timeout(500)
-        editor = page.locator("#composer-editor")
-        expect(editor).to_contain_text("Step ID")
-        expect(editor).to_contain_text("System Prompt")
+        panel = page.locator("#df-config-panel")
+        expect(panel).to_contain_text("IDENTITY")
+        expect(panel).to_contain_text("SYSTEM PROMPT")
 
-    def test_export_yaml_generates_valid_output(self, page: Page, server_check):
+    def test_export_yaml_produces_valid_output(self, page: Page, server_check):
+        """Export YAML button generates workflow YAML"""
         page.goto(BASE_URL)
         page.click("button.tab-btn:has-text('Workflows')")
         page.wait_for_timeout(1000)
         page.click("#wf-mode-compose")
         page.wait_for_timeout(500)
-        page.click("button:has-text('+ Add Step')")
-        page.wait_for_timeout(300)
-        page.click("button:has-text('+ Add Step')")
-        page.wait_for_timeout(300)
-        page.fill("#comp-wf-id", "e2e-test-workflow")
-        page.fill("#comp-wf-name", "E2E Test Workflow")
+        page.evaluate("dfAddNodeFromTemplate('analyzer', 100, 100)")
+        page.evaluate("dfAddNodeFromTemplate('code_gen', 350, 100)")
+        page.wait_for_timeout(500)
+        page.fill("#df-wf-id", "e2e-test")
+        page.fill("#df-wf-name", "E2E Test")
         page.click("button:has-text('Export YAML')")
         page.wait_for_timeout(500)
-        yaml_output = page.locator("#comp-yaml-output")
+        yaml_output = page.locator("#df-yaml-output")
         expect(yaml_output).to_be_visible()
-        expect(yaml_output).to_contain_text("id: e2e-test-workflow")
+        expect(yaml_output).to_contain_text("id: e2e-test")
         expect(yaml_output).to_contain_text("steps:")
 
-    def test_mode_toggle_preserves_state(self, page: Page, server_check):
+    def test_mode_toggle_preserves_nodes(self, page: Page, server_check):
+        """Switching to Runner and back preserves composer nodes"""
         page.goto(BASE_URL)
         page.click("button.tab-btn:has-text('Workflows')")
         page.wait_for_timeout(1000)
-        # Switch to composer, add a step
         page.click("#wf-mode-compose")
         page.wait_for_timeout(500)
-        page.click("button:has-text('+ Add Step')")
+        page.evaluate("dfAddNodeFromTemplate('analyzer', 100, 100)")
         page.wait_for_timeout(300)
-        # Switch back to runner
         page.click("#wf-mode-run")
         page.wait_for_timeout(300)
         expect(page.locator("#wf-composer")).to_be_hidden()
-        # Switch back to composer — node should still be there
         page.click("#wf-mode-compose")
         page.wait_for_timeout(300)
-        assert page.locator(".composer-node").count() >= 1
+        assert page.locator(".drawflow-node").count() >= 1
 
     def test_save_endpoint(self, page: Page, server_check):
         """Test the /api/workflows/save endpoint directly"""
