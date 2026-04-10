@@ -8,6 +8,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.59/dist/drawflow.min.css">
+<script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.59/dist/drawflow.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 <style>
 /* ── DESIGN TOKENS ──────────────────────────────────────────────── */
 :root {
@@ -1073,7 +1077,7 @@ body::after {
 }
 .wf-dag-stats strong { color: var(--text); }
 
-/* ── Workflow Composer ─────────────────────────────────────────── */
+/* ── Drawflow Composer ─────────────────────────────────────────── */
 .wf-mode-btn {
   padding: 4px 14px;
   font-size: 0.65rem;
@@ -1091,50 +1095,42 @@ body::after {
   color: var(--cyan);
 }
 .wf-mode-btn:hover:not(.active) { color: var(--text); }
-.composer-node {
-  position: absolute;
-  background: var(--bg);
-  border: 1.5px solid var(--border);
-  padding: 0;
-  min-width: 160px;
-  cursor: grab;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  z-index: 2;
-}
-.composer-node:hover { border-color: var(--cyan-dim); }
-.composer-node.selected { border-color: var(--cyan); box-shadow: var(--glow-cyan); }
-.composer-node-header {
-  padding: 6px 10px;
-  background: var(--cyan-ghost);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.composer-node-body {
-  padding: 6px 10px;
-  font-size: 0.6rem;
-  color: var(--text-dim);
-}
-.composer-port {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--border);
-  border: 1.5px solid var(--text-muted);
-  position: absolute;
-  cursor: crosshair;
-  z-index: 3;
-  transition: all 0.2s;
-}
-.composer-port:hover { background: var(--cyan); border-color: var(--cyan); transform: scale(1.3); }
-.composer-port.input { left: -6px; top: 50%; transform: translateY(-50%); }
-.composer-port.output { right: -6px; top: 50%; transform: translateY(-50%); }
-.composer-port.output:hover { transform: translateY(-50%) scale(1.3); }
-.composer-port.input:hover { transform: translateY(-50%) scale(1.3); }
+
+#drawflow-canvas { width: 100%; height: 100%; min-height: 440px; }
+#drawflow-canvas .drawflow { background: var(--bg-deep); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
+#drawflow-canvas .drawflow .drawflow-node { background: var(--bg); border: 1.5px solid var(--border); border-radius: 6px; min-width: 160px; color: var(--text); font-family: var(--mono); font-size: 0.72rem; }
+#drawflow-canvas .drawflow .drawflow-node.selected { border-color: var(--cyan); box-shadow: var(--glow-cyan); }
+#drawflow-canvas .drawflow .drawflow-node:hover { border-color: var(--cyan-dim); }
+#drawflow-canvas .drawflow .drawflow-node .input, #drawflow-canvas .drawflow .drawflow-node .output { background: var(--border); border: 2px solid var(--text-muted); }
+#drawflow-canvas .drawflow .drawflow-node .input:hover, #drawflow-canvas .drawflow .drawflow-node .output:hover { background: var(--cyan); border-color: var(--cyan); }
+#drawflow-canvas .drawflow .connection .main-path { stroke: var(--text-muted); stroke-width: 2; }
+#drawflow-canvas .drawflow .connection .main-path.selected { stroke: var(--cyan); stroke-width: 3; }
+
+.df-node-content { padding: 0; position: relative; }
+.df-node-header { padding: 6px 10px; background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.7rem; }
+.df-node-role-bar { width: 3px; height: 100%; position: absolute; left: 0; top: 0; border-radius: 6px 0 0 6px; }
+.df-node-body { padding: 6px 10px; font-size: 0.6rem; color: var(--text-dim); }
+.df-node-role { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.54rem; margin-bottom: 2px; }
+.df-node-outputs { color: var(--cyan); opacity: 0.7; font-size: 0.56rem; }
+.df-node-footer { padding: 4px 10px; border-top: 1px solid var(--border); font-size: 0.52rem; color: var(--text-muted); display: flex; justify-content: space-between; }
+
+.df-palette { display: flex; flex-direction: column; gap: 4px; padding: 6px; overflow-y: auto; }
+.df-palette-item { padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; cursor: grab; font-size: 0.64rem; font-family: var(--mono); display: flex; align-items: center; gap: 6px; transition: border-color 0.2s; }
+.df-palette-item:hover { border-color: var(--cyan-dim); }
+.df-palette-item:active { cursor: grabbing; }
+.df-palette-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.df-palette-label { flex: 1; }
+.df-palette-role { font-size: 0.5rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.df-config-section { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.df-config-section-title { font-size: 0.56rem; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; font-weight: 600; }
+.df-config-label { font-size: 0.54rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
+.df-config-hint { font-size: 0.5rem; color: var(--text-muted); margin-top: 2px; }
+.df-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; background: var(--cyan-ghost); border: 1px solid var(--cyan-dim); font-size: 0.58rem; color: var(--cyan); margin: 2px; border-radius: 2px; }
+.df-tag-remove { cursor: pointer; opacity: 0.6; font-size: 0.7rem; }
+.df-tag-remove:hover { opacity: 1; color: var(--red); }
+.df-gate-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 4px; margin-bottom: 4px; font-size: 0.6rem; }
+.df-gate-row select, .df-gate-row input { font-size: 0.6rem; padding: 3px 6px; }
 
 .wf-result-step {
   display: flex;
@@ -1667,72 +1663,63 @@ body::after {
         </div>
         <!-- Composer controls (hidden by default) -->
         <div id="wf-composer-controls" style="display:none;gap:8px;align-items:center;flex:1">
-          <button class="action-btn" onclick="composerAddStep()" style="color:var(--cyan);border-color:var(--cyan-dim)">+ Add Step</button>
+          <span style="font-size:0.6rem;color:var(--text-dim)">Drag steps from the left palette onto the canvas</span>
           <div style="flex:1"></div>
-          <button class="action-btn" onclick="composerExportYaml()">Export YAML</button>
-          <button class="action-btn" onclick="composerSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
+          <button class="action-btn" onclick="dfExportYaml()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export YAML</button>
+          <button class="action-btn" onclick="dfSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
         </div>
       </div>
     </div>
 
     <!-- Composer (hidden by default) -->
     <div id="wf-composer" style="display:none">
-      <div style="display:grid;grid-template-columns:1fr 340px;gap:12px;margin-bottom:12px">
-        <!-- LEFT: Interactive canvas -->
-        <div class="panel" style="min-height:420px;position:relative">
+      <div style="display:grid;grid-template-columns:130px 1fr 320px;gap:10px;margin-bottom:12px">
+        <!-- LEFT: Node Palette -->
+        <div class="panel" style="overflow-y:auto;max-height:500px">
           <span class="corner-tr"></span><span class="corner-bl"></span>
-          <div class="panel-label">Workflow Canvas</div>
-          <div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:8px">Click + Add Step to create nodes. Drag from output port (right) to input port (left) to connect.</div>
-          <div id="composer-canvas" style="width:100%;min-height:380px;position:relative;border:1px solid var(--border);background:var(--bg-deep)"></div>
+          <div class="panel-label">Steps</div>
+          <div class="df-palette" id="df-palette"></div>
         </div>
-        <!-- RIGHT: Step editor -->
-        <div class="panel" style="display:flex;flex-direction:column">
+        <!-- CENTER: Drawflow Canvas -->
+        <div class="panel" style="min-height:440px;position:relative;padding:0;overflow:hidden">
           <span class="corner-tr"></span><span class="corner-bl"></span>
-          <div class="panel-label" id="composer-editor-title">Step Editor</div>
-          <div id="composer-editor" style="flex:1;overflow-y:auto">
-            <div style="padding:20px 0;text-align:center;color:var(--text-muted);font-size:0.68rem">
-              Click a node to edit its properties, or click + Add Step to begin.
+          <div id="drawflow-canvas"></div>
+        </div>
+        <!-- RIGHT: Config Panel -->
+        <div class="panel" style="display:flex;flex-direction:column;overflow-y:auto;max-height:500px">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label" id="df-config-title">Config</div>
+          <div id="df-config-panel" style="flex:1;overflow-y:auto;font-size:0.72rem;color:var(--text-dim);padding:0 2px">
+            <div style="padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.64rem">
+              Drag a step from the palette onto the canvas to begin. Click a node to configure it.
             </div>
           </div>
         </div>
       </div>
-      <!-- Workflow metadata -->
+      <!-- Bottom bar: metadata + actions -->
       <div class="panel" style="margin-bottom:12px">
         <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div class="panel-label">Workflow Metadata</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:0.72rem">
-          <div>
-            <div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Workflow ID</div>
-            <input type="text" id="comp-wf-id" class="chat-input" style="font-size:0.72rem;padding:6px 10px" placeholder="my-workflow" />
-          </div>
-          <div>
-            <div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Name</div>
-            <input type="text" id="comp-wf-name" class="chat-input" style="font-size:0.72rem;padding:6px 10px" placeholder="My Workflow" />
-          </div>
-          <div>
-            <div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Default Role</div>
-            <select id="comp-wf-role" class="model-select" style="font-size:0.72rem;padding:4px 8px">
-              <option value="reasoning">reasoning</option>
-              <option value="coding">coding</option>
-              <option value="fast">fast</option>
-              <option value="general" selected>general</option>
-              <option value="uncensored">uncensored</option>
-            </select>
-          </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+          <div><div class="df-config-label">Workflow ID</div><input type="text" id="df-wf-id" class="chat-input" style="font-size:0.68rem;padding:5px 8px" placeholder="my-workflow" /></div>
+          <div><div class="df-config-label">Name</div><input type="text" id="df-wf-name" class="chat-input" style="font-size:0.68rem;padding:5px 8px" placeholder="My Workflow" /></div>
+          <div><div class="df-config-label">Default Role</div><select id="df-wf-role" class="model-select" style="font-size:0.68rem;padding:3px 6px"><option value="reasoning">reasoning</option><option value="coding">coding</option><option value="fast">fast</option><option value="general" selected>general</option><option value="uncensored">uncensored</option></select></div>
+          <div><div class="df-config-label">Description</div><input type="text" id="df-wf-desc" class="chat-input" style="font-size:0.68rem;padding:5px 8px" placeholder="What does this workflow do?" /></div>
         </div>
-        <div style="margin-top:8px">
-          <div style="font-size:0.58rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Description</div>
-          <input type="text" id="comp-wf-desc" class="chat-input" style="font-size:0.72rem;padding:6px 10px" placeholder="What does this workflow do?" />
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="action-btn" onclick="dfExportYaml()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export YAML</button>
+          <button class="action-btn" onclick="dfSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
+          <button class="action-btn" onclick="dfImportYaml()">Import YAML</button>
+          <button class="action-btn" onclick="dfAutoLayout()">Auto-Layout</button>
+          <div style="flex:1"></div>
+          <button class="action-btn" onclick="dfRunWorkflow()" style="color:var(--green);border-color:var(--green-dim)">Run ▶</button>
         </div>
       </div>
-      <!-- YAML Preview -->
-      <div class="panel" id="comp-yaml-panel" style="display:none">
+      <!-- YAML preview -->
+      <div class="panel" id="df-yaml-panel" style="display:none;margin-bottom:12px">
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="panel-label">Generated YAML</div>
-        <pre id="comp-yaml-output" style="font-size:0.62rem;color:var(--text-dim);max-height:300px;overflow:auto;white-space:pre-wrap"></pre>
-        <div style="margin-top:8px;display:flex;gap:8px">
-          <button class="action-btn" onclick="navigator.clipboard.writeText(document.getElementById('comp-yaml-output').textContent)" style="font-size:0.58rem;padding:4px 12px">Copy YAML</button>
-        </div>
+        <pre id="df-yaml-output" style="font-size:0.6rem;color:var(--text-dim);max-height:300px;overflow:auto;white-space:pre-wrap"></pre>
+        <button class="action-btn" onclick="navigator.clipboard.writeText(document.getElementById('df-yaml-output').textContent)" style="font-size:0.56rem;padding:3px 10px;margin-top:6px">Copy YAML</button>
       </div>
     </div>
 
