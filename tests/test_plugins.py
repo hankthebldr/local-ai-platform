@@ -161,3 +161,24 @@ class TestPluginRouter:
     def test_get_unknown_plugin(self, plugin_client):
         resp = plugin_client.get("/api/plugins/nonexistent")
         assert resp.status_code == 404
+
+
+class TestChatPluginIntegration:
+    def test_skill_triggers_inject_system_prompt(self):
+        """Verify that plugin skills are found for matching messages"""
+        from api.services.plugin_service import PluginService
+        svc = PluginService(plugins_dir=str(Path(__file__).parent.parent / "plugins"))
+        svc.scan_plugins()
+
+        # "search" should trigger the search-expert skill
+        skills = svc.get_skills("please search for quantum computing")
+        assert len(skills) >= 1
+        assert any("web_search" in s["content"] for s in skills)
+
+    def test_no_skill_for_unmatched_message(self):
+        from api.services.plugin_service import PluginService
+        svc = PluginService(plugins_dir=str(Path(__file__).parent.parent / "plugins"))
+        svc.scan_plugins()
+
+        skills = svc.get_skills("what is the meaning of life")
+        assert len(skills) == 0

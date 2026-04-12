@@ -14,10 +14,13 @@ from pydantic import BaseModel, Field
 
 from ..services.ollama_service import OllamaService
 from ..services import search_service
+from ..services.plugin_service import PluginService
 from ..logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 ollama_service = OllamaService()
+_plugin_service = PluginService()
+_plugin_service.scan_plugins()
 
 
 class Message(BaseModel):
@@ -48,6 +51,20 @@ async def chat_completions(request: ChatCompletionRequest):
 
     # Convert Pydantic models to dicts for Ollama
     messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+
+    # ── Plugin Skill Injection ────────────────────────────────────────
+    last_user_content = ""
+    for msg in reversed(messages):
+        if msg["role"] == "user":
+            last_user_content = msg["content"]
+            break
+
+    matched_skills = _plugin_service.get_skills(last_user_content)
+    for skill in matched_skills:
+        if skill["inject"] == "system":
+            messages = [{"role": "system", "content": skill["content"]}] + messages
+        elif skill["inject"] == "context":
+            messages.append({"role": "system", "content": skill["content"]})
 
     # ── Web Search Augmentation ────────────────────────────────────────
     sources = []
