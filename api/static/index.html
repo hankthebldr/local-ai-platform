@@ -11,32 +11,32 @@
 <style>
 /* ── DESIGN TOKENS ──────────────────────────────────────────────── */
 :root {
-  /* PANW Cortex Brand — dark mode palette */
-  --bg-deep: #0a0c0f;
-  --bg: #12151a;
-  --bg-panel: rgba(18, 21, 26, 0.92);
-  --border: #1e2228;
-  --border-glow: #98c23d18;
-  --cyan: #98c23d;             /* Cortex Green — official PANW brand */
-  --cyan-dim: #98c23d60;
-  --cyan-ghost: #98c23d15;
-  --amber: #8a98a0;            /* PANW grey — secondary info */
-  --amber-dim: #8a98a060;
-  --green: #98c23d;            /* Cortex Green — status/success */
-  --green-dim: #98c23d60;
-  --red: #ff5252;              /* Alert red */
-  --red-dim: #ff525260;
-  --purple: #2dabe2;           /* PANW sky blue — tertiary accent */
-  --purple-dim: #2dabe260;
-  --text: #eceff1;
-  --text-dim: #5e6872;         /* PANW medium grey */
-  --text-muted: #36424b;       /* PANW dark grey */
+  /* Cortex Brand — dark mode palette */
+  --bg-deep: #0a0a0a;
+  --bg: #141414;
+  --bg-panel: rgba(20, 20, 20, 0.9);
+  --border: #2a2a2a;
+  --border-glow: #00CC6618;
+  --cyan: #00CC66;              /* Cortex Green — primary accent */
+  --cyan-dim: #00CC6660;
+  --cyan-ghost: #00CC6615;
+  --amber: #19AA61;             /* Cortex Secondary Green */
+  --amber-dim: #19AA6160;
+  --green: #00CC66;             /* Cortex Green — success/status */
+  --green-dim: #00CC6660;
+  --red: #FA582D;               /* Cortex Orange — danger/error */
+  --red-dim: #FA582D60;
+  --purple: #00C0E8;            /* Cortex Cyan — info accent */
+  --purple-dim: #00C0E860;
+  --text: #e0e0e0;
+  --text-dim: #8D8D8D;
+  --text-muted: #555555;
   --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   --sans: 'Space Grotesk', 'TT Hoves', system-ui, sans-serif;
-  --glow-cyan: 0 0 12px #98c23d30, 0 0 4px #98c23d20;
-  --glow-green: 0 0 12px #98c23d30, 0 0 4px #98c23d20;
-  --glow-red: 0 0 12px #ff525230, 0 0 4px #ff525220;
-  --glow-amber: 0 0 12px #8a98a030, 0 0 4px #8a98a020;
+  --glow-cyan: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
+  --glow-green: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
+  --glow-red: 0 0 12px #FA582D30, 0 0 4px #FA582D20;
+  --glow-amber: 0 0 12px #19AA6130, 0 0 4px #19AA6120;
 }
 
 /* ── RESET & BASE ───────────────────────────────────────────────── */
@@ -57,37 +57,11 @@ body::before {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 20% 20%, #98c23d06 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 80%, #78909c04 0%, transparent 60%),
-    linear-gradient(180deg, var(--bg-deep) 0%, #121518 100%);
+    radial-gradient(ellipse 80% 50% at 20% 20%, #00CC6606 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, #19AA6104 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-deep) 0%, #141414 100%);
   z-index: -2;
   pointer-events: none;
-}
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(var(--border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border) 1px, transparent 1px);
-  background-size: 60px 60px;
-  opacity: 0.15;
-  z-index: -1;
-  pointer-events: none;
-}
-
-@keyframes scanline {
-  0% { transform: translateY(-100vh); }
-  100% { transform: translateY(100vh); }
-}
-.scanline {
-  position: fixed;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 0%, #98c23d04 50%, transparent 100%);
-  height: 200px;
-  animation: scanline 8s linear infinite;
-  pointer-events: none;
-  z-index: 1000;
 }
 
 /* ── LAYOUT ─────────────────────────────────────────────────────── */
@@ -1081,7 +1055,6 @@ body::after {
 </head>
 <body>
 
-<div class="scanline"></div>
 
 <div class="shell">
 
