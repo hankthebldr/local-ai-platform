@@ -128,6 +128,8 @@ def plugin_client():
     os.environ["PLUGINS_DIR"] = str(
         Path(__file__).parent.parent / "plugins"
     )
+    import api.middleware
+    importlib.reload(api.middleware)
     import api.main
     importlib.reload(api.main)
     from api.main import app
