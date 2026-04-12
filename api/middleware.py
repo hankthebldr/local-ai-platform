@@ -44,8 +44,8 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable):
-        # Skip if auth is disabled
-        if not ENABLE_API_AUTH:
+        # Skip if auth is disabled (read at request time for testability)
+        if os.getenv("ENABLE_API_AUTH", "false").lower() != "true":
             return await call_next(request)
 
         # Skip public paths
@@ -75,7 +75,8 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
             )
 
         # Accept master key
-        if MASTER_API_KEY and provided_key == MASTER_API_KEY:
+        master_key = os.getenv("MASTER_API_KEY", "")
+        if master_key and provided_key == master_key:
             return await call_next(request)
 
         # Accept legacy single key (backward compat)

@@ -103,6 +103,11 @@ def api_client():
     os.environ["ENABLE_API_AUTH"] = "true"
     os.environ["MASTER_API_KEY"] = "master-test-key-12345"
     os.environ["RATE_LIMIT_RPM"] = "0"
+    # Reload all modules that cache env vars at import time
+    import api.middleware
+    importlib.reload(api.middleware)
+    import api.routers.api_keys
+    importlib.reload(api.routers.api_keys)
     import api.main
     importlib.reload(api.main)
     from api.main import app
