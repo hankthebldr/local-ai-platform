@@ -89,3 +89,77 @@ class TestKeyManagement:
         keys = key_service.list_keys()
         assert keys[0]["usage"]["total_requests"] == 2
         assert keys[0]["usage"]["total_tokens"] == 200
+
+
+import importlib
+from fastapi.testclient import TestClient
+
+# ── Router Tests ──────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def api_client():
+    """Test client with master key set"""
+    os.environ["ENABLE_API_AUTH"] = "true"
+    os.environ["MASTER_API_KEY"] = "master-test-key-12345"
+    os.environ["RATE_LIMIT_RPM"] = "0"
+    import api.main
+    importlib.reload(api.main)
+    from api.main import app
+    return TestClient(app)
+
+
+class TestKeyRouter:
+    MASTER_HEADER = {"Authorization": "Bearer master-test-key-12345"}
+
+    def test_create_key_via_api(self, api_client):
+        resp = api_client.post(
+            "/api/keys",
+            json={"name": "router-test", "scopes": ["chat"]},
+            headers=self.MASTER_HEADER,
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["key"].startswith("sk-router-test-")
+        assert data["id"].startswith("key_")
+
+    def test_list_keys_via_api(self, api_client):
+        resp = api_client.get("/api/keys", headers=self.MASTER_HEADER)
+        assert resp.status_code == 200
+        keys = resp.json()
+        assert isinstance(keys, list)
+        assert len(keys) >= 1
+        for k in keys:
+            assert "key_hash" not in k
+
+    def test_create_key_requires_master_key(self, api_client):
+        resp = api_client.post(
+            "/api/keys",
+            json={"name": "unauth", "scopes": ["chat"]},
+        )
+        assert resp.status_code == 401
+
+    def test_revoke_key_via_api(self, api_client):
+        create_resp = api_client.post(
+            "/api/keys",
+            json={"name": "to-delete", "scopes": ["chat"]},
+            headers=self.MASTER_HEADER,
+        )
+        key_id = create_resp.json()["id"]
+        del_resp = api_client.delete(
+            f"/api/keys/{key_id}", headers=self.MASTER_HEADER
+        )
+        assert del_resp.status_code == 200
+
+    def test_usage_endpoint(self, api_client):
+        create_resp = api_client.post(
+            "/api/keys",
+            json={"name": "usage-key", "scopes": ["chat"]},
+            headers=self.MASTER_HEADER,
+        )
+        key_id = create_resp.json()["id"]
+        resp = api_client.get(
+            f"/api/keys/{key_id}/usage", headers=self.MASTER_HEADER
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total_requests"] == 0

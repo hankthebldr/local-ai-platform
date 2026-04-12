@@ -20,6 +20,7 @@ load_dotenv()
 
 API_KEY = os.getenv("API_KEY", "")
 ENABLE_API_AUTH = os.getenv("ENABLE_API_AUTH", "false").lower() == "true"
+MASTER_API_KEY = os.getenv("MASTER_API_KEY", "")
 RATE_LIMIT_RPM = int(os.getenv("RATE_LIMIT_RPM", "60"))  # requests per minute
 
 
@@ -73,7 +74,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        if provided_key != API_KEY:
+        if provided_key != API_KEY and provided_key != MASTER_API_KEY:
             return JSONResponse(
                 status_code=401,
                 content={
