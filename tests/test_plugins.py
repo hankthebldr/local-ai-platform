@@ -114,3 +114,50 @@ class TestPluginTools:
         plugin_service.scan_plugins()
         with pytest.raises(ValueError, match="Tool not found"):
             plugin_service.call_tool("test-plugin", "nonexistent", {})
+
+
+import importlib
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture(scope="module")
+def plugin_client():
+    """Test client with plugins loaded"""
+    os.environ["ENABLE_API_AUTH"] = "false"
+    os.environ["RATE_LIMIT_RPM"] = "0"
+    os.environ["PLUGINS_DIR"] = str(
+        Path(__file__).parent.parent / "plugins"
+    )
+    import api.main
+    importlib.reload(api.main)
+    from api.main import app
+    return TestClient(app)
+
+
+class TestPluginRouter:
+    def test_list_plugins(self, plugin_client):
+        resp = plugin_client.get("/api/plugins")
+        assert resp.status_code == 200
+        plugins = resp.json()
+        assert isinstance(plugins, list)
+        assert any(p["id"] == "web-search" for p in plugins)
+
+    def test_get_plugin_detail(self, plugin_client):
+        resp = plugin_client.get("/api/plugins/web-search")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == "web-search"
+        assert len(data["tools"]) >= 1
+
+    def test_invoke_tool(self, plugin_client):
+        resp = plugin_client.post(
+            "/api/plugins/web-search/tools/web_search",
+            json={"query": "test query", "max_results": 3},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "results" in data
+
+    def test_get_unknown_plugin(self, plugin_client):
+        resp = plugin_client.get("/api/plugins/nonexistent")
+        assert resp.status_code == 404
