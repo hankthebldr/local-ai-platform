@@ -149,7 +149,7 @@ body::before {
 .tab-btn.active {
   color: var(--cyan);
   border-bottom-color: var(--cyan);
-  box-shadow: 0 2px 8px #98c23d15;
+  box-shadow: 0 2px 8px #00CC6615;
 }
 .tab-btn .tab-count {
   font-size: 0.6rem;
@@ -250,8 +250,8 @@ body::before {
 .gauge svg { transform: rotate(-90deg); }
 .gauge-track { fill: none; stroke: var(--border); stroke-width: 4; }
 .gauge-fill { fill: none; stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset 1s ease, stroke 0.5s ease; }
-.gauge-fill.cpu { stroke: var(--cyan); filter: drop-shadow(0 0 6px #98c23d40); }
-.gauge-fill.mem { stroke: var(--green); filter: drop-shadow(0 0 6px #00ff8840); }
+.gauge-fill.cpu { stroke: var(--cyan); filter: drop-shadow(0 0 6px #00CC6640); }
+.gauge-fill.mem { stroke: var(--green); filter: drop-shadow(0 0 6px #00CC6640); }
 .gauge-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .gauge-value { font-size: 1.1rem; font-weight: 600; line-height: 1; }
 .gauge-value.cpu-color { color: var(--cyan); }
@@ -272,7 +272,7 @@ body::before {
   transition: all 0.2s ease;
   cursor: default;
 }
-.model-item:hover { background: #98c23d08; border-left-color: var(--cyan); }
+.model-item:hover { background: #00CC6608; border-left-color: var(--cyan); }
 .model-name { color: var(--text); font-weight: 500; }
 .model-size { color: var(--text-dim); font-size: 0.7rem; }
 .model-empty { color: var(--text-muted); font-size: 0.75rem; font-style: italic; padding: 12px 0; }
@@ -316,7 +316,7 @@ body::before {
 
 .msg { padding: 10px 14px; margin: 6px 0; max-width: 85%; position: relative; }
 .msg.user {
-  background: linear-gradient(135deg, #98c23d10, #98c23d05);
+  background: linear-gradient(135deg, #00CC6610, #00CC6605);
   border-left: 2px solid var(--cyan-dim);
   margin-left: auto;
   text-align: left;
@@ -504,7 +504,7 @@ body::before {
   outline: none;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
-.chat-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 8px #98c23d10; }
+.chat-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 8px #00CC6610; }
 .chat-input::placeholder { color: var(--text-muted); }
 
 .send-btn {
@@ -521,7 +521,7 @@ body::before {
   position: relative;
   overflow: hidden;
 }
-.send-btn:hover { background: #98c23d10; border-color: var(--cyan); box-shadow: var(--glow-cyan); }
+.send-btn:hover { background: #00CC6610; border-color: var(--cyan); box-shadow: var(--glow-cyan); }
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .send-btn:disabled:hover { background: transparent; box-shadow: none; }
 
@@ -566,7 +566,7 @@ body::before {
   transition: all 0.2s ease;
 }
 .filter-btn:hover { border-color: var(--text-dim); color: var(--text); }
-.filter-btn.active { border-color: var(--cyan); color: var(--cyan); background: #98c23d08; }
+.filter-btn.active { border-color: var(--cyan); color: var(--cyan); background: #00CC6608; }
 
 .inv-stats {
   display: flex;
@@ -590,7 +590,7 @@ body::before {
   padding: 16px;
   transition: all 0.2s ease;
 }
-.inv-card:hover { border-color: var(--cyan-dim); background: #98c23d06; }
+.inv-card:hover { border-color: var(--cyan-dim); background: #00CC6606; }
 .inv-card.installed { border-left: 3px solid var(--green-dim); }
 .inv-card.available { border-left: 3px solid var(--text-muted); }
 .inv-card.no-fit { opacity: 0.5; }
@@ -1030,7 +1030,7 @@ body::before {
   cursor: pointer;
   transition: all 0.2s ease;
 }
-.wf-run-item:hover { background: #98c23d08; border-color: var(--cyan-dim); }
+.wf-run-item:hover { background: #00CC6608; border-color: var(--cyan-dim); }
 .wf-run-id { color: var(--text-dim); font-size: 0.68rem; }
 .wf-run-wf { color: var(--text); font-weight: 500; }
 .wf-run-status { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; }
@@ -2338,7 +2338,7 @@ function renderGraph(data) {
   };
 
   const linkColor = (d) => {
-    if (d.type === 'related') return '#98c23d25';
+    if (d.type === 'related') return '#00CC6625';
     if (d.type === 'cites')   return '#b388ff25';
     return '#ff8c0025';
   };

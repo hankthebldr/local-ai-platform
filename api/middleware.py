@@ -3,6 +3,7 @@
 API Middleware — Authentication and Rate Limiting
 """
 
+import hmac
 import os
 import time
 from collections import defaultdict
@@ -74,13 +75,13 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        # Accept master key
+        # Accept master key (constant-time comparison)
         master_key = os.getenv("MASTER_API_KEY", "")
-        if master_key and provided_key == master_key:
+        if master_key and hmac.compare_digest(provided_key, master_key):
             return await call_next(request)
 
         # Accept legacy single key (backward compat)
-        if API_KEY and provided_key == API_KEY:
+        if API_KEY and hmac.compare_digest(provided_key, API_KEY):
             return await call_next(request)
 
         # Try multi-key validation

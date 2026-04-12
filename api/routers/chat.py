@@ -14,13 +14,11 @@ from pydantic import BaseModel, Field
 
 from ..services.ollama_service import OllamaService
 from ..services import search_service
-from ..services.plugin_service import PluginService
+from .plugins import plugin_service as _plugin_service
 from ..logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 ollama_service = OllamaService()
-_plugin_service = PluginService()
-_plugin_service.scan_plugins()
 
 
 class Message(BaseModel):

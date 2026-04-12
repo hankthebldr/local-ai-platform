@@ -75,7 +75,10 @@ class PluginService:
             # Load skills
             skills = []
             for skill_def in manifest.get("skills", []):
-                skill_path = child / skill_def["file"]
+                skill_path = (child / skill_def["file"]).resolve()
+                if not str(skill_path).startswith(str(child.resolve())):
+                    logger.error(f"Path traversal blocked: {skill_def['file']} in {plugin_id}")
+                    continue
                 if skill_path.exists():
                     parsed = _parse_skill_md(skill_path)
                     skills.append({
@@ -89,7 +92,10 @@ class PluginService:
             # Pre-load tool modules
             tools = []
             for tool_def in manifest.get("tools", []):
-                tool_path = child / tool_def["file"]
+                tool_path = (child / tool_def["file"]).resolve()
+                if not str(tool_path).startswith(str(child.resolve())):
+                    logger.error(f"Path traversal blocked: {tool_def['file']} in {plugin_id}")
+                    continue
                 if tool_path.exists():
                     module = self._load_tool_module(plugin_id, tool_def["id"], tool_path)
                     if module:
@@ -164,5 +170,12 @@ class PluginService:
             raise ValueError(f"Tool not found: {plugin_id}/{tool_id}")
 
         entry = self._tools[key]
-        func = getattr(entry["module"], entry["function"])
-        return func(**params)
+        func_name = entry["function"]
+        func = getattr(entry["module"], func_name, None)
+        if func is None:
+            raise ValueError(f"Function '{func_name}' not found in {plugin_id}/{tool_id}")
+        try:
+            return func(**params)
+        except Exception as e:
+            logger.error(f"Tool {plugin_id}/{tool_id} failed: {e}")
+            raise RuntimeError(f"Tool execution failed: {e}") from e

@@ -3,6 +3,7 @@
 API Keys Router — Key management endpoints (master key protected)
 """
 
+import hmac
 import os
 from typing import Optional, List
 
@@ -19,7 +20,7 @@ def _require_master(request: Request):
     master_key = os.getenv("MASTER_API_KEY", "")
     auth = request.headers.get("Authorization", "")
     token = auth[7:] if auth.startswith("Bearer ") else ""
-    if not token or not master_key or token != master_key:
+    if not token or not master_key or not hmac.compare_digest(token, master_key):
         raise HTTPException(status_code=401, detail="Master API key required")
 
 
