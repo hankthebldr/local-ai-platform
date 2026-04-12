@@ -44,8 +44,8 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable):
-        # Skip if auth is disabled or no key is configured
-        if not ENABLE_API_AUTH or not API_KEY:
+        # Skip if auth is disabled
+        if not ENABLE_API_AUTH:
             return await call_next(request)
 
         # Skip public paths
@@ -74,19 +74,33 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        if provided_key != API_KEY and provided_key != MASTER_API_KEY:
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "error": {
-                        "message": "Invalid API key.",
-                        "type": "authentication_error",
-                        "code": "invalid_api_key",
-                    }
-                },
-            )
+        # Accept master key
+        if MASTER_API_KEY and provided_key == MASTER_API_KEY:
+            return await call_next(request)
 
-        return await call_next(request)
+        # Accept legacy single key (backward compat)
+        if API_KEY and provided_key == API_KEY:
+            return await call_next(request)
+
+        # Try multi-key validation
+        from api.services.api_key_service import APIKeyService
+        svc = APIKeyService()
+        meta = svc.validate_key(provided_key)
+        if meta:
+            # Store key metadata on request state for downstream use
+            request.state.api_key_meta = meta
+            return await call_next(request)
+
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": {
+                    "message": "Invalid API key.",
+                    "type": "authentication_error",
+                    "code": "invalid_api_key",
+                }
+            },
+        )
 
 
 # ── Rate Limiting Middleware ───────────────────────────────────────────────

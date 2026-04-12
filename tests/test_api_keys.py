@@ -163,3 +163,44 @@ class TestKeyRouter:
         )
         assert resp.status_code == 200
         assert resp.json()["total_requests"] == 0
+
+
+class TestMultiKeyAuth:
+    """Test that created keys work for authenticating API requests"""
+
+    MASTER_HEADER = {"Authorization": "Bearer master-test-key-12345"}
+
+    def test_created_key_authenticates_models(self, api_client):
+        # Create a key with chat scope
+        resp = api_client.post(
+            "/api/keys",
+            json={"name": "auth-test", "scopes": ["chat"]},
+            headers=self.MASTER_HEADER,
+        )
+        raw_key = resp.json()["key"]
+
+        # Use it to access /v1/models
+        resp = api_client.get(
+            "/v1/models",
+            headers={"Authorization": f"Bearer {raw_key}"},
+        )
+        assert resp.status_code == 200
+
+    def test_revoked_key_rejected(self, api_client):
+        resp = api_client.post(
+            "/api/keys",
+            json={"name": "revoke-auth", "scopes": ["chat"]},
+            headers=self.MASTER_HEADER,
+        )
+        raw_key = resp.json()["key"]
+        key_id = resp.json()["id"]
+
+        # Revoke it
+        api_client.delete(f"/api/keys/{key_id}", headers=self.MASTER_HEADER)
+
+        # Should be rejected
+        resp = api_client.get(
+            "/v1/models",
+            headers={"Authorization": f"Bearer {raw_key}"},
+        )
+        assert resp.status_code == 401
