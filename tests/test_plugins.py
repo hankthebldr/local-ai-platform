@@ -184,3 +184,72 @@ class TestChatPluginIntegration:
 
         skills = svc.get_skills("what is the meaning of life")
         assert len(skills) == 0
+
+
+class TestPluginToolConversion:
+    """Test converting plugin tool definitions to Ollama format"""
+
+    def test_get_ollama_tools_format(self):
+        import tempfile
+        import shutil
+        from pathlib import Path
+        import yaml
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            plugin_path = Path(tmpdir) / "test-plugin"
+            plugin_path.mkdir()
+            (plugin_path / "plugin.yaml").write_text(yaml.dump({
+                "name": "Test", "id": "test-plugin", "version": "1.0.0",
+                "description": "Test", "author": "test",
+                "tools": [{
+                    "id": "my_tool",
+                    "file": "tools/my_tool.py",
+                    "function": "execute",
+                    "description": "Does something useful",
+                    "parameters": {
+                        "query": {"type": "string", "required": True},
+                        "limit": {"type": "integer", "default": 10},
+                    },
+                }],
+            }))
+            tools_dir = plugin_path / "tools"
+            tools_dir.mkdir()
+            (tools_dir / "__init__.py").write_text("")
+            (tools_dir / "my_tool.py").write_text(
+                'def execute(query: str, limit: int = 10) -> dict:\n    return {"result": query}\n'
+            )
+
+            from api.services.plugin_service import PluginService
+            svc = PluginService(plugins_dir=tmpdir)
+            svc.scan_plugins()
+
+            ollama_tools = svc.get_ollama_tools()
+
+            assert len(ollama_tools) == 1
+            tool = ollama_tools[0]
+            assert tool["type"] == "function"
+            assert tool["function"]["name"] == "test-plugin__my_tool"
+            assert tool["function"]["description"] == "Does something useful"
+            params = tool["function"]["parameters"]
+            assert params["type"] == "object"
+            assert "query" in params["properties"]
+            assert params["properties"]["query"]["type"] == "string"
+            assert "limit" in params["properties"]
+            assert "query" in params["required"]
+            assert "limit" not in params["required"]
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_get_ollama_tools_empty(self):
+        import tempfile
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            from api.services.plugin_service import PluginService
+            svc = PluginService(plugins_dir=tmpdir)
+            svc.scan_plugins()
+            assert svc.get_ollama_tools() == []
+        finally:
+            shutil.rmtree(tmpdir)

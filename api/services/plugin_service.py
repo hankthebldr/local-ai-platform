@@ -179,3 +179,34 @@ class PluginService:
         except Exception as e:
             logger.error(f"Tool {plugin_id}/{tool_id} failed: {e}")
             raise RuntimeError(f"Tool execution failed: {e}") from e
+
+    def get_ollama_tools(self) -> list:
+        """Convert all plugin tools to Ollama's tools format."""
+        ollama_tools = []
+        for plugin in self._plugins.values():
+            for tool in plugin["tools"]:
+                properties = {}
+                required = []
+                for param_name, param_def in tool.get("parameters", {}).items():
+                    prop = {"type": param_def.get("type", "string")}
+                    if "default" in param_def:
+                        prop["default"] = param_def["default"]
+                    if "description" in param_def:
+                        prop["description"] = param_def["description"]
+                    properties[param_name] = prop
+                    if param_def.get("required", False):
+                        required.append(param_name)
+
+                ollama_tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": f"{plugin['id']}__{tool['id']}",
+                        "description": tool.get("description", ""),
+                        "parameters": {
+                            "type": "object",
+                            "properties": properties,
+                            "required": required,
+                        },
+                    },
+                })
+        return ollama_tools
