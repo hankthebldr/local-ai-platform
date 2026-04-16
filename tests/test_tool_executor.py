@@ -175,3 +175,38 @@ class TestToolExecutor:
             assert result["content"] == "That tool failed."
             assert "error" in result["tool_calls_made"][0]["result"]
         import shutil; shutil.rmtree(tmpdir)
+
+
+import os
+import importlib
+from fastapi.testclient import TestClient
+
+
+class TestChatToolIntegration:
+    def test_chat_request_accepts_tools_param(self):
+        os.environ["ENABLE_API_AUTH"] = "false"
+        os.environ["RATE_LIMIT_RPM"] = "0"
+        import api.middleware
+        importlib.reload(api.middleware)
+        import api.main
+        importlib.reload(api.main)
+        from api.main import app
+        client = TestClient(app)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "message": {"role": "assistant", "content": "Hello"},
+            "prompt_eval_count": 10, "eval_count": 5,
+        }
+
+        with patch("api.services.ollama_service.requests.post", return_value=mock_response):
+            resp = client.post("/v1/chat/completions", json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": True,
+                "max_tool_iterations": 5,
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["choices"][0]["message"]["content"] == "Hello"
