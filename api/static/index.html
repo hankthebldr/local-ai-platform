@@ -1259,6 +1259,43 @@ body::before {
         <div class="model-empty">Loading...</div>
       </div>
     </div>
+
+    <!-- ── SESSION HISTORY & FACTS ──────────────────────────────────── -->
+    <div style="display:flex;gap:12px;margin-top:16px;margin-bottom:16px;">
+      <input type="text" id="memory-search" placeholder="Search sessions and facts..."
+        style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:0.85rem;"
+        oninput="searchMemory(this.value)">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Session History</h3>
+        <div id="session-list" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Pinned Facts</h3>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="new-fact-input" placeholder="Add a fact..."
+            style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:0.8rem;"
+            onkeydown="if(event.key==='Enter')addFact()">
+          <button onclick="addFact()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Pin</button>
+        </div>
+        <div id="facts-list" style="max-height:350px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:16px;">
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="stat-sessions">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Sessions</div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="stat-tool-calls">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Tool Calls</div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="stat-facts">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Facts</div>
+      </div>
+    </div>
   </div>
 
   <!-- ═══ TAB: DISCOVER ═════════════════════════════════════════════ -->
@@ -1436,7 +1473,7 @@ function switchTab(name) {
   event.currentTarget.classList.add('active');
 
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
-  if (name === 'memory') loadMemory();
+  if (name === 'memory') { loadMemory(); loadMemoryTab(); }
   if (name === 'discover' && !discoverLoaded) loadDiscovery();
   if (name === 'research') initResearch();
   if (name === 'workflows') loadWorkflowsTab();
@@ -2884,6 +2921,143 @@ async function viewRun(runId) {
 loadStatus();
 loadModels();
 setInterval(loadStatus, 10000);
+
+// ── Memory Tab (Sessions / Facts / Stats) ────────────────────────
+async function loadMemoryTab() {
+  loadSessions();
+  loadFacts();
+  loadMemoryStats();
+}
+
+async function loadSessions() {
+  try {
+    const r = await fetch('/api/memory/sessions');
+    const sessions = await r.json();
+    const el = document.getElementById('session-list');
+    if (!sessions.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No saved sessions yet.</div>';
+      return;
+    }
+    el.innerHTML = sessions.map(s => `
+      <div style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="toggleSessionDetail('${esc(s.id)}')">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:0.85rem;color:var(--text);max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.preview || 'No preview')}</div>
+          <button onclick="event.stopPropagation();deleteSession('${esc(s.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
+          ${esc(s.model || '')} · ${s.message_count || 0} msgs · ${s.tool_calls_count || 0} tool calls · ${s.duration_minutes || 0}m
+        </div>
+        <div id="session-detail-${esc(s.id)}" style="display:none;margin-top:8px;padding:8px;background:var(--bg-deep);border-radius:4px;font-size:0.75rem;"></div>
+      </div>
+    `).join('');
+  } catch(e) { console.error('Failed to load sessions:', e); }
+}
+
+async function toggleSessionDetail(id) {
+  const el = document.getElementById('session-detail-' + id);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  try {
+    const r = await fetch('/api/memory/sessions/' + id);
+    const s = await r.json();
+    let html = '<div style="color:var(--text-dim);">';
+    if (s.tools_used && s.tools_used.length) html += '<div>Tools: ' + s.tools_used.join(', ') + '</div>';
+    if (s.topics && s.topics.length) html += '<div>Topics: ' + s.topics.join(', ') + '</div>';
+    if (s.tool_calls && s.tool_calls.length) {
+      html += '<div style="margin-top:6px;font-weight:500;color:var(--text);">Tool Calls:</div>';
+      s.tool_calls.forEach(tc => {
+        html += '<div style="margin:4px 0;padding:4px;background:var(--bg);border-radius:3px;">' +
+          '<span style="color:var(--cyan);">' + esc(tc.tool_name || '') + '</span> ' +
+          '<span style="color:var(--text-muted);">' + (tc.duration_ms || 0) + 'ms</span></div>';
+      });
+    }
+    html += '</div>';
+    el.innerHTML = html;
+    el.style.display = '';
+  } catch(e) { el.innerHTML = '<div style="color:var(--red);">Failed to load</div>'; el.style.display = ''; }
+}
+
+async function deleteSession(id) {
+  await fetch('/api/memory/sessions/' + id, {method: 'DELETE'});
+  loadSessions();
+  loadMemoryStats();
+}
+
+async function loadFacts() {
+  try {
+    const r = await fetch('/api/memory/facts');
+    const facts = await r.json();
+    const el = document.getElementById('facts-list');
+    if (!facts.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No pinned facts. Add one above.</div>';
+      return;
+    }
+    el.innerHTML = facts.map(f => `
+      <div style="padding:8px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <div style="font-size:0.85rem;color:var(--text);">${esc(f.content)}</div>
+          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">
+            ${(f.tags||[]).map(t => '<span style="color:var(--cyan);">#'+esc(t)+'</span>').join(' ')}
+          </div>
+        </div>
+        <button onclick="deleteFact('${esc(f.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+      </div>
+    `).join('');
+  } catch(e) { console.error('Failed to load facts:', e); }
+}
+
+async function addFact() {
+  const input = document.getElementById('new-fact-input');
+  const content = input.value.trim();
+  if (!content) return;
+  await fetch('/api/memory/facts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({content, tags: []}),
+  });
+  input.value = '';
+  loadFacts();
+  loadMemoryStats();
+}
+
+async function deleteFact(id) {
+  await fetch('/api/memory/facts/' + id, {method: 'DELETE'});
+  loadFacts();
+  loadMemoryStats();
+}
+
+async function loadMemoryStats() {
+  try {
+    const r = await fetch('/api/memory/stats');
+    const s = await r.json();
+    document.getElementById('stat-sessions').textContent = s.total_sessions || 0;
+    document.getElementById('stat-tool-calls').textContent = s.total_tool_calls || 0;
+    document.getElementById('stat-facts').textContent = s.total_facts || 0;
+  } catch(e) {}
+}
+
+async function searchMemory(query) {
+  if (!query.trim()) { loadSessions(); return; }
+  try {
+    const r = await fetch('/api/memory/sessions/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query}),
+    });
+    const results = await r.json();
+    const el = document.getElementById('session-list');
+    if (!results.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No results for "' + esc(query) + '"</div>';
+      return;
+    }
+    el.innerHTML = results.map(s => `
+      <div style="padding:10px;border-bottom:1px solid var(--border);">
+        <div style="font-size:0.85rem;color:var(--text);">${esc(s.preview || 'No preview')}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">${esc(s.model || '')} · ${s.message_count || 0} msgs</div>
+      </div>
+    `).join('');
+  } catch(e) {}
+}
 </script>
 </body>
 </html>
