@@ -2,10 +2,19 @@
 py2app build configuration for Local AI Platform
 
 Usage:
+    cd <project_root>
     python desktop/setup_py2app.py py2app
 """
 
-from setuptools import setup
+import sys
+import os
+
+# Ensure project root is on sys.path so py2app can find local packages
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from setuptools import setup, find_packages
 
 APP = ["desktop/app.py"]
 
@@ -31,7 +40,41 @@ OPTIONS = {
         "dotenv",
         "psutil",
     ],
-    "packages": ["api", "plugins"],
+    "packages": find_packages(where=PROJECT_ROOT, include=["api", "api.*"]),
+    "excludes": [
+        # Exclude heavy ML dependencies not needed for the desktop app
+        "torch",
+        "transformers",
+        "accelerate",
+        "bitsandbytes",
+        "optimum",
+        "peft",
+        "trl",
+        "datasets",
+        "chromadb",
+        "langchain",
+        "langchain_community",
+        "sentence_transformers",
+        "llama_cpp",
+        "numpy",
+        "scipy",
+        "matplotlib",
+        "pandas",
+        "PIL",
+        "Pillow",
+        "black",
+        "blib2to3",
+        "tokenizers",
+        "safetensors",
+        "huggingface_hub",
+        "tqdm",
+        "pytest",
+    ],
+    "resources": [
+        "api/static",
+        "plugins",
+        ".env.example",
+    ],
     "plist": {
         "CFBundleName": "Local AI Platform",
         "CFBundleDisplayName": "Local AI Platform",
