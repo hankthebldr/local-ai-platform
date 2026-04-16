@@ -75,3 +75,70 @@ class TestContextModels:
         assert summary.tools_used == ["web-search__web_search"]
         assert summary.skills_triggered == ["search-expert"]
         assert summary.preview == "Tell me about testing..."
+
+
+class TestContextStore:
+    def test_create_and_get(self):
+        from api.services.context_store import ContextStore
+        store = ContextStore()
+        store.create("conv_1", "dolphin3:latest")
+        ctx = store.get("conv_1")
+        assert ctx is not None
+        assert ctx.model == "dolphin3:latest"
+
+    def test_get_nonexistent(self):
+        from api.services.context_store import ContextStore
+        store = ContextStore()
+        assert store.get("nonexistent") is None
+
+    def test_record_tool_call(self):
+        from api.services.context_store import ContextStore
+        from api.models.context_models import ToolCallRecord
+        store = ContextStore()
+        store.create("conv_2", "test-model")
+        tc = ToolCallRecord(
+            tool_name="echo__echo", arguments={"text": "hi"},
+            result={"echo": "hi"}, iteration=1, duration_ms=100,
+        )
+        store.record_tool_call("conv_2", tc)
+        ctx = store.get("conv_2")
+        assert len(ctx.tool_calls) == 1
+        assert ctx.tool_calls[0].tool_name == "echo__echo"
+
+    def test_record_skill(self):
+        from api.services.context_store import ContextStore
+        store = ContextStore()
+        store.create("conv_3", "test-model")
+        store.record_skill("conv_3", "search-expert")
+        ctx = store.get("conv_3")
+        assert "search-expert" in ctx.skills_injected
+
+    def test_update_activity(self):
+        from api.services.context_store import ContextStore
+        store = ContextStore()
+        store.create("conv_4", "test-model")
+        original = store.get("conv_4").last_activity
+        import time; time.sleep(0.01)
+        store.update_activity("conv_4")
+        updated = store.get("conv_4")
+        assert updated.message_count == 1
+        assert updated.last_activity >= original
+
+    def test_list_active(self):
+        from api.services.context_store import ContextStore
+        store = ContextStore()
+        store.create("conv_a", "model-a")
+        store.create("conv_b", "model-b")
+        active = store.list_active()
+        assert len(active) == 2
+        ids = [c["conversation_id"] for c in active]
+        assert "conv_a" in ids
+        assert "conv_b" in ids
+
+    def test_remove(self):
+        from api.services.context_store import ContextStore
+        store = ContextStore()
+        store.create("conv_rm", "test-model")
+        ctx = store.remove("conv_rm")
+        assert ctx is not None
+        assert store.get("conv_rm") is None
