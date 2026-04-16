@@ -179,3 +179,30 @@ class TestSessionManager:
         mgr = SessionManager(ContextStore(), MemoryService(data_dir=tmpdir))
         assert mgr.close_session("nonexistent") is None
         shutil.rmtree(tmpdir)
+
+
+import os
+import importlib
+from fastapi.testclient import TestClient
+
+
+class TestContextRouter:
+    @pytest.fixture(scope="class")
+    def client(self):
+        os.environ["ENABLE_API_AUTH"] = "false"
+        os.environ["RATE_LIMIT_RPM"] = "0"
+        import api.middleware
+        importlib.reload(api.middleware)
+        import api.main
+        importlib.reload(api.main)
+        from api.main import app
+        return TestClient(app)
+
+    def test_list_active_contexts(self, client):
+        resp = client.get("/api/context")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+    def test_get_nonexistent_context(self, client):
+        resp = client.get("/api/context/nonexistent")
+        assert resp.status_code == 404

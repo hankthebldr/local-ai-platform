@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
-from .routers import chat, completions, models, inventory, exports, graph, workflows, api_keys, plugins, setup
+from .routers import chat, completions, models, inventory, exports, graph, workflows, api_keys, plugins, setup, context, memory
 from .services.ollama_service import OllamaService
 from .middleware import APIKeyAuthMiddleware, RateLimitMiddleware
 from .exceptions import register_exception_handlers
@@ -107,6 +107,8 @@ app.include_router(workflows.router)
 app.include_router(api_keys.router)
 app.include_router(plugins.router)
 app.include_router(setup.router)
+app.include_router(context.router)
+app.include_router(memory.router)
 
 
 # ── Public Endpoints ───────────────────────────────────────────────────────

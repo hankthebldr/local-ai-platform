@@ -111,3 +111,58 @@ class TestMemoryStats:
         assert stats["total_sessions"] == 1
         assert stats["total_facts"] == 1
         assert stats["total_tool_calls"] == 1
+
+
+import os
+import importlib
+from fastapi.testclient import TestClient
+
+
+class TestMemoryRouter:
+    @pytest.fixture(scope="class")
+    def client(self):
+        os.environ["ENABLE_API_AUTH"] = "false"
+        os.environ["RATE_LIMIT_RPM"] = "0"
+        import api.middleware
+        importlib.reload(api.middleware)
+        import api.main
+        importlib.reload(api.main)
+        from api.main import app
+        return TestClient(app)
+
+    def test_list_sessions_empty(self, client):
+        resp = client.get("/api/memory/sessions")
+        assert resp.status_code == 200
+
+    def test_add_and_list_facts_via_api(self, client):
+        resp = client.post("/api/memory/facts", json={
+            "content": "Test fact via API", "tags": ["test"],
+        })
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["content"] == "Test fact via API"
+
+        resp = client.get("/api/memory/facts")
+        assert resp.status_code == 200
+        facts = resp.json()
+        assert any(f["content"] == "Test fact via API" for f in facts)
+
+    def test_memory_stats(self, client):
+        resp = client.get("/api/memory/stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "total_sessions" in data
+        assert "total_facts" in data
+
+    def test_delete_fact_via_api(self, client):
+        resp = client.post("/api/memory/facts", json={
+            "content": "Delete me via API", "tags": [],
+        })
+        fact_id = resp.json()["id"]
+        resp = client.delete(f"/api/memory/facts/{fact_id}")
+        assert resp.status_code == 200
+
+    def test_search_sessions(self, client):
+        resp = client.post("/api/memory/sessions/search", json={"query": "test"})
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
