@@ -142,3 +142,40 @@ class TestContextStore:
         ctx = store.remove("conv_rm")
         assert ctx is not None
         assert store.get("conv_rm") is None
+
+
+class TestSessionManager:
+    def test_close_session_persists(self):
+        import tempfile, shutil
+        tmpdir = tempfile.mkdtemp()
+        from api.services.context_store import ContextStore
+        from api.services.memory_service import MemoryService
+        from api.services.session_manager import SessionManager
+
+        store = ContextStore()
+        mem = MemoryService(data_dir=tmpdir)
+        mgr = SessionManager(store, mem)
+
+        store.create("conv_close", "test-model")
+        store.update_activity("conv_close")
+
+        result = mgr.close_session("conv_close", preview="Test close")
+        assert result is not None
+        assert result["id"] == "conv_close"
+        assert store.get("conv_close") is None
+
+        sessions = mem.list_sessions()
+        assert len(sessions) == 1
+        assert sessions[0]["id"] == "conv_close"
+
+        shutil.rmtree(tmpdir)
+
+    def test_close_nonexistent(self):
+        from api.services.context_store import ContextStore
+        from api.services.memory_service import MemoryService
+        from api.services.session_manager import SessionManager
+        import tempfile, shutil
+        tmpdir = tempfile.mkdtemp()
+        mgr = SessionManager(ContextStore(), MemoryService(data_dir=tmpdir))
+        assert mgr.close_session("nonexistent") is None
+        shutil.rmtree(tmpdir)
