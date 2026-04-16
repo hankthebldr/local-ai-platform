@@ -129,8 +129,10 @@ class OllamaService:
             content = result.get("message", {}).get("content", "")
             content = strip_think_tags(content)
 
-            # Fallback: if /api/chat returned empty, use /api/generate
-            if not content.strip():
+            # Fallback: if /api/chat returned empty AND no tool_calls, use /api/generate
+            # (empty content with tool_calls is valid — the model is requesting a tool)
+            has_tool_calls = bool(result.get("message", {}).get("tool_calls"))
+            if not content.strip() and not has_tool_calls:
                 logger.info(f"Chat returned empty for {model}, falling back to /api/generate")
                 prompt = _format_chat_prompt(messages)
                 gen_result = self.generate(model=model, prompt=prompt, temperature=temperature, max_tokens=max_tokens)
