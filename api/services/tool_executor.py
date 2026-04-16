@@ -6,9 +6,11 @@ Tool Executor — Iterative tool-calling loop for agentic LLM interactions
 from __future__ import annotations
 
 import json
+import time
 from typing import List, Dict
 
 from ..logging_config import logger
+from ..models.context_models import ToolCallRecord
 from .ollama_service import OllamaService
 from .plugin_service import PluginService
 
@@ -19,6 +21,13 @@ class ToolExecutor:
     def __init__(self, ollama_service: OllamaService, plugin_service: PluginService):
         self.ollama = ollama_service
         self.plugins = plugin_service
+        self._context_store = None
+        self._conversation_id = None
+
+    def set_context(self, context_store, conversation_id: str):
+        """Set the context store and conversation ID for recording tool calls."""
+        self._context_store = context_store
+        self._conversation_id = conversation_id
 
     def execute(
         self,
@@ -75,6 +84,7 @@ class ToolExecutor:
                     except json.JSONDecodeError:
                         arguments = {}
 
+                start_time = time.time()
                 tool_result = self._execute_tool(tool_name, arguments)
                 tool_calls_made.append({
                     "tool": tool_name,
@@ -82,6 +92,18 @@ class ToolExecutor:
                     "result": tool_result,
                     "iteration": iteration + 1,
                 })
+                # Record to context store if available
+                if self._context_store and self._conversation_id:
+                    self._context_store.record_tool_call(
+                        self._conversation_id,
+                        ToolCallRecord(
+                            tool_name=tool_name,
+                            arguments=arguments,
+                            result=tool_result,
+                            iteration=iteration + 1,
+                            duration_ms=int((time.time() - start_time) * 1000),
+                        ),
+                    )
                 working_messages.append({
                     "role": "tool",
                     "content": json.dumps(tool_result),

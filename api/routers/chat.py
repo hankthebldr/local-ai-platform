@@ -7,20 +7,24 @@ Supports optional web search augmentation via web_search parameter.
 """
 
 import json
+import uuid
 from typing import Optional, List
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..services.ollama_service import OllamaService
 from ..services import search_service
+from ..services.memory_service import MemoryService
 from .plugins import plugin_service as _plugin_service
+from .context import context_store as _context_store
 from ..services.tool_executor import ToolExecutor
 from ..logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 ollama_service = OllamaService()
 _tool_executor = ToolExecutor(ollama_service, _plugin_service)
+_memory_service = MemoryService()
 
 
 class Message(BaseModel):
@@ -44,15 +48,26 @@ class ChatCompletionRequest(BaseModel):
 
 
 @router.post("/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
+async def chat_completions(request: ChatCompletionRequest, req: Request):
     """OpenAI-compatible chat completion endpoint with optional web search"""
     logger.info(
         f"Chat request: model={request.model}, messages={len(request.messages)}, "
         f"stream={request.stream}, web_search={request.web_search}"
     )
 
+    # ── Conversation Tracking ─────────────────────────────────────────
+    conversation_id = req.headers.get("X-Conversation-ID", str(uuid.uuid4()))
+    if not _context_store.get(conversation_id):
+        _context_store.create(conversation_id, request.model)
+    _context_store.update_activity(conversation_id)
+
     # Convert Pydantic models to dicts for Ollama
     messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+
+    # ── Memory Injection ──────────────────────────────────────────────
+    memory_context = _memory_service.get_injection_context()
+    if memory_context:
+        messages = [{"role": "system", "content": memory_context}] + messages
 
     # ── Plugin Skill Injection ────────────────────────────────────────
     last_user_content = ""
@@ -63,6 +78,7 @@ async def chat_completions(request: ChatCompletionRequest):
 
     matched_skills = _plugin_service.get_skills(last_user_content)
     for skill in matched_skills:
+        _context_store.record_skill(conversation_id, skill.get("id", ""))
         if skill["inject"] == "system":
             messages = [{"role": "system", "content": skill["content"]}] + messages
         elif skill["inject"] == "context":
@@ -144,6 +160,7 @@ async def chat_completions(request: ChatCompletionRequest):
     # ── Non-Streaming ──────────────────────────────────────────────────
     if request.tools and _plugin_service.get_ollama_tools():
         # Use tool executor for agentic loop
+        _tool_executor.set_context(_context_store, conversation_id)
         result = _tool_executor.execute(
             model=request.model,
             messages=messages,
@@ -174,6 +191,7 @@ async def chat_completions(request: ChatCompletionRequest):
             response["tool_calls"] = result["tool_calls_made"]
         if sources:
             response["sources"] = sources
+        response["conversation_id"] = conversation_id
         return response
 
     # ── Non-Streaming (no tools) ───────────────────────────────────────
@@ -204,4 +222,5 @@ async def chat_completions(request: ChatCompletionRequest):
     }
     if sources:
         response["sources"] = sources
+    response["conversation_id"] = conversation_id
     return response
