@@ -3,6 +3,7 @@
 API Middleware — Authentication and Rate Limiting
 """
 
+import hmac
 import os
 import time
 from collections import defaultdict
@@ -20,6 +21,7 @@ load_dotenv()
 
 API_KEY = os.getenv("API_KEY", "")
 ENABLE_API_AUTH = os.getenv("ENABLE_API_AUTH", "false").lower() == "true"
+MASTER_API_KEY = os.getenv("MASTER_API_KEY", "")
 RATE_LIMIT_RPM = int(os.getenv("RATE_LIMIT_RPM", "60"))  # requests per minute
 
 
@@ -43,8 +45,8 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable):
-        # Skip if auth is disabled or no key is configured
-        if not ENABLE_API_AUTH or not API_KEY:
+        # Skip if auth is disabled (read at request time for testability)
+        if os.getenv("ENABLE_API_AUTH", "false").lower() != "true":
             return await call_next(request)
 
         # Skip public paths
@@ -73,19 +75,34 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        if provided_key != API_KEY:
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "error": {
-                        "message": "Invalid API key.",
-                        "type": "authentication_error",
-                        "code": "invalid_api_key",
-                    }
-                },
-            )
+        # Accept master key (constant-time comparison)
+        master_key = os.getenv("MASTER_API_KEY", "")
+        if master_key and hmac.compare_digest(provided_key, master_key):
+            return await call_next(request)
 
-        return await call_next(request)
+        # Accept legacy single key (backward compat)
+        if API_KEY and hmac.compare_digest(provided_key, API_KEY):
+            return await call_next(request)
+
+        # Try multi-key validation
+        from api.services.api_key_service import APIKeyService
+        svc = APIKeyService()
+        meta = svc.validate_key(provided_key)
+        if meta:
+            # Store key metadata on request state for downstream use
+            request.state.api_key_meta = meta
+            return await call_next(request)
+
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": {
+                    "message": "Invalid API key.",
+                    "type": "authentication_error",
+                    "code": "invalid_api_key",
+                }
+            },
+        )
 
 
 # ── Rate Limiting Middleware ───────────────────────────────────────────────

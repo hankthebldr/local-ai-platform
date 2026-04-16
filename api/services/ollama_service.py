@@ -93,6 +93,7 @@ class OllamaService:
         messages: List[Dict],
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        tools: List[Dict] = None,
     ) -> Dict:
         """
         Chat completion using Ollama's native /api/chat endpoint.
@@ -110,6 +111,8 @@ class OllamaService:
                 "num_predict": max_tokens,
             },
         }
+        if tools:
+            request_data["tools"] = tools
 
         logger.info(f"Chat request: model={model}, messages={len(messages)}, temp={temperature}")
 
@@ -126,8 +129,10 @@ class OllamaService:
             content = result.get("message", {}).get("content", "")
             content = strip_think_tags(content)
 
-            # Fallback: if /api/chat returned empty, use /api/generate
-            if not content.strip():
+            # Fallback: if /api/chat returned empty AND no tool_calls, use /api/generate
+            # (empty content with tool_calls is valid — the model is requesting a tool)
+            has_tool_calls = bool(result.get("message", {}).get("tool_calls"))
+            if not content.strip() and not has_tool_calls:
                 logger.info(f"Chat returned empty for {model}, falling back to /api/generate")
                 prompt = _format_chat_prompt(messages)
                 gen_result = self.generate(model=model, prompt=prompt, temperature=temperature, max_tokens=max_tokens)
@@ -141,11 +146,15 @@ class OllamaService:
                 f"completion_tokens={result.get('eval_count', 0)}"
             )
 
-            return {
+            result_dict = {
                 "content": content,
                 "prompt_eval_count": result.get("prompt_eval_count", 0),
                 "eval_count": result.get("eval_count", 0),
             }
+            tool_calls = result.get("message", {}).get("tool_calls")
+            if tool_calls:
+                result_dict["tool_calls"] = tool_calls
+            return result_dict
         except requests.ConnectionError:
             raise OllamaConnectionError(f"Cannot connect to {self.host}")
         except requests.HTTPError as e:

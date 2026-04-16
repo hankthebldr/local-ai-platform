@@ -14,10 +14,13 @@ from pydantic import BaseModel, Field
 
 from ..services.ollama_service import OllamaService
 from ..services import search_service
+from .plugins import plugin_service as _plugin_service
+from ..services.tool_executor import ToolExecutor
 from ..logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 ollama_service = OllamaService()
+_tool_executor = ToolExecutor(ollama_service, _plugin_service)
 
 
 class Message(BaseModel):
@@ -36,6 +39,8 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = Field(2048, description="Maximum tokens to generate")
     stream: Optional[bool] = Field(False, description="Stream the response")
     web_search: Optional[bool] = Field(False, description="Enable web search augmentation")
+    tools: Optional[bool] = Field(True, description="Enable plugin tool calling")
+    max_tool_iterations: Optional[int] = Field(10, description="Max tool-call iterations")
 
 
 @router.post("/chat/completions")
@@ -48,6 +53,20 @@ async def chat_completions(request: ChatCompletionRequest):
 
     # Convert Pydantic models to dicts for Ollama
     messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+
+    # ── Plugin Skill Injection ────────────────────────────────────────
+    last_user_content = ""
+    for msg in reversed(messages):
+        if msg["role"] == "user":
+            last_user_content = msg["content"]
+            break
+
+    matched_skills = _plugin_service.get_skills(last_user_content)
+    for skill in matched_skills:
+        if skill["inject"] == "system":
+            messages = [{"role": "system", "content": skill["content"]}] + messages
+        elif skill["inject"] == "context":
+            messages.append({"role": "system", "content": skill["content"]})
 
     # ── Web Search Augmentation ────────────────────────────────────────
     sources = []
@@ -123,6 +142,41 @@ async def chat_completions(request: ChatCompletionRequest):
         return StreamingResponse(generate(), media_type="text/event-stream")
 
     # ── Non-Streaming ──────────────────────────────────────────────────
+    if request.tools and _plugin_service.get_ollama_tools():
+        # Use tool executor for agentic loop
+        result = _tool_executor.execute(
+            model=request.model,
+            messages=messages,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            max_iterations=request.max_tool_iterations,
+        )
+
+        response = {
+            "id": "chatcmpl-local",
+            "object": "chat.completion",
+            "created": 0,
+            "model": request.model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": result["content"]},
+                    "finish_reason": "stop" if result["stopped_reason"] == "complete" else "length",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": result.get("prompt_eval_count", 0),
+                "completion_tokens": result.get("eval_count", 0),
+                "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0),
+            },
+        }
+        if result["tool_calls_made"]:
+            response["tool_calls"] = result["tool_calls_made"]
+        if sources:
+            response["sources"] = sources
+        return response
+
+    # ── Non-Streaming (no tools) ───────────────────────────────────────
     result = ollama_service.chat(
         model=request.model,
         messages=messages,
@@ -148,9 +202,6 @@ async def chat_completions(request: ChatCompletionRequest):
             "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0),
         },
     }
-
-    # Attach sources if search was used
     if sources:
         response["sources"] = sources
-
     return response

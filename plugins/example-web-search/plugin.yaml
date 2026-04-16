@@ -1,0 +1,27 @@
+name: "Web Search"
+id: "web-search"
+version: "1.0.0"
+description: "Adds web search capability to any conversation"
+author: "local"
+
+skills:
+  - id: "search-expert"
+    file: "skills/search-expert.md"
+    triggers:
+      - keyword: "search"
+      - keyword: "find online"
+      - keyword: "look up"
+      - manual: true
+
+tools:
+  - id: "web_search"
+    file: "tools/web_search.py"
+    function: "execute"
+    description: "Search the web and return results"
+    parameters:
+      query:
+        type: string
+        required: true
+      max_results:
+        type: integer
+        default: 5

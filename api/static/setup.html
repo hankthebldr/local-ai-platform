@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Setup — Local AI Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── DESIGN TOKENS ──────────────────────────────────────────────── */
+:root {
+  --bg-deep: #0a0a0a;
+  --bg: #141414;
+  --border: #2a2a2a;
+  --cyan: #00CC66;
+  --cyan-dim: #00CC6660;
+  --cyan-ghost: #00CC6615;
+  --red: #FA582D;
+  --red-dim: #FA582D40;
+  --text: #e0e0e0;
+  --text-dim: #8D8D8D;
+  --text-muted: #555555;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+  --sans: 'Space Grotesk', system-ui, sans-serif;
+  --glow-cyan: 0 0 16px #00CC6630, 0 0 4px #00CC6620;
+}
+
+/* ── RESET ──────────────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 14px; }
+body {
+  font-family: var(--sans);
+  background: var(--bg-deep);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* ── WIZARD SHELL ───────────────────────────────────────────────── */
+.wizard {
+  width: 100%;
+  max-width: 560px;
+}
+
+/* ── STEP INDICATOR ─────────────────────────────────────────────── */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 40px;
+}
+
+.pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background 0.3s, box-shadow 0.3s, width 0.3s;
+}
+
+.pip.active {
+  background: var(--cyan);
+  box-shadow: var(--glow-cyan);
+  width: 24px;
+  border-radius: 4px;
+}
+
+.pip.done {
+  background: var(--cyan-dim);
+}
+
+/* ── CARD ───────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 48px;
+}
+
+/* ── STEP PANELS ────────────────────────────────────────────────── */
+.step-panel {
+  display: none;
+}
+.step-panel.active {
+  display: block;
+}
+
+/* ── TYPOGRAPHY ─────────────────────────────────────────────────── */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin-bottom: 16px;
+}
+
+h1 {
+  font-family: var(--sans);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.25;
+  margin-bottom: 12px;
+}
+
+h2 {
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+
+.desc {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin-bottom: 36px;
+}
+
+/* ── BUTTONS ────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s, box-shadow 0.2s, transform 0.15s;
+  text-decoration: none;
+}
+
+.btn:active { transform: translateY(1px); }
+
+.btn-primary {
+  background: var(--cyan);
+  color: #000;
+  box-shadow: 0 0 0 0 var(--cyan-dim);
+}
+.btn-primary:hover {
+  opacity: 0.9;
+  box-shadow: var(--glow-cyan);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover {
+  border-color: var(--cyan-dim);
+  color: var(--text);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── STATUS ROW ─────────────────────────────────────────────────── */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 28px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+  transition: background 0.3s;
+}
+.status-dot.checking { background: #f59e0b; animation: pulse 1.2s infinite; }
+.status-dot.ok       { background: var(--cyan); }
+.status-dot.error    { background: var(--red); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.status-text {
+  color: var(--text-dim);
+  flex: 1;
+}
+
+/* ── INSTALL NOTE ───────────────────────────────────────────────── */
+.install-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+/* ── MODEL CARDS ────────────────────────────────────────────────── */
+.model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.model-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: var(--bg-deep);
+}
+
+.model-card:hover {
+  border-color: var(--cyan-dim);
+}
+
+.model-card.selected {
+  border-color: var(--cyan);
+  background: var(--cyan-ghost);
+}
+
+.model-card input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.model-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.model-radio-indicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s;
+}
+
+.model-card.selected .model-radio-indicator {
+  border-color: var(--cyan);
+}
+
+.model-radio-indicator::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.model-card.selected .model-radio-indicator::after {
+  opacity: 1;
+}
+
+.model-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.model-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── PROGRESS BAR ───────────────────────────────────────────────── */
+.progress-area {
+  margin-bottom: 28px;
+  display: none;
+}
+
+.progress-area.visible {
+  display: block;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.progress-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--cyan);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 8px var(--cyan-dim);
+}
+
+.progress-status {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── DONE STEP ──────────────────────────────────────────────────── */
+.done-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--cyan-ghost);
+  border: 1px solid var(--cyan-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 28px;
+  box-shadow: var(--glow-cyan);
+}
+
+.done-icon svg {
+  width: 24px;
+  height: 24px;
+  stroke: var(--cyan);
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.done-details {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 32px;
+  line-height: 1.8;
+}
+
+.done-details span {
+  color: var(--cyan);
+}
+
+/* ── ERROR ──────────────────────────────────────────────────────── */
+.error-msg {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  display: none;
+}
+
+.error-msg.visible {
+  display: block;
+}
+</style>
+</head>
+<body>
+
+<div class="wizard">
+  <!-- Step indicator pips -->
+  <div class="step-indicator" id="stepIndicator">
+    <div class="pip active" data-step="0"></div>
+    <div class="pip" data-step="1"></div>
+    <div class="pip" data-step="2"></div>
+    <div class="pip" data-step="3"></div>
+  </div>
+
+  <div class="card">
+
+    <!-- ── STEP 0: WELCOME ──────────────────────────────────────── -->
+    <div class="step-panel active" id="step-0">
+      <div class="eyebrow">Local AI Platform</div>
+      <h1>Your private AI,<br>running locally.</h1>
+      <p class="desc">
+        This wizard takes about two minutes. We'll verify Ollama is running,
+        then download your first model. No cloud required — everything stays
+        on your machine.
+      </p>
+      <button class="btn btn-primary" onclick="goToStep(1)">
+        Get Started
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 7h10M8 3l4 4-4 4"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- ── STEP 1: OLLAMA CHECK ─────────────────────────────────── -->
+    <div class="step-panel" id="step-1">
+      <div class="eyebrow">Step 1 of 3</div>
+      <h2>Checking for Ollama</h2>
+      <p class="desc">Ollama is the inference engine that runs your models locally.</p>
+
+      <div class="status-row">
+        <div class="status-dot checking" id="ollamaDot"></div>
+        <span class="status-text" id="ollamaStatus">Checking for Ollama...</span>
+      </div>
+
+      <div class="install-note" id="installNote" style="display:none;">
+        Ollama was not found. Click <strong style="color:var(--text)">Install Ollama</strong> to
+        download and start it automatically, or install it manually from
+        <span style="color:var(--cyan)">ollama.com</span>.
+      </div>
+
+      <div class="error-msg" id="ollamaError"></div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="installOllamaBtn" style="display:none;" onclick="installOllama()">
+          Install Ollama
+        </button>
+        <button class="btn btn-primary" id="continueToModelsBtn" style="display:none;" onclick="goToStep(2)">
+          Continue
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 7h10M8 3l4 4-4 4"/>
+          </svg>
+        </button>
+        <button class="btn btn-secondary" id="retryOllamaBtn" style="display:none;" onclick="checkOllama()">
+          Retry
+        </button>
+      </div>
+    </div>
+
+    <!-- ── STEP 2: MODEL SELECTION ──────────────────────────────── -->
+    <div class="step-panel" id="step-2">
+      <div class="eyebrow">Step 2 of 3</div>
+      <h2>Choose a model</h2>
+      <p class="desc">Select the model to download. You can add more later.</p>
+
+      <div class="model-list" id="modelList">
+        <label class="model-card selected" id="card-dolphin3:8b">
+          <input type="radio" name="model" value="dolphin3:8b" checked>
+          <div class="model-card-inner">
+            <div class="model-radio-indicator"></div>
+            <div class="model-info">
+              <div class="model-name">dolphin3:8b</div>
+              <div class="model-meta">4.9 GB · ~40 tok/s · Fast, uncensored</div>
+            </div>
+          </div>
+        </label>
+
+        <label class="model-card" id="card-qwen2.5:14b">
+          <input type="radio" name="model" value="qwen2.5:14b">
+          <div class="model-card-inner">
+            <div class="model-radio-indicator"></div>
+            <div class="model-info">
+              <div class="model-name">qwen2.5:14b</div>
+              <div class="model-meta">9 GB · ~25 tok/s · Balanced</div>
+            </div>
+          </div>
+        </label>
+
+        <label class="model-card" id="card-deepseek-r1:32b">
+          <input type="radio" name="model" value="deepseek-r1:32b">
+          <div class="model-card-inner">
+            <div class="model-radio-indicator"></div>
+            <div class="model-info">
+              <div class="model-name">deepseek-r1:32b</div>
+              <div class="model-meta">19 GB · ~10 tok/s · Best reasoning</div>
+            </div>
+          </div>
+        </label>
+      </div>
+
+      <div class="progress-area" id="progressArea">
+        <div class="progress-label">
+          <span id="progressModel">Downloading...</span>
+          <span id="progressPct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-status" id="progressStatus">Starting download...</div>
+      </div>
+
+      <div class="error-msg" id="modelError"></div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="downloadBtn" onclick="downloadModel()">
+          Download Model
+        </button>
+        <button class="btn btn-secondary" onclick="goToStep(1)">
+          Back
+        </button>
+      </div>
+    </div>
+
+    <!-- ── STEP 3: DONE ──────────────────────────────────────────── -->
+    <div class="step-panel" id="step-3">
+      <div class="done-icon">
+        <svg viewBox="0 0 24 24">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <h2>You're all set!</h2>
+      <p class="desc">Your local AI platform is configured and ready to use.</p>
+
+      <div class="done-details" id="doneDetails">
+        <div>status  <span>online</span></div>
+        <div>engine  <span>ollama</span></div>
+        <div>model   <span id="doneModel">—</span></div>
+        <div>api     <span>http://localhost:8000</span></div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="completeSetup()">
+          Open Dashboard
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 7h10M8 3l4 4-4 4"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /.card -->
+</div><!-- /.wizard -->
+
+<script>
+// ── STATE ────────────────────────────────────────────────────────
+let currentStep = 0;
+let chosenModel = 'dolphin3:8b';
+
+// ── STEP NAVIGATION ──────────────────────────────────────────────
+function goToStep(n) {
+  // Update panels
+  document.querySelectorAll('.step-panel').forEach((p, i) => {
+    p.classList.toggle('active', i === n);
+  });
+
+  // Update pips
+  document.querySelectorAll('.pip').forEach((pip, i) => {
+    pip.classList.remove('active', 'done');
+    if (i < n)  pip.classList.add('done');
+    if (i === n) pip.classList.add('active');
+  });
+
+  currentStep = n;
+
+  // Auto-run step logic
+  if (n === 1) checkOllama();
+}
+
+// ── STEP 1: OLLAMA CHECK ─────────────────────────────────────────
+async function checkOllama() {
+  const dot    = document.getElementById('ollamaDot');
+  const status = document.getElementById('ollamaStatus');
+  const installNote = document.getElementById('installNote');
+  const installBtn  = document.getElementById('installOllamaBtn');
+  const continueBtn = document.getElementById('continueToModelsBtn');
+  const retryBtn    = document.getElementById('retryOllamaBtn');
+  const errEl       = document.getElementById('ollamaError');
+
+  // Reset
+  dot.className = 'status-dot checking';
+  status.textContent = 'Checking for Ollama...';
+  installNote.style.display = 'none';
+  installBtn.style.display  = 'none';
+  continueBtn.style.display = 'none';
+  retryBtn.style.display    = 'none';
+  errEl.classList.remove('visible');
+
+  try {
+    const res  = await fetch('/api/setup/check-ollama');
+    const data = await res.json();
+
+    if (data.running) {
+      dot.className = 'status-dot ok';
+      status.textContent = 'Ollama is running.';
+      continueBtn.style.display = 'inline-flex';
+      // Short auto-advance delay
+      setTimeout(() => goToStep(2), 800);
+    } else if (data.installed) {
+      dot.className = 'status-dot checking';
+      status.textContent = 'Ollama installed but not running — starting...';
+      await installOllama();
+    } else {
+      dot.className = 'status-dot error';
+      status.textContent = 'Ollama not found.';
+      installNote.style.display = 'block';
+      installBtn.style.display  = 'inline-flex';
+    }
+  } catch (err) {
+    dot.className = 'status-dot error';
+    status.textContent = 'Could not reach setup API.';
+    showError('ollamaError', 'Failed to connect to /api/setup/check-ollama: ' + err.message);
+    retryBtn.style.display = 'inline-flex';
+  }
+}
+
+async function installOllama() {
+  const dot    = document.getElementById('ollamaDot');
+  const status = document.getElementById('ollamaStatus');
+  const installBtn  = document.getElementById('installOllamaBtn');
+  const continueBtn = document.getElementById('continueToModelsBtn');
+  const retryBtn    = document.getElementById('retryOllamaBtn');
+  const errEl       = document.getElementById('ollamaError');
+
+  dot.className = 'status-dot checking';
+  status.textContent = 'Installing Ollama...';
+  installBtn.disabled = true;
+  errEl.classList.remove('visible');
+
+  try {
+    const res  = await fetch('/api/setup/install-ollama', { method: 'POST' });
+    const data = await res.json();
+
+    if (data.status === 'installed' || data.status === 'started' || data.status === 'already_running') {
+      dot.className = 'status-dot ok';
+      status.textContent = 'Ollama is running.';
+      installBtn.style.display  = 'none';
+      continueBtn.style.display = 'inline-flex';
+      setTimeout(() => goToStep(2), 600);
+    } else {
+      throw new Error('Unexpected status: ' + data.status);
+    }
+  } catch (err) {
+    dot.className = 'status-dot error';
+    status.textContent = 'Installation failed.';
+    installBtn.disabled = false;
+    showError('ollamaError', 'Install failed: ' + err.message);
+    retryBtn.style.display = 'inline-flex';
+  }
+}
+
+// ── STEP 2: MODEL CARDS ──────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.model-card').forEach(card => {
+    card.addEventListener('click', () => {
+      // Deselect all
+      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      const radio = card.querySelector('input[type="radio"]');
+      radio.checked = true;
+      chosenModel = radio.value;
+    });
+  });
+});
+
+// ── STEP 2: DOWNLOAD ─────────────────────────────────────────────
+async function downloadModel() {
+  const btn         = document.getElementById('downloadBtn');
+  const progressArea= document.getElementById('progressArea');
+  const progressFill= document.getElementById('progressFill');
+  const progressPct = document.getElementById('progressPct');
+  const progressStatus = document.getElementById('progressStatus');
+  const progressModel  = document.getElementById('progressModel');
+  const errEl       = document.getElementById('modelError');
+  const modelList   = document.getElementById('modelList');
+
+  // Grab selected
+  const selected = document.querySelector('input[name="model"]:checked');
+  if (!selected) return;
+  chosenModel = selected.value;
+
+  btn.disabled = true;
+  errEl.classList.remove('visible');
+  progressArea.classList.add('visible');
+  progressModel.textContent = chosenModel;
+  progressStatus.textContent = 'Connecting...';
+  modelList.style.pointerEvents = 'none';
+  modelList.style.opacity = '0.5';
+
+  try {
+    const res = await fetch('/api/setup/pull-model', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: chosenModel })
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error('Server error: ' + res.status + ' — ' + text);
+    }
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // SSE format: "data: {...}"
+        const dataPrefix = 'data: ';
+        const raw = trimmed.startsWith(dataPrefix)
+          ? trimmed.slice(dataPrefix.length)
+          : trimmed;
+
+        try {
+          const evt = JSON.parse(raw);
+          updateProgress(evt, progressFill, progressPct, progressStatus);
+
+          if (evt.status === 'success' || evt.status === 'complete') {
+            // Download complete
+            progressFill.style.width = '100%';
+            progressPct.textContent  = '100%';
+            progressStatus.textContent = 'Download complete.';
+            document.getElementById('doneModel').textContent = chosenModel;
+            setTimeout(() => goToStep(3), 600);
+            return;
+          }
+        } catch (_) {
+          // Non-JSON line, ignore
+        }
+      }
+    }
+
+    // Stream ended without explicit success — treat as done
+    progressFill.style.width = '100%';
+    progressPct.textContent  = '100%';
+    progressStatus.textContent = 'Download complete.';
+    document.getElementById('doneModel').textContent = chosenModel;
+    setTimeout(() => goToStep(3), 600);
+
+  } catch (err) {
+    showError('modelError', 'Download failed: ' + err.message);
+    btn.disabled = false;
+    modelList.style.pointerEvents = '';
+    modelList.style.opacity = '';
+    progressArea.classList.remove('visible');
+  }
+}
+
+function updateProgress(evt, fill, pct, statusEl) {
+  if (evt.status) {
+    statusEl.textContent = evt.status;
+  }
+  if (typeof evt.total === 'number' && typeof evt.completed === 'number' && evt.total > 0) {
+    const percent = Math.round((evt.completed / evt.total) * 100);
+    fill.style.width = percent + '%';
+    pct.textContent  = percent + '%';
+  }
+}
+
+// ── STEP 3: COMPLETE ─────────────────────────────────────────────
+async function completeSetup() {
+  const btn = document.querySelector('#step-3 .btn-primary');
+  btn.disabled = true;
+  btn.textContent = 'Opening...';
+
+  try {
+    await fetch('/api/setup/complete', { method: 'POST' });
+  } catch (_) {
+    // Best-effort — redirect regardless
+  }
+
+  window.location.href = '/';
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+</script>
+</body>
+</html>
