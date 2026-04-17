@@ -18,6 +18,8 @@ from ..services import search_service
 from ..services.memory_service import MemoryService
 from .plugins import plugin_service as _plugin_service
 from .context import context_store as _context_store
+from ..services.sandbox_fs import SandboxedFS
+from .profiles import profile_service as _profile_service
 from ..services.tool_executor import ToolExecutor
 from ..logging_config import logger
 
@@ -60,6 +62,24 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
     if not _context_store.get(conversation_id):
         _context_store.create(conversation_id, request.model)
     _context_store.update_activity(conversation_id)
+
+    # ── Profile Resolution ────────────────────────────────────────────
+    profile_header = req.headers.get("X-Profile-ID")
+    profile_id = _profile_service.resolve(header=profile_header, key_id=None)
+    ctx = _context_store.get(conversation_id)
+    if ctx is not None:
+        ctx.metadata["profile_id"] = profile_id
+
+    # ── Sandbox Setup ────────────────────────────────────────────────
+    profile = _profile_service.get_profile(profile_id) or {}
+    sandbox_cfg = profile.get("sandbox") or {}
+    sandbox = None
+    if sandbox_cfg.get("mode") and sandbox_cfg["mode"] != "none":
+        sandbox = SandboxedFS(
+            sandbox_root=f"data/sandboxes/{conversation_id}",
+            max_file_size_mb=sandbox_cfg.get("max_file_size_mb", 10),
+            allowed_extensions=sandbox_cfg.get("allowed_extensions"),
+        )
 
     # Convert Pydantic models to dicts for Ollama
     messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
@@ -161,6 +181,7 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
     if request.tools and _plugin_service.get_ollama_tools():
         # Use tool executor for agentic loop
         _tool_executor.set_context(_context_store, conversation_id)
+        _tool_executor.set_policy(_profile_service, profile_id, sandbox)
         result = _tool_executor.execute(
             model=request.model,
             messages=messages,
@@ -192,6 +213,7 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         if sources:
             response["sources"] = sources
         response["conversation_id"] = conversation_id
+        response["profile_id"] = profile_id
         return response
 
     # ── Non-Streaming (no tools) ───────────────────────────────────────
@@ -223,4 +245,5 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
     if sources:
         response["sources"] = sources
     response["conversation_id"] = conversation_id
+    response["profile_id"] = profile_id
     return response

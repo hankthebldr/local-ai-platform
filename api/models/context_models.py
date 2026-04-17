@@ -77,6 +77,7 @@ class SessionSummary:
     topics: list = field(default_factory=list)
     preview: str = ""
     tool_calls: list = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
     @classmethod
     def from_context(cls, ctx: ConversationContext, preview: str = "") -> SessionSummary:
@@ -101,15 +102,19 @@ class SessionSummary:
 
     def to_dict(self) -> dict:
         return {
-            "id": self.id, "model": self.model,
-            "started_at": self.started_at, "ended_at": self.ended_at,
+            "id": self.id,
+            "model": self.model,
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
             "duration_minutes": self.duration_minutes,
             "message_count": self.message_count,
             "tool_calls_count": self.tool_calls_count,
             "tools_used": self.tools_used,
             "skills_triggered": self.skills_triggered,
-            "topics": self.topics, "preview": self.preview,
+            "topics": self.topics,
+            "preview": self.preview,
             "tool_calls": self.tool_calls,
+            "metadata": self.metadata,
         }
 
     def to_index_entry(self) -> dict:

@@ -23,6 +23,29 @@ class SessionManager:
         if not ctx:
             return None
         summary = SessionSummary.from_context(ctx, preview=preview)
+
+        # Preserve profile ID in metadata if present
+        if ctx.metadata.get("profile_id"):
+            summary.metadata["profile_id"] = ctx.metadata["profile_id"]
+
+        # Archive sandbox contents (file list only) then delete the directory
+        import shutil
+        from pathlib import Path
+        sandbox_dir = Path(f"data/sandboxes/{conversation_id}")
+        if sandbox_dir.exists():
+            files = []
+            for f in sandbox_dir.rglob("*"):
+                if f.is_file():
+                    files.append({
+                        "path": str(f.relative_to(sandbox_dir)),
+                        "size": f.stat().st_size,
+                    })
+            summary.metadata["sandbox_files"] = files
+            try:
+                shutil.rmtree(sandbox_dir)
+            except OSError as e:
+                logger.warning(f"Could not remove sandbox dir {sandbox_dir}: {e}")
+
         self.memory_service.save_session(summary)
         logger.info(f"Session closed and saved: {conversation_id}")
         return summary.to_dict()
