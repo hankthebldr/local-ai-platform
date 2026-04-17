@@ -167,3 +167,45 @@ class TestIsToolAllowed:
         svc = ProfileService(profiles_dir=profile_dir)
         svc.load_profiles()
         assert svc.is_tool_allowed("x", "y", "missing") is False
+
+
+import importlib
+from fastapi.testclient import TestClient
+
+
+class TestProfileRouter:
+    @pytest.fixture(scope="class")
+    def client(self):
+        os.environ["ENABLE_API_AUTH"] = "false"
+        os.environ["RATE_LIMIT_RPM"] = "0"
+        import api.middleware
+        importlib.reload(api.middleware)
+        import api.main
+        importlib.reload(api.main)
+        from api.main import app
+        return TestClient(app)
+
+    def test_list_profiles_endpoint(self, client):
+        resp = client.get("/api/profiles")
+        assert resp.status_code == 200
+        ids = [p["id"] for p in resp.json()]
+        assert "default" in ids
+
+    def test_get_profile_detail(self, client):
+        resp = client.get("/api/profiles/default")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == "default"
+
+    def test_get_missing_profile_404(self, client):
+        resp = client.get("/api/profiles/nonexistent")
+        assert resp.status_code == 404
+
+    def test_reload_profiles(self, client):
+        resp = client.post("/api/profiles/reload")
+        assert resp.status_code == 200
+        assert "loaded" in resp.json()
+
+    def test_active_default(self, client):
+        resp = client.get("/api/profiles/active")
+        assert resp.status_code == 200
+        assert "default_profile_id" in resp.json()
