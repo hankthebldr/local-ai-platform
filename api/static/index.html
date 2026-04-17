@@ -1296,6 +1296,18 @@ body::before {
         <div style="font-size:0.75rem;color:var(--text-dim);">Facts</div>
       </div>
     </div>
+
+    <!-- Profiles Section -->
+    <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="color:var(--cyan);font-size:0.9rem;">Active Profile: <span id="active-profile-id" style="color:var(--amber);">loading…</span></h3>
+        <button onclick="reloadProfiles()" style="background:var(--cyan);color:#000;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.75rem;">Reload</button>
+      </div>
+      <div id="profiles-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;"></div>
+      <div style="margin-top:10px;font-size:0.7rem;color:var(--text-dim);">
+        Profiles are edited in <code style="color:var(--cyan);">data/profiles/*.yaml</code>. Click Reload after changes.
+      </div>
+    </div>
   </div>
 
   <!-- ═══ TAB: DISCOVER ═════════════════════════════════════════════ -->
@@ -2927,6 +2939,7 @@ async function loadMemoryTab() {
   loadSessions();
   loadFacts();
   loadMemoryStats();
+  loadProfiles();
 }
 
 async function loadSessions() {
@@ -3034,6 +3047,46 @@ async function loadMemoryStats() {
     document.getElementById('stat-tool-calls').textContent = s.total_tool_calls || 0;
     document.getElementById('stat-facts').textContent = s.total_facts || 0;
   } catch(e) {}
+}
+
+async function loadProfiles() {
+  try {
+    const [profilesResp, activeResp] = await Promise.all([
+      fetch('/api/profiles'),
+      fetch('/api/profiles/active'),
+    ]);
+    const profiles = await profilesResp.json();
+    const active = await activeResp.json();
+    document.getElementById('active-profile-id').textContent = active.default_profile_id || 'default';
+
+    const el = document.getElementById('profiles-list');
+    if (!profiles.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;">No profiles loaded.</div>';
+      return;
+    }
+    el.innerHTML = profiles.map(p => {
+      const pluginCount = (p.allowed_plugins || []).length;
+      const sandboxMode = (p.sandbox || {}).mode || 'none';
+      const wildcard = (p.allowed_plugins || []).includes('*');
+      return `
+        <div style="padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-deep);">
+          <div style="font-size:0.85rem;color:var(--text);font-weight:500;">${esc(p.name || p.id)}</div>
+          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">${esc(p.description || '')}</div>
+          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:6px;">
+            <span style="color:var(--cyan);">${wildcard ? 'all plugins' : pluginCount + ' plugins'}</span>
+            · <span>sandbox: ${esc(sandboxMode)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) { console.error('Failed to load profiles:', e); }
+}
+
+async function reloadProfiles() {
+  try {
+    await fetch('/api/profiles/reload', {method: 'POST'});
+    loadProfiles();
+  } catch(e) { console.error('Reload failed:', e); }
 }
 
 async function searchMemory(query) {
