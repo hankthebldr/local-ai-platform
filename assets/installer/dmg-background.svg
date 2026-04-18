@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 400" width="660" height="400">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="50%" stop-color="#0d1520"/>
+      <stop offset="100%" stop-color="#1a1a2e"/>
+    </linearGradient>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <rect width="20" height="20" fill="none" stroke="#1a1a2e" stroke-width="0.5" opacity="0.3"/>
+    </pattern>
+  </defs>
+
+  <rect width="660" height="400" fill="url(#bg)"/>
+  <rect width="660" height="400" fill="url(#grid)"/>
+
+  <circle cx="330" cy="200" r="150" fill="#00E87B" opacity="0.03"/>
+
+  <text x="330" y="80" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="24" font-weight="700" fill="#00E87B" letter-spacing="3">ENCLAVE</text>
+  <text x="330" y="110" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="12" fill="#555555">Drag to Applications to install</text>
+
+  <line x1="280" y1="230" x2="370" y2="230" stroke="#1a1a2e" stroke-width="2"/>
+  <polygon points="370,225 385,230 370,235" fill="#1a1a2e"/>
+
+  <text x="330" y="360" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" fill="#333333">v1.0.0 — by ohno llc</text>
+</svg>
