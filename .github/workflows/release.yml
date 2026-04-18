@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-macos:
+    name: Build macOS DMG
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install librsvg (for icon generation)
+        run: brew install librsvg create-dmg
+
+      - name: Regenerate assets
+        run: |
+          ./scripts/generate-icons.sh
+          ls -la assets/icons/icon.icns
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r setup/requirements-core.txt
+
+      - name: Build DMG
+        run: ./scripts/build_mac.sh
+
+      - name: Verify DMG exists
+        run: |
+          test -f dist/Enclave.dmg
+          ls -la dist/
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Enclave ${{ steps.version.outputs.version }}
+          body: |
+            ## Enclave ${{ steps.version.outputs.version }}
+
+            Self-hosted AI inference. CPU-optimized. By ohno llc.
+
+            ### Download
+
+            Download `Enclave.dmg` below and drag to your Applications folder.
+
+            **Requirements:** macOS 12.0+ (Monterey or later)
+
+            ### License
+
+            Commercial license required to use Enclave. See [LICENSE](https://github.com/hankthebldr/local-ai-platform/blob/master/LICENSE) for terms.
+
+            Contact ohno llc for Individual or Teams license pricing.
+          files: |
+            dist/Enclave.dmg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
