@@ -107,3 +107,6 @@ $RECYCLE.BIN/
 
 # Workflow run data (persisted locally)
 data/workflows/*/
+
+# Brainstorm session files
+.superpowers/

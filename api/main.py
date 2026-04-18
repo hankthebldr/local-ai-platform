@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Local AI Platform - FastAPI Server
+Enclave - FastAPI Server
 OpenAI-compatible API for local LLM inference
 """
 
@@ -50,7 +50,7 @@ ollama_service = OllamaService(OLLAMA_HOST)
 async def lifespan(app: FastAPI):
     """Lifecycle manager for the application"""
     auth_status = "enabled" if os.getenv("ENABLE_API_AUTH", "false").lower() == "true" else "disabled"
-    logger.info("Starting Local AI Platform API")
+    logger.info("Starting Enclave API")
     logger.info(f"  Ollama Host: {OLLAMA_HOST}")
     logger.info(f"  API Port: {API_PORT}")
     logger.info(f"  Auth: {auth_status}")
@@ -65,13 +65,13 @@ async def lifespan(app: FastAPI):
         logger.warning("  Ollama: NOT responding")
 
     yield
-    logger.info("Shutting down Local AI Platform API")
+    logger.info("Shutting down Enclave API")
 
 
 # ── App ────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="Local AI Platform API",
+    title="Enclave API",
     description="OpenAI-compatible API for local LLM inference with streaming support",
     version="1.0.0",
     lifespan=lifespan,
@@ -162,7 +162,7 @@ async def root():
         return FileResponse(index, media_type="text/html")
     # Fallback to JSON if static files missing
     return {
-        "message": "Local AI Platform API",
+        "message": "Enclave API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health",
@@ -173,7 +173,7 @@ async def root():
 async def api_info():
     """JSON API information endpoint"""
     return {
-        "message": "Local AI Platform API",
+        "message": "Enclave API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health",

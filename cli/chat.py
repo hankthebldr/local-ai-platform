@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Local AI Platform - CLI Chat Interface
+Enclave - CLI Chat Interface
 Interactive chat with local LLMs
 """
 
@@ -17,10 +17,11 @@ def chat_with_ollama(model: str, host: str = "http://localhost:11434"):
     """Interactive chat session with Ollama"""
 
     console.print(Panel.fit(
-        f"[bold bright_cyan]Local AI Platform - Chat Interface[/bold bright_cyan]\n"
+        f"[bold bright_green]\u25a3 ENCLAVE[/bold bright_green] [dim]v1.0.0[/dim]\n"
+        f"[dim]Self-hosted AI inference[/dim]\n"
+        f"[dim]by ohno llc[/dim]\n\n"
         f"[dim]Model:[/dim] [bright_white]{model}[/bright_white]\n"
-        f"[dim]Type 'exit' or 'quit' to end the session[/dim]\n"
-        f"[dim]Type '/help' for commands[/dim]",
+        f"[dim]Type /help for commands[/dim]",
         border_style="bright_cyan"
     ))
 

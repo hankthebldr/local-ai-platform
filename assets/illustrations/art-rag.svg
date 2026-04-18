@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#0d1520"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#bg)"/>
+  <!-- Document stack -->
+  <rect x="20" y="50" width="50" height="60" rx="3" fill="none" stroke="#1a1a2e" stroke-width="1"/>
+  <line x1="28" y1="62" x2="62" y2="62" stroke="#1a1a2e" stroke-width="0.5"/>
+  <line x1="28" y1="70" x2="55" y2="70" stroke="#1a1a2e" stroke-width="0.5"/>
+  <line x1="28" y1="78" x2="60" y2="78" stroke="#1a1a2e" stroke-width="0.5"/>
+  <line x1="28" y1="86" x2="50" y2="86" stroke="#1a1a2e" stroke-width="0.5"/>
+  <line x1="28" y1="94" x2="58" y2="94" stroke="#1a1a2e" stroke-width="0.5"/>
+  <text x="45" y="42" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">docs</text>
+
+  <!-- Chunking arrows -->
+  <line x1="75" y1="65" x2="95" y2="55" stroke="#00C0E8" stroke-width="0.5" opacity="0.4"/>
+  <line x1="75" y1="80" x2="95" y2="80" stroke="#00C0E8" stroke-width="0.5" opacity="0.4"/>
+  <line x1="75" y1="95" x2="95" y2="105" stroke="#00C0E8" stroke-width="0.5" opacity="0.4"/>
+
+  <!-- Embedding vectors (abstract) -->
+  <circle cx="110" cy="55" r="6" fill="#00C0E8" opacity="0.15" stroke="#00C0E8" stroke-width="0.8"/>
+  <circle cx="110" cy="80" r="6" fill="#00C0E8" opacity="0.25" stroke="#00C0E8" stroke-width="0.8"/>
+  <circle cx="110" cy="105" r="6" fill="#00C0E8" opacity="0.1" stroke="#00C0E8" stroke-width="0.8"/>
+
+  <!-- Vector space -->
+  <rect x="140" y="25" width="100" height="130" rx="6" fill="none" stroke="#00C0E8" stroke-width="1" opacity="0.3"/>
+  <text x="190" y="20" text-anchor="middle" fill="#00C0E8" font-family="monospace" font-size="7" opacity="0.5">vector space</text>
+  <!-- Scattered points -->
+  <circle cx="160" cy="50" r="3" fill="#00C0E8" opacity="0.3"/>
+  <circle cx="180" cy="65" r="3" fill="#00C0E8" opacity="0.5"/>
+  <circle cx="200" cy="45" r="3" fill="#00C0E8" opacity="0.2"/>
+  <circle cx="170" cy="90" r="3" fill="#00C0E8" opacity="0.4"/>
+  <circle cx="210" cy="80" r="3" fill="#00C0E8" opacity="0.3"/>
+  <circle cx="155" cy="120" r="3" fill="#00C0E8" opacity="0.2"/>
+  <circle cx="195" cy="110" r="3" fill="#00C0E8" opacity="0.4"/>
+  <circle cx="220" cy="130" r="3" fill="#00C0E8" opacity="0.3"/>
+  <!-- Query highlight cluster -->
+  <circle cx="185" cy="85" r="20" fill="#00E87B" opacity="0.06" stroke="#00E87B" stroke-width="0.5"/>
+  <circle cx="180" cy="82" r="3" fill="#00E87B" opacity="0.7"/>
+  <circle cx="190" cy="90" r="3" fill="#00E87B" opacity="0.5"/>
+
+  <!-- Query input -->
+  <line x1="120" y1="80" x2="140" y2="80" stroke="#00E87B" stroke-width="1" opacity="0.4"/>
+  <polygon points="138,77 144,80 138,83" fill="#00E87B" opacity="0.4"/>
+
+  <!-- Output to LLM -->
+  <line x1="244" y1="85" x2="268" y2="85" stroke="#00E87B" stroke-width="1" opacity="0.3"/>
+  <polygon points="268,82 274,85 268,88" fill="#00E87B" opacity="0.3"/>
+  <rect x="278" y="70" width="30" height="30" rx="4" fill="none" stroke="#00E87B" stroke-width="1" opacity="0.4"/>
+  <text x="293" y="88" text-anchor="middle" fill="#00E87B" font-family="monospace" font-size="7" opacity="0.5">LLM</text>
+</svg>

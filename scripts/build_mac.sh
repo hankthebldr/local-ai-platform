@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== Local AI Platform — macOS Build Pipeline ==="
+echo "=== Enclave — macOS Build Pipeline ==="
 echo ""
 
 # Ensure we're in the project root
@@ -26,7 +26,7 @@ mkdir -p dist
 # ── Step 3: Create .app bundle structure ────────────────────────────
 echo "[3/5] Building .app bundle..."
 
-APP_NAME="Local AI Platform"
+APP_NAME="Enclave"
 APP_DIR="dist/${APP_NAME}.app"
 CONTENTS="${APP_DIR}/Contents"
 MACOS="${CONTENTS}/MacOS"
@@ -74,7 +74,7 @@ echo "  Python environment ready"
 # Create launcher script
 cat > "${MACOS}/launch.sh" << 'LAUNCHER'
 #!/bin/bash
-# Local AI Platform — macOS Launcher
+# Enclave — macOS Launcher
 DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
 
 # Activate bundled Python
@@ -114,17 +114,17 @@ cat > "${CONTENTS}/Info.plist" << 'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Local AI Platform</string>
+    <string>Enclave</string>
     <key>CFBundleDisplayName</key>
-    <string>Local AI Platform</string>
+    <string>Enclave</string>
     <key>CFBundleIdentifier</key>
-    <string>com.localai.platform</string>
+    <string>com.ohno.enclave</string>
     <key>CFBundleVersion</key>
     <string>1.0.0</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0.0</string>
     <key>CFBundleExecutable</key>
-    <string>Local AI Platform</string>
+    <string>Enclave</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
@@ -163,34 +163,34 @@ echo "[5/5] Creating DMG..."
 
 if command -v create-dmg &>/dev/null; then
     create-dmg \
-        --volname "Local AI Platform" \
+        --volname "Enclave" \
         --window-pos 200 120 \
         --window-size 600 400 \
         --icon "${APP_NAME}.app" 150 200 \
         --app-drop-link 450 200 \
         --no-internet-enable \
-        "dist/LocalAIPlatform.dmg" \
+        "dist/Enclave.dmg" \
         "${APP_DIR}" \
         2>/dev/null || {
             echo "  create-dmg failed, using hdiutil fallback..."
-            hdiutil create -volname "Local AI Platform" \
+            hdiutil create -volname "Enclave" \
                 -srcfolder "${APP_DIR}" \
                 -ov -format UDZO \
-                "dist/LocalAIPlatform.dmg"
+                "dist/Enclave.dmg"
         }
 else
     echo "  create-dmg not found, using hdiutil..."
-    hdiutil create -volname "Local AI Platform" \
+    hdiutil create -volname "Enclave" \
         -srcfolder "${APP_DIR}" \
         -ov -format UDZO \
-        "dist/LocalAIPlatform.dmg"
+        "dist/Enclave.dmg"
 fi
 
 echo ""
 echo "=== Build Complete ==="
 echo "  App: ${APP_DIR}"
-echo "  DMG: dist/LocalAIPlatform.dmg"
+echo "  DMG: dist/Enclave.dmg"
 echo "  App Size: $(du -sh "${APP_DIR}" | cut -f1)"
-echo "  DMG Size: $(du -sh "dist/LocalAIPlatform.dmg" | cut -f1)"
+echo "  DMG Size: $(du -sh "dist/Enclave.dmg" | cut -f1)"
 echo ""
 echo "To test: open '${APP_DIR}'"
