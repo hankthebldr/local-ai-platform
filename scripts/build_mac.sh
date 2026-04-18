@@ -40,8 +40,23 @@ cp -R api "${RESOURCES}/api"
 cp -R plugins "${RESOURCES}/plugins"
 cp -R cli "${RESOURCES}/cli"
 cp -R models "${RESOURCES}/models"
+[ -d data/profiles ] && cp -R data "${RESOURCES}/data" 2>/dev/null || true
 [ -f .env ] && cp .env "${RESOURCES}/.env"
 [ -f .env.example ] && cp .env.example "${RESOURCES}/.env.example"
+
+# Copy Enclave icon into the bundle
+ICON_SRC=""
+if [ -f "assets/icons/icon.icns" ]; then
+    ICON_SRC="assets/icons/icon.icns"
+elif [ -f "desktop/icon.icns" ] && [ -s "desktop/icon.icns" ]; then
+    ICON_SRC="desktop/icon.icns"
+fi
+if [ -n "$ICON_SRC" ]; then
+    cp "$ICON_SRC" "${RESOURCES}/icon.icns"
+    echo "  Copied icon from ${ICON_SRC}"
+else
+    echo "  WARNING: No icon.icns found — app will use default icon"
+fi
 
 # Create a bundled venv with only runtime deps
 # Use Python 3.12 specifically (3.14 is too new for some wheels)
@@ -125,6 +140,8 @@ cat > "${CONTENTS}/Info.plist" << 'PLIST'
     <string>1.0.0</string>
     <key>CFBundleExecutable</key>
     <string>Local AI Platform</string>
+    <key>CFBundleIconFile</key>
+    <string>icon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
