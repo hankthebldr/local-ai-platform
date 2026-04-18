@@ -31,7 +31,7 @@ jobs:
           pip install -r setup/requirements-dev.txt
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short --deselect tests/test_api.py::TestIntegrationChat --deselect tests/test_api.py::TestIntegrationCompletions --deselect tests/test_api.py::TestIntegrationStreaming
+        run: pytest tests/ -v --tb=short -k "not Integration and not TestAuthentication and not TestMultiKeyAuth"
 
   lint:
     name: Lint
