@@ -1,7 +1,7 @@
 # CLI Color Scheme
 
 ## Overview
-The Local AI Platform CLI uses an optimized color palette designed for modern terminal emulators (especially Kitty) with excellent readability and visual hierarchy.
+The Enclave CLI uses an optimized color palette designed for modern terminal emulators (especially Kitty) with excellent readability and visual hierarchy.
 
 ## Color Palette
 
@@ -37,7 +37,7 @@ The Local AI Platform CLI uses an optimized color palette designed for modern te
 
 #### Header/Welcome Panel
 ```
-[bold bright_cyan]Local AI Platform - Chat Interface[/bold bright_cyan]
+[bold bright_cyan]Enclave - Chat Interface[/bold bright_cyan]
 [dim]Model:[/dim] [bright_white]{model}[/bright_white]
 ```
 - Bright cyan for title (high visibility)
