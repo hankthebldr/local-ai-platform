@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enclave — Self-hosted AI inference</title>
+  <meta name="description" content="Self-hosted LLM infrastructure with OpenAI-compatible API. CPU-optimized. Buy once, run forever.">
+
+  <meta property="og:title" content="Enclave">
+  <meta property="og:description" content="Self-hosted AI inference. CPU-optimized. One price. Forever.">
+  <meta property="og:image" content="https://hankthebldr.github.io/local-ai-platform/social-preview.png">
+  <meta property="og:url" content="https://hankthebldr.github.io/local-ai-platform/">
+  <meta property="og:type" content="website">
+
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="logo">
+        <svg width="32" height="32" viewBox="0 0 80 80">
+          <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="#00E87B" stroke-width="2.5"/>
+          <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="#00E87B" stroke-width="1.5" opacity="0.5"/>
+          <rect x="28" y="28" width="24" height="24" rx="2" fill="#00E87B" opacity="0.2"/>
+          <rect x="34" y="34" width="12" height="12" rx="1" fill="#00E87B" opacity="0.6"/>
+        </svg>
+        <span class="wordmark">ENCLAVE</span>
+      </div>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/hankthebldr/local-ai-platform">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <h1>Self-hosted AI inference.<br>CPU-optimized. One price. Forever.</h1>
+        <p class="subtitle">Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero cloud dependencies.</p>
+        <div class="cta">
+          <a href="#download" class="btn-primary">Download v1.0.0</a>
+          <a href="https://github.com/hankthebldr/local-ai-platform" class="btn-secondary">View on GitHub</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="features">
+      <div class="container">
+        <h2>What it does</h2>
+        <div class="grid">
+          <div class="card">
+            <h3>OpenAI-compatible API</h3>
+            <p>Drop-in replacement. Point your existing code at localhost:8000.</p>
+          </div>
+          <div class="card">
+            <h3>CPU-optimized</h3>
+            <p>GGUF quantized models via Ollama. 7B at 40-50 tok/s, 13B at 25-30 tok/s.</p>
+          </div>
+          <div class="card">
+            <h3>Zero telemetry</h3>
+            <p>No data leaves your machine. No internet required for inference.</p>
+          </div>
+          <div class="card">
+            <h3>Model registry</h3>
+            <p>18+ models pre-catalogued. Download, configure, and switch with one command.</p>
+          </div>
+          <div class="card">
+            <h3>Multi-agent workflows</h3>
+            <p>YAML-defined step pipelines with role-based model selection.</p>
+          </div>
+          <div class="card">
+            <h3>Native macOS app</h3>
+            <p>Desktop wrapper with setup wizard. Linux support via direct install.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="download">
+      <div class="container">
+        <h2>Get Enclave</h2>
+        <p class="subtitle">Commercial software. Not open source. Source-available with commercial license.</p>
+        <div class="license-grid">
+          <div class="license">
+            <h3>Individual</h3>
+            <p>One seat. One-time purchase.<br>All updates included.<br>Personal and commercial use.</p>
+            <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest" class="btn-primary">Download DMG</a>
+          </div>
+          <div class="license">
+            <h3>Teams</h3>
+            <p>Volume discount per seat.<br>Shared infrastructure.<br>Priority support channel.</p>
+            <a href="mailto:contact@ohno.llc?subject=Enclave%20Teams%20License" class="btn-secondary">Contact for pricing</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>Enclave v1.0.0 — by ohno llc</p>
+      <p><a href="https://github.com/hankthebldr/local-ai-platform">GitHub</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/LICENSE">License</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/discussions">Discussions</a></p>
+    </div>
+  </footer>
+</body>
+</html>
