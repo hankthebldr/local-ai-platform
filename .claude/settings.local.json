@@ -62,7 +62,14 @@
       "Bash(npm install *)",
       "Bash(npm test *)",
       "Bash(bash -n scripts/build_mac.sh)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(git -C /Users/henry/Github/license-service log --oneline dd287db..dc2d902)",
+      "Bash(git -C /Users/henry/Github/license-service show dd287db:src/index.ts)",
+      "Bash(git -C /Users/henry/Github/license-service diff dd287db..dc2d902 -- tsconfig.json)",
+      "Bash(python3 -c \"import json,sys; p=json.load\\(sys.stdin\\); print\\(p.get\\('types',''\\), p.get\\('exports',{}\\).get\\('.', {}\\)\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(node -e ' *)",
+      "Bash(node --input-type=module)"
     ],
     "deny": [],
     "ask": []
