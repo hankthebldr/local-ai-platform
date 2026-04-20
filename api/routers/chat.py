@@ -7,20 +7,27 @@ Supports optional web search augmentation via web_search parameter.
 """
 
 import json
+import uuid
 from typing import Optional, List
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..services.ollama_service import OllamaService
 from ..services import search_service
+from ..services.memory_service import MemoryService
 from .plugins import plugin_service as _plugin_service
+from .context import context_store as _context_store
+from ..services.sandbox_fs import SandboxedFS
+from .profiles import profile_service as _profile_service
+from .documents import rag_service as _rag_service
 from ..services.tool_executor import ToolExecutor
 from ..logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 ollama_service = OllamaService()
 _tool_executor = ToolExecutor(ollama_service, _plugin_service)
+_memory_service = MemoryService()
 
 
 class Message(BaseModel):
@@ -41,18 +48,49 @@ class ChatCompletionRequest(BaseModel):
     web_search: Optional[bool] = Field(False, description="Enable web search augmentation")
     tools: Optional[bool] = Field(True, description="Enable plugin tool calling")
     max_tool_iterations: Optional[int] = Field(10, description="Max tool-call iterations")
+    rag: Optional[bool] = Field(False, description="Enable RAG retrieval for this request")
+    rag_top_k: Optional[int] = Field(5, description="Number of chunks to retrieve")
 
 
 @router.post("/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
+async def chat_completions(request: ChatCompletionRequest, req: Request):
     """OpenAI-compatible chat completion endpoint with optional web search"""
     logger.info(
         f"Chat request: model={request.model}, messages={len(request.messages)}, "
         f"stream={request.stream}, web_search={request.web_search}"
     )
 
+    # ── Conversation Tracking ─────────────────────────────────────────
+    conversation_id = req.headers.get("X-Conversation-ID", str(uuid.uuid4()))
+    if not _context_store.get(conversation_id):
+        _context_store.create(conversation_id, request.model)
+    _context_store.update_activity(conversation_id)
+
+    # ── Profile Resolution ────────────────────────────────────────────
+    profile_header = req.headers.get("X-Profile-ID")
+    profile_id = _profile_service.resolve(header=profile_header, key_id=None)
+    ctx = _context_store.get(conversation_id)
+    if ctx is not None:
+        ctx.metadata["profile_id"] = profile_id
+
+    # ── Sandbox Setup ────────────────────────────────────────────────
+    profile = _profile_service.get_profile(profile_id) or {}
+    sandbox_cfg = profile.get("sandbox") or {}
+    sandbox = None
+    if sandbox_cfg.get("mode") and sandbox_cfg["mode"] != "none":
+        sandbox = SandboxedFS(
+            sandbox_root=f"data/sandboxes/{conversation_id}",
+            max_file_size_mb=sandbox_cfg.get("max_file_size_mb", 10),
+            allowed_extensions=sandbox_cfg.get("allowed_extensions"),
+        )
+
     # Convert Pydantic models to dicts for Ollama
     messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+
+    # ── Memory Injection ──────────────────────────────────────────────
+    memory_context = _memory_service.get_injection_context()
+    if memory_context:
+        messages = [{"role": "system", "content": memory_context}] + messages
 
     # ── Plugin Skill Injection ────────────────────────────────────────
     last_user_content = ""
@@ -63,10 +101,37 @@ async def chat_completions(request: ChatCompletionRequest):
 
     matched_skills = _plugin_service.get_skills(last_user_content)
     for skill in matched_skills:
+        _context_store.record_skill(conversation_id, skill.get("id", ""))
         if skill["inject"] == "system":
             messages = [{"role": "system", "content": skill["content"]}] + messages
         elif skill["inject"] == "context":
             messages.append({"role": "system", "content": skill["content"]})
+
+    # ── RAG Augmentation ────────────────────────────────────────────
+    rag_sources = []
+    rag_allowed = True
+    if request.rag:
+        # Profile gate
+        profile_rag = (profile.get("rag") or {}).get("enabled", True)
+        if profile_rag is False:
+            rag_allowed = False
+            logger.info(f"RAG disabled by profile '{profile_id}'")
+        elif _rag_service is None:
+            rag_allowed = False
+            logger.warning("RAG requested but rag_service is unavailable")
+
+    if request.rag and rag_allowed:
+        last_user_msg = ""
+        for msg in reversed(messages):
+            if msg["role"] == "user":
+                last_user_msg = msg["content"]
+                break
+        if last_user_msg:
+            results = _rag_service.search(last_user_msg, top_k=request.rag_top_k)
+            if results["total"] > 0:
+                messages = [{"role": "system", "content": _rag_service.format_context(results)}] + messages
+                rag_sources = results["results"]
+                logger.info(f"Injected {results['total']} RAG chunks")
 
     # ── Web Search Augmentation ────────────────────────────────────────
     sources = []
@@ -144,6 +209,8 @@ async def chat_completions(request: ChatCompletionRequest):
     # ── Non-Streaming ──────────────────────────────────────────────────
     if request.tools and _plugin_service.get_ollama_tools():
         # Use tool executor for agentic loop
+        _tool_executor.set_context(_context_store, conversation_id)
+        _tool_executor.set_policy(_profile_service, profile_id, sandbox)
         result = _tool_executor.execute(
             model=request.model,
             messages=messages,
@@ -174,6 +241,10 @@ async def chat_completions(request: ChatCompletionRequest):
             response["tool_calls"] = result["tool_calls_made"]
         if sources:
             response["sources"] = sources
+        response["conversation_id"] = conversation_id
+        if request.rag or rag_sources:
+            response["rag_sources"] = rag_sources
+        response["profile_id"] = profile_id
         return response
 
     # ── Non-Streaming (no tools) ───────────────────────────────────────
@@ -204,4 +275,10 @@ async def chat_completions(request: ChatCompletionRequest):
     }
     if sources:
         response["sources"] = sources
+    response["conversation_id"] = conversation_id
+    if request.rag:
+        response["rag_sources"] = rag_sources
+    elif rag_sources:
+        response["rag_sources"] = rag_sources
+    response["profile_id"] = profile_id
     return response

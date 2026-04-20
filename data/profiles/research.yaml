@@ -1,0 +1,31 @@
+id: "research"
+name: "Research Profile"
+description: "Web search and document analysis only, strict sandbox"
+version: "1.0.0"
+
+allowed_plugins:
+  - "web-search"
+  - "doc-analyzer"
+  - "rag"
+
+tool_rules:
+  web-search:
+    allowed_tools: ["web_search"]
+  doc-analyzer:
+    allowed_tools: ["read_document", "extract_text"]
+
+sandbox:
+  mode: "strict"
+  root_dir: "data/sandboxes/{conversation_id}"
+  max_file_size_mb: 5
+  allowed_extensions: ["txt", "md", "json"]
+
+network:
+  mode: "unrestricted"
+  allowed_hosts: []
+
+bound_to_keys: []
+
+rag:
+  enabled: true
+  max_upload_mb: 50

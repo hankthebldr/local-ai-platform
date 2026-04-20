@@ -64,3 +64,6 @@ jupyter==1.0.0
 
 # Desktop App
 pywebview==5.1
+
+# RAG
+pypdf==4.3.1

@@ -1089,6 +1089,9 @@ body::before {
     <button class="tab-btn" onclick="switchTab('discover')">Discover<span class="tab-count" id="disc-count"></span></button>
     <button class="tab-btn" onclick="switchTab('research')">Research<span class="tab-count" id="res-count"></span></button>
     <button class="tab-btn" onclick="switchTab('workflows')">Workflows</button>
+    <button class="tab-btn" data-tab="documents" onclick="switchTab('documents')">
+      <span>Documents</span>
+    </button>
   </div>
 
   <!-- ═══ TAB: DASHBOARD ═══════════════════════════════════════════ -->
@@ -1261,6 +1264,55 @@ body::before {
         <div class="model-empty">Loading...</div>
       </div>
     </div>
+
+    <!-- ── SESSION HISTORY & FACTS ──────────────────────────────────── -->
+    <div style="display:flex;gap:12px;margin-top:16px;margin-bottom:16px;">
+      <input type="text" id="memory-search" placeholder="Search sessions and facts..."
+        style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:0.85rem;"
+        oninput="searchMemory(this.value)">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Session History</h3>
+        <div id="session-list" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Pinned Facts</h3>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="new-fact-input" placeholder="Add a fact..."
+            style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:0.8rem;"
+            onkeydown="if(event.key==='Enter')addFact()">
+          <button onclick="addFact()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Pin</button>
+        </div>
+        <div id="facts-list" style="max-height:350px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:16px;">
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="stat-sessions">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Sessions</div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="stat-tool-calls">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Tool Calls</div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="stat-facts">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Facts</div>
+      </div>
+    </div>
+
+    <!-- Profiles Section -->
+    <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="color:var(--cyan);font-size:0.9rem;">Active Profile: <span id="active-profile-id" style="color:var(--amber);">loading…</span></h3>
+        <button onclick="reloadProfiles()" style="background:var(--cyan);color:#000;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.75rem;">Reload</button>
+      </div>
+      <div id="profiles-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;"></div>
+      <div style="margin-top:10px;font-size:0.7rem;color:var(--text-dim);">
+        Profiles are edited in <code style="color:var(--cyan);">data/profiles/*.yaml</code>. Click Reload after changes.
+      </div>
+    </div>
   </div>
 
   <!-- ═══ TAB: DISCOVER ═════════════════════════════════════════════ -->
@@ -1415,6 +1467,43 @@ body::before {
     </div>
   </div>
 
+  <!-- ── DOCUMENTS TAB ───────────────────────────────────────────── -->
+  <div class="tab-content" id="tab-documents" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Documents</h3>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" style="flex:1;color:var(--text);font-family:var(--mono);font-size:0.8rem;">
+          <button onclick="uploadDocument()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Upload</button>
+        </div>
+        <div id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;"></div>
+        <div id="documents-list" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Search Preview</h3>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="doc-search-input" placeholder="Try a query..." style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:0.8rem;" onkeydown="if(event.key==='Enter')searchDocuments()">
+          <button onclick="searchDocuments()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Search</button>
+        </div>
+        <div id="doc-search-results" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:16px;">
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="doc-stat-count">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Documents</div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="doc-stat-chunks">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Chunks</div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:0.85rem;font-weight:600;color:var(--cyan);" id="doc-stat-backend">—</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Embedding Backend</div>
+      </div>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <div class="footer">
     <div class="footer-links">
@@ -1438,10 +1527,11 @@ function switchTab(name) {
   event.currentTarget.classList.add('active');
 
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
-  if (name === 'memory') loadMemory();
+  if (name === 'memory') { loadMemory(); loadMemoryTab(); }
   if (name === 'discover' && !discoverLoaded) loadDiscovery();
   if (name === 'research') initResearch();
   if (name === 'workflows') loadWorkflowsTab();
+  if (name === 'documents') loadDocumentsTab();
 }
 
 /* ── CLOCK ──────────────────────────────────────────────────────── */
@@ -2886,6 +2976,298 @@ async function viewRun(runId) {
 loadStatus();
 loadModels();
 setInterval(loadStatus, 10000);
+
+// ── Memory Tab (Sessions / Facts / Stats) ────────────────────────
+async function loadMemoryTab() {
+  loadSessions();
+  loadFacts();
+  loadMemoryStats();
+  loadProfiles();
+}
+
+async function loadSessions() {
+  try {
+    const r = await fetch('/api/memory/sessions');
+    const sessions = await r.json();
+    const el = document.getElementById('session-list');
+    if (!sessions.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No saved sessions yet.</div>';
+      return;
+    }
+    el.innerHTML = sessions.map(s => `
+      <div style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="toggleSessionDetail('${esc(s.id)}')">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:0.85rem;color:var(--text);max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.preview || 'No preview')}</div>
+          <button onclick="event.stopPropagation();deleteSession('${esc(s.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
+          ${esc(s.model || '')} · ${s.message_count || 0} msgs · ${s.tool_calls_count || 0} tool calls · ${s.duration_minutes || 0}m
+        </div>
+        <div id="session-detail-${esc(s.id)}" style="display:none;margin-top:8px;padding:8px;background:var(--bg-deep);border-radius:4px;font-size:0.75rem;"></div>
+      </div>
+    `).join('');
+  } catch(e) { console.error('Failed to load sessions:', e); }
+}
+
+async function toggleSessionDetail(id) {
+  const el = document.getElementById('session-detail-' + id);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  try {
+    const r = await fetch('/api/memory/sessions/' + id);
+    const s = await r.json();
+    let html = '<div style="color:var(--text-dim);">';
+    if (s.tools_used && s.tools_used.length) html += '<div>Tools: ' + s.tools_used.join(', ') + '</div>';
+    if (s.topics && s.topics.length) html += '<div>Topics: ' + s.topics.join(', ') + '</div>';
+    if (s.tool_calls && s.tool_calls.length) {
+      html += '<div style="margin-top:6px;font-weight:500;color:var(--text);">Tool Calls:</div>';
+      s.tool_calls.forEach(tc => {
+        html += '<div style="margin:4px 0;padding:4px;background:var(--bg);border-radius:3px;">' +
+          '<span style="color:var(--cyan);">' + esc(tc.tool_name || '') + '</span> ' +
+          '<span style="color:var(--text-muted);">' + (tc.duration_ms || 0) + 'ms</span></div>';
+      });
+    }
+    html += '</div>';
+    el.innerHTML = html;
+    el.style.display = '';
+  } catch(e) { el.innerHTML = '<div style="color:var(--red);">Failed to load</div>'; el.style.display = ''; }
+}
+
+async function deleteSession(id) {
+  await fetch('/api/memory/sessions/' + id, {method: 'DELETE'});
+  loadSessions();
+  loadMemoryStats();
+}
+
+async function loadFacts() {
+  try {
+    const r = await fetch('/api/memory/facts');
+    const facts = await r.json();
+    const el = document.getElementById('facts-list');
+    if (!facts.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No pinned facts. Add one above.</div>';
+      return;
+    }
+    el.innerHTML = facts.map(f => `
+      <div style="padding:8px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <div style="font-size:0.85rem;color:var(--text);">${esc(f.content)}</div>
+          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">
+            ${(f.tags||[]).map(t => '<span style="color:var(--cyan);">#'+esc(t)+'</span>').join(' ')}
+          </div>
+        </div>
+        <button onclick="deleteFact('${esc(f.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+      </div>
+    `).join('');
+  } catch(e) { console.error('Failed to load facts:', e); }
+}
+
+async function addFact() {
+  const input = document.getElementById('new-fact-input');
+  const content = input.value.trim();
+  if (!content) return;
+  await fetch('/api/memory/facts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({content, tags: []}),
+  });
+  input.value = '';
+  loadFacts();
+  loadMemoryStats();
+}
+
+async function deleteFact(id) {
+  await fetch('/api/memory/facts/' + id, {method: 'DELETE'});
+  loadFacts();
+  loadMemoryStats();
+}
+
+async function loadMemoryStats() {
+  try {
+    const r = await fetch('/api/memory/stats');
+    const s = await r.json();
+    document.getElementById('stat-sessions').textContent = s.total_sessions || 0;
+    document.getElementById('stat-tool-calls').textContent = s.total_tool_calls || 0;
+    document.getElementById('stat-facts').textContent = s.total_facts || 0;
+  } catch(e) {}
+}
+
+async function loadProfiles() {
+  try {
+    const [profilesResp, activeResp] = await Promise.all([
+      fetch('/api/profiles'),
+      fetch('/api/profiles/active'),
+    ]);
+    const profiles = await profilesResp.json();
+    const active = await activeResp.json();
+    document.getElementById('active-profile-id').textContent = active.default_profile_id || 'default';
+
+    const el = document.getElementById('profiles-list');
+    if (!profiles.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;">No profiles loaded.</div>';
+      return;
+    }
+    el.innerHTML = profiles.map(p => {
+      const pluginCount = (p.allowed_plugins || []).length;
+      const sandboxMode = (p.sandbox || {}).mode || 'none';
+      const wildcard = (p.allowed_plugins || []).includes('*');
+      return `
+        <div style="padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-deep);">
+          <div style="font-size:0.85rem;color:var(--text);font-weight:500;">${esc(p.name || p.id)}</div>
+          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">${esc(p.description || '')}</div>
+          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:6px;">
+            <span style="color:var(--cyan);">${wildcard ? 'all plugins' : pluginCount + ' plugins'}</span>
+            · <span>sandbox: ${esc(sandboxMode)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) { console.error('Failed to load profiles:', e); }
+}
+
+async function reloadProfiles() {
+  try {
+    await fetch('/api/profiles/reload', {method: 'POST'});
+    loadProfiles();
+  } catch(e) { console.error('Reload failed:', e); }
+}
+
+async function searchMemory(query) {
+  if (!query.trim()) { loadSessions(); return; }
+  try {
+    const r = await fetch('/api/memory/sessions/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query}),
+    });
+    const results = await r.json();
+    const el = document.getElementById('session-list');
+    if (!results.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No results for "' + esc(query) + '"</div>';
+      return;
+    }
+    el.innerHTML = results.map(s => `
+      <div style="padding:10px;border-bottom:1px solid var(--border);">
+        <div style="font-size:0.85rem;color:var(--text);">${esc(s.preview || 'No preview')}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">${esc(s.model || '')} · ${s.message_count || 0} msgs</div>
+      </div>
+    `).join('');
+  } catch(e) {}
+}
+
+// ── Documents Tab ────────────────────────────────────────────────
+async function loadDocumentsTab() {
+  loadDocumentsList();
+  loadDocStats();
+}
+
+async function loadDocumentsList() {
+  try {
+    const r = await fetch('/api/documents');
+    const docs = await r.json();
+    const el = document.getElementById('documents-list');
+    if (!docs.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No documents yet. Upload above.</div>';
+      return;
+    }
+    el.innerHTML = docs.map(d => {
+      const sizeKb = ((d.size_bytes||0)/1024).toFixed(1);
+      const statusColor = d.status === 'indexed' ? 'var(--cyan)' : (d.status === 'failed' ? 'var(--red)' : 'var(--text-dim)');
+      return `
+        <div style="padding:10px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="font-size:0.85rem;color:var(--text);max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.filename)}</div>
+            <div>
+              <button onclick="reindexDocument('${d.id}')" style="background:none;border:none;color:var(--cyan);cursor:pointer;font-size:0.75rem;margin-right:8px;">reindex</button>
+              <button onclick="deleteDocument('${d.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+            </div>
+          </div>
+          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
+            <span style="color:${statusColor};">${esc(d.status)}</span>
+            · ${sizeKb} KB · ${d.chunk_count||0} chunks
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) { console.error('Failed to load documents:', e); }
+}
+
+async function loadDocStats() {
+  try {
+    const r = await fetch('/api/documents/stats');
+    if (!r.ok) return;
+    const s = await r.json();
+    document.getElementById('doc-stat-count').textContent = s.total_documents || 0;
+    document.getElementById('doc-stat-chunks').textContent = s.total_chunks || 0;
+    const emb = s.embedding || {};
+    document.getElementById('doc-stat-backend').textContent = `${emb.backend || '—'} (${emb.model || '—'})`;
+  } catch(e) {}
+}
+
+async function uploadDocument() {
+  const input = document.getElementById('doc-file-input');
+  const status = document.getElementById('doc-upload-status');
+  if (!input.files.length) { status.textContent = 'Pick a file first.'; return; }
+  const file = input.files[0];
+  const form = new FormData();
+  form.append('file', file);
+  status.textContent = `Uploading ${file.name}...`;
+  try {
+    const r = await fetch('/api/documents', { method: 'POST', body: form });
+    const data = await r.json();
+    if (!r.ok) { status.textContent = `Error: ${data.detail || 'upload failed'}`; return; }
+    status.textContent = `Indexed: ${data.filename} (${data.chunk_count} chunks)`;
+    input.value = '';
+    loadDocumentsList();
+    loadDocStats();
+  } catch(e) { status.textContent = `Error: ${e.message}`; }
+}
+
+async function deleteDocument(id) {
+  await fetch('/api/documents/' + id, { method: 'DELETE' });
+  loadDocumentsList();
+  loadDocStats();
+}
+
+async function reindexDocument(id) {
+  const status = document.getElementById('doc-upload-status');
+  status.textContent = 'Reindexing...';
+  const r = await fetch('/api/documents/' + id + '/reindex', { method: 'POST' });
+  const data = await r.json();
+  status.textContent = r.ok ? `Reindexed: ${data.filename}` : `Error: ${data.detail || 'reindex failed'}`;
+  loadDocumentsList();
+  loadDocStats();
+}
+
+async function searchDocuments() {
+  const input = document.getElementById('doc-search-input');
+  const query = input.value.trim();
+  const el = document.getElementById('doc-search-results');
+  if (!query) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;padding:8px;">Searching...</div>';
+  try {
+    const r = await fetch('/api/documents/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ query, top_k: 5 }),
+    });
+    const data = await r.json();
+    if (!data.results || !data.results.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No matches.</div>';
+      return;
+    }
+    el.innerHTML = data.results.map((r, i) => `
+      <div style="padding:10px;border-bottom:1px solid var(--border);">
+        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">
+          <span style="color:var(--cyan);">[${i+1}]</span> ${esc(r.filename)} (chunk ${r.chunk_index}, score: ${r.score})
+        </div>
+        <div style="font-size:0.8rem;color:var(--text);">${esc(r.text).slice(0, 300)}${r.text.length > 300 ? '…' : ''}</div>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);font-size:0.8rem;padding:8px;">Error: ${esc(e.message)}</div>`;
+  }
+}
 </script>
 </body>
 </html>

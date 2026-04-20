@@ -6,6 +6,7 @@ Plugin Service — Discovery, loading, skill matching, tool invocation
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import sys
 from pathlib import Path
 from typing import Optional
@@ -160,8 +161,12 @@ class PluginService:
                         break
         return matched
 
-    def call_tool(self, plugin_id: str, tool_id: str, params: dict) -> dict:
-        """Execute a tool function and return its result."""
+    def call_tool(self, plugin_id: str, tool_id: str, params: dict, sandbox=None) -> dict:
+        """Execute a tool function and return its result.
+
+        If `sandbox` is provided and the tool function declares a `__sandbox`
+        parameter, the sandbox instance is injected before invocation.
+        """
         if plugin_id not in self._plugins:
             raise ValueError(f"Plugin not found: {plugin_id}")
 
@@ -174,8 +179,19 @@ class PluginService:
         func = getattr(entry["module"], func_name, None)
         if func is None:
             raise ValueError(f"Function '{func_name}' not found in {plugin_id}/{tool_id}")
+
+        # Inject __sandbox only if the tool declares it
+        call_params = dict(params)
+        if sandbox is not None:
+            try:
+                sig = inspect.signature(func)
+                if "__sandbox" in sig.parameters:
+                    call_params["__sandbox"] = sandbox
+            except (TypeError, ValueError):
+                pass
+
         try:
-            return func(**params)
+            return func(**call_params)
         except Exception as e:
             logger.error(f"Tool {plugin_id}/{tool_id} failed: {e}")
             raise RuntimeError(f"Tool execution failed: {e}") from e

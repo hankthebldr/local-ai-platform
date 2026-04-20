@@ -1,0 +1,24 @@
+id: "unrestricted"
+name: "Unrestricted Profile"
+description: "No profile enforcement. Legacy behavior — use with caution."
+version: "1.0.0"
+
+allowed_plugins: ["*"]
+
+tool_rules: {}
+
+sandbox:
+  mode: "none"
+  root_dir: "data/sandboxes/{conversation_id}"
+  max_file_size_mb: 100
+  allowed_extensions: null
+
+network:
+  mode: "unrestricted"
+  allowed_hosts: []
+
+bound_to_keys: []
+
+rag:
+  enabled: true
+  max_upload_mb: 100

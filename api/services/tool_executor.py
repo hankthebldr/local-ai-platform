@@ -6,9 +6,11 @@ Tool Executor — Iterative tool-calling loop for agentic LLM interactions
 from __future__ import annotations
 
 import json
+import time
 from typing import List, Dict
 
 from ..logging_config import logger
+from ..models.context_models import ToolCallRecord
 from .ollama_service import OllamaService
 from .plugin_service import PluginService
 
@@ -19,6 +21,22 @@ class ToolExecutor:
     def __init__(self, ollama_service: OllamaService, plugin_service: PluginService):
         self.ollama = ollama_service
         self.plugins = plugin_service
+        self._context_store = None
+        self._conversation_id = None
+        self._profile_service = None
+        self._profile_id = None
+        self._sandbox = None
+
+    def set_context(self, context_store, conversation_id: str):
+        """Set the context store and conversation ID for recording tool calls."""
+        self._context_store = context_store
+        self._conversation_id = conversation_id
+
+    def set_policy(self, profile_service, profile_id: str, sandbox):
+        """Set the active profile and sandbox for this execution."""
+        self._profile_service = profile_service
+        self._profile_id = profile_id
+        self._sandbox = sandbox
 
     def execute(
         self,
@@ -29,6 +47,8 @@ class ToolExecutor:
         max_iterations: int = 10,
     ) -> Dict:
         ollama_tools = self.plugins.get_ollama_tools()
+        if self._profile_service and self._profile_id:
+            ollama_tools = self._profile_service.filter_tools(ollama_tools, self._profile_id)
         tool_calls_made = []
         total_prompt_tokens = 0
         total_completion_tokens = 0
@@ -75,6 +95,7 @@ class ToolExecutor:
                     except json.JSONDecodeError:
                         arguments = {}
 
+                start_time = time.time()
                 tool_result = self._execute_tool(tool_name, arguments)
                 tool_calls_made.append({
                     "tool": tool_name,
@@ -82,6 +103,18 @@ class ToolExecutor:
                     "result": tool_result,
                     "iteration": iteration + 1,
                 })
+                # Record to context store if available
+                if self._context_store and self._conversation_id:
+                    self._context_store.record_tool_call(
+                        self._conversation_id,
+                        ToolCallRecord(
+                            tool_name=tool_name,
+                            arguments=arguments,
+                            result=tool_result,
+                            iteration=iteration + 1,
+                            duration_ms=int((time.time() - start_time) * 1000),
+                        ),
+                    )
                 working_messages.append({
                     "role": "tool",
                     "content": json.dumps(tool_result),
@@ -102,8 +135,14 @@ class ToolExecutor:
         if len(parts) != 2:
             return {"error": f"Invalid tool name format: {tool_name}. Expected 'plugin_id__tool_id'."}
         plugin_id, tool_id = parts
+
+        # Defense-in-depth: re-check the profile even if filtering missed it
+        if self._profile_service and self._profile_id:
+            if not self._profile_service.is_tool_allowed(plugin_id, tool_id, self._profile_id):
+                return {"error": f"Tool '{tool_name}' not permitted by profile '{self._profile_id}'"}
+
         try:
-            return self.plugins.call_tool(plugin_id, tool_id, arguments)
+            return self.plugins.call_tool(plugin_id, tool_id, arguments, sandbox=self._sandbox)
         except (ValueError, RuntimeError) as e:
             logger.error(f"Tool execution failed: {tool_name}: {e}")
             return {"error": str(e)}

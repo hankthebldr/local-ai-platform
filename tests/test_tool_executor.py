@@ -210,3 +210,115 @@ class TestChatToolIntegration:
             assert resp.status_code == 200
             data = resp.json()
             assert data["choices"][0]["message"]["content"] == "Hello"
+
+
+class TestToolExecutorPolicy:
+    def _setup_plugin_and_profile(self):
+        import tempfile
+        import yaml
+        from pathlib import Path
+        from api.services.plugin_service import PluginService
+        from api.services.profile_service import ProfileService
+
+        tmp_plugin = tempfile.mkdtemp()
+        p = Path(tmp_plugin) / "echo-plugin"
+        p.mkdir()
+        (p / "plugin.yaml").write_text(yaml.dump({
+            "name": "Echo", "id": "echo", "version": "1.0.0",
+            "description": "Echo", "author": "test",
+            "tools": [{
+                "id": "echo", "file": "tools/echo.py", "function": "execute",
+                "description": "Echo", "parameters": {"text": {"type": "string", "required": True}},
+            }],
+        }))
+        tools = p / "tools"
+        tools.mkdir()
+        (tools / "__init__.py").write_text("")
+        (tools / "echo.py").write_text(
+            "def execute(text: str) -> dict:\n    return {'echo': text}\n"
+        )
+
+        tmp_profile = tempfile.mkdtemp()
+        Path(tmp_profile, "no-echo.yaml").write_text(yaml.dump({
+            "id": "no-echo", "name": "No Echo", "description": "Echo blocked",
+            "version": "1.0.0",
+            "allowed_plugins": ["other-plugin"],
+            "tool_rules": {}, "sandbox": {"mode": "strict"},
+            "network": {"mode": "unrestricted"}, "bound_to_keys": [],
+        }))
+        Path(tmp_profile, "allow-all.yaml").write_text(yaml.dump({
+            "id": "allow-all", "name": "Allow All", "description": "Open",
+            "version": "1.0.0",
+            "allowed_plugins": ["*"], "tool_rules": {},
+            "sandbox": {"mode": "strict"},
+            "network": {"mode": "unrestricted"}, "bound_to_keys": [],
+        }))
+
+        plugin_svc = PluginService(plugins_dir=tmp_plugin)
+        plugin_svc.scan_plugins()
+        profile_svc = ProfileService(profiles_dir=tmp_profile)
+        profile_svc.load_profiles()
+        return plugin_svc, profile_svc, tmp_plugin, tmp_profile
+
+    def test_profile_blocks_disallowed_tool_at_execution(self):
+        from api.services.tool_executor import ToolExecutor
+        from api.services.ollama_service import OllamaService
+        import shutil
+
+        plugin_svc, profile_svc, tp, tpr = self._setup_plugin_and_profile()
+        try:
+            executor = ToolExecutor(OllamaService(), plugin_svc)
+            executor.set_policy(profile_svc, "no-echo", None)
+
+            tc_resp = MagicMock()
+            tc_resp.status_code = 200
+            tc_resp.json.return_value = {
+                "message": {"role": "assistant", "content": "", "tool_calls": [
+                    {"function": {"name": "echo__echo", "arguments": {"text": "hi"}}}
+                ]},
+                "prompt_eval_count": 10, "eval_count": 5,
+            }
+            final_resp = MagicMock()
+            final_resp.status_code = 200
+            final_resp.json.return_value = {
+                "message": {"role": "assistant", "content": "Blocked, sorry."},
+                "prompt_eval_count": 20, "eval_count": 10,
+            }
+            with patch("api.services.ollama_service.requests.post", side_effect=[tc_resp, final_resp]):
+                result = executor.execute(model="test", messages=[{"role": "user", "content": "echo hi"}])
+                assert len(result["tool_calls_made"]) == 1
+                assert "not permitted" in result["tool_calls_made"][0]["result"]["error"]
+        finally:
+            shutil.rmtree(tp)
+            shutil.rmtree(tpr)
+
+    def test_profile_allows_permitted_tool(self):
+        from api.services.tool_executor import ToolExecutor
+        from api.services.ollama_service import OllamaService
+        import shutil
+
+        plugin_svc, profile_svc, tp, tpr = self._setup_plugin_and_profile()
+        try:
+            executor = ToolExecutor(OllamaService(), plugin_svc)
+            executor.set_policy(profile_svc, "allow-all", None)
+
+            tc_resp = MagicMock()
+            tc_resp.status_code = 200
+            tc_resp.json.return_value = {
+                "message": {"role": "assistant", "content": "", "tool_calls": [
+                    {"function": {"name": "echo__echo", "arguments": {"text": "hi"}}}
+                ]},
+                "prompt_eval_count": 10, "eval_count": 5,
+            }
+            final_resp = MagicMock()
+            final_resp.status_code = 200
+            final_resp.json.return_value = {
+                "message": {"role": "assistant", "content": "Done"},
+                "prompt_eval_count": 20, "eval_count": 10,
+            }
+            with patch("api.services.ollama_service.requests.post", side_effect=[tc_resp, final_resp]):
+                result = executor.execute(model="test", messages=[{"role": "user", "content": "echo hi"}])
+                assert result["tool_calls_made"][0]["result"] == {"echo": "hi"}
+        finally:
+            shutil.rmtree(tp)
+            shutil.rmtree(tpr)
