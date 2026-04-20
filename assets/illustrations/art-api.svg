@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#0d1520"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#bg)"/>
+  <!-- API request/response flow -->
+  <!-- Client -->
+  <rect x="20" y="60" width="60" height="60" rx="4" fill="none" stroke="#00C0E8" stroke-width="1.5" opacity="0.6"/>
+  <text x="50" y="85" text-anchor="middle" fill="#00C0E8" font-family="monospace" font-size="8" opacity="0.8">CLIENT</text>
+  <text x="50" y="97" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">OpenAI SDK</text>
+  <!-- Arrow -->
+  <line x1="85" y1="82" x2="115" y2="82" stroke="#00C0E8" stroke-width="1" opacity="0.4"/>
+  <line x1="85" y1="98" x2="115" y2="98" stroke="#00E87B" stroke-width="1" opacity="0.4" stroke-dasharray="3 3"/>
+  <polygon points="115,79 122,82 115,85" fill="#00C0E8" opacity="0.4"/>
+  <polygon points="115,95 108,98 115,101" fill="#00E87B" opacity="0.4"/>
+  <!-- Enclave box -->
+  <rect x="125" y="30" width="100" height="120" rx="6" fill="none" stroke="#00E87B" stroke-width="1.5"/>
+  <text x="175" y="48" text-anchor="middle" fill="#00E87B" font-family="monospace" font-size="9" font-weight="bold" letter-spacing="1">ENCLAVE</text>
+  <line x1="135" y1="54" x2="215" y2="54" stroke="#1a1a2e" stroke-width="1"/>
+  <!-- Internal layers -->
+  <rect x="137" y="60" width="76" height="20" rx="3" fill="#00E87B" opacity="0.08" stroke="#00E87B" stroke-width="0.5"/>
+  <text x="175" y="73" text-anchor="middle" fill="#888" font-family="monospace" font-size="7">/v1/chat/completions</text>
+  <rect x="137" y="85" width="76" height="20" rx="3" fill="#00C0E8" opacity="0.08" stroke="#00C0E8" stroke-width="0.5"/>
+  <text x="175" y="98" text-anchor="middle" fill="#888" font-family="monospace" font-size="7">/v1/completions</text>
+  <rect x="137" y="110" width="76" height="20" rx="3" fill="#00C0E8" opacity="0.05" stroke="#1a1a2e" stroke-width="0.5"/>
+  <text x="175" y="123" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">/v1/models</text>
+  <!-- Arrow to backend -->
+  <line x1="230" y1="90" x2="255" y2="90" stroke="#00E87B" stroke-width="1" opacity="0.3"/>
+  <polygon points="255,87 262,90 255,93" fill="#00E87B" opacity="0.3"/>
+  <!-- Backend -->
+  <rect x="265" y="65" width="45" height="50" rx="4" fill="none" stroke="#1a1a2e" stroke-width="1.5"/>
+  <text x="287" y="86" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">Ollama</text>
+  <text x="287" y="97" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">vLLM</text>
+  <text x="287" y="108" text-anchor="middle" fill="#444" font-family="monospace" font-size="7">llama.cpp</text>
+</svg>

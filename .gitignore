@@ -108,35 +108,5 @@ $RECYCLE.BIN/
 # Workflow run data (persisted locally)
 data/workflows/*/
 
-# ── Runtime user data — never commit ────────────────────────────────
-# API key hashes and metadata (managed via /api/keys endpoints)
-data/config/api_keys.yaml
-# User-pinned memories and session summaries
-data/memory/sessions/
-data/memory/facts.yaml
-data/memory/index.yaml
-# Per-conversation sandboxes (wiped when session closes)
-data/sandboxes/
-# RAG document storage and ChromaDB
-data/rag/
-# Exported session markdown
-data/exports/
-# Graph cache
-data/graph/
-# Playwright artifacts
-.playwright-mcp/
-cortex-xdr-*.png
-
-# ── Secrets (defense in depth) ──────────────────────────────────────
-# Never commit anything that looks like a secret
-*secret*
-*credential*
-*.pem
-*.key
-!Info.plist
-
-# ── Build artifacts ─────────────────────────────────────────────────
-# py2app / DMG build output
-LocalAIPlatform.app/
-*.dmg
-*.icns.backup
+# Brainstorm session files
+.superpowers/

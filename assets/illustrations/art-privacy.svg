@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#0d1520"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#bg)"/>
+  <!-- Vault / enclosure layers -->
+  <rect x="80" y="20" width="160" height="140" rx="8" fill="none" stroke="#1a1a2e" stroke-width="1" stroke-dasharray="4 4"/>
+  <rect x="100" y="35" width="120" height="110" rx="6" fill="none" stroke="#1a1a2e" stroke-width="1.5"/>
+  <rect x="120" y="50" width="80" height="80" rx="4" fill="none" stroke="#00E87B" stroke-width="1.5" opacity="0.6"/>
+  <rect x="140" y="65" width="40" height="50" rx="2" fill="#00E87B" opacity="0.1"/>
+  <!-- Lock icon in center -->
+  <rect x="150" y="80" width="20" height="16" rx="2" fill="#00E87B" opacity="0.3"/>
+  <path d="M153 80 L153 74 A7 7 0 0 1 167 74 L167 80" fill="none" stroke="#00E87B" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="160" cy="87" r="2" fill="#00E87B" opacity="0.8"/>
+  <!-- Blocked external connections -->
+  <line x1="0" y1="60" x2="75" y2="60" stroke="#FA582D" stroke-width="1" opacity="0.3"/>
+  <text x="68" y="57" fill="#FA582D" font-size="10" opacity="0.5">✕</text>
+  <line x1="0" y1="100" x2="75" y2="100" stroke="#FA582D" stroke-width="1" opacity="0.2"/>
+  <text x="68" y="97" fill="#FA582D" font-size="10" opacity="0.4">✕</text>
+  <line x1="245" y1="70" x2="320" y2="70" stroke="#FA582D" stroke-width="1" opacity="0.3"/>
+  <text x="248" y="67" fill="#FA582D" font-size="10" opacity="0.5">✕</text>
+  <line x1="245" y1="120" x2="320" y2="120" stroke="#FA582D" stroke-width="1" opacity="0.2"/>
+  <text x="248" y="117" fill="#FA582D" font-size="10" opacity="0.4">✕</text>
+  <!-- Interior data flow -->
+  <line x1="140" y1="105" x2="140" y2="120" stroke="#00E87B" stroke-width="0.5" opacity="0.4"/>
+  <line x1="180" y1="105" x2="180" y2="120" stroke="#00E87B" stroke-width="0.5" opacity="0.4"/>
+  <circle cx="140" cy="120" r="2" fill="#00E87B" opacity="0.3"/>
+  <circle cx="180" cy="120" r="2" fill="#00E87B" opacity="0.3"/>
+</svg>

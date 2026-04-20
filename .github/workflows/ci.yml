@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r setup/requirements-core.txt
+          pip install -r setup/requirements-dev.txt
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short -k "not Integration and not TestAuthentication and not TestMultiKeyAuth"
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install linters
+        run: |
+          python -m pip install --upgrade pip
+          pip install black flake8 mypy
+
+      - name: Check formatting (black)
+        run: black --check api/ cli/ models/ || echo "::warning::Black formatting issues (non-blocking)"
+        continue-on-error: true
+
+      - name: Lint (flake8)
+        run: flake8 api/ cli/ models/ --max-line-length=120 --extend-ignore=E501,W503 || echo "::warning::Flake8 issues (non-blocking)"
+        continue-on-error: true

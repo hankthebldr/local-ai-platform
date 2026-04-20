@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Local AI Platform — macOS Desktop App
+Enclave — macOS Desktop App
 
 PyWebView wrapper that:
 1. Starts the FastAPI server in a background thread
@@ -21,7 +21,7 @@ APP_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 if APP_ROOT not in sys.path:
     sys.path.insert(0, APP_ROOT)
 
-APP_DIR = os.path.expanduser("~/.local-ai-platform")
+APP_DIR = os.path.expanduser("~/.enclave")
 SETUP_FLAG = os.path.join(APP_DIR, "setup_complete")
 HOST = "127.0.0.1"
 PORT = 8000
@@ -69,7 +69,7 @@ def main():
 
     # Open native window
     webview.create_window(
-        "Local AI Platform",
+        "Enclave",
         url,
         width=1200,
         height=800,

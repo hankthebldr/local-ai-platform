@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#0d1520"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#bg)"/>
+  <!-- Pipeline steps -->
+  <!-- Step 1 -->
+  <rect x="20" y="70" width="50" height="40" rx="4" fill="#00E87B" opacity="0.12" stroke="#00E87B" stroke-width="1"/>
+  <text x="45" y="86" text-anchor="middle" fill="#00E87B" font-family="monospace" font-size="7" opacity="0.8">analyze</text>
+  <text x="45" y="98" text-anchor="middle" fill="#555" font-family="monospace" font-size="6">reasoning</text>
+  <circle cx="45" cy="64" r="3" fill="#00E87B" opacity="0.6"/>
+
+  <!-- Arrow 1→2 -->
+  <line x1="74" y1="90" x2="94" y2="90" stroke="#00E87B" stroke-width="1" opacity="0.3"/>
+  <polygon points="94,87 100,90 94,93" fill="#00E87B" opacity="0.3"/>
+  <!-- Data packet -->
+  <rect x="79" y="82" width="10" height="4" rx="1" fill="#00E87B" opacity="0.2"/>
+
+  <!-- Step 2 -->
+  <rect x="104" y="70" width="50" height="40" rx="4" fill="#00C0E8" opacity="0.1" stroke="#00C0E8" stroke-width="1"/>
+  <text x="129" y="86" text-anchor="middle" fill="#00C0E8" font-family="monospace" font-size="7" opacity="0.7">generate</text>
+  <text x="129" y="98" text-anchor="middle" fill="#555" font-family="monospace" font-size="6">coding</text>
+  <circle cx="129" cy="64" r="3" fill="#00C0E8" opacity="0.5"/>
+
+  <!-- Arrow 2→3 -->
+  <line x1="158" y1="90" x2="178" y2="90" stroke="#00C0E8" stroke-width="1" opacity="0.3"/>
+  <polygon points="178,87 184,90 178,93" fill="#00C0E8" opacity="0.3"/>
+
+  <!-- Step 3 -->
+  <rect x="188" y="70" width="50" height="40" rx="4" fill="#00E87B" opacity="0.08" stroke="#1a1a2e" stroke-width="1"/>
+  <text x="213" y="86" text-anchor="middle" fill="#888" font-family="monospace" font-size="7">validate</text>
+  <text x="213" y="98" text-anchor="middle" fill="#555" font-family="monospace" font-size="6">fast</text>
+  <circle cx="213" cy="64" r="3" fill="#888" opacity="0.3"/>
+
+  <!-- Arrow 3→4 -->
+  <line x1="242" y1="90" x2="262" y2="90" stroke="#1a1a2e" stroke-width="1"/>
+  <polygon points="262,87 268,90 262,93" fill="#1a1a2e"/>
+
+  <!-- Step 4 -->
+  <rect x="272" y="70" width="36" height="40" rx="4" fill="#00E87B" opacity="0.06" stroke="#1a1a2e" stroke-width="1"/>
+  <text x="290" y="86" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">output</text>
+  <circle cx="290" cy="64" r="3" fill="#555" opacity="0.3"/>
+
+  <!-- Workspace layer below -->
+  <rect x="20" y="125" width="288" height="30" rx="4" fill="none" stroke="#1a1a2e" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="30" y="143" fill="#333" font-family="monospace" font-size="7">workspace.analyze.result → workspace.generate.input → workspace.validate.passed</text>
+
+  <!-- Seed input above -->
+  <rect x="20" y="30" width="60" height="20" rx="3" fill="none" stroke="#555" stroke-width="0.8"/>
+  <text x="50" y="43" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">seed{}</text>
+  <line x1="50" y1="50" x2="45" y2="64" stroke="#555" stroke-width="0.5" stroke-dasharray="2 2"/>
+</svg>

@@ -1,5 +1,5 @@
 """
-py2app build configuration for Local AI Platform
+py2app build configuration for Enclave
 
 Usage:
     cd <project_root>
@@ -76,9 +76,9 @@ OPTIONS = {
         ".env.example",
     ],
     "plist": {
-        "CFBundleName": "Local AI Platform",
-        "CFBundleDisplayName": "Local AI Platform",
-        "CFBundleIdentifier": "com.localai.platform",
+        "CFBundleName": "Enclave",
+        "CFBundleDisplayName": "Enclave",
+        "CFBundleIdentifier": "com.ohno.enclave",
         "CFBundleVersion": "1.0.0",
         "CFBundleShortVersionString": "1.0.0",
         "LSMinimumSystemVersion": "12.0",

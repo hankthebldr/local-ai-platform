@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Local AI Platform is a comprehensive self-hosted infrastructure for running uncensored local LLM models with CPU-optimized inference. Built for a three-machine fleet: Mac M4 Pro 48GB (dev), MS-01 64GB DDR5 (API serving), BD790i 96GB DDR5 (research/flagship) with focus on privacy, performance, and customization.
+Enclave (by ohno llc) is a comprehensive self-hosted infrastructure for running uncensored local LLM models with CPU-optimized inference. Built for a three-machine fleet: Mac M4 Pro 48GB (dev), MS-01 64GB DDR5 (API serving), BD790i 96GB DDR5 (research/flagship) with focus on privacy, performance, and customization.
 
 > **Model Strategy & Lifecycle**: See [MODELS.md](./MODELS.md) — authoritative source for
 > flagship model selection, per-machine assignments, and install/remove sequences.

@@ -1,0 +1,25 @@
+name: License Inquiry
+description: Questions about Individual or Teams licensing
+labels: [licensing]
+body:
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Interested tier
+      options:
+        - Individual
+        - Teams
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: seats
+    attributes:
+      label: Number of seats (Teams only)
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Briefly describe your intended use
