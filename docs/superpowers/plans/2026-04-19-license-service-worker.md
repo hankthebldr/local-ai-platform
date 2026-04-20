@@ -1,5 +1,10 @@
 # License Service Worker Implementation Plan
 
+> ⚠️ **ABANDONED (2026-04-20).** Plan retained for historical reference. Do not execute.
+> Tasks 1 and 2 were executed in a throwaway repo (`~/Github/license-service`)
+> which has since been deleted. No code from this plan landed in `local-ai-platform`.
+> See the spec file's abandonment banner for context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a Cloudflare Worker that signs Ed25519 license files on Lemon Squeezy webhooks, delivers them via Postmark, creates GitHub support issues for licensed users, and handles admin revocation/reissue.

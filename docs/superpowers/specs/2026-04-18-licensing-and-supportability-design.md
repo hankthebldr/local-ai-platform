@@ -1,8 +1,24 @@
 # Local AI Platform — Licensing & Supportability Design
 
 **Date:** 2026-04-18
-**Status:** Design approved, pending implementation plan
-**Target release:** v1.0 (licensing launch)
+**Status:** ⚠️ **ABANDONED** (2026-04-20) — retained for historical reference only.
+**Original status:** Design approved, implementation plans drafted and partially executed (scaffolding only).
+
+> **Why abandoned:** Product direction changed. The project will not ship with
+> any licensing/key enforcement mechanism. Keeping this spec in-tree because
+> the threat model, redaction rules, and support-channel design remain useful
+> reference material if the project ever reintroduces a paid tier or
+> privileged support channel.
+>
+> **What was built and removed:** A standalone Cloudflare Worker repo was
+> scaffolded at `~/Github/license-service` (Tasks 1–2 of the worker plan:
+> project skeleton, Hono app, Zod schemas, env bindings). That repo has
+> been deleted. No code from this spec landed in the `local-ai-platform`
+> repo itself.
+>
+> **Do NOT treat this document as an active roadmap.**
+
+---
 
 ## 1. Goals and Non-Goals
 

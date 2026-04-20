@@ -1,5 +1,10 @@
 # In-App Licensing & Support Client Implementation Plan
 
+> ⚠️ **ABANDONED (2026-04-20).** Plan retained for historical reference. Do not execute.
+> Product direction changed — the project will not ship with license-key enforcement.
+> Nothing from this plan was implemented in the codebase. See the spec file's
+> abandonment banner for context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add offline license verification, feature gating (FastAPI dep + CLI dispatch + desktop banner), a redaction-hardened support client that submits issues through `license-service`, and user-facing docs — to the `local-ai-platform` repo.
