@@ -40,20 +40,8 @@ cp -R api "${RESOURCES}/api"
 cp -R plugins "${RESOURCES}/plugins"
 cp -R cli "${RESOURCES}/cli"
 cp -R models "${RESOURCES}/models"
-[ -f setup/requirements.txt ] && mkdir -p "${RESOURCES}/setup" && cp setup/requirements.txt "${RESOURCES}/setup/requirements.txt"
-
-# Seed only the shippable parts of data/ (profiles + empty runtime dirs).
-# NEVER copy user state: api_keys.yaml, memory/, sandboxes/, rag/, exports/, graph/, logs/, etc.
-mkdir -p "${RESOURCES}/data/profiles" "${RESOURCES}/data/config" "${RESOURCES}/data/cache" "${RESOURCES}/data/logs"
-if [ -d data/profiles ]; then
-    # Only copy built-in profile YAMLs, not user-created ones with bound keys
-    for p in data/profiles/default.yaml data/profiles/research.yaml data/profiles/unrestricted.yaml; do
-        [ -f "$p" ] && cp "$p" "${RESOURCES}/data/profiles/"
-    done
-fi
-
-# NEVER copy .env — it contains dev secrets (API_KEY, MASTER_API_KEY).
-# Only ship .env.example as a template; the user creates their own .env at runtime.
+[ -d data/profiles ] && cp -R data "${RESOURCES}/data" 2>/dev/null || true
+[ -f .env ] && cp .env "${RESOURCES}/.env"
 [ -f .env.example ] && cp .env.example "${RESOURCES}/.env.example"
 
 # Copy Enclave icon into the bundle
@@ -157,6 +145,8 @@ cat > "${CONTENTS}/Info.plist" << 'PLIST'
     <string>0.1.0</string>
     <key>CFBundleExecutable</key>
     <string>Enclave</string>
+    <key>CFBundleIconFile</key>
+    <string>icon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
