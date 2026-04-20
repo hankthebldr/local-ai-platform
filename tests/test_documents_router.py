@@ -111,3 +111,33 @@ class TestDocumentsRouter:
         data = resp.json()
         assert "results" in data
         assert "total" in data
+
+
+class TestChatRagIntegration:
+    def test_chat_accepts_rag_flag(self, client):
+        # Upload a doc first
+        import io
+        files = {"file": ("facts.txt", io.BytesIO(b"The capital of France is Paris."), "text/plain")}
+        client.post("/api/documents", files=files)
+
+        # Mock Ollama chat call
+        from unittest.mock import patch, MagicMock
+        mock_ollama = MagicMock()
+        mock_ollama.status_code = 200
+        mock_ollama.json.return_value = {
+            "message": {"role": "assistant", "content": "Paris."},
+            "prompt_eval_count": 10, "eval_count": 5,
+        }
+
+        with patch("api.services.ollama_service.requests.post", return_value=mock_ollama):
+            resp = client.post("/v1/chat/completions", json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "What is the capital of France?"}],
+                "rag": True,
+                "rag_top_k": 3,
+                "tools": False,
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            # rag_sources should be present when retrieval found results
+            assert "rag_sources" in data or data.get("rag_sources") == []

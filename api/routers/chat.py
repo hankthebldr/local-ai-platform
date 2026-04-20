@@ -20,6 +20,7 @@ from .plugins import plugin_service as _plugin_service
 from .context import context_store as _context_store
 from ..services.sandbox_fs import SandboxedFS
 from .profiles import profile_service as _profile_service
+from .documents import rag_service as _rag_service
 from ..services.tool_executor import ToolExecutor
 from ..logging_config import logger
 
@@ -47,6 +48,8 @@ class ChatCompletionRequest(BaseModel):
     web_search: Optional[bool] = Field(False, description="Enable web search augmentation")
     tools: Optional[bool] = Field(True, description="Enable plugin tool calling")
     max_tool_iterations: Optional[int] = Field(10, description="Max tool-call iterations")
+    rag: Optional[bool] = Field(False, description="Enable RAG retrieval for this request")
+    rag_top_k: Optional[int] = Field(5, description="Number of chunks to retrieve")
 
 
 @router.post("/chat/completions")
@@ -103,6 +106,32 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
             messages = [{"role": "system", "content": skill["content"]}] + messages
         elif skill["inject"] == "context":
             messages.append({"role": "system", "content": skill["content"]})
+
+    # ── RAG Augmentation ────────────────────────────────────────────
+    rag_sources = []
+    rag_allowed = True
+    if request.rag:
+        # Profile gate
+        profile_rag = (profile.get("rag") or {}).get("enabled", True)
+        if profile_rag is False:
+            rag_allowed = False
+            logger.info(f"RAG disabled by profile '{profile_id}'")
+        elif _rag_service is None:
+            rag_allowed = False
+            logger.warning("RAG requested but rag_service is unavailable")
+
+    if request.rag and rag_allowed:
+        last_user_msg = ""
+        for msg in reversed(messages):
+            if msg["role"] == "user":
+                last_user_msg = msg["content"]
+                break
+        if last_user_msg:
+            results = _rag_service.search(last_user_msg, top_k=request.rag_top_k)
+            if results["total"] > 0:
+                messages = [{"role": "system", "content": _rag_service.format_context(results)}] + messages
+                rag_sources = results["results"]
+                logger.info(f"Injected {results['total']} RAG chunks")
 
     # ── Web Search Augmentation ────────────────────────────────────────
     sources = []
@@ -213,6 +242,8 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         if sources:
             response["sources"] = sources
         response["conversation_id"] = conversation_id
+        if request.rag or rag_sources:
+            response["rag_sources"] = rag_sources
         response["profile_id"] = profile_id
         return response
 
@@ -245,5 +276,9 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
     if sources:
         response["sources"] = sources
     response["conversation_id"] = conversation_id
+    if request.rag:
+        response["rag_sources"] = rag_sources
+    elif rag_sources:
+        response["rag_sources"] = rag_sources
     response["profile_id"] = profile_id
     return response
