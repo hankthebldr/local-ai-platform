@@ -18,3 +18,7 @@ network:
   allowed_hosts: []
 
 bound_to_keys: []
+
+rag:
+  enabled: true
+  max_upload_mb: 100

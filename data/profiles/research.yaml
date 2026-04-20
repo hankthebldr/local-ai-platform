@@ -6,6 +6,7 @@ version: "1.0.0"
 allowed_plugins:
   - "web-search"
   - "doc-analyzer"
+  - "rag"
 
 tool_rules:
   web-search:
@@ -24,3 +25,7 @@ network:
   allowed_hosts: []
 
 bound_to_keys: []
+
+rag:
+  enabled: true
+  max_upload_mb: 50

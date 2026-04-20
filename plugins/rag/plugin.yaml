@@ -1,0 +1,20 @@
+name: "RAG Search"
+id: "rag"
+version: "1.0.0"
+description: "Query indexed documents for relevant context"
+author: "local"
+
+tools:
+  - id: "search"
+    file: "tools/search.py"
+    function: "execute"
+    description: "Search indexed documents for information relevant to a query. Use when the user asks about specific information that might be in uploaded documents."
+    parameters:
+      query:
+        type: string
+        required: true
+        description: "Natural-language search query"
+      top_k:
+        type: integer
+        default: 5
+        description: "Number of document chunks to retrieve"
