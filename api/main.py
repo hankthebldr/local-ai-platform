@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Enclave API",
     description="OpenAI-compatible API for local LLM inference with streaming support",
-    version="1.0.0",
+    version="0.1.0",
     lifespan=lifespan,
 )
 
@@ -135,7 +135,7 @@ async def health_check():
 
     return {
         "status": "healthy" if ollama_healthy else "degraded",
-        "version": "1.0.0",
+        "version": "0.1.0",
         "ollama": {
             "host": OLLAMA_HOST,
             "status": "healthy" if ollama_healthy else "unhealthy",
@@ -167,7 +167,7 @@ async def root():
     # Fallback to JSON if static files missing
     return {
         "message": "Enclave API",
-        "version": "1.0.0",
+        "version": "0.1.0",
         "docs": "/docs",
         "health": "/health",
     }
@@ -178,7 +178,7 @@ async def api_info():
     """JSON API information endpoint"""
     return {
         "message": "Enclave API",
-        "version": "1.0.0",
+        "version": "0.1.0",
         "docs": "/docs",
         "health": "/health",
         "endpoints": {

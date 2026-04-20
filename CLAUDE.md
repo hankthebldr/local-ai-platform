@@ -188,9 +188,14 @@ Primary model tier in registry emphasizes uncensored models:
 ### API Response Format
 All API endpoints convert between OpenAI format (for client compatibility) and native Ollama format. This abstraction allows switching backends without client changes.
 
-## Project Status & Phase
+## Release Track (SemVer)
 
-**Current**: Phase 1 - Foundation Setup (Mostly Complete)
+All planning, features, and build artifacts follow semantic versioning. Historical
+"Phase N" labels map to the release track below. `1.0.0` is reserved for the first
+production-ready release (auth + tests + Docker + observability); everything prior
+ships as `0.x`.
+
+**Current release**: `0.1.0` — Foundation (mostly complete)
 - ✓ Core infrastructure (Ollama + systemd service)
 - ✓ Model download system with comprehensive registry (18 models in catalog — see MODELS.md)
 - ✓ CLI chat interface with modern color scheme
@@ -201,11 +206,13 @@ All API endpoints convert between OpenAI format (for client compatibility) and n
 - ⏳ RAG implementation
 - ⏳ Automated tests
 
-**Next Phases**:
-- Phase 2: Streaming responses, multiple inference engines (vLLM, llama.cpp), Web UI
-- Phase 3: Fine-tuning pipeline (Axolotl/Unsloth)
-- Phase 4: RAG with Chroma, LangChain integration
-- Phase 5: Docker deployment, optimization
+**Roadmap**:
+- `0.2.0` — Enhanced Serving: streaming responses, additional inference engines (vLLM, llama.cpp), Web UI
+- `0.3.0` — Customization: fine-tuning pipeline (Axolotl/Unsloth)
+- `0.4.0` — Retrieval: RAG with Chroma, LangChain integration
+- `1.0.0` — Production: auth/authz, rate limiting, test coverage ≥70%, Docker/K8s, Prometheus + Grafana, structured logging, HA (the "true 1.0")
+- `1.x` — Post-1.0 enterprise features: distributed tracing, multi-region, compliance/audit, API gateway
+- `0.1.x` / `1.0.x` — Patch releases for bug fixes and doc updates within each minor line
 
 ## Critical Context
 

@@ -233,9 +233,25 @@ local-ai-platform/
     └── TROUBLESHOOTING.md
 ```
 
-## Implementation Phases
+## Release Track (SemVer)
 
-### Phase 1: Foundation (Week 1)
+All milestones below are sequenced on the semantic-versioning track. `1.0.0` is
+reserved for the first production-ready release — the current build ships as `0.1.0`.
+
+| Version | Milestone | Focus |
+|---|---|---|
+| `0.1.0` | Foundation | Ollama + CLI + OpenAI-compatible API (current) |
+| `0.2.0` | Enhanced Serving | Streaming, vLLM/llama.cpp, Web UI |
+| `0.3.0` | Customization | Fine-tuning pipeline (Axolotl/Unsloth) |
+| `0.4.0` | Retrieval | RAG (Chroma + LangChain) |
+| `1.0.0` | Production | Auth, tests ≥70%, Docker/K8s, observability, HA |
+| `1.x` | Enterprise | Distributed tracing, multi-region, compliance |
+
+Patch releases (`0.1.x`, `1.0.x`, …) carry bug fixes and doc updates within a minor line.
+
+## Implementation Milestones
+
+### 0.1.0 — Foundation (Week 1)
 **Goal**: Basic infrastructure and model serving
 
 1. **Setup Core Infrastructure**
@@ -259,7 +275,7 @@ local-ai-platform/
 - Ability to download and run models
 - Basic API for model inference
 
-### Phase 2: Enhanced Serving (Week 2)
+### 0.2.0 — Enhanced Serving (Week 2)
 **Goal**: Multiple inference engines and web interface
 
 1. **Additional Inference Engines**
@@ -282,7 +298,7 @@ local-ai-platform/
 - User-friendly web interface
 - Production-ready API
 
-### Phase 3: Fine-tuning & Customization (Week 3)
+### 0.3.0 — Fine-tuning & Customization (Week 3)
 **Goal**: Model customization capabilities
 
 1. **Fine-tuning Setup**
@@ -305,7 +321,7 @@ local-ai-platform/
 - LoRA adapter management
 - Dataset preparation tools
 
-### Phase 4: RAG & Advanced Features (Week 4)
+### 0.4.0 — RAG & Advanced Features (Week 4)
 **Goal**: Enhanced capabilities with retrieval and integrations
 
 1. **RAG Implementation**
@@ -328,8 +344,8 @@ local-ai-platform/
 - LangChain integrations
 - Monitoring dashboard
 
-### Phase 5: Production & Optimization (Week 5+)
-**Goal**: Production-ready deployment
+### 1.0.0 — Production & Optimization (Week 5+)
+**Goal**: Production-ready deployment — the "true 1.0" release
 
 1. **Containerization**
    - Docker images
@@ -460,11 +476,11 @@ local-ai-platform/
 - Total estimate: 200-300GB
 
 ### Estimated Setup Time
-- Phase 1: 8-16 hours
-- Phase 2: 12-16 hours
-- Phase 3: 16-24 hours
-- Phase 4: 16-24 hours
-- Phase 5: 8-16 hours
+- `0.1.0`: 8-16 hours
+- `0.2.0`: 12-16 hours
+- `0.3.0`: 16-24 hours
+- `0.4.0`: 16-24 hours
+- `1.0.0`: 8-16 hours
 - **Total**: 60-96 hours
 
 ## Success Criteria
@@ -531,6 +547,6 @@ local-ai-platform/
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2025-01-10
-**Status**: Planning Phase
+**Document Version**: 1.1
+**Last Updated**: 2026-04-18
+**Status**: Planning — current build is `0.1.0`

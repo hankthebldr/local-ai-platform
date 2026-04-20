@@ -442,7 +442,12 @@ Vector DB (Chroma): Embeddings (already in requirements)
 
 ## Recommended Implementation Roadmap
 
-### Phase 1: Security & Core Infrastructure (Weeks 1-4) 🔴 CRITICAL
+All milestones below sit on the production track that culminates in the `1.0.0`
+release. Pre-release stages use SemVer pre-release suffixes (`-alpha`, `-beta`, `-rc`);
+post-`1.0.0` work ships as `1.x`. The current build is `0.1.0` — these milestones
+are prerequisites for the "true 1.0".
+
+### `1.0.0-alpha` — Security & Core Infrastructure (Weeks 1-4) 🔴 CRITICAL
 
 **Goals**: Make the system secure and reliable enough for initial enterprise deployment
 
@@ -484,7 +489,7 @@ Vector DB (Chroma): Embeddings (already in requirements)
 
 ---
 
-### Phase 2: Deployment Automation (Weeks 5-6) 🟠 HIGH
+### `1.0.0-beta` — Deployment Automation (Weeks 5-6) 🟠 HIGH
 
 **Goals**: Automate deployments and enable repeatable infrastructure
 
@@ -515,7 +520,7 @@ Vector DB (Chroma): Embeddings (already in requirements)
 
 ---
 
-### Phase 3: Scalability & Performance (Weeks 7-8) 🟡 MEDIUM
+### `1.0.0-rc` — Scalability & Performance (Weeks 7-8) 🟡 MEDIUM
 
 **Goals**: Enable horizontal scaling and improve performance
 
@@ -544,7 +549,7 @@ Vector DB (Chroma): Embeddings (already in requirements)
 
 ---
 
-### Phase 4: Enterprise Features (Weeks 9-12) 🟡 MEDIUM
+### `1.1.0` — Enterprise Features (Weeks 9-12, post-GA) 🟡 MEDIUM
 
 **Goals**: Add enterprise-grade features and compliance
 
@@ -622,12 +627,12 @@ Vector DB (Chroma): Embeddings (already in requirements)
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| **Security breach due to no auth** | High | Critical | Implement auth in Phase 1 |
-| **Service outage (single instance)** | High | High | Add HA in Phase 1 |
-| **Data loss (no backups)** | Medium | Critical | Implement backups in Phase 3 |
-| **Performance degradation at scale** | High | Medium | Add caching in Phase 3 |
-| **Compliance violations** | Medium | High | Add audit logging in Phase 4 |
-| **Undetected incidents** | High | High | Add monitoring in Phase 1 |
+| **Security breach due to no auth** | High | Critical | Implement auth in `1.0.0-alpha` |
+| **Service outage (single instance)** | High | High | Add HA in `1.0.0-alpha` |
+| **Data loss (no backups)** | Medium | Critical | Implement backups in `1.0.0-rc` |
+| **Performance degradation at scale** | High | Medium | Add caching in `1.0.0-rc` |
+| **Compliance violations** | Medium | High | Add audit logging in `1.1.0` |
+| **Undetected incidents** | High | High | Add monitoring in `1.0.0-alpha` |
 
 ---
 
@@ -679,7 +684,7 @@ The Local AI Platform is an **excellent development/personal-use system** but re
 - ❌ No deployment automation
 - ❌ Single points of failure throughout
 
-**Recommendation**: Do **NOT** deploy the current system to production. Follow the phased implementation roadmap, prioritizing security and reliability (Phase 1) before adding advanced features.
+**Recommendation**: Do **NOT** deploy the current `0.1.0` build to production. Follow the versioned roadmap above, prioritizing security and reliability (`1.0.0-alpha`) before advancing toward the `1.0.0` GA release.
 
 **Estimated Effort**: 8-12 weeks with 2-3 engineers for minimal enterprise readiness (MVEP).
 

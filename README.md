@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-1a1a2e?style=flat&labelColor=1a1a2e&color=00E87B" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.0-1a1a2e?style=flat&labelColor=1a1a2e&color=00E87B" alt="Version">
   <img src="https://img.shields.io/badge/macOS-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="macOS">
   <img src="https://img.shields.io/badge/Linux-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="Linux">
   <img src="https://img.shields.io/badge/license-Commercial-1a1a2e?style=flat&labelColor=1a1a2e&color=888888" alt="License">

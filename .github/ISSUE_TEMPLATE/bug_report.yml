@@ -25,7 +25,7 @@ body:
     id: version
     attributes:
       label: Enclave version
-      placeholder: "v1.0.0"
+      placeholder: "v0.1.0"
     validations:
       required: true
 

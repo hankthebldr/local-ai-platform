@@ -48,7 +48,19 @@
       "Bash(xargs kill:*)",
       "mcp__Claude_Preview__preview_start",
       "Bash(python -c \"from api.routers.inventory import router; print\\(''Router imported OK, routes:'', [r.path for r in router.routes]\\)\")",
-      "Bash(python -c \"from api.main import app; print\\(''App loaded OK, routes:'', len\\(app.routes\\)\\)\")"
+      "Bash(python -c \"from api.main import app; print\\(''App loaded OK, routes:'', len\\(app.routes\\)\\)\")",
+      "Bash(/Users/henry/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/scripts/start-server.sh --project-dir /Users/henry/Github/Github_desktop/local-ai-platform)",
+      "Bash(bash /Users/henry/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/start-server.sh --project-dir /Users/henry/Github/Github_desktop/local-ai-platform)",
+      "Bash(gh repo *)",
+      "Bash(gh release *)",
+      "Bash(gh api *)",
+      "Bash(git checkout *)",
+      "Bash(bash -n scripts/generate-icons.sh)",
+      "Bash(git rm *)",
+      "Bash(yes)",
+      "Bash(python -)",
+      "Bash(npm install *)",
+      "Bash(npm test *)"
     ],
     "deny": [],
     "ask": []

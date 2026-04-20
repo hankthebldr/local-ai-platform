@@ -17,7 +17,7 @@ def chat_with_ollama(model: str, host: str = "http://localhost:11434"):
     """Interactive chat session with Ollama"""
 
     console.print(Panel.fit(
-        f"[bold bright_green]\u25a3 ENCLAVE[/bold bright_green] [dim]v1.0.0[/dim]\n"
+        f"[bold bright_green]\u25a3 ENCLAVE[/bold bright_green] [dim]v0.1.0[/dim]\n"
         f"[dim]Self-hosted AI inference[/dim]\n"
         f"[dim]by ohno llc[/dim]\n\n"
         f"[dim]Model:[/dim] [bright_white]{model}[/bright_white]\n"
