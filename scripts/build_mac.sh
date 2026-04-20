@@ -40,8 +40,20 @@ cp -R api "${RESOURCES}/api"
 cp -R plugins "${RESOURCES}/plugins"
 cp -R cli "${RESOURCES}/cli"
 cp -R models "${RESOURCES}/models"
-[ -d data/profiles ] && cp -R data "${RESOURCES}/data" 2>/dev/null || true
-[ -f .env ] && cp .env "${RESOURCES}/.env"
+[ -f setup/requirements.txt ] && mkdir -p "${RESOURCES}/setup" && cp setup/requirements.txt "${RESOURCES}/setup/requirements.txt"
+
+# Seed only the shippable parts of data/ (profiles + empty runtime dirs).
+# NEVER copy user state: api_keys.yaml, memory/, sandboxes/, rag/, exports/, graph/, logs/, etc.
+mkdir -p "${RESOURCES}/data/profiles" "${RESOURCES}/data/config" "${RESOURCES}/data/cache" "${RESOURCES}/data/logs"
+if [ -d data/profiles ]; then
+    # Only copy built-in profile YAMLs, not user-created ones with bound keys
+    for p in data/profiles/default.yaml data/profiles/research.yaml data/profiles/unrestricted.yaml; do
+        [ -f "$p" ] && cp "$p" "${RESOURCES}/data/profiles/"
+    done
+fi
+
+# NEVER copy .env — it contains dev secrets (API_KEY, MASTER_API_KEY).
+# Only ship .env.example as a template; the user creates their own .env at runtime.
 [ -f .env.example ] && cp .env.example "${RESOURCES}/.env.example"
 
 # Copy Enclave icon into the bundle
@@ -91,20 +103,25 @@ cat > "${MACOS}/launch.sh" << 'LAUNCHER'
 #!/bin/bash
 # Enclave — macOS Launcher
 DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
+USER_DATA="${HOME}/.local-ai-platform"
 
 # Activate bundled Python
 source "${DIR}/venv/bin/activate"
 
-# Set up environment
+# Set up environment — user data lives in ~/.local-ai-platform, NOT inside the bundle
 export PYTHONPATH="${DIR}"
-cd "${DIR}"
+export DATA_CONFIG_DIR="${USER_DATA}/config"
+export RAG_DATA_DIR="${USER_DATA}/rag"
+mkdir -p "${USER_DATA}/config" "${USER_DATA}/logs"
 
-# Load .env if present
-if [ -f "${DIR}/.env" ]; then
+# Load user's .env from ~/.local-ai-platform/.env (NOT from the bundle — secrets stay user-side)
+if [ -f "${USER_DATA}/.env" ]; then
     set -a
-    source "${DIR}/.env"
+    source "${USER_DATA}/.env"
     set +a
 fi
+
+cd "${DIR}"
 
 # Run the desktop app
 exec python "${DIR}/../MacOS/app.py"
