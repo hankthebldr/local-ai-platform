@@ -67,3 +67,7 @@ pywebview==5.1
 
 # RAG
 pypdf==4.3.1
+
+# Prompt framework
+jinja2>=3.1
+jsonschema>=4.0
