@@ -104,3 +104,57 @@ class HookBus:
         for stage in self._hooks:
             self._hooks[stage] = []
         self._counter = 0
+
+
+# ── Registration decorator + auto-discovery ────────────────────────────────
+
+import importlib.util
+import sys
+from pathlib import Path as _Path
+
+# Module-level registry of decorated hooks, keyed by absolute path of declaring file.
+# Populated when files are imported; consumed by HookBus.discover_and_register.
+_PENDING_HOOKS: list = []
+
+
+def register_hook(stage: Stage, name: str):
+    """Decorator to mark a function as a hook for auto-discovery."""
+    if stage not in _VALID_STAGES:
+        raise ValueError(f"invalid stage: {stage!r}")
+
+    def _decorate(fn):
+        fn.stage = stage
+        fn.name = name
+        _PENDING_HOOKS.append(fn)
+        return fn
+
+    return _decorate
+
+
+def _extend_HookBus_discovery():
+    def discover_and_register(self, directory, source: str = "custom") -> int:
+        """Import every *.py file under `directory` (non-recursive) and register
+        any functions decorated with @register_hook. Returns count registered."""
+        directory = _Path(directory)
+        if not directory.is_dir():
+            return 0
+        before = len(_PENDING_HOOKS)
+        for py_file in sorted(directory.glob("*.py")):
+            if py_file.name.startswith("__") or py_file.name == ".gitkeep":
+                continue
+            module_name = f"_hooks_auto_{py_file.stem}_{id(py_file)}"
+            spec = importlib.util.spec_from_file_location(module_name, py_file)
+            if spec is None or spec.loader is None:
+                continue
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            spec.loader.exec_module(module)
+        newly_added = _PENDING_HOOKS[before:]
+        for hook in newly_added:
+            self.register(hook, source=source)
+        # Clear what we just registered so a second bus doesn't double-register
+        del _PENDING_HOOKS[before:]
+        return len(newly_added)
+    HookBus.discover_and_register = discover_and_register
+
+_extend_HookBus_discovery()

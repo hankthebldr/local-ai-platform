@@ -156,3 +156,42 @@ def test_bus_custom_hooks_run_after_builtin_hooks():
     bus.register(h("builtin2", "builtin"), source="builtin")
     bus.dispatch("after_step", HookContext())
     assert order == ["builtin1", "builtin2", "custom1"]
+
+
+import tempfile
+import textwrap
+from pathlib import Path
+
+
+def test_discover_registers_hooks_from_directory(tmp_path, monkeypatch):
+    hook_file = tmp_path / "my_custom.py"
+    hook_file.write_text(textwrap.dedent("""
+        from api.services.hook_bus import HookResult, register_hook
+
+        @register_hook(stage="after_step", name="custom_noop")
+        def noop(ctx):
+            return HookResult(action="continue")
+    """))
+
+    bus = HookBus()
+    bus.discover_and_register(tmp_path, source="custom")
+    # Verify by dispatching — if registered, hook list has 1 entry
+    assert len(bus._hooks["after_step"]) == 1
+    # Dispatch works
+    results = bus.dispatch("after_step", HookContext())
+    assert len(results) == 1
+    assert results[0].action == "continue"
+
+
+def test_discover_skips_files_without_register_hook_decorator(tmp_path):
+    (tmp_path / "not_a_hook.py").write_text("x = 1\n")
+    bus = HookBus()
+    bus.discover_and_register(tmp_path, source="custom")
+    assert len(bus._hooks["after_step"]) == 0
+
+
+def test_discover_ignores_dunder_files(tmp_path):
+    (tmp_path / "__init__.py").write_text("x = 1\n")
+    bus = HookBus()
+    bus.discover_and_register(tmp_path, source="custom")
+    assert all(len(v) == 0 for v in bus._hooks.values())
