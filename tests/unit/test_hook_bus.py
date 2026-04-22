@@ -15,7 +15,7 @@ def test_hook_result_with_feedback():
     assert result.feedback == "missing key 'x'"
 
 
-def test_hook_result_action_rejects_invalid():
+def test_hook_result_accepts_valid_actions():
     # Literal enforcement is static but we assert runtime accepts valid values
     for action in ("continue", "retry", "fail", "skip"):
         HookResult(action=action)  # does not raise
