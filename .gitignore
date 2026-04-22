@@ -150,3 +150,7 @@ data/graph/
 *.dmg
 *.icns.backup
 data/logs/*.jsonl
+
+# ── Claude Code worktrees (project-local isolation) ─────────────────
+.claude/worktrees/
+.worktrees/
