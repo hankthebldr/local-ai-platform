@@ -98,3 +98,25 @@ def test_skip_when_all_examples_are_malformed(tmp_path):
     assert result.action == "continue"
     # Prompt unchanged because all examples failed to parse
     assert ctx.prompt.system == original_system
+
+
+def test_skip_when_step_id_attempts_path_traversal(tmp_path):
+    # Create a sibling directory outside example_dir
+    sibling = tmp_path.parent / f"sibling_{tmp_path.name}"
+    sibling.mkdir(exist_ok=True)
+    (sibling / "evil.json").write_text('{"input": "in", "output": {"x": 1}}')
+    try:
+        hook = FewShotInjectorHook(example_dir=tmp_path, max_examples=1)
+        class EvilStep:
+            id = f"../sibling_{tmp_path.name}"
+        prompt = _prompt_with_output_format()
+        original = prompt.system
+        ctx = HookContext(step=EvilStep(), prompt=prompt)
+        result = hook(ctx)
+        assert result.action == "continue"
+        # Traversal rejected — prompt unchanged, no example injected
+        assert ctx.prompt.system == original
+        assert "evil.json" not in ctx.prompt.system
+    finally:
+        import shutil
+        shutil.rmtree(sibling, ignore_errors=True)

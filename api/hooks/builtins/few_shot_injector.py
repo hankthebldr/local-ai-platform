@@ -31,7 +31,14 @@ class FewShotInjectorHook:
         if not step_id:
             return HookResult(action="continue")
 
-        base = Path(self.example_dir) / step_id
+        # Containment check: step_id must not escape example_dir
+        example_root = Path(self.example_dir).resolve()
+        base = (Path(self.example_dir) / step_id).resolve()
+        try:
+            base.relative_to(example_root)
+        except ValueError:
+            return HookResult(action="continue")
+
         if not base.is_dir():
             return HookResult(action="continue")
 

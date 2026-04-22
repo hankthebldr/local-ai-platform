@@ -85,7 +85,15 @@ class PromptComposer:
 
     def _load_role(self, ref: str | None, inline: str | None) -> str:
         if ref:
-            path = self.roles_dir / f"{ref}.md"
+            roles_root = self.roles_dir.resolve()
+            path = (self.roles_dir / f"{ref}.md").resolve()
+            # Containment check: reject role_ref values that escape roles_dir
+            try:
+                path.relative_to(roles_root)
+            except ValueError:
+                raise ValueError(
+                    f"role_ref '{ref}' resolves outside roles directory"
+                )
             return path.read_text(encoding="utf-8")
         if inline:
             return inline

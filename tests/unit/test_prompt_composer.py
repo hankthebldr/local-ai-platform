@@ -131,3 +131,16 @@ def test_composer_user_message_default_when_no_inputs(composer):
     )
     assert prompt.user.strip() != ""
     assert "Complete" in prompt.user or "task" in prompt.user.lower()
+
+
+def test_composer_rejects_role_ref_path_traversal(composer, tmp_path):
+    # Create a file outside roles_dir that exists
+    outside = tmp_path / "evil.md"
+    outside.write_text("SECRET")
+    with pytest.raises(ValueError, match="outside roles directory"):
+        composer.compose(
+            role_ref="../evil",
+            role_inline=None,
+            context="", task="t", constraints=[],
+            output_schema={},
+        )
