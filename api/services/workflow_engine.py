@@ -197,6 +197,7 @@ class WorkflowEngine:
                 ollama_service=self.ollama,
                 composer=self.composer,
                 hook_bus=step_bus,
+                model_resolver=self.resolver,
             )
             step_result = step_executor.execute(
                 step=step,

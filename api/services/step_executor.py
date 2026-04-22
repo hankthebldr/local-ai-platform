@@ -35,10 +35,12 @@ class StepExecutor:
         ollama_service: OllamaService,
         composer: PromptComposer,
         hook_bus: HookBus,
+        model_resolver=None,
     ):
         self.ollama = ollama_service
         self.composer = composer
         self.hook_bus = hook_bus
+        self.model_resolver = model_resolver
 
     def execute(
         self,
@@ -157,6 +159,20 @@ class StepExecutor:
                 escalate_to = last_mutations.get("escalate_to")
                 if escalate_to:
                     context.set_shared(f"_escalated_{step.id}", escalate_to)
+                    # Actually switch models if the resolver is available
+                    if self.model_resolver is not None:
+                        try:
+                            new_model = self.model_resolver.resolve(role=escalate_to)
+                            logger.info(
+                                f"Step '{step.id}' escalating from '{current_model}' "
+                                f"to '{new_model}' (role={escalate_to}) on retry"
+                            )
+                            current_model = new_model
+                        except Exception as e:
+                            logger.warning(
+                                f"Step '{step.id}' escalation to role '{escalate_to}' failed: {e}. "
+                                f"Continuing with '{current_model}'."
+                            )
                 if retry_delay > 0:
                     time.sleep(retry_delay)
                 last_error = failure_feedback
