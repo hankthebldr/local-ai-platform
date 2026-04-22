@@ -1,5 +1,4 @@
 import pytest
-from dataclasses import FrozenInstanceError
 from api.services.hook_bus import HookContext, HookResult, Hook
 
 
