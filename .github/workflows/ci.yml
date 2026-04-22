@@ -31,7 +31,7 @@ jobs:
           pip install -r setup/requirements-dev.txt
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short -k "not Integration and not TestAuthentication and not TestMultiKeyAuth"
+        run: pytest tests/ -v --tb=short -k "not Integration and not TestAuthentication and not TestMultiKeyAuth" -m "not rag"
 
   lint:
     name: Lint

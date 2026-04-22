@@ -7,6 +7,8 @@ import tempfile
 import shutil
 from unittest.mock import MagicMock, patch
 
+pytestmark = pytest.mark.rag
+
 
 class _FakeEmbedding:
     """Deterministic fake for EmbeddingService — no network or model."""

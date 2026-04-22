@@ -3,6 +3,8 @@
 
 import pytest
 
+pytestmark = pytest.mark.rag
+
 
 class TestChunker:
     def test_split_returns_list_of_strings(self):

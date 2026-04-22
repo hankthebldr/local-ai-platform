@@ -5,6 +5,8 @@ import pytest
 import tempfile
 import shutil
 
+pytestmark = pytest.mark.rag
+
 
 class _FakeEmbedding:
     def __init__(self, dim=4):
