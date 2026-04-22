@@ -64,3 +64,19 @@ def test_mobile_media_query_contains_all_responsive_rules(index_html_text):
         assert selector in block, (
             f"{selector} is not inside the mobile media query"
         )
+
+
+def test_chat_input_is_textarea(index_soup):
+    """Chat prompt must be a <textarea> so Shift+Enter can insert newlines."""
+    el = index_soup.find(id="prompt")
+    assert el is not None, "#prompt element missing"
+    assert el.name == "textarea", (
+        f"#prompt is <{el.name}>, must be <textarea>"
+    )
+
+
+def test_chat_input_has_shift_enter_handler(index_html_text):
+    """JS must distinguish Enter (send) from Shift+Enter (newline)."""
+    assert (
+        "e.shiftKey" in index_html_text or "shiftKey" in index_html_text
+    ), "Shift+Enter branch missing from keydown handler"

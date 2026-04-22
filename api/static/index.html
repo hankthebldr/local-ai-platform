@@ -502,9 +502,14 @@ body::before {
   color: var(--text);
   font-family: var(--mono);
   font-size: 0.82rem;
+  line-height: 1.5;
   padding: 12px 16px;
   outline: none;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  resize: none;
+  min-height: 44px;
+  max-height: 240px;
+  overflow-y: auto;
 }
 .chat-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 8px #00CC6610; }
 .chat-input::placeholder { color: var(--text-muted); }
@@ -1214,7 +1219,7 @@ body::before {
             <span class="toggle-label" id="search-label">Search: OFF</span>
             &#x1F310;
           </button>
-          <input class="chat-input" id="prompt" type="text" placeholder="Enter query..." autocomplete="off" spellcheck="false" />
+          <textarea class="chat-input" id="prompt" rows="1" placeholder="Enter query... (Enter to send, Shift+Enter for newline)" autocomplete="off" spellcheck="false"></textarea>
           <button class="action-btn" onclick="toggleSettings()" title="Search settings" style="padding:0 12px;font-size:1rem;border-color:var(--border)">&#x2699;</button>
           <button class="send-btn" id="send-btn" onclick="sendMessage()">TRANSMIT</button>
         </div>
@@ -1782,6 +1787,7 @@ async function sendMessage() {
   const searchBadge = webSearchEnabled ? ' <span style="color:var(--amber);font-size:0.6rem;vertical-align:middle">&#x1F310; SEARCH</span>' : '';
   messages.innerHTML += `<div class="msg user">${esc(text)}${searchBadge}</div>`;
   input.value = '';
+  input.style.height = 'auto';
   btn.disabled = true;
   btn.textContent = webSearchEnabled ? 'SEARCHING...' : 'SENDING...';
 
@@ -1924,9 +1930,24 @@ async function exportSession() {
   setTimeout(() => { btn.textContent = 'EXPORT'; }, 1500);
 }
 
-document.getElementById('prompt').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
+(function wireChatInput() {
+  const ta = document.getElementById('prompt');
+  if (!ta) return;
+  const autoGrow = () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 240) + 'px';
+  };
+  ta.addEventListener('input', autoGrow);
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    } else if (e.key === 'Escape') {
+      ta.value = '';
+      autoGrow();
+    }
+  });
+})();
 
 /* ══════════════════════════════════════════════════════════════════
    INVENTORY TAB
