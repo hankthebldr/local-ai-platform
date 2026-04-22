@@ -26,6 +26,8 @@ from ..models.workflow_models import (
 from .model_resolver import ModelResolver
 from .step_executor import StepExecutor
 from .ollama_service import OllamaService
+from .hook_bus import HookBus
+from .prompt_composer import PromptComposer
 
 
 # Default data directory for workflow run persistence
@@ -46,7 +48,14 @@ class WorkflowEngine:
     def __init__(self, ollama_service: OllamaService):
         self.ollama = ollama_service
         self.resolver = ModelResolver(ollama_service)
-        self.executor = StepExecutor(ollama_service)
+        # Prompt composer
+        project_root = Path(__file__).resolve().parents[2]
+        self.composer = PromptComposer(
+            roles_dir=project_root / "prompts" / "roles",
+            templates_dir=project_root / "prompts" / "templates",
+        )
+        # Hook bus default is built per-step in _build_step_bus()
+        self._project_root = project_root
 
     # ── Load Phase ─────────────────────────────────────────────────────
 
@@ -182,12 +191,21 @@ class WorkflowEngine:
                 logger.error(f"Workflow failed at step '{step.id}': {e}")
                 break
 
-            # Execute the step
-            step_result = self.executor.execute(
+            # Execute the step — build a fresh hook bus and executor per step
+            step_bus = self._build_step_bus(step)
+            step_executor = StepExecutor(
+                ollama_service=self.ollama,
+                composer=self.composer,
+                hook_bus=step_bus,
+                model_resolver=self.resolver,
+            )
+            step_result = step_executor.execute(
                 step=step,
+                workflow=definition,
                 context=context,
                 resolved_model=resolved_model,
                 defaults=definition.defaults,
+                workflow_run=workflow_run,
             )
             workflow_run.step_results.append(step_result)
 
@@ -220,6 +238,58 @@ class WorkflowEngine:
         self._persist_run(workflow_run, definition)
 
         return workflow_run
+
+    # ── Hook Bus Assembly ──────────────────────────────────────────────
+
+    def _build_step_bus(self, step) -> HookBus:
+        """Return a fresh HookBus with default hooks + step-scoped json_schema + YAML-declared hooks."""
+        from api.hooks.builtins.token_budget import TokenBudgetHook
+        from api.hooks.builtins.output_logger import OutputLoggerHook
+        from api.hooks.builtins.retry_with_feedback import RetryWithFeedbackHook
+        from api.hooks.builtins.refusal_detector import RefusalDetectorHook
+        from api.hooks.builtins.json_schema import JsonSchemaHook
+
+        bus = HookBus()
+        # Default hooks
+        bus.register(TokenBudgetHook(max_prompt_tokens=3500, reserve_for_output=1024))
+        bus.register(OutputLoggerHook(include_prompt=False))
+        bus.register(RetryWithFeedbackHook(max_attempts=2, include_example=True))
+        bus.register(RefusalDetectorHook(patterns=[], use_family_defaults=True))
+        # Step-scoped json_schema (requires output_schema)
+        if getattr(step, "output_schema", None):
+            bus.register(JsonSchemaHook(schema=step.output_schema, strip_fences=True))
+        # YAML-declared per-step hook overrides — safe access (may not be present on v1 steps)
+        hooks_block = getattr(step, "hooks", None)
+        if hooks_block is not None:
+            for stage_name in ("before_step", "transform_prompt", "after_step", "validate_output", "on_failure"):
+                for spec in getattr(hooks_block, stage_name, []) or []:
+                    bus.register(self._instantiate_hook(spec, stage_name))
+        # Custom hooks auto-discovered from api/hooks/custom/
+        custom_dir = self._project_root / "api" / "hooks" / "custom"
+        if custom_dir.is_dir():
+            bus.discover_and_register(custom_dir, source="custom")
+        return bus
+
+    def _instantiate_hook(self, spec, stage):
+        """Map a YAML HookSpec into a concrete built-in hook instance."""
+        from api.hooks.builtins.json_schema import JsonSchemaHook
+        from api.hooks.builtins.refusal_detector import RefusalDetectorHook
+        from api.hooks.builtins.retry_with_feedback import RetryWithFeedbackHook
+        from api.hooks.builtins.token_budget import TokenBudgetHook
+        from api.hooks.builtins.output_logger import OutputLoggerHook
+        from api.hooks.builtins.few_shot_injector import FewShotInjectorHook
+
+        factory = {
+            "json_schema": JsonSchemaHook,
+            "refusal_detector": RefusalDetectorHook,
+            "retry_with_feedback": RetryWithFeedbackHook,
+            "token_budget": TokenBudgetHook,
+            "output_logger": OutputLoggerHook,
+            "few_shot_injector": FewShotInjectorHook,
+        }.get(spec.name)
+        if factory is None:
+            raise ValueError(f"Unknown built-in hook: {spec.name}")
+        return factory(**spec.config)
 
     # ── Persist Phase ──────────────────────────────────────────────────
 

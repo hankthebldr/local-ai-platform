@@ -1,17 +1,48 @@
-"""Tests for StepExecutor — single step execution with retry"""
+"""Tests for StepExecutor — single step execution with retry
+
+The legacy executor tested `_build_messages` / `_try_parse_outputs` internals.
+Those were removed in the v2 refactor (6-hook lifecycle + PromptComposer).
+Remaining tests construct a real PromptComposer + HookBus and verify
+end-to-end step execution via the new signature.
+"""
+from pathlib import Path
+
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 from api.services.step_executor import StepExecutor
+from api.services.prompt_composer import PromptComposer
+from api.services.hook_bus import HookBus
 from api.models.workflow_models import (
-    AgentStep, StepConfig, WorkflowContext, WorkflowDefaults,
+    AgentStep, StepConfig, WorkflowContext, WorkflowDefaults, WorkflowDefinition,
 )
 from api.exceptions import GenerationError
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _make_executor(ollama):
+    composer = PromptComposer(
+        roles_dir=PROJECT_ROOT / "prompts" / "roles",
+        templates_dir=PROJECT_ROOT / "prompts" / "templates",
+    )
+    bus = HookBus()
+    return StepExecutor(ollama_service=ollama, composer=composer, hook_bus=bus)
+
+
+def _make_workflow(step: AgentStep) -> WorkflowDefinition:
+    return WorkflowDefinition(
+        id="test-wf",
+        name="Test Workflow",
+        steps=[step],
+    )
 
 
 class TestStepExecutor:
     def setup_method(self):
         self.ollama = MagicMock()
-        self.executor = StepExecutor(self.ollama)
+        self.executor = _make_executor(self.ollama)
 
     def test_execute_step_success(self):
         """Successful step execution writes outputs to context"""
@@ -25,6 +56,7 @@ class TestStepExecutor:
         )
         ctx = WorkflowContext(seed={"task": "analyze users"})
         defaults = WorkflowDefaults()
+        workflow = _make_workflow(step)
 
         self.ollama.chat.return_value = {
             "content": "Here is the analysis result.",
@@ -34,6 +66,7 @@ class TestStepExecutor:
 
         result = self.executor.execute(
             step=step,
+            workflow=workflow,
             context=ctx,
             resolved_model="deepseek-r1:32b",
             defaults=defaults,
@@ -45,7 +78,9 @@ class TestStepExecutor:
         assert ctx.get_workspace("analyze", "result") is not None
 
     def test_execute_step_retries_on_failure(self):
-        """Step retries on GenerationError then succeeds"""
+        """Step retries on model failure then succeeds (requires RetryWithFeedbackHook)"""
+        from api.hooks.builtins.retry_with_feedback import RetryWithFeedbackHook
+
         step = AgentStep(
             id="draft",
             name="Draft",
@@ -57,8 +92,12 @@ class TestStepExecutor:
         )
         ctx = WorkflowContext(seed={"task": "draft"})
         defaults = WorkflowDefaults()
+        workflow = _make_workflow(step)
 
-        # First call fails, second succeeds
+        # Register retry hook so on_failure produces a retry decision
+        self.executor.hook_bus.register(RetryWithFeedbackHook(max_attempts=3))
+
+        # First call raises, second succeeds
         self.ollama.chat.side_effect = [
             GenerationError("timeout"),
             {
@@ -70,6 +109,7 @@ class TestStepExecutor:
 
         result = self.executor.execute(
             step=step,
+            workflow=workflow,
             context=ctx,
             resolved_model="dolphin3:8b",
             defaults=defaults,
@@ -92,11 +132,13 @@ class TestStepExecutor:
         )
         ctx = WorkflowContext(seed={})
         defaults = WorkflowDefaults()
+        workflow = _make_workflow(step)
 
         self.ollama.chat.side_effect = GenerationError("always fails")
 
         result = self.executor.execute(
             step=step,
+            workflow=workflow,
             context=ctx,
             resolved_model="dolphin3:8b",
             defaults=defaults,
@@ -119,6 +161,7 @@ class TestStepExecutor:
         ctx = WorkflowContext(seed={"task": "test", "secret": "should not appear"})
         ctx.set_workspace("s1", "entities", ["User", "Post"])
         ctx.set_workspace("s1", "other_data", "should not appear in prompt")
+        workflow = _make_workflow(step)
 
         self.ollama.chat.return_value = {
             "content": "Processed.",
@@ -127,7 +170,13 @@ class TestStepExecutor:
         }
 
         defaults = WorkflowDefaults()
-        self.executor.execute(step=step, context=ctx, resolved_model="m", defaults=defaults)
+        self.executor.execute(
+            step=step,
+            workflow=workflow,
+            context=ctx,
+            resolved_model="m",
+            defaults=defaults,
+        )
 
         # Check the messages sent to ollama.chat
         call_args = self.ollama.chat.call_args

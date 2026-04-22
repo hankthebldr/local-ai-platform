@@ -149,3 +149,4 @@ data/graph/
 # macOS DMG output (dist/ already ignored; this catches stray copies)
 *.dmg
 *.icns.backup
+data/logs/*.jsonl

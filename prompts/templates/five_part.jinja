@@ -1,0 +1,21 @@
+{{ role }}
+
+## Context
+{{ context }}
+
+## Task
+{{ task }}
+
+## Constraints
+{% for c in constraints -%}
+- {{ c }}
+{% endfor %}
+## Output Format
+Return a single JSON object matching this schema. No prose, no markdown fences:
+{{ output_schema_json }}
+{% if few_shot_example %}
+
+## Example
+Input: {{ few_shot_example.input }}
+Output: {{ few_shot_example.output_json }}
+{% endif %}
