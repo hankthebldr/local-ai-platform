@@ -179,6 +179,56 @@ def cmd_artifact(args):
     console.print_json(json.dumps(step_data, indent=2))
 
 
+def upgrade_v1_to_v2(src_path, dst_path):
+    """Upgrade a v1 workflow YAML into v2 schema. Never overwrites.
+
+    Heuristics:
+      - `system_prompt` → split: first sentence = role_inline, rest = task
+      - `outputs` list → output_schema with string-typed properties
+    """
+    import re
+    from pathlib import Path
+    import yaml
+
+    src = Path(src_path)
+    dst = Path(dst_path)
+    if dst.exists():
+        raise FileExistsError(f"refusing to overwrite {dst}")
+
+    data = yaml.safe_load(src.read_text())
+    data["schema_version"] = 2
+
+    for step in data.get("steps", []):
+        sp = step.pop("system_prompt", None)
+        if sp is None:
+            continue
+        sp = sp.strip()
+        m = re.match(r"([^.\n]+[.\n])(.*)", sp, re.DOTALL)
+        if m:
+            role_inline = m.group(1).strip()
+            task = m.group(2).strip() or "(Perform the role described above.)"
+        else:
+            role_inline = sp
+            task = "(Perform the role described above.)"
+        step["prompt"] = {
+            "role_inline": role_inline,
+            "task": task,
+            "constraints": [
+                "Return JSON only. No prose, no markdown fences.",
+            ],
+        }
+        outputs = step.get("outputs", [])
+        step["output_schema"] = {
+            "type": "object",
+            "required": list(outputs),
+            "properties": {k: {"type": "string"} for k in outputs},
+        }
+
+    dst.write_text(yaml.safe_dump(data, sort_keys=False))
+    print(f"Upgraded → {dst}")
+    print("Review generated output_schema: stubs are all type:string. Tighten as needed.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Workflow CLI")
     sub = parser.add_subparsers(dest="command")
@@ -204,6 +254,15 @@ def main():
     p_art.add_argument("run_id", help="Run ID")
     p_art.add_argument("step_id", help="Step ID")
 
+    # upgrade
+    p_upgrade = sub.add_parser("upgrade", help="Upgrade a v1 workflow YAML to v2")
+    p_upgrade.add_argument("src")
+    p_upgrade.add_argument(
+        "--out",
+        default=None,
+        help="Destination path (defaults to <src>.v2.yaml)",
+    )
+
     args = parser.parse_args()
 
     commands = {
@@ -214,7 +273,13 @@ def main():
         "artifact": cmd_artifact,
     }
 
-    if args.command in commands:
+    if args.command == "upgrade":
+        from pathlib import Path
+
+        src = Path(args.src)
+        dst = Path(args.out) if args.out else src.with_suffix(".v2.yaml")
+        upgrade_v1_to_v2(src, dst)
+    elif args.command in commands:
         commands[args.command](args)
     else:
         parser.print_help()
