@@ -56,3 +56,45 @@ def test_name_and_stage():
     hook = FewShotInjectorHook(example_dir="/tmp", max_examples=1)
     assert hook.name == "few_shot_injector"
     assert hook.stage == "transform_prompt"
+
+
+def test_skip_when_prompt_is_none():
+    hook = FewShotInjectorHook(example_dir="/tmp", max_examples=1)
+    ctx = HookContext(prompt=None, step=FakeStep("x"))
+    result = hook(ctx)
+    assert result.action == "continue"
+
+
+def test_skip_when_step_is_none():
+    hook = FewShotInjectorHook(example_dir="/tmp", max_examples=1)
+    ctx = HookContext(prompt=_prompt_with_output_format(), step=None)
+    result = hook(ctx)
+    assert result.action == "continue"
+
+
+def test_skip_when_step_has_no_id():
+    class NoIdStep: pass
+    hook = FewShotInjectorHook(example_dir="/tmp", max_examples=1)
+    ctx = HookContext(prompt=_prompt_with_output_format(), step=NoIdStep())
+    result = hook(ctx)
+    assert result.action == "continue"
+
+
+def test_skip_when_example_dir_does_not_exist(tmp_path):
+    hook = FewShotInjectorHook(example_dir=tmp_path / "nonexistent", max_examples=1)
+    ctx = HookContext(prompt=_prompt_with_output_format(), step=FakeStep("analyze"))
+    result = hook(ctx)
+    assert result.action == "continue"
+
+
+def test_skip_when_all_examples_are_malformed(tmp_path):
+    ex_dir = tmp_path / "sid"
+    ex_dir.mkdir()
+    (ex_dir / "bad.json").write_text("{ this is not valid json")
+    hook = FewShotInjectorHook(example_dir=tmp_path, max_examples=1)
+    ctx = HookContext(prompt=_prompt_with_output_format(), step=FakeStep("sid"))
+    original_system = ctx.prompt.system
+    result = hook(ctx)
+    assert result.action == "continue"
+    # Prompt unchanged because all examples failed to parse
+    assert ctx.prompt.system == original_system
