@@ -108,3 +108,31 @@ def test_switchtab_does_not_rely_on_bare_event_global(index_html_text):
     assert "event.currentTarget" not in body, (
         "switchTab still references event.currentTarget — use the el parameter"
     )
+
+
+def test_index_does_not_load_external_cdns(index_html_text):
+    """Privacy promise: no external CDN loads in the shipped HTML."""
+    for needle in [
+        "fonts.googleapis.com",
+        "fonts.gstatic.com",
+        "cdnjs.cloudflare.com",
+        "cdn.jsdelivr.net",
+        "unpkg.com",
+    ]:
+        assert needle not in index_html_text, (
+            f"external CDN reference remains: {needle}"
+        )
+
+
+def test_setup_does_not_load_external_cdns(setup_html_text):
+    """Setup wizard must also run offline."""
+    for needle in [
+        "fonts.googleapis.com",
+        "fonts.gstatic.com",
+        "cdnjs.cloudflare.com",
+        "cdn.jsdelivr.net",
+        "unpkg.com",
+    ]:
+        assert needle not in setup_html_text, (
+            f"setup.html external CDN reference remains: {needle}"
+        )
