@@ -171,3 +171,16 @@ def test_color_tokens_are_honest(index_html_text):
     assert dr > dg and dr > db, (
         f"--danger #{danger.group(1)} is not red-dominant"
     )
+
+
+def test_no_sci_fi_caps_verbs_in_button_text(index_html_text):
+    """Button text should be sentence case; uppercase styling comes from CSS."""
+    # We search for these as whole-word literals on lines that look like
+    # markup/text, not as substrings inside CSS class names like .transmit.
+    for verb in ["TRANSMIT", "EXECUTE", "DIVE"]:
+        # Exclude occurrences inside element-content like >TRANSMIT< or 'TRANSMIT'
+        pattern = r">\s*" + verb + r"\s*<|textContent\s*=\s*['\"]" + verb + r"['\"]"
+        m = re.search(pattern, index_html_text)
+        assert m is None, (
+            f"'{verb}' still appears in button text or JS — use sentence case"
+        )

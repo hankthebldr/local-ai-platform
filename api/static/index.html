@@ -1242,7 +1242,7 @@ body::before {
           </button>
           <textarea class="chat-input" id="prompt" rows="1" placeholder="Enter query... (Enter to send, Shift+Enter for newline)" autocomplete="off" spellcheck="false"></textarea>
           <button class="action-btn" onclick="toggleSettings()" title="Search settings" style="padding:0 12px;font-size:1rem;border-color:var(--border)">&#x2699;</button>
-          <button class="send-btn" id="send-btn" onclick="sendMessage()">TRANSMIT</button>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
         </div>
       </div>
     </div>
@@ -1416,7 +1416,7 @@ body::before {
           <div class="panel-label">Deep Research Mode</div>
           <div class="deep-dive-form">
             <input type="text" id="research-topic" placeholder="Enter research topic or question..." autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')runDeepDive()" />
-            <button class="action-btn pull" id="dive-btn" onclick="runDeepDive()">DIVE</button>
+            <button class="action-btn pull" id="dive-btn" onclick="runDeepDive()">Research</button>
           </div>
           <div class="deep-dive-options">
             <label>Model</label>
@@ -1431,7 +1431,7 @@ body::before {
           <span class="corner-tr"></span><span class="corner-bl"></span>
           <div class="panel-label">Research Results</div>
           <div id="research-output">
-            <div class="research-empty">Enter a topic above and click DIVE to start deep research.<br><br>The model will decompose your topic, search each angle, then synthesize a structured report.</div>
+            <div class="research-empty">Enter a topic above and click Research to start a deep investigation.<br><br>The model will decompose your topic, search each angle, then synthesize a structured report.</div>
           </div>
         </div>
       </div>
@@ -1474,7 +1474,7 @@ body::before {
         </div>
 
         <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:8px 28px">EXECUTE</button>
+          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:8px 28px">Run</button>
         </div>
       </div>
 
@@ -1816,7 +1816,7 @@ async function sendMessage() {
   input.value = '';
   input.style.height = 'auto';
   btn.disabled = true;
-  btn.textContent = webSearchEnabled ? 'SEARCHING...' : 'SENDING...';
+  btn.textContent = webSearchEnabled ? 'Searching…' : 'Sending…';
 
   const typingId = 'typing-' + Date.now();
   const typingLabel = webSearchEnabled ? 'searching & generating' : 'generating';
@@ -1867,7 +1867,7 @@ async function sendMessage() {
   }
 
   btn.disabled = false;
-  btn.textContent = 'TRANSMIT';
+  btn.textContent = 'Send';
   messages.scrollTop = messages.scrollHeight;
   updateExportBtn();
 }
@@ -2619,7 +2619,7 @@ async function runDeepDive() {
   const out = document.getElementById('research-output');
   const btn = document.getElementById('dive-btn');
   btn.disabled = true;
-  btn.textContent = 'RESEARCHING...';
+  btn.textContent = 'Researching…';
 
   // Show progress UI
   out.innerHTML = `
@@ -2662,7 +2662,7 @@ async function runDeepDive() {
     out.innerHTML = `<div class="research-empty" style="color:var(--red)">Research failed: ${esc(String(e))}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'DIVE';
+    btn.textContent = 'Research';
   }
 }
 
@@ -2862,7 +2862,7 @@ async function runWorkflow() {
   } catch (e) {
     alert('Invalid JSON in seed data');
     btn.disabled = false;
-    btn.textContent = 'EXECUTE';
+    btn.textContent = 'Run';
     return;
   }
 
@@ -2940,7 +2940,7 @@ async function runWorkflow() {
       `<div style="color:var(--red);font-size:0.75rem">Execution failed: ${esc(String(e))}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'EXECUTE';
+    btn.textContent = 'Run';
   }
 }
 
