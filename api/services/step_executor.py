@@ -78,6 +78,12 @@ class StepExecutor:
         current_model = resolved_model
         llm_result: Dict[str, Any] = {}
 
+        # Snapshot the composed prompt so each retry attempt starts clean.
+        # Hooks (especially retry_with_feedback) mutate ctx.prompt.user in place;
+        # without the reset the user message would accumulate feedback across attempts.
+        _original_user = composed.user
+        _original_system = composed.system
+
         for attempt in range(max_retries + 1):
             ctx = HookContext(
                 workflow=workflow_run,
@@ -135,6 +141,13 @@ class StepExecutor:
             )
             from api.hooks.builtins.retry_with_feedback import ValidationFailure
             ctx.error = ValidationFailure(feedback=str(failure_feedback))
+
+            # Reset the prompt to its composed baseline before on_failure hooks
+            # append retry feedback. Without this reset, retry_with_feedback
+            # would stack a new feedback block on top of every previous attempt's
+            # feedback (the user message grows unbounded across retries).
+            composed.user = _original_user
+            composed.system = _original_system
 
             failure_results = self.hook_bus.dispatch("on_failure", ctx)
             decision = failure_results[-1].action if failure_results else "fail"
