@@ -2,122 +2,150 @@
 Workflow Engine Data Models
 
 Pydantic models for multi-agent workflow definitions, context management,
-and execution tracking.
+and execution tracking. Supports both v1 (system_prompt string) and v2
+(structured `prompt` block) schema.
 """
 
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ── Step Config ────────────────────────────────────────────────────────────
 
 
 class StepConfig(BaseModel):
-    """Per-step configuration overrides"""
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     retries: Optional[int] = None
-    retry_delay: Optional[int] = None  # seconds
-    timeout: Optional[int] = None  # seconds
+    retry_delay: Optional[int] = None
+    timeout: Optional[int] = None
+
+
+# ── v2: Structured Prompt + Hook Spec ──────────────────────────────────────
+
+
+class StepPrompt(BaseModel):
+    """Five-part prompt block (v2 schema)."""
+    role_ref: Optional[str] = None
+    role_inline: Optional[str] = None
+    task: str
+    constraints: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_role(self):
+        if self.role_ref and self.role_inline:
+            raise ValueError("only one of role_ref or role_inline may be set")
+        if not self.role_ref and not self.role_inline:
+            raise ValueError("StepPrompt requires role_ref or role_inline")
+        return self
+
+
+class HookSpec(BaseModel):
+    """A single hook entry in the step's `hooks` block."""
+    name: str
+    config: Dict[str, Any] = Field(default_factory=dict)
+
+
+class StepHooks(BaseModel):
+    """Per-step hook registrations."""
+    before_step: List[HookSpec] = Field(default_factory=list)
+    transform_prompt: List[HookSpec] = Field(default_factory=list)
+    after_step: List[HookSpec] = Field(default_factory=list)
+    validate_output: List[HookSpec] = Field(default_factory=list)
+    on_failure: List[HookSpec] = Field(default_factory=list)
 
 
 # ── Agent Step ─────────────────────────────────────────────────────────────
 
 
 class AgentStep(BaseModel):
-    """A single agent step in a workflow"""
     id: str
     name: str
-    model: Optional[str] = None  # explicit model name
-    role: Optional[str] = None   # role-based resolution: reasoning, fast, coding, uncensored, general
-    system_prompt: str
+    model: Optional[str] = None
+    role: Optional[str] = None
+
+    # v1 field
+    system_prompt: Optional[str] = None
+    # v2 field
+    prompt: Optional[StepPrompt] = None
+
     inputs: List[str] = Field(default_factory=list)
     outputs: List[str] = Field(min_length=1)
+    output_schema: Optional[Dict[str, Any]] = None
+    hooks: StepHooks = Field(default_factory=StepHooks)
     config: StepConfig = Field(default_factory=StepConfig)
 
-    @field_validator("system_prompt")
-    @classmethod
-    def system_prompt_not_empty(cls, v: str) -> str:
-        if not v.strip():
+    @model_validator(mode="after")
+    def _validate_prompt_shape(self):
+        if not self.system_prompt and not self.prompt:
+            raise ValueError("AgentStep requires either prompt or system_prompt (v2 prompt block or v1 system_prompt)")
+        if self.system_prompt and self.prompt:
+            raise ValueError("AgentStep has both `prompt` and `system_prompt` — use one")
+        if self.system_prompt is not None and not self.system_prompt.strip():
             raise ValueError("system_prompt must not be empty")
-        return v
+        return self
 
 
 # ── Workflow Definition ────────────────────────────────────────────────────
 
 
 class WorkflowDefaults(BaseModel):
-    """Workflow-level default configuration"""
     role: str = "general"
     temperature: float = 0.7
     max_tokens: int = 4096
     retries: int = 2
-    retry_delay: int = 5  # seconds
+    retry_delay: int = 5
 
 
 class WorkflowDefinition(BaseModel):
-    """Complete workflow definition, parsed from YAML"""
     id: str
     name: str
     description: Optional[str] = None
     version: Optional[str] = None
+    schema_version: int = 1
+    context: Dict[str, Any] = Field(default_factory=dict)
+    schemas: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     defaults: WorkflowDefaults = Field(default_factory=WorkflowDefaults)
     steps: List[AgentStep] = Field(min_length=1)
 
     @field_validator("steps")
     @classmethod
-    def steps_not_empty(cls, v: List[AgentStep]) -> List[AgentStep]:
+    def steps_not_empty(cls, v):
         if len(v) == 0:
             raise ValueError("Workflow must have at least one step")
         return v
 
 
-# ── Workflow Context (Three-Layer) ─────────────────────────────────────────
+# ── Workflow Context (unchanged from v1) ───────────────────────────────────
 
 
 class WorkflowContext(BaseModel):
-    """
-    Three-layer context management for workflow execution.
-
-    Layer 1 - seed: immutable user input
-    Layer 2 - workspace: namespaced per-step outputs
-    Layer 3 - shared: mutable cross-cutting state
-    """
     seed: Dict[str, Any] = Field(default_factory=dict)
     workspace: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     shared: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def get_seed(self, key: str) -> Any:
-        """Read from the immutable seed layer"""
         return self.seed.get(key)
 
     def set_workspace(self, step_id: str, key: str, value: Any) -> None:
-        """Write to a step's namespace in the workspace layer"""
         if step_id not in self.workspace:
             self.workspace[step_id] = {}
         self.workspace[step_id][key] = value
 
     def get_workspace(self, step_id: str, key: str) -> Any:
-        """Read from any step's namespace in the workspace layer"""
         return self.workspace.get(step_id, {}).get(key)
 
     def set_shared(self, key: str, value: Any) -> None:
-        """Write to the shared cross-cutting layer"""
         self.shared[key] = value
 
     def get_shared(self, key: str) -> Any:
-        """Read from the shared layer"""
         return self.shared.get(key)
 
     def resolve_input(self, input_ref: str) -> Any:
-        """
-        Resolve an input reference to its value.
-        Format: 'seed.key', 'step_id.key', or 'shared.key'
-        """
         parts = input_ref.split(".", 1)
         if len(parts) != 2:
             return None
@@ -130,14 +158,13 @@ class WorkflowContext(BaseModel):
             return self.get_workspace(namespace, key)
 
 
-# ── Step Result ────────────────────────────────────────────────────────────
+# ── Step Result (unchanged) ────────────────────────────────────────────────
 
 
 class StepResult(BaseModel):
-    """Result of executing a single workflow step"""
     model_config = {"protected_namespaces": ()}
     step_id: str
-    status: str = "pending"  # pending, running, completed, failed
+    status: str = "pending"
     model_used: Optional[str] = None
     duration_seconds: Optional[float] = None
     token_count: Dict[str, int] = Field(
@@ -149,14 +176,13 @@ class StepResult(BaseModel):
     completed_at: Optional[datetime] = None
 
 
-# ── Workflow Run ───────────────────────────────────────────────────────────
+# ── Workflow Run (unchanged) ───────────────────────────────────────────────
 
 
 class WorkflowRun(BaseModel):
-    """A single execution instance of a workflow"""
     run_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     workflow_id: str
-    status: str = "pending"  # pending, running, completed, failed
+    status: str = "pending"
     context: WorkflowContext
     step_results: List[StepResult] = Field(default_factory=list)
     started_at: Optional[datetime] = None
