@@ -1039,15 +1039,20 @@ body::before {
 .wf-run-time { color: var(--text-muted); font-size: 0.65rem; }
 
 /* ── RESPONSIVE ─────────────────────────────────────────────────── */
-@media (max-width: 800px) {
-  .research-layout { grid-template-columns: 1fr; height: auto; }
-  .research-left, .research-right { min-height: 300px; }
-}
+@media (max-width: 1024px) {
   .dashboard-grid { grid-template-columns: 1fr; }
   .dashboard-grid .panel-system,
   .dashboard-grid .panel-models,
   .dashboard-grid .panel-perf,
   .dashboard-grid .panel-chat { grid-column: 1; }
+  .inv-grid { grid-template-columns: 1fr 1fr; }
+  .mem-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 800px) {
+  .research-layout { grid-template-columns: 1fr; height: auto; }
+  .research-left, .research-right { min-height: 300px; }
+  .dashboard-grid { grid-template-columns: 1fr; }
   .header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .inv-grid { grid-template-columns: 1fr; }
   .mem-grid { grid-template-columns: 1fr; }

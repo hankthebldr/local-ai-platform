@@ -6,6 +6,8 @@ they target invariants, not implementation.
 """
 from __future__ import annotations
 
+import re
+
 
 def test_index_html_loads(index_soup):
     """Sanity: index.html parses as HTML and has a <title>."""
@@ -31,3 +33,34 @@ def test_index_footer_version_matches_api(index_html_text):
     assert (
         "Enclave v0.1.0" in index_html_text
     ), "footer must read 'Enclave v0.1.0'"
+
+
+def test_mobile_media_query_contains_all_responsive_rules(index_html_text):
+    """The mobile @media block must wrap all six responsive rule blocks."""
+    m = re.search(
+        r"@media\s*\(\s*max-width:\s*800px\s*\)\s*\{",
+        index_html_text,
+    )
+    assert m is not None, "mobile @media block not found"
+    start = m.end()
+    depth = 1
+    i = start
+    while i < len(index_html_text) and depth > 0:
+        c = index_html_text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        i += 1
+    block = index_html_text[start : i - 1]
+    for selector in [
+        ".research-layout",
+        ".dashboard-grid",
+        ".header",
+        ".inv-grid",
+        ".mem-grid",
+        ".tab-btn",
+    ]:
+        assert selector in block, (
+            f"{selector} is not inside the mobile media query"
+        )
