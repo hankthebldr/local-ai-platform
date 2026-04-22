@@ -80,3 +80,31 @@ def test_chat_input_has_shift_enter_handler(index_html_text):
     assert (
         "e.shiftKey" in index_html_text or "shiftKey" in index_html_text
     ), "Shift+Enter branch missing from keydown handler"
+
+
+def test_switchtab_does_not_rely_on_bare_event_global(index_html_text):
+    """switchTab must accept the element explicitly, not read a bare global."""
+    # Extract the switchTab function body.
+    m = re.search(r"function\s+switchTab\s*\(([^)]*)\)\s*\{", index_html_text)
+    assert m is not None, "switchTab function not found"
+    params = [p.strip() for p in m.group(1).split(",") if p.strip()]
+    # Signature must include an element param alongside name.
+    assert len(params) >= 2, (
+        f"switchTab signature is {params!r}; must accept (name, el)"
+    )
+    # And no caller may still rely on the implicit `event` global:
+    # find function body bounds.
+    start = m.end()
+    depth = 1
+    i = start
+    while i < len(index_html_text) and depth > 0:
+        c = index_html_text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        i += 1
+    body = index_html_text[start : i - 1]
+    assert "event.currentTarget" not in body, (
+        "switchTab still references event.currentTarget — use the el parameter"
+    )
