@@ -184,3 +184,12 @@ def test_no_sci_fi_caps_verbs_in_button_text(index_html_text):
         assert m is None, (
             f"'{verb}' still appears in button text or JS — use sentence case"
         )
+
+
+def test_focus_visible_outline_exists(index_html_text):
+    """Global :focus-visible rule must exist for keyboard accessibility."""
+    m = re.search(
+        r":focus-visible\s*\{[^}]*outline\s*:",
+        index_html_text,
+    )
+    assert m is not None, "no global :focus-visible outline rule found"
