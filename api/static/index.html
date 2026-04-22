@@ -17,17 +17,39 @@
   --bg-panel: rgba(20, 20, 20, 0.9);
   --border: #2a2a2a;
   --border-glow: #00CC6618;
-  --cyan: #00CC66;              /* Enclave Terminal Green — primary accent */
-  --cyan-dim: #00CC6660;
-  --cyan-ghost: #00CC6615;
-  --amber: #19AA61;             /* Enclave Secondary Green */
-  --amber-dim: #19AA6160;
-  --green: #00CC66;             /* Enclave Terminal Green — success/status */
-  --green-dim: #00CC6660;
-  --red: #FA582D;               /* Enclave Alert Orange — danger/error */
+
+  /* === Primary accent (Enclave Terminal Green) === */
+  --accent: #00CC66;
+  --accent-dim: #00CC6660;
+  --accent-ghost: #00CC6615;
+
+  /* === Secondary accent (muted green for less-prominent highlights) === */
+  --accent-2: #19AA61;
+  --accent-2-dim: #19AA6160;
+
+  /* === Semantic status === */
+  --success: #00CC66;
+  --success-dim: #00CC6660;
+  --warn: #F5A623;              /* real amber — warnings only */
+  --warn-dim: #F5A62360;
+  --danger: #E54B4B;            /* real red — errors only */
+  --danger-dim: #E54B4B60;
+  --info: #00C0E8;              /* signal cyan — info accents */
+  --info-dim: #00C0E860;
+
+  /* === DEPRECATED aliases — remove after Month-1 token pass === */
+  --cyan: var(--accent);
+  --cyan-dim: var(--accent-dim);
+  --cyan-ghost: var(--accent-ghost);
+  --amber: var(--accent-2);      /* was misnamed: this is green, not amber */
+  --amber-dim: var(--accent-2-dim);
+  --green: var(--success);
+  --green-dim: var(--success-dim);
+  --red: #FA582D;                /* Enclave Alert Orange — legacy; prefer --danger */
   --red-dim: #FA582D60;
-  --purple: #00C0E8;            /* Enclave Signal Cyan — info accent */
-  --purple-dim: #00C0E860;
+  --purple: var(--info);
+  --purple-dim: var(--info-dim);
+
   --text: #e0e0e0;
   --text-dim: #8D8D8D;
   --text-muted: #555555;
@@ -36,7 +58,8 @@
   --glow-cyan: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
   --glow-green: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
   --glow-red: 0 0 12px #FA582D30, 0 0 4px #FA582D20;
-  --glow-amber: 0 0 12px #19AA6130, 0 0 4px #19AA6120;
+  --glow-amber: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
+  --glow-warn: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
 }
 
 /* ── RESET & BASE ───────────────────────────────────────────────── */
@@ -229,7 +252,7 @@ body::before {
 }
 .status-pip.online { background: var(--green); box-shadow: var(--glow-green); }
 .status-pip.offline { background: var(--red); box-shadow: var(--glow-red); animation: none; }
-.status-pip.warn { background: var(--amber); box-shadow: var(--glow-amber); }
+.status-pip.warn { background: var(--warn); box-shadow: var(--glow-warn); }
 
 .metric-row {
   display: flex;
@@ -625,7 +648,7 @@ body::before {
 }
 .inv-card-badge.installed { color: var(--green); border-color: var(--green-dim); }
 .inv-card-badge.available { color: var(--text-muted); border-color: var(--text-muted); }
-.inv-card-badge.pulling { color: var(--amber); border-color: var(--amber-dim); }
+.inv-card-badge.pulling { color: var(--warn); border-color: var(--warn-dim); }
 
 .inv-card-desc {
   font-size: 0.72rem;

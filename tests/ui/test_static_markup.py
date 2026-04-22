@@ -136,3 +136,38 @@ def test_setup_does_not_load_external_cdns(setup_html_text):
         assert needle not in setup_html_text, (
             f"setup.html external CDN reference remains: {needle}"
         )
+
+
+def test_color_tokens_are_honest(index_html_text):
+    """Token values must match their semantic name.
+
+    --amber rendering as green and --warn missing entirely were caught
+    in the audit; this guards against regression.
+    """
+    m = re.search(r":root\s*\{([^}]*)\}", index_html_text)
+    assert m is not None, ":root CSS variable block not found"
+    root = m.group(1)
+
+    def hex_to_rgb(h: str) -> tuple[int, int, int]:
+        h = h.lstrip("#")
+        return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+    def is_green(hex_str: str) -> bool:
+        r, g, b = hex_to_rgb(hex_str)
+        return g > r and g > b
+
+    # If --warn is defined, its base hex (not an alias) must actually be
+    # amber/orange — i.e. NOT green-dominant.
+    warn = re.search(r"--warn:\s*#([0-9A-Fa-f]{6})\b", root)
+    assert warn is not None, "--warn token missing — introduce a real amber for warnings"
+    assert not is_green(warn.group(1)), (
+        f"--warn resolves to green #{warn.group(1)} — must be amber/orange"
+    )
+
+    # --danger must also exist as a real red.
+    danger = re.search(r"--danger:\s*#([0-9A-Fa-f]{6})\b", root)
+    assert danger is not None, "--danger token missing"
+    dr, dg, db = hex_to_rgb(danger.group(1))
+    assert dr > dg and dr > db, (
+        f"--danger #{danger.group(1)} is not red-dominant"
+    )
