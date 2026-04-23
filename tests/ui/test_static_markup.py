@@ -193,3 +193,44 @@ def test_focus_visible_outline_exists(index_html_text):
         index_html_text,
     )
     assert m is not None, "no global :focus-visible outline rule found"
+
+
+def test_api_mounts_static_directory():
+    """api/main.py must mount /static so vendor assets and favicon serve.
+
+    Pre-existing silent bug: StaticFiles was imported but never mounted,
+    so favicon and every /static/* request 404'd. Task 6's self-hosted
+    fonts exposed this — test ensures the mount remains wired up.
+    """
+    from pathlib import Path
+
+    main_py = (
+        Path(__file__).resolve().parents[2] / "api" / "main.py"
+    ).read_text(encoding="utf-8")
+    assert 'app.mount("/static"' in main_py, (
+        "api/main.py must mount /static — vendor/ and favicon depend on it"
+    )
+    assert "StaticFiles(directory=STATIC_DIR)" in main_py, (
+        "mount must use StaticFiles(directory=STATIC_DIR)"
+    )
+
+
+def test_vendor_css_references_only_local_paths(index_html_text):
+    """Task 6 sibling check: every stylesheet <link> must be local-only."""
+    # Match any <link> with rel="stylesheet", regardless of attribute order.
+    hrefs: list[str] = []
+    for tag in re.finditer(r"<link[^>]+>", index_html_text):
+        tag_text = tag.group(0)
+        if 'rel="stylesheet"' not in tag_text and "rel='stylesheet'" not in tag_text:
+            continue
+        m = re.search(r'href=["\']([^"\']+)["\']', tag_text)
+        if m:
+            hrefs.append(m.group(1))
+    assert hrefs, "no stylesheet <link> tags found"
+    for href in hrefs:
+        assert href.startswith("/") or href.startswith("./"), (
+            f"stylesheet href '{href}' is not a relative/root-relative path"
+        )
+        assert "//" not in href.replace("http://", "").replace(
+            "https://", ""
+        ), f"stylesheet href '{href}' looks external"
