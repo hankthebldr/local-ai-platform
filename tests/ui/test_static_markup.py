@@ -282,6 +282,23 @@ def test_chat_panel_sits_on_first_dashboard_row(index_html_text):
     )
 
 
+def test_chat_has_system_prompt_row(index_html_text):
+    """Chat must expose a system-prompt row wired to the role library."""
+    assert 'id="system-prompt"' in index_html_text, (
+        "system-prompt <textarea> missing from chat panel"
+    )
+    assert 'id="sysprompt-role-select"' in index_html_text, (
+        "role dropdown for system prompt missing"
+    )
+    # sendMessage must actually prepend the system message when present.
+    assert "getSystemPromptMessage" in index_html_text, (
+        "sendMessage must prepend the saved system prompt"
+    )
+    assert "role: 'system'" in index_html_text, (
+        "no role=system turn is ever emitted — system prompt wiring broken"
+    )
+
+
 def test_header_uses_installer_enclave_mark(index_html_text):
     """Header logo must match the canonical Enclave mark used by the installer."""
     # Reject the legacy hexagon + 'EN/CL' typographic placeholder

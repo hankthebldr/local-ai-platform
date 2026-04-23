@@ -1274,9 +1274,29 @@ body::before {
           <div class="panel-label" style="margin-bottom:0">Chat Interface</div>
           <div style="display:flex;align-items:center;gap:8px">
             <select class="model-select" id="model-select"><option>loading...</option></select>
+            <button class="action-btn" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border)">System</button>
             <button class="action-btn" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border);display:none">EXPORT</button>
           </div>
         </div>
+
+        <!-- System Prompt (collapsible; applies to every turn in this session) -->
+        <div class="system-prompt-row" id="system-prompt-row" style="display:none">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.15em;text-transform:uppercase">System Prompt</label>
+            <select id="sysprompt-role-select" class="model-select" style="min-width:180px;font-size:0.7rem" onchange="applyRoleAsSystemPrompt()">
+              <option value="">— load from role library —</option>
+            </select>
+            <span style="flex:1"></span>
+            <button class="action-btn" onclick="saveSystemPrompt()" style="padding:3px 10px;font-size:0.65rem">Save</button>
+            <button class="action-btn" onclick="clearSystemPrompt()" style="padding:3px 10px;font-size:0.65rem;border-color:var(--border);color:var(--text-dim)">Clear</button>
+          </div>
+          <textarea id="system-prompt" class="chat-input" rows="3" style="min-height:60px;max-height:200px;font-size:0.72rem" placeholder="Define the assistant's persona, tone, and constraints. Applied as role=system on every turn."></textarea>
+          <div style="font-size:0.58rem;color:var(--text-muted);margin-top:4px;letter-spacing:0.1em;text-transform:uppercase">
+            <span id="sysprompt-status">off</span>
+            <span style="margin-left:10px">saved in localStorage</span>
+          </div>
+        </div>
+
         <div class="chat-messages" id="messages">
           <div class="msg system-msg">Select a model and start chatting. All inference runs locally.</div>
         </div>
@@ -1892,6 +1912,90 @@ function updateExportBtn() {
   if (chatMetadata.length > 0) btn.style.display = 'inline-block';
 }
 
+// ── SYSTEM PROMPT (applied to every chat turn) ─────────────────────────
+const SYSPROMPT_KEY = 'enclave.chat.systemPrompt';
+
+function toggleSystemPrompt() {
+  const row = document.getElementById('system-prompt-row');
+  const show = row.style.display === 'none';
+  row.style.display = show ? 'block' : 'none';
+  if (show) populateSystemPromptRoles();
+}
+
+async function populateSystemPromptRoles() {
+  const sel = document.getElementById('sysprompt-role-select');
+  if (!sel || sel.dataset.loaded === '1') return;
+  try {
+    const r = await fetch('/api/roles');
+    const roles = await r.json();
+    for (const role of roles) {
+      const opt = document.createElement('option');
+      opt.value = role.id;
+      opt.textContent = role.name;
+      sel.appendChild(opt);
+    }
+    sel.dataset.loaded = '1';
+  } catch (e) {
+    console.warn('Failed to load roles for system prompt:', e);
+  }
+}
+
+async function applyRoleAsSystemPrompt() {
+  const sel = document.getElementById('sysprompt-role-select');
+  const id = sel.value;
+  if (!id) return;
+  try {
+    const r = await fetch(`/api/roles/${encodeURIComponent(id)}`);
+    if (!r.ok) return;
+    const role = await r.json();
+    document.getElementById('system-prompt').value = role.content;
+    saveSystemPrompt();
+  } catch (e) { console.warn(e); }
+}
+
+function saveSystemPrompt() {
+  const text = document.getElementById('system-prompt').value;
+  try { localStorage.setItem(SYSPROMPT_KEY, text); } catch (_) {}
+  updateSystemPromptStatus();
+}
+
+function clearSystemPrompt() {
+  document.getElementById('system-prompt').value = '';
+  try { localStorage.removeItem(SYSPROMPT_KEY); } catch (_) {}
+  updateSystemPromptStatus();
+}
+
+function loadSystemPrompt() {
+  try {
+    const saved = localStorage.getItem(SYSPROMPT_KEY);
+    if (saved) document.getElementById('system-prompt').value = saved;
+  } catch (_) {}
+  updateSystemPromptStatus();
+}
+
+function updateSystemPromptStatus() {
+  const ta = document.getElementById('system-prompt');
+  const status = document.getElementById('sysprompt-status');
+  const btn = document.getElementById('sysprompt-btn');
+  const active = !!(ta && ta.value.trim());
+  if (status) status.textContent = active ? `active · ${ta.value.length} chars` : 'off';
+  if (btn) btn.style.borderColor = active ? 'var(--accent-dim)' : 'var(--border)';
+  if (btn) btn.style.color = active ? 'var(--accent)' : '';
+}
+
+function getSystemPromptMessage() {
+  const ta = document.getElementById('system-prompt');
+  const text = ta && ta.value.trim();
+  return text ? { role: 'system', content: text } : null;
+}
+
+// Load on first paint; keep status synced as the user edits
+document.addEventListener('DOMContentLoaded', () => {
+  loadSystemPrompt();
+  const ta = document.getElementById('system-prompt');
+  if (ta) ta.addEventListener('input', updateSystemPromptStatus);
+});
+
 async function sendMessage() {
   const input = document.getElementById('prompt');
   const text = input.value.trim();
@@ -1918,12 +2022,16 @@ async function sendMessage() {
   messages.scrollTop = messages.scrollHeight;
 
   try {
+    // Prepend the saved system prompt (if any) — OpenAI-style role=system turn.
+    const sysMsg = getSystemPromptMessage();
+    const outboundMessages = sysMsg ? [sysMsg, ...chatHistory] : chatHistory;
+
     const r = await fetch('/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        messages: chatHistory,
+        messages: outboundMessages,
         max_tokens: 1024,
         web_search: webSearchEnabled,
       })
