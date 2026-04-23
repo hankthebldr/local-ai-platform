@@ -264,3 +264,36 @@ def test_results_renderer_shows_retries_and_model(index_html_text):
     assert "model_used" in index_html_text, (
         "results renderer does not reference StepResult.model_used"
     )
+
+
+def test_chat_panel_sits_on_first_dashboard_row(index_html_text):
+    """Chat must be the primary surface — row 1, spanning all columns."""
+    m = re.search(
+        r"\.dashboard-grid\s+\.panel-chat\s*\{([^}]+)\}",
+        index_html_text,
+    )
+    assert m is not None, ".panel-chat grid rule not found"
+    body = m.group(1)
+    assert "grid-row: 1" in body, (
+        "panel-chat is not on grid-row 1 — chat should sit above the metrics row"
+    )
+    assert "grid-column: 1 / -1" in body, (
+        "panel-chat must span all dashboard columns"
+    )
+
+
+def test_header_uses_installer_enclave_mark(index_html_text):
+    """Header logo must match the canonical Enclave mark used by the installer."""
+    # Reject the legacy hexagon + 'EN/CL' typographic placeholder
+    assert 'class="logo-hex"' not in index_html_text, (
+        "legacy .logo-hex still in header — swap to .logo-mark"
+    )
+    # Assert the canonical mark is present (nested rects)
+    assert 'class="logo-mark"' in index_html_text, (
+        ".logo-mark container missing from header"
+    )
+    # And the 4 nested rects — signature of the installer Enclave mark
+    rect_count = index_html_text.count('<rect ')
+    assert rect_count >= 4, (
+        f"installer Enclave mark expects 4 nested <rect> elements; found {rect_count}"
+    )
