@@ -190,29 +190,30 @@ All API endpoints convert between OpenAI format (for client compatibility) and n
 
 ## Release Track (SemVer)
 
-All planning, features, and build artifacts follow semantic versioning. Historical
-"Phase N" labels map to the release track below. `1.0.0` is reserved for the first
-production-ready release (auth + tests + Docker + observability); everything prior
-ships as `0.x`.
+All planning, features, and build artifacts follow semantic versioning. `1.0.0`
+shipped 2026-04-18 as the first public Enclave release — it marks the initial
+product surface (API, CLI, Mac DMG, workflow engine, RAG) rather than enterprise-
+grade production readiness. The enterprise hardening bar (auth maturity,
+observability, HA, ≥70% coverage) is still the target, tracked separately in
+[ENTERPRISE_DEPLOYMENT_GAPS.md](./ENTERPRISE_DEPLOYMENT_GAPS.md).
 
-**Current release**: `0.1.0` — Foundation (mostly complete)
-- ✓ Core infrastructure (Ollama + systemd service)
-- ✓ Model download system with comprehensive registry (18 models in catalog — see MODELS.md)
-- ✓ CLI chat interface with modern color scheme
-- ✓ Functional API with OpenAI compatibility (chat/completions endpoints working)
-- ✓ Installation automation via `setup/install.sh`
-- ⏳ Router/service layer implementation (directories created, not populated)
-- ⏳ Streaming support (API structure ready, not implemented)
-- ⏳ RAG implementation
-- ⏳ Automated tests
+**Current release**: `1.0.0` — initial public Enclave release
+- ✓ Core infrastructure (Ollama + systemd service + macOS DMG)
+- ✓ Model registry and downloader (18 models — see MODELS.md)
+- ✓ CLI chat with Rich formatting
+- ✓ OpenAI-compatible API (chat, completions, models) with streaming
+- ✓ Router/service layer (populated: 15 routers, 23 services)
+- ✓ API-key authentication with rotation + plugin system
+- ✓ Multi-agent workflow engine (6-hook lifecycle, retry/escalation, v2 YAML)
+- ✓ RAG pipeline (Chroma + chunker + document service)
+- ✓ CI (pytest on 3.12/3.13 matrix), Release (DMG build + GitHub Release), Pages
+- ✓ Automated tests (~30 files across unit / integration / e2e / hooks)
 
 **Roadmap**:
-- `0.2.0` — Enhanced Serving: streaming responses, additional inference engines (vLLM, llama.cpp), Web UI
-- `0.3.0` — Customization: fine-tuning pipeline (Axolotl/Unsloth)
-- `0.4.0` — Retrieval: RAG with Chroma, LangChain integration
-- `1.0.0` — Production: auth/authz, rate limiting, test coverage ≥70%, Docker/K8s, Prometheus + Grafana, structured logging, HA (the "true 1.0")
-- `1.x` — Post-1.0 enterprise features: distributed tracing, multi-region, compliance/audit, API gateway
-- `0.1.x` / `1.0.x` — Patch releases for bug fixes and doc updates within each minor line
+- `1.1.0` — ongoing work since `1.0.0`: workflow engine refinements, backlog wins, docs hygiene
+- `1.x` — incremental features: additional inference engines (vLLM, llama.cpp), fine-tuning pipeline, Web UI polish
+- `2.0.0` — enterprise hardening bar: ≥70% coverage, full authz, Prometheus + Grafana, Docker/K8s production topology, HA, distributed tracing
+- `1.x.y` — patch releases for bug fixes and doc updates
 
 ## Critical Context
 
@@ -340,23 +341,20 @@ curl -X POST http://localhost:8000/api/workflows/run \
 ## Known Limitations & Implementation Status
 
 **API Layer**:
-- `api/main.py` has working endpoints but uses inline logic (no routers/services separation)
-- Router/service layers in `api/` are empty skeleton directories
-- Streaming responses not implemented (request model has stream parameter but not used)
-- No actual token counting (returns 0 in usage metrics)
-- No API key authentication implemented (env var defined but not enforced)
+- Router/service separation is in place; new endpoints should follow the existing pattern rather than the legacy inline style in `api/main.py`
+- Token counting in OpenAI-compatible usage metrics is still a stub (returns 0)
+- CORS is permissive (`allow_origins=["*"]`) — acceptable for local dev, must be tightened before any multi-tenant deployment
 
 **Features Not Yet Built**:
 - Fine-tuning pipeline (dependencies installed but no implementation)
-- RAG system (ChromaDB/LangChain installed but not integrated)
-- No automated tests (pytest installed, `tests/` directory empty)
-- No Docker deployment (Dockerfile/compose files planned but not created)
-- Web UI integration (Open WebUI installable but not configured)
+- Additional inference backends beyond Ollama (vLLM, llama.cpp — scaffolding only)
+- Web UI (Open WebUI installable but not integrated into the distribution)
+- Rate limiting per API key
 
 **Data Persistence**:
 - CLI conversation history is in-memory only (lost on exit)
 - No conversation logging/export
-- No metrics/usage tracking
+- No metrics/usage tracking beyond API-key usage counters
 
 ## Troubleshooting
 
@@ -393,33 +391,32 @@ curl http://localhost:11434/api/tags
 
 ## Enterprise Deployment
 
-**⚠️ IMPORTANT**: This codebase is currently **NOT production-ready** for enterprise deployment.
+**⚠️ IMPORTANT**: Enclave `1.0.0` shipped as the first public product release. It is
+**not** yet enterprise-grade for multi-tenant production deployment. See
+[ENTERPRISE_DEPLOYMENT_GAPS.md](./ENTERPRISE_DEPLOYMENT_GAPS.md) for the gap analysis;
+the `2.0.0` roadmap line targets that bar.
 
-See `ENTERPRISE_DEPLOYMENT_GAPS.md` for a comprehensive analysis of gaps and required improvements.
+**What's already in place (updated 1.0.0)**:
+- API-key authentication + middleware + rotation
+- CI pipeline (pytest matrix on 3.12/3.13, lint, release DMG build)
+- Automated test suite (~30 test files, unit + integration + e2e)
+- Docker + docker-compose for local/single-host deployment
+- Streaming API endpoints
+- Structured workflow engine with hook lifecycle
 
-**Current Production Readiness**: ~15%
+**Still required for enterprise-grade deployment**:
+1. Tighten CORS (currently `allow_origins=["*"]`)
+2. Add rate limiting per API key
+3. Increase test coverage to ≥70% and wire coverage reporting in CI
+4. Implement Prometheus metrics + Grafana dashboards (client installed but unused)
+5. Kubernetes manifests / Helm chart for HA topology
+6. Liveness / readiness health checks beyond the existing `/health`
+7. Structured logging with correlation IDs
+8. Automated backups and disaster recovery runbook
+9. Authorization (RBAC) on top of authentication
+10. Distributed tracing (OpenTelemetry)
 
-**Critical Blockers**:
-- No authentication/authorization (API_KEY defined but not implemented in api/main.py:23)
-- No testing infrastructure (0% test coverage)
-- No monitoring/observability (Prometheus client installed but unused)
-- No CI/CD pipeline
-- No high availability (single instance, no load balancing)
-- CORS configured to allow all origins (security risk at api/main.py:49)
-
-**Minimum Requirements for Production**:
-1. Implement JWT/API key authentication middleware
-2. Add rate limiting per user/API key
-3. Configure proper CORS policies
-4. Create comprehensive test suite (target: 70%+ coverage)
-5. Implement Prometheus metrics + Grafana dashboards
-6. Set up CI/CD pipeline with automated testing
-7. Containerize with Docker and deploy to Kubernetes
-8. Add health check endpoints (liveness/readiness)
-9. Implement structured logging with correlation IDs
-10. Set up automated backups and disaster recovery
-
-**Recommended Path**: Follow the 4-phase implementation roadmap in `ENTERPRISE_DEPLOYMENT_GAPS.md` (estimated 8-12 weeks with 2-3 engineers).
+**Recommended Path**: Follow the phased roadmap in [ENTERPRISE_DEPLOYMENT_GAPS.md](./ENTERPRISE_DEPLOYMENT_GAPS.md); target is the `2.0.0` release line.
 
 ## References
 
