@@ -6,10 +6,8 @@
 <title>ENCLAVE</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js" crossorigin="anonymous"></script>
+<link href="/static/vendor/fonts/fonts.css" rel="stylesheet">
+<script src="/static/vendor/d3.v7.min.js" defer></script>
 <style>
 /* ── DESIGN TOKENS ──────────────────────────────────────────────── */
 :root {
@@ -19,17 +17,39 @@
   --bg-panel: rgba(20, 20, 20, 0.9);
   --border: #2a2a2a;
   --border-glow: #00CC6618;
-  --cyan: #00CC66;              /* Enclave Terminal Green — primary accent */
-  --cyan-dim: #00CC6660;
-  --cyan-ghost: #00CC6615;
-  --amber: #19AA61;             /* Enclave Secondary Green */
-  --amber-dim: #19AA6160;
-  --green: #00CC66;             /* Enclave Terminal Green — success/status */
-  --green-dim: #00CC6660;
-  --red: #FA582D;               /* Enclave Alert Orange — danger/error */
+
+  /* === Primary accent (Enclave Terminal Green) === */
+  --accent: #00CC66;
+  --accent-dim: #00CC6660;
+  --accent-ghost: #00CC6615;
+
+  /* === Secondary accent (muted green for less-prominent highlights) === */
+  --accent-2: #19AA61;
+  --accent-2-dim: #19AA6160;
+
+  /* === Semantic status === */
+  --success: #00CC66;
+  --success-dim: #00CC6660;
+  --warn: #F5A623;              /* real amber — warnings only */
+  --warn-dim: #F5A62360;
+  --danger: #E54B4B;            /* real red — errors only */
+  --danger-dim: #E54B4B60;
+  --info: #00C0E8;              /* signal cyan — info accents */
+  --info-dim: #00C0E860;
+
+  /* === DEPRECATED aliases — remove after Month-1 token pass === */
+  --cyan: var(--accent);
+  --cyan-dim: var(--accent-dim);
+  --cyan-ghost: var(--accent-ghost);
+  --amber: var(--accent-2);      /* was misnamed: this is green, not amber */
+  --amber-dim: var(--accent-2-dim);
+  --green: var(--success);
+  --green-dim: var(--success-dim);
+  --red: #FA582D;                /* Enclave Alert Orange — legacy; prefer --danger */
   --red-dim: #FA582D60;
-  --purple: #00C0E8;            /* Enclave Signal Cyan — info accent */
-  --purple-dim: #00C0E860;
+  --purple: var(--info);
+  --purple-dim: var(--info-dim);
+
   --text: #e0e0e0;
   --text-dim: #8D8D8D;
   --text-muted: #555555;
@@ -38,12 +58,37 @@
   --glow-cyan: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
   --glow-green: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
   --glow-red: 0 0 12px #FA582D30, 0 0 4px #FA582D20;
-  --glow-amber: 0 0 12px #19AA6130, 0 0 4px #19AA6120;
+  --glow-amber: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
+  --glow-warn: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
 }
 
 /* ── RESET & BASE ───────────────────────────────────────────────── */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html { font-size: 14px; }
+
+/* ── KEYBOARD FOCUS (a11y) ──────────────────────────────────────── */
+:focus { outline: none; }  /* reset default chrome; :focus-visible restores */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* Elements that already indicate focus via border-color — don't double up. */
+.chat-input:focus-visible,
+.model-select:focus-visible,
+.inv-toolbar .search-input:focus-visible,
+.settings-row input:focus-visible,
+.settings-row select:focus-visible { outline: none; }
+
+/* Respect reduced-motion users — disable our ambient/pulse animations. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 body {
   font-family: var(--mono);
   background: var(--bg-deep);
@@ -231,7 +276,7 @@ body::before {
 }
 .status-pip.online { background: var(--green); box-shadow: var(--glow-green); }
 .status-pip.offline { background: var(--red); box-shadow: var(--glow-red); animation: none; }
-.status-pip.warn { background: var(--amber); box-shadow: var(--glow-amber); }
+.status-pip.warn { background: var(--warn); box-shadow: var(--glow-warn); }
 
 .metric-row {
   display: flex;
@@ -502,9 +547,14 @@ body::before {
   color: var(--text);
   font-family: var(--mono);
   font-size: 0.82rem;
+  line-height: 1.5;
   padding: 12px 16px;
   outline: none;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  resize: none;
+  min-height: 44px;
+  max-height: 240px;
+  overflow-y: auto;
 }
 .chat-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 8px #00CC6610; }
 .chat-input::placeholder { color: var(--text-muted); }
@@ -622,7 +672,7 @@ body::before {
 }
 .inv-card-badge.installed { color: var(--green); border-color: var(--green-dim); }
 .inv-card-badge.available { color: var(--text-muted); border-color: var(--text-muted); }
-.inv-card-badge.pulling { color: var(--amber); border-color: var(--amber-dim); }
+.inv-card-badge.pulling { color: var(--warn); border-color: var(--warn-dim); }
 
 .inv-card-desc {
   font-size: 0.72rem;
@@ -1039,15 +1089,20 @@ body::before {
 .wf-run-time { color: var(--text-muted); font-size: 0.65rem; }
 
 /* ── RESPONSIVE ─────────────────────────────────────────────────── */
-@media (max-width: 800px) {
-  .research-layout { grid-template-columns: 1fr; height: auto; }
-  .research-left, .research-right { min-height: 300px; }
-}
+@media (max-width: 1024px) {
   .dashboard-grid { grid-template-columns: 1fr; }
   .dashboard-grid .panel-system,
   .dashboard-grid .panel-models,
   .dashboard-grid .panel-perf,
   .dashboard-grid .panel-chat { grid-column: 1; }
+  .inv-grid { grid-template-columns: 1fr 1fr; }
+  .mem-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 800px) {
+  .research-layout { grid-template-columns: 1fr; height: auto; }
+  .research-left, .research-right { min-height: 300px; }
+  .dashboard-grid { grid-template-columns: 1fr; }
   .header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .inv-grid { grid-template-columns: 1fr; }
   .mem-grid { grid-template-columns: 1fr; }
@@ -1066,13 +1121,13 @@ body::before {
       <div class="logo-hex">
         <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
           <path d="M50 2 L93 27 L93 73 L50 98 L7 73 L7 27 Z" rx="8" fill="var(--cyan)" opacity="0.9"/>
-          <text x="50" y="42" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">COR</text>
-          <text x="50" y="68" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">TEX</text>
+          <text x="50" y="42" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">EN</text>
+          <text x="50" y="68" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">CL</text>
         </svg>
       </div>
       <div class="logo-text">
-        <div class="logo-title">LOCAL <span>AI</span> PLATFORM</div>
-        <div class="logo-sub">CORTEX &mdash; Mission Control</div>
+        <div class="logo-title">EN<span>CLAVE</span></div>
+        <div class="logo-sub">Local sovereign AI &mdash; by ohno llc</div>
       </div>
     </div>
     <div class="header-status">
@@ -1082,14 +1137,14 @@ body::before {
   </div>
 
   <!-- TAB NAVIGATION -->
-  <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
-    <button class="tab-btn" onclick="switchTab('inventory')">Models<span class="tab-count" id="inv-count"></span></button>
-    <button class="tab-btn" onclick="switchTab('memory')">Memory<span class="tab-count" id="mem-count"></span></button>
-    <button class="tab-btn" onclick="switchTab('discover')">Discover<span class="tab-count" id="disc-count"></span></button>
-    <button class="tab-btn" onclick="switchTab('research')">Research<span class="tab-count" id="res-count"></span></button>
-    <button class="tab-btn" onclick="switchTab('workflows')">Workflows</button>
-    <button class="tab-btn" data-tab="documents" onclick="switchTab('documents')">
+  <div class="tab-nav" role="tablist">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Dashboard</button>
+    <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
+    <button class="tab-btn" data-tab="memory" onclick="switchTab('memory', this)">Memory<span class="tab-count" id="mem-count"></span></button>
+    <button class="tab-btn" data-tab="discover" onclick="switchTab('discover', this)">Discover<span class="tab-count" id="disc-count"></span></button>
+    <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Research<span class="tab-count" id="res-count"></span></button>
+    <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows', this)">Workflows</button>
+    <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">
       <span>Documents</span>
     </button>
   </div>
@@ -1209,9 +1264,9 @@ body::before {
             <span class="toggle-label" id="search-label">Search: OFF</span>
             &#x1F310;
           </button>
-          <input class="chat-input" id="prompt" type="text" placeholder="Enter query..." autocomplete="off" spellcheck="false" />
+          <textarea class="chat-input" id="prompt" rows="1" placeholder="Enter query... (Enter to send, Shift+Enter for newline)" autocomplete="off" spellcheck="false"></textarea>
           <button class="action-btn" onclick="toggleSettings()" title="Search settings" style="padding:0 12px;font-size:1rem;border-color:var(--border)">&#x2699;</button>
-          <button class="send-btn" id="send-btn" onclick="sendMessage()">TRANSMIT</button>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
         </div>
       </div>
     </div>
@@ -1385,7 +1440,7 @@ body::before {
           <div class="panel-label">Deep Research Mode</div>
           <div class="deep-dive-form">
             <input type="text" id="research-topic" placeholder="Enter research topic or question..." autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')runDeepDive()" />
-            <button class="action-btn pull" id="dive-btn" onclick="runDeepDive()">DIVE</button>
+            <button class="action-btn pull" id="dive-btn" onclick="runDeepDive()">Research</button>
           </div>
           <div class="deep-dive-options">
             <label>Model</label>
@@ -1400,7 +1455,7 @@ body::before {
           <span class="corner-tr"></span><span class="corner-bl"></span>
           <div class="panel-label">Research Results</div>
           <div id="research-output">
-            <div class="research-empty">Enter a topic above and click DIVE to start deep research.<br><br>The model will decompose your topic, search each angle, then synthesize a structured report.</div>
+            <div class="research-empty">Enter a topic above and click Research to start a deep investigation.<br><br>The model will decompose your topic, search each angle, then synthesize a structured report.</div>
           </div>
         </div>
       </div>
@@ -1443,7 +1498,7 @@ body::before {
         </div>
 
         <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:8px 28px">EXECUTE</button>
+          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:8px 28px">Run</button>
         </div>
       </div>
 
@@ -1513,18 +1568,24 @@ body::before {
       <a href="/v1/models">MODELS</a>
       <a href="/api/info">INFO</a>
     </div>
-    <div class="footer-meta">ENCLAVE v1.0.0 &mdash; by ohno llc</div>
+    <div class="footer-meta">Enclave v0.1.0 &mdash; by ohno llc</div>
   </div>
 
 </div>
 
 <script>
 /* ── TAB SWITCHING ─────────────────────────────────────────────── */
-function switchTab(name) {
+function switchTab(name, el) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  event.currentTarget.classList.add('active');
+  // Prefer explicitly-passed element; fall back to data-tab, then to onclick-string match.
+  const btn = el
+    || document.querySelector('.tab-btn[data-tab="' + name + '"]')
+    || Array.from(document.querySelectorAll('.tab-btn')).find(
+      b => (b.getAttribute('onclick') || '').indexOf("'" + name + "'") !== -1
+    );
+  if (btn) btn.classList.add('active');
 
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
   if (name === 'memory') { loadMemory(); loadMemoryTab(); }
@@ -1777,8 +1838,9 @@ async function sendMessage() {
   const searchBadge = webSearchEnabled ? ' <span style="color:var(--amber);font-size:0.6rem;vertical-align:middle">&#x1F310; SEARCH</span>' : '';
   messages.innerHTML += `<div class="msg user">${esc(text)}${searchBadge}</div>`;
   input.value = '';
+  input.style.height = 'auto';
   btn.disabled = true;
-  btn.textContent = webSearchEnabled ? 'SEARCHING...' : 'SENDING...';
+  btn.textContent = webSearchEnabled ? 'Searching…' : 'Sending…';
 
   const typingId = 'typing-' + Date.now();
   const typingLabel = webSearchEnabled ? 'searching & generating' : 'generating';
@@ -1829,7 +1891,7 @@ async function sendMessage() {
   }
 
   btn.disabled = false;
-  btn.textContent = 'TRANSMIT';
+  btn.textContent = 'Send';
   messages.scrollTop = messages.scrollHeight;
   updateExportBtn();
 }
@@ -1919,9 +1981,24 @@ async function exportSession() {
   setTimeout(() => { btn.textContent = 'EXPORT'; }, 1500);
 }
 
-document.getElementById('prompt').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
+(function wireChatInput() {
+  const ta = document.getElementById('prompt');
+  if (!ta) return;
+  const autoGrow = () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 240) + 'px';
+  };
+  ta.addEventListener('input', autoGrow);
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    } else if (e.key === 'Escape') {
+      ta.value = '';
+      autoGrow();
+    }
+  });
+})();
 
 /* ══════════════════════════════════════════════════════════════════
    INVENTORY TAB
@@ -2566,7 +2643,7 @@ async function runDeepDive() {
   const out = document.getElementById('research-output');
   const btn = document.getElementById('dive-btn');
   btn.disabled = true;
-  btn.textContent = 'RESEARCHING...';
+  btn.textContent = 'Researching…';
 
   // Show progress UI
   out.innerHTML = `
@@ -2609,7 +2686,7 @@ async function runDeepDive() {
     out.innerHTML = `<div class="research-empty" style="color:var(--red)">Research failed: ${esc(String(e))}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'DIVE';
+    btn.textContent = 'Research';
   }
 }
 
@@ -2809,7 +2886,7 @@ async function runWorkflow() {
   } catch (e) {
     alert('Invalid JSON in seed data');
     btn.disabled = false;
-    btn.textContent = 'EXECUTE';
+    btn.textContent = 'Run';
     return;
   }
 
@@ -2887,7 +2964,7 @@ async function runWorkflow() {
       `<div style="color:var(--red);font-size:0.75rem">Execution failed: ${esc(String(e))}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'EXECUTE';
+    btn.textContent = 'Run';
   }
 }
 

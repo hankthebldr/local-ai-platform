@@ -156,6 +156,12 @@ async def health_check():
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Mount /static for all assets under api/static/ (favicon, index.html,
+# setup.html, vendor fonts, vendor d3, etc). Previously StaticFiles was
+# imported but never mounted — favicon and every /static/* request 404'd.
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 @app.get("/")
 @app.head("/")
