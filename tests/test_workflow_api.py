@@ -87,3 +87,33 @@ class TestWorkflowAPI:
         response = client.get("/api/workflows/runs")
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+
+    def test_get_workflow_definition(self, client):
+        """GET /api/workflows/{id} returns full definition with steps for the UI."""
+        response = client.get("/api/workflows/data-model-rules")
+        assert response.status_code == 200
+        defn = response.json()
+        assert defn["id"] == "data-model-rules"
+        assert isinstance(defn["steps"], list)
+        assert len(defn["steps"]) >= 1
+        # Each step must expose the hooks block (may be empty) so the UI
+        # can reliably render hook slots.
+        for step in defn["steps"]:
+            assert "hooks" in step
+            hooks = step["hooks"] or {}
+            for slot in (
+                "before_step",
+                "transform_prompt",
+                "validate_output",
+                "after_step",
+                "on_failure",
+            ):
+                assert slot in hooks
+
+    def test_get_missing_workflow_returns_404(self, client):
+        response = client.get("/api/workflows/does-not-exist")
+        assert response.status_code == 404
+
+    def test_get_workflow_rejects_path_traversal(self, client):
+        response = client.get("/api/workflows/..%2F..%2Fetc%2Fpasswd")
+        assert response.status_code in (400, 404)

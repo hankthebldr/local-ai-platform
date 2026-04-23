@@ -2961,17 +2961,68 @@ async function loadWorkflowDetail() {
     document.getElementById('wf-detail').style.display = 'block';
     document.getElementById('wf-results').style.display = 'none';
 
-    // We need to get the steps - use the validate endpoint with inline definition
-    // For now, render based on what we know
-    currentWorkflowDef = { id: opt.dataset.id, name: opt.textContent, steps: wf.steps };
+    // Fetch the full workflow definition (with hooks + prompt blocks).
+    const defResp2 = await fetch(`/api/workflows/${encodeURIComponent(opt.dataset.id)}`);
+    const defn = defResp2.ok ? await defResp2.json() : null;
+    currentWorkflowDef = defn || { id: opt.dataset.id, name: opt.textContent, steps: [] };
 
-    // Build pipeline visualization placeholder
+    // Build static pipeline visualization showing declared hooks + role_ref.
     const pipeline = document.getElementById('wf-pipeline');
-    pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
+    if (defn && Array.isArray(defn.steps) && defn.steps.length > 0) {
+      pipeline.innerHTML = defn.steps.map((step, i) =>
+        (i > 0 ? '<div class="wf-arrow">&rarr;</div>' : '') +
+        renderStepBox(step, 'pending', null)
+      ).join('');
+    } else {
+      pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
+    }
 
   } catch (e) {
     console.error('Failed to load workflow:', e);
   }
+}
+
+function renderStepBox(step, status, result) {
+  // Declared hooks (from WorkflowDefinition). Live hook execution status
+  // will be added in a follow-up (requires engine instrumentation).
+  const hooks = step.hooks || {};
+  const slots = ['before_step', 'transform_prompt', 'validate_output', 'after_step', 'on_failure'];
+  const hookBlocks = slots.map(slot => {
+    const entries = (hooks[slot] || []);
+    if (!entries.length) return '';
+    const pills = entries.map(h =>
+      `<span class="wf-hook-pill" title="${esc(JSON.stringify(h.config || {}))}">${esc(h.name)}</span>`
+    ).join('');
+    return `<div class="wf-hook-slot">
+      <span class="wf-hook-slot-label">${slot.replace('_', ' ')}</span>${pills}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  // Role chip: prefer v2 prompt.role_ref (clickable), fallback to v1 role.
+  const roleRef = step.prompt && step.prompt.role_ref;
+  const roleChip = roleRef
+    ? `<span class="wf-role-chip" onclick="previewRole('${esc(roleRef)}')">role: ${esc(roleRef)}</span>`
+    : (step.role
+      ? `<span class="wf-role-chip inline" title="v1 role alias">role: ${esc(step.role)}</span>`
+      : '');
+
+  const modelUsed = (result && result.model_used) ? result.model_used : '';
+  const retries = (result && result.retries) ? result.retries : 0;
+  const attemptBadge = retries > 0
+    ? `<span class="wf-attempt-badge">${retries + 1} attempts</span>`
+    : '';
+
+  return `
+    <div class="wf-step">
+      <div class="wf-step-box ${status || 'pending'}">
+        <div class="wf-step-name">${esc(step.id || step.step_id)}${attemptBadge}</div>
+        <div class="wf-step-role">${esc(modelUsed)}</div>
+        ${roleChip}
+        <div class="wf-step-status ${status || 'pending'}">${status || 'pending'}</div>
+        ${hookBlocks ? `<div class="wf-step-hooks">${hookBlocks}</div>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 async function runWorkflow() {
@@ -3009,23 +3060,20 @@ async function runWorkflow() {
     document.getElementById('wf-results').style.display = 'block';
     const content = document.getElementById('wf-results-content');
 
-    // Build pipeline visualization with results
+    // Build pipeline visualization with results. Prefer the declared-step
+    // metadata (hooks, role_ref) from currentWorkflowDef so each box still
+    // shows its hook chain + role chip even when execution is mid-flight.
     const pipeline = document.getElementById('wf-pipeline');
+    const defSteps = (currentWorkflowDef && currentWorkflowDef.steps) || [];
+    const byId = new Map(defSteps.map(s => [s.id, s]));
     let pipeHtml = '';
-    (run.step_results || []).forEach((step, i) => {
+    (run.step_results || []).forEach((res, i) => {
       if (i > 0) {
-        const arrowClass = step.status === 'completed' ? 'done' : (step.status === 'running' ? 'active' : '');
+        const arrowClass = res.status === 'completed' ? 'done' : (res.status === 'running' ? 'active' : '');
         pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
       }
-      pipeHtml += `
-        <div class="wf-step">
-          <div class="wf-step-box ${step.status}">
-            <div class="wf-step-name">${esc(step.step_id)}</div>
-            <div class="wf-step-role">${esc(step.model_used || '')}</div>
-            <div class="wf-step-status ${step.status}">${step.status}</div>
-          </div>
-        </div>
-      `;
+      const step = byId.get(res.step_id) || { id: res.step_id, hooks: {} };
+      pipeHtml += renderStepBox(step, res.status, res);
     });
     pipeline.innerHTML = pipeHtml;
 
@@ -3110,23 +3158,28 @@ async function viewRun(runId) {
     document.getElementById('wf-detail-name').textContent = run.workflow_id;
     document.getElementById('wf-detail-desc').textContent = `Run: ${runId}`;
 
-    // Build pipeline from step results
+    // Build pipeline from step results. Fetch full definition so hook chips
+    // + role chips appear on historical runs too (requires engine workflow
+    // to still exist on disk — otherwise we fall back to step_results only).
     const pipeline = document.getElementById('wf-pipeline');
+    let defSteps = [];
+    try {
+      const dResp = await fetch(`/api/workflows/${encodeURIComponent(run.workflow_id)}`);
+      if (dResp.ok) {
+        const d = await dResp.json();
+        defSteps = d.steps || [];
+        currentWorkflowDef = d;
+      }
+    } catch (_) { /* fallback below */ }
+    const byId = new Map(defSteps.map(s => [s.id, s]));
     let pipeHtml = '';
-    (run.step_results || []).forEach((step, i) => {
+    (run.step_results || []).forEach((res, i) => {
       if (i > 0) {
-        const arrowClass = step.status === 'completed' ? 'done' : '';
+        const arrowClass = res.status === 'completed' ? 'done' : '';
         pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
       }
-      pipeHtml += `
-        <div class="wf-step">
-          <div class="wf-step-box ${step.status}">
-            <div class="wf-step-name">${esc(step.step_id)}</div>
-            <div class="wf-step-role">${esc(step.model_used || '')}</div>
-            <div class="wf-step-status ${step.status}">${step.status}</div>
-          </div>
-        </div>
-      `;
+      const step = byId.get(res.step_id) || { id: res.step_id, hooks: {} };
+      pipeHtml += renderStepBox(step, res.status, res);
     });
     pipeline.innerHTML = pipeHtml;
 
