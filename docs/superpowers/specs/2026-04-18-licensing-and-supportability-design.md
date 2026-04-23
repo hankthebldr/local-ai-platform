@@ -1,24 +1,18 @@
 # Local AI Platform — Licensing & Supportability Design
 
 **Date:** 2026-04-18
-**Status:** ⚠️ **ABANDONED** (2026-04-20) — retained for historical reference only.
-**Original status:** Design approved, implementation plans drafted and partially executed (scaffolding only).
+**Status:** Active — Plan 1 (Worker) implementation complete, Plan 2 (in-app client) queued.
+**Target release:** v1.0 (licensing launch)
 
-> **Why abandoned:** Product direction changed. The project will not ship with
-> any licensing/key enforcement mechanism. Keeping this spec in-tree because
-> the threat model, redaction rules, and support-channel design remain useful
-> reference material if the project ever reintroduces a paid tier or
-> privileged support channel.
+> **Implementation state (2026-04-22):**
+> - Plan 1 — Cloudflare Worker at [hankthebldr/license-service](https://github.com/hankthebldr/license-service): all 18 tasks complete, 92 tests green. Awaiting operator deploy (Cloudflare resources, keypair, secrets, LS webhook wiring).
+> - Plan 2 — in-app client (this repo): not yet started. 19 tasks documented in [`../plans/2026-04-19-in-app-licensing-and-support.md`](../plans/2026-04-19-in-app-licensing-and-support.md).
 >
-> **What was built and removed:** A standalone Cloudflare Worker repo was
-> scaffolded at `~/Github/license-service` (Tasks 1–2 of the worker plan:
-> project skeleton, Hono app, Zod schemas, env bindings). That repo has
-> been deleted. No code from this spec landed in the `local-ai-platform`
-> repo itself.
->
-> **Do NOT treat this document as an active roadmap.**
-
----
+> **Implementation constraint:** no real production signing-key material
+> commits to this repo. The app ships with a `PLACEHOLDER` public key in
+> `api/keys/license_pubkey.pem` until production deploy; tests use the
+> committable keypair in `tests/fixtures/test_license_*.pem`; the
+> production private key lives only as a Cloudflare Worker Secret.
 
 ## 1. Goals and Non-Goals
 

@@ -1,9 +1,11 @@
 # In-App Licensing & Support Client Implementation Plan
 
-> ⚠️ **ABANDONED (2026-04-20).** Plan retained for historical reference. Do not execute.
-> Product direction changed — the project will not ship with license-key enforcement.
-> Nothing from this plan was implemented in the codebase. See the spec file's
-> abandonment banner for context.
+> **Status (2026-04-22): Active — not yet started.** Queued behind Plan 1 (Worker), which is complete ([hankthebldr/license-service](https://github.com/hankthebldr/license-service)). Execute when ready to ship the in-app verification, feature gating, and support client.
+>
+> **Constraint:** no production signing-key material in this repo. The bundled
+> public key at `api/keys/license_pubkey.pem` stays as `PLACEHOLDER` until
+> production deploy; tests use the committable keypair at
+> `tests/fixtures/test_license_*.pem`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
