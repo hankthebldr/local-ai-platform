@@ -1088,6 +1088,58 @@ body::before {
 .wf-run-status { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; }
 .wf-run-time { color: var(--text-muted); font-size: 0.65rem; }
 
+/* Role Library (v2 prompt framework) */
+.wf-role-card {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.wf-role-card:hover { border-color: var(--accent-dim); background: #00CC6608; }
+.wf-role-name { color: var(--text); font-weight: 500; font-size: 0.78rem; }
+.wf-role-summary {
+  color: var(--text-dim); font-size: 0.68rem; margin-top: 4px;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.wf-role-id {
+  color: var(--text-muted); font-size: 0.6rem; margin-top: 6px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+
+/* Hook chips on pipeline */
+.wf-step-hooks { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.wf-hook-slot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wf-hook-slot-label {
+  font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted); min-width: 110px;
+}
+.wf-hook-pill {
+  font-size: 0.62rem; padding: 2px 8px;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent); background: var(--accent-ghost);
+  border-radius: 999px; cursor: help;
+}
+.wf-role-chip {
+  display: inline-block; font-size: 0.62rem; padding: 2px 8px;
+  border: 1px solid var(--accent-2-dim); color: var(--accent-2);
+  border-radius: 999px; cursor: pointer; margin-top: 6px;
+}
+.wf-role-chip:hover { border-color: var(--accent-2); background: rgba(25,170,97,0.08); }
+.wf-role-chip.inline { cursor: default; }
+
+/* Attempt / escalation indicators */
+.wf-attempt-badge {
+  font-size: 0.6rem; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--warn-dim); color: var(--warn);
+  margin-left: 8px;
+}
+.wf-escalation {
+  font-size: 0.66rem; color: var(--text-dim);
+  margin-top: 4px; padding-left: 12px; border-left: 2px solid var(--warn-dim);
+}
+.wf-escalation strong { color: var(--text); }
+
 /* ── RESPONSIVE ─────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .dashboard-grid { grid-template-columns: 1fr; }
@@ -1510,6 +1562,16 @@ body::before {
           <div id="wf-results-content"></div>
         </div>
       </div>
+    </div>
+
+    <!-- Role Library (v2 prompt framework) -->
+    <div class="panel" style="margin-bottom:16px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// ROLE LIBRARY
+        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">prompts/roles/</span>
+      </div>
+      <div id="wf-roles-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px"></div>
+      <div id="wf-role-preview" style="display:none;margin-top:14px;padding:12px;background:var(--bg-deep);border-left:2px solid var(--accent-dim);font-family:var(--mono);font-size:0.72rem;line-height:1.6;white-space:pre-wrap;color:var(--text-dim)"></div>
     </div>
 
     <!-- Recent Runs -->
@@ -2815,6 +2877,47 @@ async function loadWorkflowsTab() {
     await refreshWorkflows();
     await loadRecentRuns();
     workflowsLoaded = true;
+  }
+  // Roles are cheap to reload; refresh each time the tab is opened so edits
+  // to prompts/roles/ show up without a page reload.
+  await loadRoles();
+}
+
+async function loadRoles() {
+  const container = document.getElementById('wf-roles-list');
+  if (!container) return;
+  try {
+    const resp = await fetch('/api/roles');
+    const roles = await resp.json();
+    if (!Array.isArray(roles) || roles.length === 0) {
+      container.innerHTML = '<div class="model-empty">No roles defined in prompts/roles/</div>';
+      return;
+    }
+    container.innerHTML = roles.map(r => `
+      <div class="wf-role-card" onclick="previewRole('${esc(r.id)}')">
+        <div class="wf-role-name">${esc(r.name)}</div>
+        <div class="wf-role-summary">${esc(r.summary)}</div>
+        <div class="wf-role-id">${esc(r.id)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="model-empty">Failed to load roles: ${esc(e.message)}</div>`;
+  }
+}
+
+async function previewRole(id) {
+  const box = document.getElementById('wf-role-preview');
+  if (!box) return;
+  try {
+    const resp = await fetch(`/api/roles/${encodeURIComponent(id)}`);
+    if (!resp.ok) { box.style.display = 'none'; return; }
+    const r = await resp.json();
+    box.textContent = r.content;
+    box.style.display = 'block';
+    box.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  } catch (e) {
+    box.textContent = 'Preview failed: ' + e.message;
+    box.style.display = 'block';
   }
 }
 

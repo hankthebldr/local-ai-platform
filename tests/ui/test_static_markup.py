@@ -234,3 +234,33 @@ def test_vendor_css_references_only_local_paths(index_html_text):
         assert "//" not in href.replace("http://", "").replace(
             "https://", ""
         ), f"stylesheet href '{href}' looks external"
+
+
+def test_workflows_tab_has_roles_subsection(index_html_text):
+    """Workflows tab must expose a Roles subsection so role_ref is browseable."""
+    assert 'id="wf-roles-list"' in index_html_text, (
+        "roles list container missing from Workflows tab"
+    )
+    assert "/api/roles" in index_html_text, (
+        "frontend does not call /api/roles"
+    )
+
+
+def test_pipeline_renderer_references_hooks(index_html_text):
+    """Pipeline renderer must reference step.hooks and prompt.role_ref."""
+    assert "step.hooks" in index_html_text or 'step["hooks"]' in index_html_text, (
+        "pipeline renderer does not reference step.hooks — hooks will not render"
+    )
+    assert "role_ref" in index_html_text, (
+        "pipeline renderer does not reference prompt.role_ref"
+    )
+
+
+def test_results_renderer_shows_retries_and_model(index_html_text):
+    """Results renderer must surface retries count and model_used."""
+    assert "retries" in index_html_text, (
+        "results renderer does not reference StepResult.retries"
+    )
+    assert "model_used" in index_html_text, (
+        "results renderer does not reference StepResult.model_used"
+    )
