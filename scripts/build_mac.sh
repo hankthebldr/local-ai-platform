@@ -73,16 +73,14 @@ fi
 echo "  Creating bundled Python environment (${PYTHON_BIN})..."
 "${PYTHON_BIN}" -m venv "${RESOURCES}/venv"
 "${RESOURCES}/venv/bin/pip" install --quiet --upgrade pip
-"${RESOURCES}/venv/bin/pip" install --quiet \
-    fastapi==0.109.0 \
-    "uvicorn[standard]==0.27.0" \
-    pydantic==2.5.3 \
-    python-dotenv==1.0.0 \
-    python-multipart==0.0.6 \
-    requests==2.31.0 \
-    PyYAML==6.0.1 \
-    psutil==5.9.7 \
-    pywebview
+
+# Install runtime deps from the canonical requirements file.
+# This keeps the bundled venv in sync with what api/main.py actually imports —
+# previous hardcoded lists drifted and caused silent boot failures (missing
+# jinja2, aiohttp, etc.).
+"${RESOURCES}/venv/bin/pip" install --quiet -r setup/requirements-core.txt
+# pywebview is a desktop-only dep; not in requirements-core.txt
+"${RESOURCES}/venv/bin/pip" install --quiet pywebview
 
 echo "  Python environment ready"
 

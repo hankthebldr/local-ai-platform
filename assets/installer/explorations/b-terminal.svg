@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 400" width="660" height="400">
+  <defs>
+    <linearGradient id="bgB" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#05070a"/>
+      <stop offset="100%" stop-color="#0b0f14"/>
+    </linearGradient>
+  </defs>
+  <rect width="660" height="400" fill="url(#bgB)"/>
+  <g stroke="#0f1620" stroke-width="1" opacity="0.8">
+    <path d="M0 4 H660 M0 12 H660 M0 20 H660 M0 28 H660 M0 36 H660 M0 44 H660 M0 52 H660 M0 60 H660 M0 68 H660 M0 76 H660 M0 84 H660 M0 92 H660 M0 100 H660 M0 108 H660 M0 116 H660 M0 124 H660 M0 132 H660 M0 140 H660 M0 148 H660 M0 156 H660 M0 164 H660 M0 172 H660 M0 180 H660 M0 188 H660 M0 196 H660 M0 204 H660 M0 212 H660 M0 220 H660 M0 228 H660 M0 236 H660 M0 244 H660 M0 252 H660 M0 260 H660 M0 268 H660 M0 276 H660 M0 284 H660 M0 292 H660 M0 300 H660 M0 308 H660 M0 316 H660 M0 324 H660 M0 332 H660 M0 340 H660 M0 348 H660 M0 356 H660 M0 364 H660 M0 372 H660 M0 380 H660 M0 388 H660 M0 396 H660"/>
+  </g>
+  <g transform="translate(40,30)">
+    <rect width="260" height="340" rx="8" fill="#0d1117" stroke="#1f2937" stroke-width="1"/>
+    <rect width="260" height="24" rx="8" fill="#161b22"/>
+    <rect y="18" width="260" height="6" fill="#161b22"/>
+    <circle cx="14" cy="12" r="4" fill="#ff5f56"/>
+    <circle cx="30" cy="12" r="4" fill="#ffbd2e"/>
+    <circle cx="46" cy="12" r="4" fill="#27c93f"/>
+    <text x="130" y="16" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5a6577">~/enclave — install.sh</text>
+    <g font-family="'JetBrains Mono',monospace" font-size="10">
+      <text x="14" y="50" fill="#5a6577">$</text><text x="28" y="50" fill="#c9d1d9">./install enclave</text>
+      <text x="14" y="70" fill="#00E87B">✓</text><text x="28" y="70" fill="#8b949e">verified signature</text>
+      <text x="14" y="90" fill="#00E87B">✓</text><text x="28" y="90" fill="#8b949e">sandbox ready</text>
+      <text x="14" y="110" fill="#00E87B">✓</text><text x="28" y="110" fill="#8b949e">no network required</text>
+      <text x="14" y="140" fill="#5a6577">→</text><text x="28" y="140" fill="#00E87B">drag app to /Applications</text>
+      <rect x="24" y="162" width="7" height="11" fill="#00E87B" opacity="0.85"/>
+    </g>
+  </g>
+  <text x="470" y="110" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="30" font-weight="700" fill="#00E87B" letter-spacing="5">ENCLAVE</text>
+  <text x="470" y="130" text-anchor="middle" font-family="'Space Grotesk',sans-serif" font-size="11" fill="#6b7689" letter-spacing="2">LOCAL · PRIVATE · YOURS</text>
+  <text x="470" y="360" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#3a4560" letter-spacing="2">v1.0.0 · ohno llc</text>
+</svg>
