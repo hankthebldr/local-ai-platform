@@ -1144,6 +1144,60 @@ body::before {
 }
 .wf-escalation strong { color: var(--text); }
 
+/* Workflow context inspector (seed / workspace / shared) */
+.ctx-inspector {
+  margin-top: 16px; padding: 10px 12px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+}
+.ctx-inspector > summary {
+  cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; list-style: none;
+}
+.ctx-inspector > summary::-webkit-details-marker { display: none; }
+.ctx-inspector > summary::after {
+  content: '▸'; color: var(--text-muted); font-size: 0.75rem;
+  transition: transform 0.15s;
+}
+.ctx-inspector[open] > summary::after { transform: rotate(90deg); }
+.ctx-label {
+  color: var(--accent); font-size: 0.7rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+}
+.ctx-meta {
+  color: var(--text-muted); font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+.ctx-body { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
+.ctx-heading {
+  font-size: 0.62rem; color: var(--text-dim);
+  letter-spacing: 0.15em; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.ctx-sub {
+  color: var(--text-muted); font-size: 0.58rem;
+  letter-spacing: 0.05em; margin-left: 6px; text-transform: none;
+}
+.ctx-json {
+  background: var(--bg);
+  border-left: 2px solid var(--accent-dim);
+  padding: 8px 12px;
+  font-family: var(--mono); font-size: 0.66rem; line-height: 1.55;
+  color: var(--text-dim); white-space: pre-wrap; word-break: break-all;
+  max-height: 220px; overflow-y: auto;
+}
+.ctx-step {
+  margin-bottom: 6px; padding: 6px 10px;
+  background: var(--bg); border-left: 2px solid var(--accent-2-dim);
+}
+.ctx-step > summary {
+  cursor: pointer; font-size: 0.7rem; color: var(--text); list-style: none;
+}
+.ctx-step > summary::-webkit-details-marker { display: none; }
+.ctx-step-keys { color: var(--text-muted); font-size: 0.6rem; margin-left: 8px; }
+.ctx-empty { color: var(--text-muted); font-size: 0.7rem; padding: 4px 0; }
+
 /* ── RESPONSIVE ─────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .dashboard-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
@@ -3220,6 +3274,9 @@ async function runWorkflow() {
       html += `<div style="margin-top:10px;padding:10px;background:var(--red-dim);border:1px solid var(--red);font-size:0.72rem;color:var(--text)">${esc(run.error)}</div>`;
     }
 
+    // Context inspector — seed / workspace / shared
+    html += renderContextInspector(run.context);
+
     content.innerHTML = html;
 
     // Refresh recent runs
@@ -3315,10 +3372,58 @@ async function viewRun(runId) {
         </div>
       `;
     });
+
+    html += renderContextInspector(run.context);
+
     content.innerHTML = html;
   } catch (e) {
     console.error('Failed to load run:', e);
   }
+}
+
+/**
+ * Render the three-layer workflow context as a collapsible inspector.
+ * Closes the "context-store has no UI" P1 gap from the 2026-04-23 audit.
+ */
+function renderContextInspector(ctx) {
+  if (!ctx || typeof ctx !== 'object') return '';
+  const seed = ctx.seed || {};
+  const workspace = ctx.workspace || {};
+  const shared = ctx.shared || {};
+  const hasData = Object.keys(seed).length + Object.keys(workspace).length + Object.keys(shared).length > 0;
+  if (!hasData) return '';
+
+  const workspaceHtml = Object.keys(workspace).length === 0
+    ? '<div class="ctx-empty">—</div>'
+    : Object.entries(workspace).map(([stepId, outputs]) => `
+        <details class="ctx-step">
+          <summary>${esc(stepId)} <span class="ctx-step-keys">(${Object.keys(outputs || {}).length} outputs)</span></summary>
+          <pre class="ctx-json">${esc(JSON.stringify(outputs, null, 2))}</pre>
+        </details>
+      `).join('');
+
+  return `
+    <details class="ctx-inspector">
+      <summary>
+        <span class="ctx-label">// WORKFLOW CONTEXT</span>
+        <span class="ctx-meta">seed: ${Object.keys(seed).length} · workspace: ${Object.keys(workspace).length} steps · shared: ${Object.keys(shared).length}</span>
+      </summary>
+      <div class="ctx-body">
+        <div class="ctx-section">
+          <div class="ctx-heading">SEED <span class="ctx-sub">immutable user input</span></div>
+          <pre class="ctx-json">${esc(JSON.stringify(seed, null, 2) || '{}')}</pre>
+        </div>
+        <div class="ctx-section">
+          <div class="ctx-heading">WORKSPACE <span class="ctx-sub">per-step outputs</span></div>
+          ${workspaceHtml}
+        </div>
+        <div class="ctx-section">
+          <div class="ctx-heading">SHARED <span class="ctx-sub">cross-cutting state</span></div>
+          <pre class="ctx-json">${esc(JSON.stringify(shared, null, 2) || '{}')}</pre>
+        </div>
+      </div>
+    </details>
+  `;
 }
 
 /* ── INIT ────────────────────────────────────────────────────────── */

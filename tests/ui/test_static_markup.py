@@ -282,6 +282,18 @@ def test_chat_panel_sits_on_first_dashboard_row(index_html_text):
     )
 
 
+def test_results_have_context_inspector(index_html_text):
+    """Workflow results must render the three-layer context (seed/workspace/shared)."""
+    assert "renderContextInspector" in index_html_text, (
+        "renderContextInspector function missing — context-store has no UI"
+    )
+    # The inspector must pull all three layers, not just one.
+    for layer in ("seed", "workspace", "shared"):
+        assert f"ctx.{layer}" in index_html_text, (
+            f"context inspector never reads ctx.{layer}"
+        )
+
+
 def test_chat_has_system_prompt_row(index_html_text):
     """Chat must expose a system-prompt row wired to the role library."""
     assert 'id="system-prompt"' in index_html_text, (

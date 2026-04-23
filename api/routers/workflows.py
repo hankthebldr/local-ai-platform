@@ -124,6 +124,14 @@ async def run_workflow(req: WorkflowRunRequest, background_tasks: BackgroundTask
             }
             for r in run.step_results
         ],
+        # Expose the three-layer context so the UI can render a context
+        # inspector (seed = immutable input, workspace = per-step outputs,
+        # shared = cross-cutting state).
+        "context": {
+            "seed": run.context.seed,
+            "workspace": run.context.workspace,
+            "shared": run.context.shared,
+        },
         "error": run.error,
     }
 
