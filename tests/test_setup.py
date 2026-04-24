@@ -53,3 +53,8 @@ class TestSetupEndpoints:
         resp = setup_client.get("/setup")
         assert resp.status_code == 200
         assert "text/html" in resp.headers.get("content-type", "")
+
+    def test_app_dir_matches_desktop_wrapper(self):
+        """APP_DIR must match desktop/app.py so the Mac app sees the flag."""
+        import api.routers.setup as setup_module
+        assert setup_module.APP_DIR == os.path.expanduser("~/.enclave")

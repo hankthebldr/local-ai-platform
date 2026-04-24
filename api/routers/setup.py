@@ -17,7 +17,7 @@ from ..logging_config import logger
 
 router = APIRouter(tags=["setup"])
 
-APP_DIR = os.path.expanduser("~/.local-ai-platform")
+APP_DIR = os.path.expanduser("~/.enclave")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
