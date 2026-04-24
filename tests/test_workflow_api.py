@@ -117,3 +117,61 @@ class TestWorkflowAPI:
     def test_get_workflow_rejects_path_traversal(self, client):
         response = client.get("/api/workflows/..%2F..%2Fetc%2Fpasswd")
         assert response.status_code in (400, 404)
+
+    def test_save_workflow_writes_yaml_and_round_trips(self, client, tmp_path, monkeypatch):
+        """POST /api/workflows/save persists a validated def to workflows/{id}.yaml."""
+        monkeypatch.setattr("api.routers.workflows.WORKFLOWS_DIR", str(tmp_path))
+        wf = {
+            "id": "saved-workflow",
+            "name": "Saved",
+            "defaults": {"role": "general", "retries": 0, "retry_delay": 0},
+            "steps": [
+                {
+                    "id": "s1",
+                    "name": "Step 1",
+                    "role": "fast",
+                    "system_prompt": "Do thing.",
+                    "inputs": ["seed.input"],
+                    "outputs": ["result"],
+                }
+            ],
+        }
+        r = client.post("/api/workflows/save", json={"definition": wf})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["saved"] is True
+        assert body["workflow_id"] == "saved-workflow"
+
+        target = tmp_path / "saved-workflow.yaml"
+        assert target.exists(), "yaml file was not written"
+        content = target.read_text()
+        assert "id: saved-workflow" in content
+        assert "Do thing." in content
+
+    def test_save_workflow_refuses_clobber_without_overwrite(self, client, tmp_path, monkeypatch):
+        monkeypatch.setattr("api.routers.workflows.WORKFLOWS_DIR", str(tmp_path))
+        wf = {
+            "id": "existing",
+            "name": "x",
+            "defaults": {"role": "general", "retries": 0, "retry_delay": 0},
+            "steps": [{"id": "s1", "name": "S1", "role": "fast",
+                       "system_prompt": "p", "inputs": ["seed.x"], "outputs": ["y"]}],
+        }
+        assert client.post("/api/workflows/save", json={"definition": wf}).status_code == 200
+        assert client.post("/api/workflows/save", json={"definition": wf}).status_code == 409
+        assert client.post(
+            "/api/workflows/save",
+            json={"definition": wf, "overwrite": True},
+        ).status_code == 200
+
+    def test_save_workflow_validates_before_writing(self, client, tmp_path, monkeypatch):
+        monkeypatch.setattr("api.routers.workflows.WORKFLOWS_DIR", str(tmp_path))
+        broken = {
+            "id": "broken-save",
+            "name": "broken",
+            "steps": [{"id": "s1", "name": "S1", "role": "fast",
+                       "system_prompt": "p", "inputs": ["nonexistent.x"], "outputs": ["y"]}],
+        }
+        r = client.post("/api/workflows/save", json={"definition": broken})
+        assert r.status_code == 422
+        assert not (tmp_path / "broken-save.yaml").exists()
