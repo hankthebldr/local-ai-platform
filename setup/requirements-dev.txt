@@ -2,6 +2,7 @@
 -r requirements-core.txt
 pytest>=7.4.3
 pytest-asyncio>=0.23.2
+beautifulsoup4>=4.12.0  # UI markup regression tests (tests/ui/)
 black>=23.12.1
 flake8>=7.0.0
 mypy>=1.8.0

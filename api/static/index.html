@@ -141,12 +141,14 @@ body::before {
 }
 .logo { display: flex; align-items: center; gap: 16px; }
 .logo-text { display: flex; flex-direction: column; gap: 4px; }
-.logo-hex {
+.logo-mark {
   width: 48px;
   height: 48px;
   flex-shrink: 0;
+  color: var(--accent);             /* Drives currentColor in the nested SVG */
+  filter: drop-shadow(0 0 6px var(--accent-dim));
 }
-.logo-hex svg { width: 100%; height: 100%; }
+.logo-mark svg { width: 100%; height: 100%; display: block; }
 .logo-title {
   font-family: var(--sans);
   font-size: 1.6rem;
@@ -252,14 +254,16 @@ body::before {
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: auto auto;
+  grid-template-rows: minmax(420px, auto) auto;
   gap: 16px;
   margin-bottom: 16px;
 }
-.dashboard-grid .panel-system { grid-column: 1; }
-.dashboard-grid .panel-models { grid-column: 2; }
-.dashboard-grid .panel-perf { grid-column: 3; }
-.dashboard-grid .panel-chat { grid-column: 1 / -1; }
+/* Chat is the primary surface — put it on row 1 spanning all columns.
+   Metrics panels live on row 2. */
+.dashboard-grid .panel-chat   { grid-column: 1 / -1; grid-row: 1; }
+.dashboard-grid .panel-system { grid-column: 1; grid-row: 2; }
+.dashboard-grid .panel-models { grid-column: 2; grid-row: 2; }
+.dashboard-grid .panel-perf   { grid-column: 3; grid-row: 2; }
 
 /* ── STATUS INDICATORS ──────────────────────────────────────────── */
 @keyframes pulse-glow {
@@ -1088,13 +1092,119 @@ body::before {
 .wf-run-status { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; }
 .wf-run-time { color: var(--text-muted); font-size: 0.65rem; }
 
+/* Role Library (v2 prompt framework) */
+.wf-role-card {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.wf-role-card:hover { border-color: var(--accent-dim); background: #00CC6608; }
+.wf-role-name { color: var(--text); font-weight: 500; font-size: 0.78rem; }
+.wf-role-summary {
+  color: var(--text-dim); font-size: 0.68rem; margin-top: 4px;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.wf-role-id {
+  color: var(--text-muted); font-size: 0.6rem; margin-top: 6px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+
+/* Hook chips on pipeline */
+.wf-step-hooks { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.wf-hook-slot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wf-hook-slot-label {
+  font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted); min-width: 110px;
+}
+.wf-hook-pill {
+  font-size: 0.62rem; padding: 2px 8px;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent); background: var(--accent-ghost);
+  border-radius: 999px; cursor: help;
+}
+.wf-role-chip {
+  display: inline-block; font-size: 0.62rem; padding: 2px 8px;
+  border: 1px solid var(--accent-2-dim); color: var(--accent-2);
+  border-radius: 999px; cursor: pointer; margin-top: 6px;
+}
+.wf-role-chip:hover { border-color: var(--accent-2); background: rgba(25,170,97,0.08); }
+.wf-role-chip.inline { cursor: default; }
+
+/* Attempt / escalation indicators */
+.wf-attempt-badge {
+  font-size: 0.6rem; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--warn-dim); color: var(--warn);
+  margin-left: 8px;
+}
+.wf-escalation {
+  font-size: 0.66rem; color: var(--text-dim);
+  margin-top: 4px; padding-left: 12px; border-left: 2px solid var(--warn-dim);
+}
+.wf-escalation strong { color: var(--text); }
+
+/* Workflow context inspector (seed / workspace / shared) */
+.ctx-inspector {
+  margin-top: 16px; padding: 10px 12px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+}
+.ctx-inspector > summary {
+  cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; list-style: none;
+}
+.ctx-inspector > summary::-webkit-details-marker { display: none; }
+.ctx-inspector > summary::after {
+  content: '▸'; color: var(--text-muted); font-size: 0.75rem;
+  transition: transform 0.15s;
+}
+.ctx-inspector[open] > summary::after { transform: rotate(90deg); }
+.ctx-label {
+  color: var(--accent); font-size: 0.7rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+}
+.ctx-meta {
+  color: var(--text-muted); font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+.ctx-body { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
+.ctx-heading {
+  font-size: 0.62rem; color: var(--text-dim);
+  letter-spacing: 0.15em; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.ctx-sub {
+  color: var(--text-muted); font-size: 0.58rem;
+  letter-spacing: 0.05em; margin-left: 6px; text-transform: none;
+}
+.ctx-json {
+  background: var(--bg);
+  border-left: 2px solid var(--accent-dim);
+  padding: 8px 12px;
+  font-family: var(--mono); font-size: 0.66rem; line-height: 1.55;
+  color: var(--text-dim); white-space: pre-wrap; word-break: break-all;
+  max-height: 220px; overflow-y: auto;
+}
+.ctx-step {
+  margin-bottom: 6px; padding: 6px 10px;
+  background: var(--bg); border-left: 2px solid var(--accent-2-dim);
+}
+.ctx-step > summary {
+  cursor: pointer; font-size: 0.7rem; color: var(--text); list-style: none;
+}
+.ctx-step > summary::-webkit-details-marker { display: none; }
+.ctx-step-keys { color: var(--text-muted); font-size: 0.6rem; margin-left: 8px; }
+.ctx-empty { color: var(--text-muted); font-size: 0.7rem; padding: 4px 0; }
+
 /* ── RESPONSIVE ─────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
-  .dashboard-grid { grid-template-columns: 1fr; }
-  .dashboard-grid .panel-system,
-  .dashboard-grid .panel-models,
-  .dashboard-grid .panel-perf,
-  .dashboard-grid .panel-chat { grid-column: 1; }
+  .dashboard-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
+  .dashboard-grid .panel-chat   { grid-column: 1; grid-row: 1; }
+  .dashboard-grid .panel-system { grid-column: 1; grid-row: 2; }
+  .dashboard-grid .panel-models { grid-column: 1; grid-row: 3; }
+  .dashboard-grid .panel-perf   { grid-column: 1; grid-row: 4; }
   .inv-grid { grid-template-columns: 1fr 1fr; }
   .mem-grid { grid-template-columns: 1fr 1fr; }
 }
@@ -1118,11 +1228,15 @@ body::before {
   <!-- HEADER -->
   <div class="header">
     <div class="logo">
-      <div class="logo-hex">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <path d="M50 2 L93 27 L93 73 L50 98 L7 73 L7 27 Z" rx="8" fill="var(--cyan)" opacity="0.9"/>
-          <text x="50" y="42" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">EN</text>
-          <text x="50" y="68" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">CL</text>
+      <div class="logo-mark" aria-label="Enclave logo">
+        <!-- Canonical Enclave mark: nested rectangles (enclosure / containment
+             / layered security). Mirrors assets/logo/enclave-mark.svg and the
+             installer DMG background. Uses currentColor so CSS themes it. -->
+        <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" role="img">
+          <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+          <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+          <rect x="28" y="28" width="24" height="24" rx="2" fill="currentColor" opacity="0.2"/>
+          <rect x="34" y="34" width="12" height="12" rx="1" fill="currentColor" opacity="0.75"/>
         </svg>
       </div>
       <div class="logo-text">
@@ -1214,9 +1328,29 @@ body::before {
           <div class="panel-label" style="margin-bottom:0">Chat Interface</div>
           <div style="display:flex;align-items:center;gap:8px">
             <select class="model-select" id="model-select"><option>loading...</option></select>
+            <button class="action-btn" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border)">System</button>
             <button class="action-btn" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border);display:none">EXPORT</button>
           </div>
         </div>
+
+        <!-- System Prompt (collapsible; applies to every turn in this session) -->
+        <div class="system-prompt-row" id="system-prompt-row" style="display:none">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.15em;text-transform:uppercase">System Prompt</label>
+            <select id="sysprompt-role-select" class="model-select" style="min-width:180px;font-size:0.7rem" onchange="applyRoleAsSystemPrompt()">
+              <option value="">— load from role library —</option>
+            </select>
+            <span style="flex:1"></span>
+            <button class="action-btn" onclick="saveSystemPrompt()" style="padding:3px 10px;font-size:0.65rem">Save</button>
+            <button class="action-btn" onclick="clearSystemPrompt()" style="padding:3px 10px;font-size:0.65rem;border-color:var(--border);color:var(--text-dim)">Clear</button>
+          </div>
+          <textarea id="system-prompt" class="chat-input" rows="3" style="min-height:60px;max-height:200px;font-size:0.72rem" placeholder="Define the assistant's persona, tone, and constraints. Applied as role=system on every turn."></textarea>
+          <div style="font-size:0.58rem;color:var(--text-muted);margin-top:4px;letter-spacing:0.1em;text-transform:uppercase">
+            <span id="sysprompt-status">off</span>
+            <span style="margin-left:10px">saved in localStorage</span>
+          </div>
+        </div>
+
         <div class="chat-messages" id="messages">
           <div class="msg system-msg">Select a model and start chatting. All inference runs locally.</div>
         </div>
@@ -1510,6 +1644,16 @@ body::before {
           <div id="wf-results-content"></div>
         </div>
       </div>
+    </div>
+
+    <!-- Role Library (v2 prompt framework) -->
+    <div class="panel" style="margin-bottom:16px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// ROLE LIBRARY
+        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">prompts/roles/</span>
+      </div>
+      <div id="wf-roles-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px"></div>
+      <div id="wf-role-preview" style="display:none;margin-top:14px;padding:12px;background:var(--bg-deep);border-left:2px solid var(--accent-dim);font-family:var(--mono);font-size:0.72rem;line-height:1.6;white-space:pre-wrap;color:var(--text-dim)"></div>
     </div>
 
     <!-- Recent Runs -->
@@ -1822,6 +1966,90 @@ function updateExportBtn() {
   if (chatMetadata.length > 0) btn.style.display = 'inline-block';
 }
 
+// ── SYSTEM PROMPT (applied to every chat turn) ─────────────────────────
+const SYSPROMPT_KEY = 'enclave.chat.systemPrompt';
+
+function toggleSystemPrompt() {
+  const row = document.getElementById('system-prompt-row');
+  const show = row.style.display === 'none';
+  row.style.display = show ? 'block' : 'none';
+  if (show) populateSystemPromptRoles();
+}
+
+async function populateSystemPromptRoles() {
+  const sel = document.getElementById('sysprompt-role-select');
+  if (!sel || sel.dataset.loaded === '1') return;
+  try {
+    const r = await fetch('/api/roles');
+    const roles = await r.json();
+    for (const role of roles) {
+      const opt = document.createElement('option');
+      opt.value = role.id;
+      opt.textContent = role.name;
+      sel.appendChild(opt);
+    }
+    sel.dataset.loaded = '1';
+  } catch (e) {
+    console.warn('Failed to load roles for system prompt:', e);
+  }
+}
+
+async function applyRoleAsSystemPrompt() {
+  const sel = document.getElementById('sysprompt-role-select');
+  const id = sel.value;
+  if (!id) return;
+  try {
+    const r = await fetch(`/api/roles/${encodeURIComponent(id)}`);
+    if (!r.ok) return;
+    const role = await r.json();
+    document.getElementById('system-prompt').value = role.content;
+    saveSystemPrompt();
+  } catch (e) { console.warn(e); }
+}
+
+function saveSystemPrompt() {
+  const text = document.getElementById('system-prompt').value;
+  try { localStorage.setItem(SYSPROMPT_KEY, text); } catch (_) {}
+  updateSystemPromptStatus();
+}
+
+function clearSystemPrompt() {
+  document.getElementById('system-prompt').value = '';
+  try { localStorage.removeItem(SYSPROMPT_KEY); } catch (_) {}
+  updateSystemPromptStatus();
+}
+
+function loadSystemPrompt() {
+  try {
+    const saved = localStorage.getItem(SYSPROMPT_KEY);
+    if (saved) document.getElementById('system-prompt').value = saved;
+  } catch (_) {}
+  updateSystemPromptStatus();
+}
+
+function updateSystemPromptStatus() {
+  const ta = document.getElementById('system-prompt');
+  const status = document.getElementById('sysprompt-status');
+  const btn = document.getElementById('sysprompt-btn');
+  const active = !!(ta && ta.value.trim());
+  if (status) status.textContent = active ? `active · ${ta.value.length} chars` : 'off';
+  if (btn) btn.style.borderColor = active ? 'var(--accent-dim)' : 'var(--border)';
+  if (btn) btn.style.color = active ? 'var(--accent)' : '';
+}
+
+function getSystemPromptMessage() {
+  const ta = document.getElementById('system-prompt');
+  const text = ta && ta.value.trim();
+  return text ? { role: 'system', content: text } : null;
+}
+
+// Load on first paint; keep status synced as the user edits
+document.addEventListener('DOMContentLoaded', () => {
+  loadSystemPrompt();
+  const ta = document.getElementById('system-prompt');
+  if (ta) ta.addEventListener('input', updateSystemPromptStatus);
+});
+
 async function sendMessage() {
   const input = document.getElementById('prompt');
   const text = input.value.trim();
@@ -1848,12 +2076,16 @@ async function sendMessage() {
   messages.scrollTop = messages.scrollHeight;
 
   try {
+    // Prepend the saved system prompt (if any) — OpenAI-style role=system turn.
+    const sysMsg = getSystemPromptMessage();
+    const outboundMessages = sysMsg ? [sysMsg, ...chatHistory] : chatHistory;
+
     const r = await fetch('/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        messages: chatHistory,
+        messages: outboundMessages,
         max_tokens: 1024,
         web_search: webSearchEnabled,
       })
@@ -2816,6 +3048,47 @@ async function loadWorkflowsTab() {
     await loadRecentRuns();
     workflowsLoaded = true;
   }
+  // Roles are cheap to reload; refresh each time the tab is opened so edits
+  // to prompts/roles/ show up without a page reload.
+  await loadRoles();
+}
+
+async function loadRoles() {
+  const container = document.getElementById('wf-roles-list');
+  if (!container) return;
+  try {
+    const resp = await fetch('/api/roles');
+    const roles = await resp.json();
+    if (!Array.isArray(roles) || roles.length === 0) {
+      container.innerHTML = '<div class="model-empty">No roles defined in prompts/roles/</div>';
+      return;
+    }
+    container.innerHTML = roles.map(r => `
+      <div class="wf-role-card" onclick="previewRole('${esc(r.id)}')">
+        <div class="wf-role-name">${esc(r.name)}</div>
+        <div class="wf-role-summary">${esc(r.summary)}</div>
+        <div class="wf-role-id">${esc(r.id)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="model-empty">Failed to load roles: ${esc(e.message)}</div>`;
+  }
+}
+
+async function previewRole(id) {
+  const box = document.getElementById('wf-role-preview');
+  if (!box) return;
+  try {
+    const resp = await fetch(`/api/roles/${encodeURIComponent(id)}`);
+    if (!resp.ok) { box.style.display = 'none'; return; }
+    const r = await resp.json();
+    box.textContent = r.content;
+    box.style.display = 'block';
+    box.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  } catch (e) {
+    box.textContent = 'Preview failed: ' + e.message;
+    box.style.display = 'block';
+  }
 }
 
 async function refreshWorkflows() {
@@ -2858,17 +3131,68 @@ async function loadWorkflowDetail() {
     document.getElementById('wf-detail').style.display = 'block';
     document.getElementById('wf-results').style.display = 'none';
 
-    // We need to get the steps - use the validate endpoint with inline definition
-    // For now, render based on what we know
-    currentWorkflowDef = { id: opt.dataset.id, name: opt.textContent, steps: wf.steps };
+    // Fetch the full workflow definition (with hooks + prompt blocks).
+    const defResp2 = await fetch(`/api/workflows/${encodeURIComponent(opt.dataset.id)}`);
+    const defn = defResp2.ok ? await defResp2.json() : null;
+    currentWorkflowDef = defn || { id: opt.dataset.id, name: opt.textContent, steps: [] };
 
-    // Build pipeline visualization placeholder
+    // Build static pipeline visualization showing declared hooks + role_ref.
     const pipeline = document.getElementById('wf-pipeline');
-    pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
+    if (defn && Array.isArray(defn.steps) && defn.steps.length > 0) {
+      pipeline.innerHTML = defn.steps.map((step, i) =>
+        (i > 0 ? '<div class="wf-arrow">&rarr;</div>' : '') +
+        renderStepBox(step, 'pending', null)
+      ).join('');
+    } else {
+      pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
+    }
 
   } catch (e) {
     console.error('Failed to load workflow:', e);
   }
+}
+
+function renderStepBox(step, status, result) {
+  // Declared hooks (from WorkflowDefinition). Live hook execution status
+  // will be added in a follow-up (requires engine instrumentation).
+  const hooks = step.hooks || {};
+  const slots = ['before_step', 'transform_prompt', 'validate_output', 'after_step', 'on_failure'];
+  const hookBlocks = slots.map(slot => {
+    const entries = (hooks[slot] || []);
+    if (!entries.length) return '';
+    const pills = entries.map(h =>
+      `<span class="wf-hook-pill" title="${esc(JSON.stringify(h.config || {}))}">${esc(h.name)}</span>`
+    ).join('');
+    return `<div class="wf-hook-slot">
+      <span class="wf-hook-slot-label">${slot.replace('_', ' ')}</span>${pills}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  // Role chip: prefer v2 prompt.role_ref (clickable), fallback to v1 role.
+  const roleRef = step.prompt && step.prompt.role_ref;
+  const roleChip = roleRef
+    ? `<span class="wf-role-chip" onclick="previewRole('${esc(roleRef)}')">role: ${esc(roleRef)}</span>`
+    : (step.role
+      ? `<span class="wf-role-chip inline" title="v1 role alias">role: ${esc(step.role)}</span>`
+      : '');
+
+  const modelUsed = (result && result.model_used) ? result.model_used : '';
+  const retries = (result && result.retries) ? result.retries : 0;
+  const attemptBadge = retries > 0
+    ? `<span class="wf-attempt-badge">${retries + 1} attempts</span>`
+    : '';
+
+  return `
+    <div class="wf-step">
+      <div class="wf-step-box ${status || 'pending'}">
+        <div class="wf-step-name">${esc(step.id || step.step_id)}${attemptBadge}</div>
+        <div class="wf-step-role">${esc(modelUsed)}</div>
+        ${roleChip}
+        <div class="wf-step-status ${status || 'pending'}">${status || 'pending'}</div>
+        ${hookBlocks ? `<div class="wf-step-hooks">${hookBlocks}</div>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 async function runWorkflow() {
@@ -2906,23 +3230,20 @@ async function runWorkflow() {
     document.getElementById('wf-results').style.display = 'block';
     const content = document.getElementById('wf-results-content');
 
-    // Build pipeline visualization with results
+    // Build pipeline visualization with results. Prefer the declared-step
+    // metadata (hooks, role_ref) from currentWorkflowDef so each box still
+    // shows its hook chain + role chip even when execution is mid-flight.
     const pipeline = document.getElementById('wf-pipeline');
+    const defSteps = (currentWorkflowDef && currentWorkflowDef.steps) || [];
+    const byId = new Map(defSteps.map(s => [s.id, s]));
     let pipeHtml = '';
-    (run.step_results || []).forEach((step, i) => {
+    (run.step_results || []).forEach((res, i) => {
       if (i > 0) {
-        const arrowClass = step.status === 'completed' ? 'done' : (step.status === 'running' ? 'active' : '');
+        const arrowClass = res.status === 'completed' ? 'done' : (res.status === 'running' ? 'active' : '');
         pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
       }
-      pipeHtml += `
-        <div class="wf-step">
-          <div class="wf-step-box ${step.status}">
-            <div class="wf-step-name">${esc(step.step_id)}</div>
-            <div class="wf-step-role">${esc(step.model_used || '')}</div>
-            <div class="wf-step-status ${step.status}">${step.status}</div>
-          </div>
-        </div>
-      `;
+      const step = byId.get(res.step_id) || { id: res.step_id, hooks: {} };
+      pipeHtml += renderStepBox(step, res.status, res);
     });
     pipeline.innerHTML = pipeHtml;
 
@@ -2952,6 +3273,9 @@ async function runWorkflow() {
     if (run.error) {
       html += `<div style="margin-top:10px;padding:10px;background:var(--red-dim);border:1px solid var(--red);font-size:0.72rem;color:var(--text)">${esc(run.error)}</div>`;
     }
+
+    // Context inspector — seed / workspace / shared
+    html += renderContextInspector(run.context);
 
     content.innerHTML = html;
 
@@ -3007,23 +3331,28 @@ async function viewRun(runId) {
     document.getElementById('wf-detail-name').textContent = run.workflow_id;
     document.getElementById('wf-detail-desc').textContent = `Run: ${runId}`;
 
-    // Build pipeline from step results
+    // Build pipeline from step results. Fetch full definition so hook chips
+    // + role chips appear on historical runs too (requires engine workflow
+    // to still exist on disk — otherwise we fall back to step_results only).
     const pipeline = document.getElementById('wf-pipeline');
+    let defSteps = [];
+    try {
+      const dResp = await fetch(`/api/workflows/${encodeURIComponent(run.workflow_id)}`);
+      if (dResp.ok) {
+        const d = await dResp.json();
+        defSteps = d.steps || [];
+        currentWorkflowDef = d;
+      }
+    } catch (_) { /* fallback below */ }
+    const byId = new Map(defSteps.map(s => [s.id, s]));
     let pipeHtml = '';
-    (run.step_results || []).forEach((step, i) => {
+    (run.step_results || []).forEach((res, i) => {
       if (i > 0) {
-        const arrowClass = step.status === 'completed' ? 'done' : '';
+        const arrowClass = res.status === 'completed' ? 'done' : '';
         pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
       }
-      pipeHtml += `
-        <div class="wf-step">
-          <div class="wf-step-box ${step.status}">
-            <div class="wf-step-name">${esc(step.step_id)}</div>
-            <div class="wf-step-role">${esc(step.model_used || '')}</div>
-            <div class="wf-step-status ${step.status}">${step.status}</div>
-          </div>
-        </div>
-      `;
+      const step = byId.get(res.step_id) || { id: res.step_id, hooks: {} };
+      pipeHtml += renderStepBox(step, res.status, res);
     });
     pipeline.innerHTML = pipeHtml;
 
@@ -3043,10 +3372,58 @@ async function viewRun(runId) {
         </div>
       `;
     });
+
+    html += renderContextInspector(run.context);
+
     content.innerHTML = html;
   } catch (e) {
     console.error('Failed to load run:', e);
   }
+}
+
+/**
+ * Render the three-layer workflow context as a collapsible inspector.
+ * Closes the "context-store has no UI" P1 gap from the 2026-04-23 audit.
+ */
+function renderContextInspector(ctx) {
+  if (!ctx || typeof ctx !== 'object') return '';
+  const seed = ctx.seed || {};
+  const workspace = ctx.workspace || {};
+  const shared = ctx.shared || {};
+  const hasData = Object.keys(seed).length + Object.keys(workspace).length + Object.keys(shared).length > 0;
+  if (!hasData) return '';
+
+  const workspaceHtml = Object.keys(workspace).length === 0
+    ? '<div class="ctx-empty">—</div>'
+    : Object.entries(workspace).map(([stepId, outputs]) => `
+        <details class="ctx-step">
+          <summary>${esc(stepId)} <span class="ctx-step-keys">(${Object.keys(outputs || {}).length} outputs)</span></summary>
+          <pre class="ctx-json">${esc(JSON.stringify(outputs, null, 2))}</pre>
+        </details>
+      `).join('');
+
+  return `
+    <details class="ctx-inspector">
+      <summary>
+        <span class="ctx-label">// WORKFLOW CONTEXT</span>
+        <span class="ctx-meta">seed: ${Object.keys(seed).length} · workspace: ${Object.keys(workspace).length} steps · shared: ${Object.keys(shared).length}</span>
+      </summary>
+      <div class="ctx-body">
+        <div class="ctx-section">
+          <div class="ctx-heading">SEED <span class="ctx-sub">immutable user input</span></div>
+          <pre class="ctx-json">${esc(JSON.stringify(seed, null, 2) || '{}')}</pre>
+        </div>
+        <div class="ctx-section">
+          <div class="ctx-heading">WORKSPACE <span class="ctx-sub">per-step outputs</span></div>
+          ${workspaceHtml}
+        </div>
+        <div class="ctx-section">
+          <div class="ctx-heading">SHARED <span class="ctx-sub">cross-cutting state</span></div>
+          <pre class="ctx-json">${esc(JSON.stringify(shared, null, 2) || '{}')}</pre>
+        </div>
+      </div>
+    </details>
+  `;
 }
 
 /* ── INIT ────────────────────────────────────────────────────────── */

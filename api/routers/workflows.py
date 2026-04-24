@@ -119,10 +119,19 @@ async def run_workflow(req: WorkflowRunRequest, background_tasks: BackgroundTask
                 "model_used": r.model_used,
                 "duration_seconds": r.duration_seconds,
                 "token_count": r.token_count,
+                "retries": r.retries,
                 "error": r.error,
             }
             for r in run.step_results
         ],
+        # Expose the three-layer context so the UI can render a context
+        # inspector (seed = immutable input, workspace = per-step outputs,
+        # shared = cross-cutting state).
+        "context": {
+            "seed": run.context.seed,
+            "workspace": run.context.workspace,
+            "shared": run.context.shared,
+        },
         "error": run.error,
     }
 
@@ -161,3 +170,25 @@ async def get_artifact(run_id: str, step_id: str):
         )
 
     return {"step_id": step_id, "run_id": run_id, "outputs": step_data}
+
+
+# NOTE: Dynamic catch-all route kept at the END so /runs, /validate, /run, etc
+# match their static handlers first. Moving this up shadows /api/workflows/runs.
+@router.get("/{workflow_id}")
+async def get_workflow(workflow_id: str):
+    """Return the full parsed WorkflowDefinition (steps, hooks, prompts).
+
+    Used by the UI to render the hook/role chips on the pipeline. The
+    list endpoint returns only summaries; this one returns everything.
+    """
+    if not workflow_id or not all(c.isalnum() or c in "_-" for c in workflow_id):
+        raise HTTPException(status_code=400, detail="invalid workflow id")
+    engine = get_engine()
+    yaml_path = f"{WORKFLOWS_DIR}/{workflow_id}.yaml"
+    try:
+        defn = engine.load(yaml_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"workflow '{workflow_id}' not found")
+    except WorkflowValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return defn.model_dump(mode="json")

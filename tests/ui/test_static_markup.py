@@ -234,3 +234,95 @@ def test_vendor_css_references_only_local_paths(index_html_text):
         assert "//" not in href.replace("http://", "").replace(
             "https://", ""
         ), f"stylesheet href '{href}' looks external"
+
+
+def test_workflows_tab_has_roles_subsection(index_html_text):
+    """Workflows tab must expose a Roles subsection so role_ref is browseable."""
+    assert 'id="wf-roles-list"' in index_html_text, (
+        "roles list container missing from Workflows tab"
+    )
+    assert "/api/roles" in index_html_text, (
+        "frontend does not call /api/roles"
+    )
+
+
+def test_pipeline_renderer_references_hooks(index_html_text):
+    """Pipeline renderer must reference step.hooks and prompt.role_ref."""
+    assert "step.hooks" in index_html_text or 'step["hooks"]' in index_html_text, (
+        "pipeline renderer does not reference step.hooks — hooks will not render"
+    )
+    assert "role_ref" in index_html_text, (
+        "pipeline renderer does not reference prompt.role_ref"
+    )
+
+
+def test_results_renderer_shows_retries_and_model(index_html_text):
+    """Results renderer must surface retries count and model_used."""
+    assert "retries" in index_html_text, (
+        "results renderer does not reference StepResult.retries"
+    )
+    assert "model_used" in index_html_text, (
+        "results renderer does not reference StepResult.model_used"
+    )
+
+
+def test_chat_panel_sits_on_first_dashboard_row(index_html_text):
+    """Chat must be the primary surface — row 1, spanning all columns."""
+    m = re.search(
+        r"\.dashboard-grid\s+\.panel-chat\s*\{([^}]+)\}",
+        index_html_text,
+    )
+    assert m is not None, ".panel-chat grid rule not found"
+    body = m.group(1)
+    assert "grid-row: 1" in body, (
+        "panel-chat is not on grid-row 1 — chat should sit above the metrics row"
+    )
+    assert "grid-column: 1 / -1" in body, (
+        "panel-chat must span all dashboard columns"
+    )
+
+
+def test_results_have_context_inspector(index_html_text):
+    """Workflow results must render the three-layer context (seed/workspace/shared)."""
+    assert "renderContextInspector" in index_html_text, (
+        "renderContextInspector function missing — context-store has no UI"
+    )
+    # The inspector must pull all three layers, not just one.
+    for layer in ("seed", "workspace", "shared"):
+        assert f"ctx.{layer}" in index_html_text, (
+            f"context inspector never reads ctx.{layer}"
+        )
+
+
+def test_chat_has_system_prompt_row(index_html_text):
+    """Chat must expose a system-prompt row wired to the role library."""
+    assert 'id="system-prompt"' in index_html_text, (
+        "system-prompt <textarea> missing from chat panel"
+    )
+    assert 'id="sysprompt-role-select"' in index_html_text, (
+        "role dropdown for system prompt missing"
+    )
+    # sendMessage must actually prepend the system message when present.
+    assert "getSystemPromptMessage" in index_html_text, (
+        "sendMessage must prepend the saved system prompt"
+    )
+    assert "role: 'system'" in index_html_text, (
+        "no role=system turn is ever emitted — system prompt wiring broken"
+    )
+
+
+def test_header_uses_installer_enclave_mark(index_html_text):
+    """Header logo must match the canonical Enclave mark used by the installer."""
+    # Reject the legacy hexagon + 'EN/CL' typographic placeholder
+    assert 'class="logo-hex"' not in index_html_text, (
+        "legacy .logo-hex still in header — swap to .logo-mark"
+    )
+    # Assert the canonical mark is present (nested rects)
+    assert 'class="logo-mark"' in index_html_text, (
+        ".logo-mark container missing from header"
+    )
+    # And the 4 nested rects — signature of the installer Enclave mark
+    rect_count = index_html_text.count('<rect ')
+    assert rect_count >= 4, (
+        f"installer Enclave mark expects 4 nested <rect> elements; found {rect_count}"
+    )
