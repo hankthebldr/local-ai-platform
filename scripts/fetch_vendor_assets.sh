@@ -70,7 +70,24 @@ echo "→ Fetching d3 v7 (minified)..."
 curl -fsSL -o "$VENDOR/d3.v7.min.js" \
   "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"
 
+echo "→ Fetching Drawflow 0.0.59 (no-code workflow composer)..."
+curl -fsSL -o "$VENDOR/drawflow.min.css" \
+  "https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.59/dist/drawflow.min.css"
+curl -fsSL -o "$VENDOR/drawflow.min.js" \
+  "https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.59/dist/drawflow.min.js"
+
+echo "→ Fetching Dagre 0.8.5 (auto-layout for the composer)..."
+curl -fsSL -o "$VENDOR/dagre.min.js" \
+  "https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"
+
+echo "→ Fetching js-yaml 4.1.0 (YAML import/export)..."
+curl -fsSL -o "$VENDOR/js-yaml.min.js" \
+  "https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"
+
 echo ""
 echo "✓ Vendor assets fetched to $VENDOR"
-echo "  fonts: $(ls "$FONTS"/*.woff2 "$FONTS"/*.ttf 2>/dev/null | wc -l | tr -d ' ')"
-echo "  d3:    $(stat -f%z "$VENDOR/d3.v7.min.js") bytes"
+echo "  fonts:    $(ls "$FONTS"/*.woff2 "$FONTS"/*.ttf 2>/dev/null | wc -l | tr -d ' ')"
+echo "  d3:       $(stat -f%z "$VENDOR/d3.v7.min.js") bytes"
+echo "  drawflow: $(stat -f%z "$VENDOR/drawflow.min.js") JS + $(stat -f%z "$VENDOR/drawflow.min.css") CSS"
+echo "  dagre:    $(stat -f%z "$VENDOR/dagre.min.js") bytes"
+echo "  js-yaml:  $(stat -f%z "$VENDOR/js-yaml.min.js") bytes"

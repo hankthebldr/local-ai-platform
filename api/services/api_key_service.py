@@ -34,15 +34,29 @@ class APIKeyService:
             self._config_dir = Path(os.getenv("DATA_CONFIG_DIR", "data/config"))
         self._config_dir.mkdir(parents=True, exist_ok=True)
         self._file = self._config_dir / "api_keys.yaml"
+        # In-memory cache invalidated by file mtime to avoid repeated disk I/O.
+        self._cache: Optional[list] = None
+        self._cache_mtime: Optional[float] = None
 
     def _load(self) -> list:
         if not self._file.exists():
+            self._cache = []
+            self._cache_mtime = None
             return []
+
+        current_mtime = self._file.stat().st_mtime
+        if self._cache is not None and self._cache_mtime == current_mtime:
+            return self._cache
+
         data = yaml.safe_load(self._file.read_text()) or {}
-        return data.get("keys", [])
+        self._cache = data.get("keys", [])
+        self._cache_mtime = current_mtime
+        return self._cache
 
     def _save(self, keys: list) -> None:
         self._file.write_text(yaml.dump({"keys": keys}, default_flow_style=False))
+        self._cache = keys
+        self._cache_mtime = self._file.stat().st_mtime
 
     def create_key(self, name: str, scopes: list, rate_limit_rpm: Optional[int] = None, expires_at: Optional[str] = None) -> dict:
         slug = _slug(name)

@@ -7,7 +7,7 @@ import hmac
 import os
 import time
 from collections import defaultdict
-from typing import Callable
+from typing import Callable, Optional
 
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -28,6 +28,31 @@ RATE_LIMIT_RPM = int(os.getenv("RATE_LIMIT_RPM", "60"))  # requests per minute
 # ── Paths that skip authentication ─────────────────────────────────────────
 
 PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
+
+
+# ── Scope enforcement ──────────────────────────────────────────────────────
+# Maps URL path prefixes to the scope a key must hold to access them.
+# Paths not listed here are unrestricted beyond base authentication.
+SCOPE_MAP = {
+    "/v1/chat/": "chat",
+    "/v1/completions": "completions",
+    "/v1/models": "models",
+    "/api/documents": "documents",
+    "/api/memory": "memory",
+    "/api/context": "context",
+    "/api/profiles": "profiles",
+    "/api/plugins": "plugins",
+    "/api/workflows": "workflows",
+    "/api/keys": "keys",  # master key bypasses this before scope check
+}
+
+
+def _required_scope(path: str) -> Optional[str]:
+    """Return the scope needed for the given request path, or None if unrestricted."""
+    for prefix, scope in SCOPE_MAP.items():
+        if path.startswith(prefix):
+            return scope
+    return None
 
 
 # ── API Key Authentication Middleware ──────────────────────────────────────
@@ -89,7 +114,23 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         svc = APIKeyService()
         meta = svc.validate_key(provided_key)
         if meta:
-            # Store key metadata on request state for downstream use
+            # ── Scope enforcement ──────────────────────────────────────
+            required = _required_scope(request.url.path)
+            scopes = meta.get("scopes") or []
+            if required and required not in scopes:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "error": {
+                            "message": (
+                                f"API key '{meta['name']}' lacks the '{required}' scope "
+                                f"required for {request.url.path}."
+                            ),
+                            "type": "authorization_error",
+                            "code": "insufficient_scope",
+                        }
+                    },
+                )
             request.state.api_key_meta = meta
             return await call_next(request)
 
