@@ -58,6 +58,9 @@ venv.bak/
 .env.local
 *.env
 
+# Stray logs at any depth (data/logs/* already covered)
+*.log
+
 # Models and data (large files)
 data/models/*.gguf
 data/models/*.bin

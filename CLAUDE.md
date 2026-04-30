@@ -202,12 +202,12 @@ observability, HA, ≥70% coverage) is still the target, tracked separately in
 - ✓ Model registry and downloader (18 models — see MODELS.md)
 - ✓ CLI chat with Rich formatting
 - ✓ OpenAI-compatible API (chat, completions, models) with streaming
-- ✓ Router/service layer (populated: 15 routers, 23 services)
+- ✓ Router/service layer (populated: 15 routers, 22 services)
 - ✓ API-key authentication with rotation + plugin system
 - ✓ Multi-agent workflow engine (6-hook lifecycle, retry/escalation, v2 YAML)
 - ✓ RAG pipeline (Chroma + chunker + document service)
 - ✓ CI (pytest on 3.12/3.13 matrix), Release (DMG build + GitHub Release), Pages
-- ✓ Automated tests (~30 files across unit / integration / e2e / hooks)
+- ✓ Automated tests (46 files across unit / integration / e2e / hooks / ui)
 
 **Roadmap**:
 - `1.1.0` — ongoing work since `1.0.0`: workflow engine refinements, backlog wins, docs hygiene
@@ -342,8 +342,9 @@ curl -X POST http://localhost:8000/api/workflows/run \
 
 **API Layer**:
 - Router/service separation is in place; new endpoints should follow the existing pattern rather than the legacy inline style in `api/main.py`
-- Token counting in OpenAI-compatible usage metrics is still a stub (returns 0)
-- CORS is permissive (`allow_origins=["*"]`) — acceptable for local dev, must be tightened before any multi-tenant deployment
+- Token counts in OpenAI-compatible usage metrics come straight from Ollama (`eval_count`/`prompt_eval_count`); when the upstream omits them the response reports `0`
+- CORS defaults to `["*"]` if `CORS_ORIGINS` is unset. The shipped `.env.example` and `docker-compose.yml` restrict it to localhost; `api/main.py` emits a startup warning if the wildcard survives or auth is off while bound to a non-localhost host
+- Authentication is off by default (`ENABLE_API_AUTH=false`); operators must set it to `true` and provision `API_KEY` before any non-localhost exposure
 
 **Features Not Yet Built**:
 - Fine-tuning pipeline (dependencies installed but no implementation)
