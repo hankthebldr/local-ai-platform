@@ -15,8 +15,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
-from .routers import chat, completions, models, inventory, exports, graph, workflows, api_keys, plugins, setup, context, memory, profiles, documents, roles
+from .routers import chat, completions, models, inventory, exports, graph, workflows, api_keys, plugins, setup, context, memory, profiles, documents, roles, a2a
 from .services.ollama_service import OllamaService
+from .services.workflow_engine import WorkflowEngine
+from .services.a2a_service import A2AService
 from .middleware import APIKeyAuthMiddleware, RateLimitMiddleware
 from .exceptions import register_exception_handlers
 from .logging_config import logger
@@ -42,6 +44,8 @@ except (json.JSONDecodeError, TypeError):
 # ── Services ───────────────────────────────────────────────────────────────
 
 ollama_service = OllamaService(OLLAMA_HOST)
+_workflow_engine = WorkflowEngine(ollama_service)
+a2a.init_a2a_service(A2AService(ollama_service, _workflow_engine))
 
 
 # ── Lifespan ───────────────────────────────────────────────────────────────
@@ -136,6 +140,7 @@ app.include_router(memory.router)
 app.include_router(profiles.router)
 app.include_router(documents.router)
 app.include_router(roles.router)
+app.include_router(a2a.router)
 
 
 # ── Public Endpoints ───────────────────────────────────────────────────────
