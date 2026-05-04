@@ -46,17 +46,41 @@ ollama_service = OllamaService(OLLAMA_HOST)
 
 # ── Lifespan ───────────────────────────────────────────────────────────────
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _is_network_exposed(host: str) -> bool:
+    return host not in _LOOPBACK_HOSTS
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for the application"""
-    auth_status = "enabled" if os.getenv("ENABLE_API_AUTH", "false").lower() == "true" else "disabled"
+    auth_enabled = os.getenv("ENABLE_API_AUTH", "false").lower() == "true"
+    auth_status = "enabled" if auth_enabled else "disabled"
     logger.info("Starting Enclave API")
     logger.info(f"  Ollama Host: {OLLAMA_HOST}")
+    logger.info(f"  API Host: {API_HOST}")
     logger.info(f"  API Port: {API_PORT}")
     logger.info(f"  Auth: {auth_status}")
     logger.info(f"  CORS Origins: {CORS_ORIGINS}")
     logger.info(f"  Rate Limit: {os.getenv('RATE_LIMIT_RPM', '60')} rpm")
     logger.info(f"  Request Timeout: {REQUEST_TIMEOUT}s")
+
+    # Loud warning if the API is reachable beyond localhost without auth.
+    if _is_network_exposed(API_HOST) and not auth_enabled:
+        logger.warning(
+            "SECURITY: API_HOST=%s is network-exposed but ENABLE_API_AUTH=false. "
+            "Workflow execution, document ingestion, and key management endpoints "
+            "are unauthenticated. Set ENABLE_API_AUTH=true and provision API_KEY "
+            "before exposing this service.",
+            API_HOST,
+        )
+    if "*" in CORS_ORIGINS:
+        logger.warning(
+            "SECURITY: CORS_ORIGINS contains '*' — any browser origin can call "
+            "this API. Restrict CORS_ORIGINS before exposing this service."
+        )
 
     if ollama_service.health_check():
         model_list = ollama_service.list_models()
