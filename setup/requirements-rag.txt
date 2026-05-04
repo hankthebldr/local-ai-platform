@@ -1,7 +1,9 @@
 # RAG Dependencies — vector database and retrieval
 -r requirements-core.txt
 chromadb>=0.4.22
-langchain>=0.1.4
-langchain-community>=0.0.14
+# Only RecursiveCharacterTextSplitter is used (api/services/chunker.py).
+# Capped below 0.2 because the text_splitter module moved to a separate
+# langchain-text-splitters package in 0.2; revisit when we adopt the new layout.
+langchain>=0.1.4,<0.2
 sentence-transformers>=2.2.2
 pillow>=10.1.0
