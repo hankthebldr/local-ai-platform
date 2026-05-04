@@ -137,3 +137,38 @@ class APIKeyService:
                 k["last_used_at"] = _now_iso()
                 self._save(keys)
                 return
+
+
+# ── First-run bootstrap ───────────────────────────────────────────────────
+#
+# When the operator enables auth on a fresh install, they shouldn't have to
+# manually provision a key before the API works. This helper auto-creates a
+# master key on first start (idempotent: returns None if any key already
+# exists or if API_KEY is set in env).
+
+ALL_SCOPES = [
+    "chat", "completions", "models",
+    "documents", "memory", "context",
+    "profiles", "plugins", "workflows",
+    "keys", "a2a",
+]
+
+
+def bootstrap_first_run_key(svc: "APIKeyService") -> Optional[dict]:
+    """
+    Provision a master key if and only if the keystore is empty AND no
+    legacy API_KEY env var is set. Returns the {id, name, key, scopes}
+    dict on creation, or None if no provisioning was needed.
+
+    The raw key is included in the return so the caller can write it to
+    a sentinel file and log it once — it cannot be retrieved later.
+    """
+    if os.getenv("API_KEY"):
+        return None
+    if svc.list_keys():
+        return None
+    return svc.create_key(
+        name="first-run-master",
+        scopes=ALL_SCOPES,
+        rate_limit_rpm=None,
+    )

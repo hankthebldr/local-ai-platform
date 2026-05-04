@@ -37,7 +37,10 @@ services:
       - OLLAMA_HOST=http://ollama:11434
       - API_HOST=0.0.0.0
       - API_PORT=8000
-      - ENABLE_API_AUTH=${ENABLE_API_AUTH:-false}
+      # Auth defaults to ON. On first boot, a master key is auto-provisioned
+      # and written to data/config/first-run-key.txt (also logged once at INFO).
+      # `docker compose logs api | grep "FIRST-RUN"` to retrieve it.
+      - ENABLE_API_AUTH=${ENABLE_API_AUTH:-true}
       - API_KEY=${API_KEY:-}
       - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-60}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

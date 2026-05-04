@@ -49,7 +49,10 @@ ollama_service = OllamaService(OLLAMA_HOST)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for the application"""
-    auth_status = "enabled" if os.getenv("ENABLE_API_AUTH", "false").lower() == "true" else "disabled"
+    # Default-on auth: 1.x ships with ENABLE_API_AUTH=true. Fresh installs
+    # auto-provision a master key on first boot (see _bootstrap_auth_if_needed).
+    auth_enabled = os.getenv("ENABLE_API_AUTH", "true").lower() == "true"
+    auth_status = "enabled" if auth_enabled else "disabled"
     logger.info("Starting Enclave API")
     logger.info(f"  Ollama Host: {OLLAMA_HOST}")
     logger.info(f"  API Port: {API_PORT}")
@@ -57,6 +60,14 @@ async def lifespan(app: FastAPI):
     logger.info(f"  CORS Origins: {CORS_ORIGINS}")
     logger.info(f"  Rate Limit: {os.getenv('RATE_LIMIT_RPM', '60')} rpm")
     logger.info(f"  Request Timeout: {REQUEST_TIMEOUT}s")
+
+    if auth_enabled:
+        _bootstrap_auth_if_needed()
+    else:
+        logger.warning(
+            "SECURITY: ENABLE_API_AUTH=false — every endpoint is unauthenticated. "
+            "This is dev mode only; set ENABLE_API_AUTH=true before exposing the API."
+        )
 
     if ollama_service.health_check():
         model_list = ollama_service.list_models()
@@ -66,6 +77,43 @@ async def lifespan(app: FastAPI):
 
     yield
     logger.info("Shutting down Enclave API")
+
+
+def _bootstrap_auth_if_needed() -> None:
+    """
+    On first boot with auth enabled, provision a master key and write the
+    raw value to data/config/first-run-key.txt (chmod 0600). Subsequent
+    boots are no-ops (the keystore won't be empty).
+
+    The raw key is logged ONCE here — never persisted in the YAML, never
+    retrievable later. Operators can find it in:
+      1. The startup log banner below
+      2. data/config/first-run-key.txt
+    """
+    from .services.api_key_service import APIKeyService, bootstrap_first_run_key
+
+    svc = APIKeyService()
+    provisioned = bootstrap_first_run_key(svc)
+    if provisioned is None:
+        return
+
+    raw_key = provisioned["key"]
+    marker_path = Path(os.getenv("DATA_CONFIG_DIR", "data/config")) / "first-run-key.txt"
+    try:
+        marker_path.parent.mkdir(parents=True, exist_ok=True)
+        marker_path.write_text(f"{raw_key}\n")
+        os.chmod(marker_path, 0o600)
+    except OSError as exc:
+        logger.warning("Failed to write first-run-key.txt: %s", exc)
+
+    banner = "=" * 70
+    logger.warning(banner)
+    logger.warning("FIRST-RUN: provisioned master API key (id=%s)", provisioned["id"])
+    logger.warning("KEY: %s", raw_key)
+    logger.warning("Saved to: %s (mode 0600)", marker_path)
+    logger.warning("Use:  Authorization: Bearer %s", raw_key)
+    logger.warning("This key has all scopes; rotate it via /api/keys when ready.")
+    logger.warning(banner)
 
 
 # ── App ────────────────────────────────────────────────────────────────────
