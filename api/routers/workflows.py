@@ -218,6 +218,49 @@ async def get_run(run_id: str):
     return run_data
 
 
+@router.post("/runs/{run_id}/resume")
+async def resume_run(run_id: str):
+    """
+    Resume a checkpointed workflow run that was interrupted mid-flight.
+
+    Idempotent for terminal runs (returns the existing snapshot unchanged).
+    For runs left in "running" state by a crash, picks up at the first
+    step that doesn't have a "completed" StepResult.
+    """
+    engine = get_engine()
+    try:
+        run = engine.resume(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return {
+        "run_id": run.run_id,
+        "workflow_id": run.workflow_id,
+        "status": run.status,
+        "started_at": str(run.started_at),
+        "completed_at": str(run.completed_at) if run.completed_at else None,
+        "step_results": [
+            {
+                "step_id": r.step_id,
+                "status": r.status,
+                "model_used": r.model_used,
+                "duration_seconds": r.duration_seconds,
+                "token_count": r.token_count,
+                "retries": r.retries,
+                "error": r.error,
+            }
+            for r in run.step_results
+        ],
+        "context": {
+            "seed": run.context.seed,
+            "workspace": run.context.workspace,
+            "shared": run.context.shared,
+        },
+        "error": run.error,
+        "resumed": True,
+    }
+
+
 @router.get("/runs/{run_id}/artifacts/{step_id}")
 async def get_artifact(run_id: str, step_id: str):
     """Get a specific step's output artifacts"""
