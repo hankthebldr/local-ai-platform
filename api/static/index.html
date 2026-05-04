@@ -1646,6 +1646,27 @@ body::before {
 
   <!-- TAB: WORKFLOWS -->
   <div class="tab-content" id="tab-workflows">
+    <!-- A2A Integrations panel — advertises this Enclave to remote agents -->
+    <div class="panel" id="a2a-panel" style="margin-bottom:16px;display:none">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">A2A
+        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">agent-to-agent protocol</span>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+        <div style="font-size:0.7rem;color:var(--text-dim);flex:1;min-width:200px">
+          External agents can discover and call this Enclave via Google's A2A protocol.
+          <span id="a2a-skill-count" style="color:var(--cyan)"></span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;font-family:var(--mono);font-size:0.68rem">
+          <span style="color:var(--text-muted)">Agent Card</span>
+          <code id="a2a-card-url" style="background:var(--bg-deep);padding:3px 8px;border-radius:3px;color:var(--cyan);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">…</code>
+          <button class="action-btn" style="padding:2px 8px;font-size:0.65rem" onclick="copyA2ACardUrl()" title="Copy Agent Card URL">Copy</button>
+          <button class="action-btn" style="padding:2px 8px;font-size:0.65rem" onclick="toggleA2ASkills()" title="Toggle skill list">Skills</button>
+        </div>
+      </div>
+      <div id="a2a-skills-list" style="display:none;margin-top:10px;padding:10px;background:var(--bg-deep);border-radius:4px;font-family:var(--mono);font-size:0.7rem;max-height:180px;overflow-y:auto"></div>
+    </div>
+
     <div class="panel" style="margin-bottom:16px">
       <span class="corner-tr"></span><span class="corner-bl"></span>
       <div class="panel-label">Workflows
@@ -3233,6 +3254,64 @@ async function refreshWorkflows() {
   } catch (e) {
     console.error('Failed to load workflows:', e);
   }
+  // Refresh A2A panel alongside workflows: every YAML change is also an
+  // Agent Card change, so the two are inherently linked.
+  loadA2ACard();
+}
+
+// ── A2A Integrations Panel ─────────────────────────────────────────────
+// Surfaces the protocol surface from PR #18: shows the Agent Card URL
+// and the advertised skills (chat + workflow:<id>...). The panel only
+// renders if /.well-known/agent.json responds — older builds without
+// A2A wired up keep the workflows tab clean.
+
+async function loadA2ACard() {
+  const panel = document.getElementById('a2a-panel');
+  if (!panel) return;
+  try {
+    const resp = await fetch('/.well-known/agent.json');
+    if (!resp.ok) { panel.style.display = 'none'; return; }
+    const card = await resp.json();
+    panel.style.display = '';
+
+    // Resolve the absolute URL the way an external agent would see it.
+    const cardUrl = new URL('/.well-known/agent.json', window.location.origin).toString();
+    document.getElementById('a2a-card-url').textContent = cardUrl;
+    document.getElementById('a2a-card-url').dataset.url = cardUrl;
+
+    const skills = card.skills || [];
+    document.getElementById('a2a-skill-count').textContent =
+      `${skills.length} skill${skills.length === 1 ? '' : 's'} advertised`;
+
+    document.getElementById('a2a-skills-list').innerHTML = skills.map(s => `
+      <div style="padding:4px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--cyan)">${esc(s.id)}</span>
+        <span style="color:var(--text-muted)">·</span>
+        <span style="color:var(--text)">${esc(s.name || '')}</span>
+        ${s.description ? `<div style="color:var(--text-dim);font-size:0.65rem;margin-top:2px">${esc(s.description)}</div>` : ''}
+      </div>
+    `).join('') || '<div style="color:var(--text-muted)">No skills advertised.</div>';
+  } catch (e) {
+    // Don't surface a console error if the Agent Card endpoint just doesn't exist.
+    panel.style.display = 'none';
+  }
+}
+
+function copyA2ACardUrl() {
+  const el = document.getElementById('a2a-card-url');
+  const url = el.dataset.url || el.textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => {
+      const orig = el.textContent;
+      el.textContent = 'copied!';
+      setTimeout(() => { el.textContent = orig; }, 900);
+    });
+  }
+}
+
+function toggleA2ASkills() {
+  const el = document.getElementById('a2a-skills-list');
+  el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
 async function loadWorkflowDetail() {
