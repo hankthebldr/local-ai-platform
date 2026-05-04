@@ -45,7 +45,7 @@ services:
       - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-60}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-300}
-      - CORS_ORIGINS=["http://localhost:8080","http://localhost:3000","*"]
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:8080","http://localhost:3000"]}
     volumes:
       - api_logs:/app/data/logs
     depends_on:
@@ -71,7 +71,8 @@ services:
       - OPENAI_API_KEY=${API_KEY:-sk-local}
       # Also connect directly to Ollama for native features
       - OLLAMA_BASE_URL=http://ollama:11434
-      - WEBUI_AUTH=false
+      # WebUI auth: set WEBUI_AUTH=false to disable for trusted local-only setups.
+      - WEBUI_AUTH=${WEBUI_AUTH:-true}
     volumes:
       - webui_data:/app/backend/data
     depends_on:

@@ -46,6 +46,13 @@ ollama_service = OllamaService(OLLAMA_HOST)
 
 # ── Lifespan ───────────────────────────────────────────────────────────────
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _is_network_exposed(host: str) -> bool:
+    return host not in _LOOPBACK_HOSTS
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for the application"""
@@ -55,6 +62,7 @@ async def lifespan(app: FastAPI):
     auth_status = "enabled" if auth_enabled else "disabled"
     logger.info("Starting Enclave API")
     logger.info(f"  Ollama Host: {OLLAMA_HOST}")
+    logger.info(f"  API Host: {API_HOST}")
     logger.info(f"  API Port: {API_PORT}")
     logger.info(f"  Auth: {auth_status}")
     logger.info(f"  CORS Origins: {CORS_ORIGINS}")
@@ -64,9 +72,26 @@ async def lifespan(app: FastAPI):
     if auth_enabled:
         _bootstrap_auth_if_needed()
     else:
+        # Auth off is now an explicit override (dev mode only). Warn loudly,
+        # and louder still when the override coincides with a network-exposed
+        # bind — that combination would expose workflows, document ingestion,
+        # and key management endpoints unauthenticated.
+        if _is_network_exposed(API_HOST):
+            logger.warning(
+                "SECURITY: API_HOST=%s is network-exposed but ENABLE_API_AUTH=false. "
+                "Workflow execution, document ingestion, and key management endpoints "
+                "are unauthenticated. Remove the override before exposing this service.",
+                API_HOST,
+            )
+        else:
+            logger.warning(
+                "SECURITY: ENABLE_API_AUTH=false — every endpoint is unauthenticated. "
+                "This is dev mode only; remove the override before exposing the API."
+            )
+    if "*" in CORS_ORIGINS:
         logger.warning(
-            "SECURITY: ENABLE_API_AUTH=false — every endpoint is unauthenticated. "
-            "This is dev mode only; set ENABLE_API_AUTH=true before exposing the API."
+            "SECURITY: CORS_ORIGINS contains '*' — any browser origin can call "
+            "this API. Restrict CORS_ORIGINS before exposing this service."
         )
 
     if ollama_service.health_check():
