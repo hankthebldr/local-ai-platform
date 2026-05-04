@@ -31,12 +31,24 @@ The active skill is selected via `params.metadata.skillId` or
 - `tasks/get` — fetch a persisted task by id.
 - `tasks/cancel` — cancel an in-flight task. Cancel after terminal returns
   `-32002 Task Not Cancelable`.
+- `tasks/resubscribe` — replay a task's event log and continue streaming
+  live tail until terminal. Works across server restarts: every event is
+  persisted to `data/a2a/<task_id>/events.jsonl` so disconnected clients
+  can resume even after the in-memory runtime is gone.
+
+## Agent Card live-refresh
+
+`GET /.well-known/agent.json` rebuilds the card on every request, so
+newly added workflow YAMLs surface as `workflow:<id>` skills immediately
+without restarting the server. The response carries a strong `ETag`
+header derived from the advertised skill set and version. Clients that
+send `If-None-Match` get a `304 Not Modified` when nothing has changed —
+cheap polling for skill-list freshness without re-downloading the body.
 
 ## Methods deferred
 
-`tasks/pushNotification/{set,get}` and `tasks/resubscribe` return
-`-32004 Unsupported Operation` until the follow-up release adds webhook
-delivery and SSE resume.
+`tasks/pushNotification/{set,get}` return `-32004 Unsupported Operation`
+until the follow-up release adds webhook delivery.
 
 Multi-turn `input-required` state and non-text Parts (file/data uploads as
 inputs) are likewise scheduled for a follow-up.
@@ -53,8 +65,13 @@ inputs) are likewise scheduled for a follow-up.
 
 ## Persistence
 
-A2A tasks are mirrored to `data/a2a/<task_id>/task.json`. The directory is
-gitignored; this is local state, not a shared database.
+Per task, two files in `data/a2a/<task_id>/`:
+- `task.json` — terminal task snapshot (status, artifacts, history)
+- `events.jsonl` — append-only event log; one JSON object per emitted
+  status/artifact event. Used by `tasks/resubscribe` to replay across
+  restarts.
+
+The directory is gitignored — this is local state, not a shared database.
 
 ## Example: discover and call
 
@@ -109,7 +126,6 @@ remains public — discovery without auth is part of the spec.
 ## Roadmap
 
 1. Push notifications (`tasks/pushNotification/{set,get}`) over webhooks
-2. SSE resume (`tasks/resubscribe`) with task event log replay
-3. Multi-turn `input-required` state — pause workflows for user input
-4. Bidirectional A2A — Enclave workflow steps that call out to remote A2A agents
-5. A2A + MCP composition — advertise plugin tools as MCP resources alongside skills
+2. Multi-turn `input-required` state — pause workflows for user input
+3. Bidirectional A2A — Enclave workflow steps that call out to remote A2A agents
+4. A2A + MCP composition — advertise plugin tools as MCP resources alongside skills

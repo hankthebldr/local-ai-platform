@@ -7,12 +7,18 @@ Concrete responsibilities:
     persistence layout under data/a2a/<task_id>/)
   - Translate inbound A2A Messages into either a chat completion or a
     workflow seed
-  - Run work in a background asyncio task so the SSE stream can yield
-    intermediate state updates
-  - Expose an async iterator of streaming events for tasks/sendSubscribe
+  - Run work in a background asyncio task; broadcast intermediate events
+    to every active SSE subscriber
+  - Persist a per-task event log (events.jsonl) so disconnected clients
+    can resume via tasks/resubscribe
 
 Cancellation: tasks check a per-task asyncio.Event between steps; the chat
 path is single-shot and only honors cancel before the LLM call returns.
+
+Multi-subscriber model: each call to send_subscribe / resubscribe gets its
+own asyncio.Queue. The runner emits to every queue + appends to a shared
+in-memory event log + appends to the on-disk JSONL. Resubscribe replays
+the log into a new queue, then attaches it for live tail.
 """
 
 from __future__ import annotations
@@ -20,8 +26,9 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import AsyncIterator, Dict, List, Optional
+from typing import AsyncIterator, Dict, List, Optional, Union
 
 from ..logging_config import logger
 from ..models.a2a_models import (
@@ -45,16 +52,25 @@ from ..models.a2a_models import (
 TASK_DATA_DIR = Path("./data/a2a")
 
 
+_Event = Union[TaskStatusUpdateEvent, TaskArtifactUpdateEvent]
+
+
 @dataclass
 class _TaskRuntime:
-    """In-memory companion to a Task while it is running."""
+    """In-memory companion to a Task while it is running.
+
+    `events` is the append-only log; `subscribers` is the live fan-out set.
+    The runner appends to `events` and pushes to every queue in `subscribers`.
+    Resubscribe replays `events` into a new queue, then registers it as a
+    subscriber so the client gets the live tail.
+    """
 
     task: Task
     cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
-    queue: "asyncio.Queue[TaskStatusUpdateEvent | TaskArtifactUpdateEvent]" = field(
-        default_factory=asyncio.Queue
-    )
+    events: List[_Event] = field(default_factory=list)
+    subscribers: List["asyncio.Queue[_Event]"] = field(default_factory=list)
     runner: Optional[asyncio.Task] = None
+    terminal: bool = False
 
 
 class A2AService:
@@ -87,27 +103,78 @@ class A2AService:
         message: Message,
         task_id: Optional[str] = None,
         session_id: Optional[str] = None,
-    ) -> AsyncIterator[TaskStatusUpdateEvent | TaskArtifactUpdateEvent]:
+    ) -> AsyncIterator[_Event]:
         """
         Kick off a task in the background and yield SSE events until the
         terminal status (completed/failed/canceled) is observed.
         """
         task = self._create_task(task_id, session_id, message)
         rt = self._runtime[task.id]
+        queue: "asyncio.Queue[_Event]" = asyncio.Queue()
+        rt.subscribers.append(queue)
         rt.runner = asyncio.create_task(self._run_task(task, skill_id, message))
+        return self._drain_queue_until_final(queue)
 
-        async def _stream():
-            while True:
-                event = await rt.queue.get()
+    async def resubscribe(self, task_id: str) -> AsyncIterator[_Event]:
+        """
+        Replay every event for a task and continue streaming live tail
+        until terminal.
+
+        - In-memory task: replay rt.events, then attach a new subscriber
+          queue for the live tail.
+        - Persisted-only task: replay events.jsonl from disk, then end.
+        - Unknown task: raise KeyError so the router maps it to -32001.
+        """
+        rt = self._runtime.get(task_id)
+        if rt is None:
+            persisted = self._load_persisted_events(task_id)
+            if persisted is None:
+                raise KeyError(task_id)
+
+            async def _replay_only() -> AsyncIterator[_Event]:
+                for event in persisted:
+                    yield event
+
+            return _replay_only()
+
+        queue: "asyncio.Queue[_Event]" = asyncio.Queue()
+        # Snapshot the in-memory log; subsequent emissions go to `queue`
+        # too via the subscribers list. Order: pre-existing events first,
+        # then live tail. We register the subscriber BEFORE snapshotting
+        # so we can't miss an event that lands between snapshot and attach.
+        rt.subscribers.append(queue)
+        snapshot = list(rt.events)
+
+        async def _stream() -> AsyncIterator[_Event]:
+            for event in snapshot:
                 yield event
-                # Terminate when we see the final status frame.
-                if (
-                    isinstance(event, TaskStatusUpdateEvent)
-                    and event.final
-                ):
-                    break
+            if rt.terminal:
+                # Drain anything that landed in `queue` after we registered
+                # but is older than (or equal to) what's in snapshot. The
+                # task is done; nothing new will arrive.
+                try:
+                    while True:
+                        yield queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+                return
+            async for event in self._drain_queue_until_final(queue):
+                # Skip events we already replayed from `snapshot`.
+                if event in snapshot:
+                    continue
+                yield event
 
         return _stream()
+
+    @staticmethod
+    async def _drain_queue_until_final(
+        queue: "asyncio.Queue[_Event]",
+    ) -> AsyncIterator[_Event]:
+        while True:
+            event = await queue.get()
+            yield event
+            if isinstance(event, TaskStatusUpdateEvent) and event.final:
+                break
 
     def get(self, task_id: str) -> Optional[Task]:
         rt = self._runtime.get(task_id)
@@ -222,7 +289,9 @@ class A2AService:
         rt.task.history.append(
             Message(role=MessageRole.AGENT, parts=[TextPart(text=result.get("content", ""))])
         )
-        await rt.queue.put(TaskArtifactUpdateEvent(id=rt.task.id, artifact=artifact))
+        await self._broadcast(
+            rt, TaskArtifactUpdateEvent(id=rt.task.id, artifact=artifact)
+        )
 
     async def _run_workflow(self, rt: _TaskRuntime, workflow_id: str, message: Message) -> None:
         """Map an A2A workflow skill invocation onto WorkflowEngine.run."""
@@ -276,7 +345,9 @@ class A2AService:
                 },
             )
             rt.task.artifacts.append(artifact)
-            await rt.queue.put(TaskArtifactUpdateEvent(id=rt.task.id, artifact=artifact))
+            await self._broadcast(
+                rt, TaskArtifactUpdateEvent(id=rt.task.id, artifact=artifact)
+            )
 
         rt.task.metadata = (rt.task.metadata or {}) | {
             "workflow_run_id": run.run_id,
@@ -289,9 +360,23 @@ class A2AService:
     # ── State transitions ──────────────────────────────────────────────
 
     async def _emit_status(self, rt: _TaskRuntime, final: bool = False) -> None:
-        await rt.queue.put(
-            TaskStatusUpdateEvent(id=rt.task.id, status=rt.task.status, final=final)
+        event = TaskStatusUpdateEvent(
+            id=rt.task.id, status=rt.task.status, final=final
         )
+        await self._broadcast(rt, event)
+        if final:
+            rt.terminal = True
+
+    async def _broadcast(self, rt: _TaskRuntime, event: _Event) -> None:
+        """Append to event log + push to every subscriber + persist to disk."""
+        rt.events.append(event)
+        for queue in list(rt.subscribers):
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                # Subscribers use unbounded queues, but be defensive.
+                pass
+        self._append_event_log(rt.task.id, event)
 
     async def _fail(self, rt: _TaskRuntime, reason: str) -> None:
         rt.task.status = TaskStatus(
@@ -310,6 +395,53 @@ class A2AService:
 
     def _task_path(self, task_id: str) -> Path:
         return TASK_DATA_DIR / task_id / "task.json"
+
+    def _events_log_path(self, task_id: str) -> Path:
+        return TASK_DATA_DIR / task_id / "events.jsonl"
+
+    def _append_event_log(self, task_id: str, event: _Event) -> None:
+        """Persist a single event so resubscribe-after-restart can replay."""
+        path = self._events_log_path(task_id)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "kind": (
+                    "status" if isinstance(event, TaskStatusUpdateEvent) else "artifact"
+                ),
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "event": event.model_dump(by_alias=True, mode="json"),
+            }
+            with path.open("a") as f:
+                f.write(json.dumps(payload, default=str) + "\n")
+        except OSError as exc:
+            logger.warning("failed to append a2a event log %s: %s", task_id, exc)
+
+    def _load_persisted_events(self, task_id: str) -> Optional[List[_Event]]:
+        """
+        Read the JSONL event log for a task no longer in memory.
+        Returns None if the task has no log on disk; empty list if the log
+        exists but is empty.
+        """
+        path = self._events_log_path(task_id)
+        if not path.exists():
+            return None
+        events: List[_Event] = []
+        try:
+            with path.open() as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    record = json.loads(line)
+                    payload = record.get("event") or {}
+                    if record.get("kind") == "status":
+                        events.append(TaskStatusUpdateEvent.model_validate(payload))
+                    elif record.get("kind") == "artifact":
+                        events.append(TaskArtifactUpdateEvent.model_validate(payload))
+        except (OSError, json.JSONDecodeError, Exception) as exc:
+            logger.warning("failed to read a2a event log %s: %s", task_id, exc)
+            return None
+        return events
 
     def _persist(self, task: Task) -> None:
         path = self._task_path(task.id)

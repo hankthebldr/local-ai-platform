@@ -222,6 +222,78 @@ def test_invalid_skill_id_returns_invalid_params(client):
     assert env["error"]["code"] == -32602
 
 
+# ── tasks/resubscribe + Agent Card ETag ───────────────────────────────────
+
+
+def test_resubscribe_replays_events_for_completed_task(client):
+    """After a task finishes, resubscribe must replay the persisted log."""
+    send = client.post(
+        "/a2a",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tasks/send",
+            "params": {
+                "message": {
+                    "role": "user",
+                    "parts": [{"type": "text", "text": "test"}],
+                    "metadata": {"skillId": "chat"},
+                }
+            },
+        },
+    )
+    task_id = send.json()["result"]["id"]
+
+    with client.stream(
+        "POST",
+        "/a2a",
+        json={
+            "jsonrpc": "2.0",
+            "id": 200,
+            "method": "tasks/resubscribe",
+            "params": {"id": task_id},
+        },
+    ) as resp:
+        assert resp.status_code == 200
+        events = []
+        for raw in resp.iter_lines():
+            if not raw or not raw.startswith("data: "):
+                continue
+            payload = raw[len("data: ") :]
+            if payload == "[DONE]":
+                break
+            events.append(json.loads(payload))
+
+    statuses = [e for e in events if "status" in e["result"]]
+    artifacts = [e for e in events if "artifact" in e["result"]]
+    assert statuses and artifacts
+    assert statuses[-1]["result"]["status"]["state"] == TaskState.COMPLETED.value
+
+
+def test_resubscribe_unknown_task_returns_task_not_found(client):
+    resp = client.post(
+        "/a2a",
+        json={
+            "jsonrpc": "2.0",
+            "id": 201,
+            "method": "tasks/resubscribe",
+            "params": {"id": "no-such-task"},
+        },
+    )
+    env = resp.json()
+    assert env["error"]["code"] == -32001
+
+
+def test_agent_card_etag_round_trip(client):
+    first = client.get("/.well-known/agent.json")
+    assert first.status_code == 200
+    etag = first.headers["ETag"]
+    assert etag
+    second = client.get("/.well-known/agent.json", headers={"if-none-match": etag})
+    assert second.status_code == 304
+    assert second.headers["ETag"] == etag
+
+
 # ── tasks/sendSubscribe (SSE) ──────────────────────────────────────────────
 
 
