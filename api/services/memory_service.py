@@ -80,6 +80,32 @@ class MemoryService:
     def list_facts(self) -> list:
         return self._load_facts()
 
+    def update_fact(
+        self,
+        fact_id: str,
+        content: Optional[str] = None,
+        tags: Optional[list] = None,
+        enabled: Optional[bool] = None,
+    ) -> Optional[dict]:
+        """
+        Patch an existing fact in place. None means "leave that field alone".
+        Returns the updated dict, or None if no fact has the given id.
+        """
+        facts = self._load_facts()
+        for f in facts:
+            if f["id"] != fact_id:
+                continue
+            if content is not None:
+                f["content"] = content
+            if tags is not None:
+                f["tags"] = list(tags)
+            if enabled is not None:
+                f["enabled"] = bool(enabled)
+            self._save_facts(facts)
+            logger.info(f"Fact updated: {fact_id}")
+            return f
+        return None
+
     def delete_fact(self, fact_id: str) -> bool:
         facts = self._load_facts()
         new_facts = [f for f in facts if f["id"] != fact_id]
@@ -90,11 +116,39 @@ class MemoryService:
         return True
 
     def get_injection_context(self) -> str:
+        """
+        Build the system-message text injected into chat completions.
+        Skips facts where enabled=False so users can park a fact without
+        losing it. Facts created before the `enabled` field existed default
+        to enabled (legacy entries don't have the key).
+        """
         facts = self._load_facts()
-        if not facts:
+        active = [f for f in facts if f.get("enabled", True)]
+        if not active:
             return ""
-        lines = [f"- {f['content']}" for f in facts]
+        lines = [f"- {f['content']}" for f in active]
         return "User memory (pinned facts):\n" + "\n".join(lines)
+
+    def injection_preview(self) -> dict:
+        """
+        Return both the literal injection text and a fact-by-fact breakdown
+        showing which facts contribute and which are parked. Powers the
+        memory ledger UI's "what gets sent to the model" panel.
+        """
+        facts = self._load_facts()
+        return {
+            "injection_text": self.get_injection_context(),
+            "facts": [
+                {
+                    "id": f["id"],
+                    "content": f["content"],
+                    "tags": f.get("tags", []),
+                    "enabled": f.get("enabled", True),
+                    "contributes": bool(f.get("enabled", True)),
+                }
+                for f in facts
+            ],
+        }
 
     def get_stats(self) -> dict:
         index = self._load_index()
