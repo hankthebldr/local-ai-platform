@@ -69,12 +69,20 @@ def _get_service() -> A2AService:
 
 @router.get("/.well-known/agent.json")
 async def agent_card(request: Request) -> JSONResponse:
-    """Serve the Agent Card describing this Enclave instance."""
+    """
+    Serve the Agent Card describing this Enclave instance.
+
+    The card is rebuilt on every request so newly added workflow YAMLs
+    surface as skills automatically. We attach a strong ETag derived from
+    the skill list + version so polling clients can use If-None-Match for
+    cheap change detection.
+    """
     svc = _get_service()
     base_url = str(request.base_url).rstrip("/")
     auth_enabled = os.getenv("ENABLE_API_AUTH", "false").lower() == "true"
 
     skills = [AgentSkill(**s) for s in svc.discoverable_skills()]
+    version = os.getenv("A2A_AGENT_VERSION", "0.1.0")
 
     card = AgentCard(
         name=os.getenv("A2A_AGENT_NAME", "Enclave"),
@@ -84,7 +92,7 @@ async def agent_card(request: Request) -> JSONResponse:
         ),
         url=f"{base_url}/a2a",
         provider=AgentProvider(organization="ohno llc"),
-        version=os.getenv("A2A_AGENT_VERSION", "0.1.0"),
+        version=version,
         capabilities=AgentCapabilities(
             streaming=True,
             pushNotifications=False,
@@ -97,7 +105,20 @@ async def agent_card(request: Request) -> JSONResponse:
         defaultOutputModes=["text", "data"],
         skills=skills,
     )
-    return JSONResponse(card.model_dump(by_alias=True, exclude_none=True))
+    body = card.model_dump(by_alias=True, exclude_none=True)
+    etag = _compute_card_etag(skills, version)
+    if request.headers.get("if-none-match") == etag:
+        return JSONResponse(content=None, status_code=304, headers={"ETag": etag})
+    return JSONResponse(body, headers={"ETag": etag, "Cache-Control": "no-cache"})
+
+
+def _compute_card_etag(skills: list, version: str) -> str:
+    """Strong ETag over (sorted skill IDs, version) — changes whenever the
+    advertised surface changes."""
+    import hashlib
+
+    payload = "|".join(sorted(s.id for s in skills)) + f"#{version}"
+    return f'"{hashlib.sha256(payload.encode()).hexdigest()[:16]}"'
 
 
 # ── JSON-RPC dispatch ──────────────────────────────────────────────────────
@@ -134,16 +155,17 @@ async def a2a_rpc(request: Request):
             return await _handle_get(rpc_id, params)
         if method == "tasks/cancel":
             return await _handle_cancel(rpc_id, params)
+        if method == "tasks/resubscribe":
+            return await _handle_resubscribe(rpc_id, params)
         if method in {
             "tasks/pushNotification/set",
             "tasks/pushNotification/get",
-            "tasks/resubscribe",
         }:
             return _error_response(
                 rpc_id,
                 A2AErrorCode.UNSUPPORTED_OPERATION,
-                f"method {method} not supported in this build (push notifications "
-                "and resubscribe are scheduled for a follow-up release)",
+                f"method {method} not supported in this build (push notification "
+                "webhooks are scheduled for a follow-up release)",
             )
         return _error_response(
             rpc_id, A2AErrorCode.METHOD_NOT_FOUND, f"unknown method: {method}"
@@ -233,6 +255,32 @@ async def _handle_get(rpc_id, params: dict[str, Any]):
     if parsed.history_length is not None:
         payload["history"] = payload.get("history", [])[-parsed.history_length :]
     return _ok_response(rpc_id, payload)
+
+
+async def _handle_resubscribe(rpc_id, params: dict[str, Any]):
+    """
+    Replay a task's event log and continue streaming live tail until
+    terminal. Streams JSON-RPC envelopes wrapping each event.
+    """
+    parsed = TaskQueryParams.model_validate(params)
+    svc = _get_service()
+    try:
+        stream = await svc.resubscribe(parsed.id)
+    except KeyError:
+        return _error_response(
+            rpc_id, A2AErrorCode.TASK_NOT_FOUND, f"task not found: {parsed.id}"
+        )
+
+    async def _sse_gen():
+        async for event in stream:
+            envelope = JsonRpcResponse(
+                id=rpc_id,
+                result=event.model_dump(by_alias=True, exclude_none=True),
+            ).model_dump(by_alias=True, exclude_none=True)
+            yield f"data: {json.dumps(envelope)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(_sse_gen(), media_type="text/event-stream")
 
 
 async def _handle_cancel(rpc_id, params: dict[str, Any]):
