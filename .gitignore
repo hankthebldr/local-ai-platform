@@ -120,6 +120,8 @@ data/a2a/
 # ── Runtime user data — never commit ────────────────────────────────
 # API key hashes and metadata (managed via /api/keys endpoints)
 data/config/api_keys.yaml
+# First-run master key sentinel (raw value, mode 0600)
+data/config/first-run-key.txt
 # User-pinned memories and session summaries
 data/memory/sessions/
 data/memory/facts.yaml

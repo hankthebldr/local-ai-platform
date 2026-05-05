@@ -76,12 +76,14 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
       - ?api_key=<key>  (query param, for testing convenience)
 
     Skips auth for public paths (health, docs, root).
-    Disabled entirely when ENABLE_API_AUTH=false or API_KEY is empty.
+    Disabled only when ENABLE_API_AUTH=false (dev mode). Auth defaults to
+    on; the keystore is auto-provisioned with a first-run master key on a
+    fresh boot — see api/services/api_key_service.bootstrap_first_run_key.
     """
 
     async def dispatch(self, request: Request, call_next: Callable):
-        # Skip if auth is disabled (read at request time for testability)
-        if os.getenv("ENABLE_API_AUTH", "false").lower() != "true":
+        # Default-on: only skip when ENABLE_API_AUTH is explicitly "false".
+        if os.getenv("ENABLE_API_AUTH", "true").lower() != "true":
             return await call_next(request)
 
         # Skip public paths
