@@ -136,6 +136,9 @@ class PinnedFact:
     created_at: str = field(default_factory=_now_iso)
     source_conversation: str = None
     pinned_by: str = "user"
+    # `enabled` lets users park a fact without losing it. The chat injection
+    # path skips disabled facts; the ledger UI still shows them.
+    enabled: bool = True
 
     def to_dict(self) -> dict:
         return {
@@ -143,4 +146,5 @@ class PinnedFact:
             "tags": self.tags, "created_at": self.created_at,
             "source_conversation": self.source_conversation,
             "pinned_by": self.pinned_by,
+            "enabled": self.enabled,
         }

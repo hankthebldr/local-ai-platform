@@ -1504,6 +1504,16 @@ body::before {
         style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:0.85rem;"
         oninput="searchMemory(this.value)">
     </div>
+
+    <!-- ── MEMORY LEDGER — INJECTION PREVIEW ───────────────────────── -->
+    <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3 style="color:var(--cyan);font-size:0.9rem;">Injection Preview</h3>
+        <span style="font-size:0.7rem;color:var(--text-dim);">What gets prepended to every chat</span>
+      </div>
+      <pre id="injection-preview" style="margin:0;padding:10px;background:var(--bg-deep);border-radius:4px;color:var(--text);font-size:0.78rem;line-height:1.4;white-space:pre-wrap;max-height:160px;overflow-y:auto;">Loading…</pre>
+      <div id="injection-empty" style="display:none;color:var(--text-muted);font-size:0.78rem;font-style:italic;">No facts enabled — nothing is injected into the system message.</div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
         <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Session History</h3>
@@ -3672,8 +3682,26 @@ setInterval(loadStatus, 10000);
 async function loadMemoryTab() {
   loadSessions();
   loadFacts();
+  loadInjectionPreview();
   loadMemoryStats();
   loadProfiles();
+}
+
+async function loadInjectionPreview() {
+  try {
+    const r = await fetch('/api/memory/injection-preview');
+    const data = await r.json();
+    const pre = document.getElementById('injection-preview');
+    const empty = document.getElementById('injection-empty');
+    if (!data.injection_text) {
+      pre.style.display = 'none';
+      empty.style.display = '';
+    } else {
+      pre.style.display = '';
+      empty.style.display = 'none';
+      pre.textContent = data.injection_text;
+    }
+  } catch(e) { console.error('Failed to load injection preview:', e); }
 }
 
 async function loadSessions() {
@@ -3739,18 +3767,78 @@ async function loadFacts() {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No pinned facts. Add one above.</div>';
       return;
     }
-    el.innerHTML = facts.map(f => `
-      <div style="padding:8px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
-        <div>
-          <div style="font-size:0.85rem;color:var(--text);">${esc(f.content)}</div>
+    // Each fact gets a toggle + click-to-edit on the content. Disabled
+    // facts are dimmed and excluded from the injection preview.
+    el.innerHTML = facts.map(f => {
+      const enabled = f.enabled !== false;
+      const dim = enabled ? '' : 'opacity:0.45;';
+      return `
+      <div style="padding:8px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;gap:8px;${dim}">
+        <div style="flex:1;min-width:0;">
+          <div class="fact-content" id="fact-content-${esc(f.id)}"
+               style="font-size:0.85rem;color:var(--text);cursor:text;word-wrap:break-word;"
+               onclick="editFact('${esc(f.id)}', this)"
+               title="Click to edit">${esc(f.content)}</div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">
             ${(f.tags||[]).map(t => '<span style="color:var(--cyan);">#'+esc(t)+'</span>').join(' ')}
           </div>
         </div>
-        <button onclick="deleteFact('${esc(f.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          <button onclick="toggleFact('${esc(f.id)}', ${enabled})"
+                  title="${enabled ? 'Disable (parks the fact, won\\'t inject)' : 'Enable (resume injection)'}"
+                  style="background:none;border:1px solid var(--border);color:${enabled ? 'var(--cyan)' : 'var(--text-muted)'};cursor:pointer;font-size:0.7rem;padding:2px 8px;border-radius:3px;">
+            ${enabled ? 'on' : 'off'}
+          </button>
+          <button onclick="deleteFact('${esc(f.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+        </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } catch(e) { console.error('Failed to load facts:', e); }
+}
+
+async function toggleFact(id, currentlyEnabled) {
+  try {
+    await fetch('/api/memory/facts/' + id, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: !currentlyEnabled}),
+    });
+    loadFacts();
+    loadInjectionPreview();
+  } catch(e) { console.error('Toggle failed:', e); }
+}
+
+async function editFact(id, contentEl) {
+  // Replace the content div with an inline textarea on click.
+  if (contentEl.querySelector('textarea')) return;  // already editing
+  const original = contentEl.textContent;
+  const ta = document.createElement('textarea');
+  ta.value = original;
+  ta.style.cssText = 'width:100%;min-height:40px;background:var(--bg-deep);color:var(--text);border:1px solid var(--cyan);border-radius:3px;padding:4px;font:inherit;';
+  contentEl.innerHTML = '';
+  contentEl.appendChild(ta);
+  ta.focus();
+  ta.select();
+
+  const commit = async () => {
+    const next = ta.value.trim();
+    if (!next || next === original) { loadFacts(); return; }
+    try {
+      await fetch('/api/memory/facts/' + id, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({content: next}),
+      });
+      loadFacts();
+      loadInjectionPreview();
+    } catch(e) { console.error('Edit failed:', e); loadFacts(); }
+  };
+  ta.addEventListener('blur', commit, {once: true});
+  ta.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); ta.blur(); }
+    if (ev.key === 'Escape') { loadFacts(); }
+  });
 }
 
 async function addFact() {
@@ -3764,12 +3852,14 @@ async function addFact() {
   });
   input.value = '';
   loadFacts();
+  loadInjectionPreview();
   loadMemoryStats();
 }
 
 async function deleteFact(id) {
   await fetch('/api/memory/facts/' + id, {method: 'DELETE'});
   loadFacts();
+  loadInjectionPreview();
   loadMemoryStats();
 }
 
