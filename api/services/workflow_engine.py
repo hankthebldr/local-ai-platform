@@ -150,9 +150,10 @@ class WorkflowEngine:
         Execute a workflow end-to-end.
 
         Creates a WorkflowRun, iterates through steps sequentially,
-        and returns the completed (or failed) run.
+        and returns the completed (or failed) run. The run is checkpointed
+        to disk after each step so a crash mid-run leaves a resumable
+        snapshot — see resume().
         """
-        # Initialize run
         context = WorkflowContext(seed=seed)
         workflow_run = WorkflowRun(
             workflow_id=definition.id,
@@ -166,10 +167,80 @@ class WorkflowEngine:
             f"({len(definition.steps)} steps)"
         )
 
-        for step in definition.steps:
+        # Initial checkpoint so the run is discoverable mid-flight.
+        self._checkpoint(workflow_run)
+
+        self._execute_steps(workflow_run, definition, context, definition.steps)
+
+        # Final terminal persist (full artifacts + summary).
+        self._persist_run(workflow_run, definition)
+        return workflow_run
+
+    def resume(
+        self,
+        run_id: str,
+        definition: Optional[WorkflowDefinition] = None,
+    ) -> WorkflowRun:
+        """
+        Resume a previously-checkpointed run.
+
+        - If status is terminal (completed/failed/canceled), re-hydrate
+          and return without re-running anything.
+        - If status is "running" (server crashed mid-run), pick up at the
+          first step that doesn't have a "completed" StepResult.
+
+        Pass `definition` if the workflow YAML has changed since the run
+        started; otherwise the engine reloads from `workflows/<workflow_id>.yaml`.
+
+        Raises ValueError if the run isn't found.
+        """
+        raw = self.get_run(run_id)
+        if raw is None:
+            raise ValueError(f"run not found: {run_id}")
+
+        workflow_run = WorkflowRun.model_validate(raw)
+        if workflow_run.status in {"completed", "failed", "canceled"}:
+            return workflow_run
+
+        if definition is None:
+            definition = self.load(f"./workflows/{workflow_run.workflow_id}.yaml")
+
+        completed_ids = {
+            r.step_id for r in workflow_run.step_results if r.status == "completed"
+        }
+        # Drop any non-completed step_results so the loop produces a clean
+        # tail (a "running" or "failed" intermediate gets re-executed).
+        workflow_run.step_results = [
+            r for r in workflow_run.step_results if r.status == "completed"
+        ]
+        remaining = [s for s in definition.steps if s.id not in completed_ids]
+
+        logger.info(
+            f"Resuming workflow run={run_id}: "
+            f"{len(completed_ids)} step(s) already done, {len(remaining)} remaining"
+        )
+        workflow_run.status = "running"
+        self._checkpoint(workflow_run)
+
+        self._execute_steps(workflow_run, definition, workflow_run.context, remaining)
+
+        self._persist_run(workflow_run, definition)
+        return workflow_run
+
+    def _execute_steps(
+        self,
+        workflow_run: WorkflowRun,
+        definition: WorkflowDefinition,
+        context: WorkflowContext,
+        steps: List[AgentStep],
+    ) -> None:
+        """
+        Run the given step list, mutating `workflow_run` in place.
+        Checkpoints to disk after every step.
+        """
+        for step in steps:
             logger.info(f"Executing step '{step.id}' ({step.name})")
 
-            # Resolve model for this step
             try:
                 resolved_model = self.resolver.resolve(
                     model=step.model,
@@ -188,10 +259,10 @@ class WorkflowEngine:
                 workflow_run.status = "failed"
                 workflow_run.error = f"Step '{step.id}' failed: model resolution error"
                 workflow_run.completed_at = datetime.utcnow()
+                self._checkpoint(workflow_run)
                 logger.error(f"Workflow failed at step '{step.id}': {e}")
-                break
+                return
 
-            # Execute the step — build a fresh hook bus and executor per step
             step_bus = self._build_step_bus(step)
             step_executor = StepExecutor(
                 ollama_service=self.ollama,
@@ -208,8 +279,10 @@ class WorkflowEngine:
                 workflow_run=workflow_run,
             )
             workflow_run.step_results.append(step_result)
+            # Checkpoint after every step — a crash here loses at most the
+            # output of the next, not-yet-started step.
+            self._checkpoint(workflow_run)
 
-            # Check for failure — abort workflow
             if step_result.status == "failed":
                 workflow_run.status = "failed"
                 workflow_run.error = (
@@ -217,27 +290,23 @@ class WorkflowEngine:
                     f"{step_result.error}"
                 )
                 workflow_run.completed_at = datetime.utcnow()
+                self._checkpoint(workflow_run)
                 logger.error(f"Workflow '{definition.id}' failed at step '{step.id}'")
-                break
-        else:
-            # All steps completed successfully
-            workflow_run.status = "completed"
-            workflow_run.completed_at = datetime.utcnow()
-            total_duration = sum(
-                r.duration_seconds or 0 for r in workflow_run.step_results
-            )
-            total_tokens = sum(
-                r.token_count.get("total_tokens", 0) for r in workflow_run.step_results
-            )
-            logger.info(
-                f"Workflow '{definition.id}' completed in {total_duration:.1f}s "
-                f"({total_tokens} total tokens)"
-            )
+                return
 
-        # Persist results
-        self._persist_run(workflow_run, definition)
-
-        return workflow_run
+        # All remaining steps succeeded.
+        workflow_run.status = "completed"
+        workflow_run.completed_at = datetime.utcnow()
+        total_duration = sum(
+            r.duration_seconds or 0 for r in workflow_run.step_results
+        )
+        total_tokens = sum(
+            r.token_count.get("total_tokens", 0) for r in workflow_run.step_results
+        )
+        logger.info(
+            f"Workflow '{definition.id}' completed in {total_duration:.1f}s "
+            f"({total_tokens} total tokens)"
+        )
 
     # ── Hook Bus Assembly ──────────────────────────────────────────────
 
@@ -293,8 +362,28 @@ class WorkflowEngine:
 
     # ── Persist Phase ──────────────────────────────────────────────────
 
+    def _checkpoint(self, run: WorkflowRun) -> None:
+        """
+        Atomically write the current run.json. Cheap path used after every
+        step — only the run state, not artifacts or markdown summary.
+
+        Atomicity matters: a crash during write could otherwise leave a
+        truncated run.json that fails to parse on resume. We write to
+        run.json.tmp and rename, which is atomic on POSIX.
+        """
+        run_dir = Path(DATA_DIR) / run.run_id
+        try:
+            run_dir.mkdir(parents=True, exist_ok=True)
+            tmp_path = run_dir / "run.json.tmp"
+            final_path = run_dir / "run.json"
+            with open(tmp_path, "w") as f:
+                json.dump(run.model_dump(mode="json"), f, indent=2, default=str)
+            os.replace(tmp_path, final_path)
+        except OSError as e:
+            logger.warning(f"Checkpoint failed for run {run.run_id}: {e}")
+
     def _persist_run(self, run: WorkflowRun, definition: WorkflowDefinition) -> None:
-        """Save workflow run results to disk"""
+        """Terminal persist: run.json + per-step artifact JSONs + summary.md."""
         run_dir = Path(DATA_DIR) / run.run_id
         artifacts_dir = run_dir / "artifacts"
 
@@ -302,12 +391,13 @@ class WorkflowEngine:
             run_dir.mkdir(parents=True, exist_ok=True)
             artifacts_dir.mkdir(exist_ok=True)
 
-            # Save full run as JSON
+            # Atomic run.json — same pattern as _checkpoint.
+            tmp_path = run_dir / "run.json.tmp"
             run_path = run_dir / "run.json"
-            with open(run_path, "w") as f:
+            with open(tmp_path, "w") as f:
                 json.dump(run.model_dump(mode="json"), f, indent=2, default=str)
+            os.replace(tmp_path, run_path)
 
-            # Save individual step artifacts
             for step in definition.steps:
                 step_data = run.context.workspace.get(step.id, {})
                 if step_data:
@@ -315,7 +405,6 @@ class WorkflowEngine:
                     with open(artifact_path, "w") as f:
                         json.dump(step_data, f, indent=2, default=str)
 
-            # Save human-readable summary
             summary_path = run_dir / "summary.md"
             with open(summary_path, "w") as f:
                 f.write(self._generate_summary(run, definition))

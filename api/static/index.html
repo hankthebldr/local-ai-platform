@@ -3507,19 +3507,53 @@ async function loadRecentRuns() {
     }
 
     container.innerHTML = runs.map(r => {
-      const statusColor = r.status === 'completed' ? 'var(--green)' : 'var(--red)';
+      // status color: green=done, red=failed, amber=running (likely a
+      // crashed run since we only ever read persisted state, never live)
+      const statusColor = r.status === 'completed' ? 'var(--green)'
+                        : r.status === 'running' ? 'var(--amber)'
+                        : 'var(--red)';
       const time = r.started_at ? new Date(r.started_at).toLocaleString() : '-';
+      // Resume is offered only for runs left in "running" — those are
+      // crashed mid-flight and have a persisted checkpoint to pick up
+      // from. Terminal runs (completed/failed/canceled) don't show it
+      // because resume() is a no-op for them.
+      const resumeBtn = r.status === 'running'
+        ? `<button class="action-btn" style="padding:2px 8px;font-size:0.65rem;color:var(--amber);border-color:var(--amber);"
+                   onclick="event.stopPropagation();resumeRun('${esc(r.run_id)}', this)"
+                   title="Resume from the last checkpointed step">Resume</button>`
+        : '';
       return `
         <div class="wf-run-item" onclick="viewRun('${esc(r.run_id)}')">
           <span class="wf-run-wf">${esc(r.workflow_id)}</span>
           <span class="wf-run-status" style="color:${statusColor}">${r.status}</span>
           <span class="wf-run-id">${(r.run_id || '').slice(0, 8)}...</span>
           <span class="wf-run-time">${time}</span>
+          ${resumeBtn}
         </div>
       `;
     }).join('');
   } catch (e) {
     console.error('Failed to load runs:', e);
+  }
+}
+
+async function resumeRun(runId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Resuming...'; }
+  try {
+    const resp = await fetch(`/api/workflows/runs/${runId}/resume`, {method: 'POST'});
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    const run = await resp.json();
+    // Refresh the list to reflect the new terminal status, then open the
+    // detail panel so the operator sees what happened.
+    await loadRecentRuns();
+    viewRun(run.run_id);
+  } catch (e) {
+    console.error('Resume failed:', e);
+    alert('Resume failed: ' + e.message);
+    loadRecentRuns();
   }
 }
 
