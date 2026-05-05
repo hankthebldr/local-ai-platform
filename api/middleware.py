@@ -27,7 +27,16 @@ RATE_LIMIT_RPM = int(os.getenv("RATE_LIMIT_RPM", "60"))  # requests per minute
 
 # ── Paths that skip authentication ─────────────────────────────────────────
 
-PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
+PUBLIC_PATHS = {
+    "/",
+    "/health",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    # A2A discovery — the Agent Card is intentionally public per spec.
+    # The JSON-RPC method endpoint at /a2a is still scope-gated below.
+    "/.well-known/agent.json",
+}
 
 
 # ── Scope enforcement ──────────────────────────────────────────────────────
@@ -44,6 +53,7 @@ SCOPE_MAP = {
     "/api/plugins": "plugins",
     "/api/workflows": "workflows",
     "/api/keys": "keys",  # master key bypasses this before scope check
+    "/a2a": "a2a",  # A2A JSON-RPC dispatch
 }
 
 

@@ -111,6 +111,9 @@ $RECYCLE.BIN/
 # Workflow run data (persisted locally)
 data/workflows/*/
 
+# A2A task state (persisted locally — same pattern as workflows)
+data/a2a/
+
 # Brainstorm session files
 .superpowers/
 
