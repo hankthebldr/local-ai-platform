@@ -6,4 +6,4 @@ chromadb>=0.4.22
 # langchain-text-splitters package in 0.2; revisit when we adopt the new layout.
 langchain>=0.1.4,<0.2
 sentence-transformers>=2.2.2
-pillow>=10.1.0
+pillow>=12.2.0
