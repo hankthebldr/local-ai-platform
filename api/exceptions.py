@@ -114,10 +114,13 @@ class ModelResolutionError(APIError):
 class StepExecutionError(APIError):
     """Raised when a single workflow step fails"""
 
-    def __init__(self, step_id: str, detail: str = ""):
-        msg = f"Step '{step_id}' failed."
+    def __init__(self, message_or_step_id: str, detail: str = ""):
         if detail:
-            msg += f" {detail}"
+            # Legacy two-arg form: StepExecutionError("step_id", "detail")
+            msg = f"Step '{message_or_step_id}' failed. {detail}"
+        else:
+            # New single-arg form: StepExecutionError("full message")
+            msg = message_or_step_id
         super().__init__(
             message=msg,
             status_code=500,

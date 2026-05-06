@@ -1,0 +1,63 @@
+[
+  {
+    "uuid": "f1e2d3c4-b5a6-7890-abcd-ef1234567890",
+    "published": "2026-04-08T14:20:01.234Z",
+    "eventType": "user.session.start",
+    "severity": "INFO",
+    "displayMessage": "User login to Okta",
+    "actor": {"id": "00u1a2b3c4d5e6f7g8", "type": "User", "alternateId": "jsmith@contoso.com", "displayName": "John Smith"},
+    "client": {"ipAddress": "203.0.113.55", "userAgent": {"os": "Windows 10", "browser": "Chrome"}, "geographicalContext": {"city": "Seattle", "state": "Washington", "country": "United States"}},
+    "outcome": {"result": "SUCCESS"},
+    "target": [{"id": "00u1a2b3c4d5e6f7g8", "type": "User", "alternateId": "jsmith@contoso.com", "displayName": "John Smith"}],
+    "authenticationContext": {"authenticationProvider": "FACTOR_PROVIDER", "externalSessionId": "102abc789xyz"}
+  },
+  {
+    "uuid": "a9b8c7d6-e5f4-3210-fedc-ba9876543210",
+    "published": "2026-04-08T14:20:45.567Z",
+    "eventType": "user.authentication.auth_via_mfa",
+    "severity": "INFO",
+    "displayMessage": "Authentication of user via MFA",
+    "actor": {"id": "00u1a2b3c4d5e6f7g8", "type": "User", "alternateId": "jsmith@contoso.com", "displayName": "John Smith"},
+    "client": {"ipAddress": "203.0.113.55", "userAgent": {"os": "Windows 10", "browser": "Chrome"}},
+    "outcome": {"result": "SUCCESS"},
+    "target": [{"id": "00u1a2b3c4d5e6f7g8", "type": "User", "alternateId": "jsmith@contoso.com"}],
+    "debugContext": {"debugData": {"factor": "OKTA_VERIFY_PUSH"}},
+    "authenticationContext": {"authenticationProvider": "FACTOR_PROVIDER"}
+  },
+  {
+    "uuid": "11223344-5566-7788-99aa-bbccddeeff00",
+    "published": "2026-04-08T14:21:30.890Z",
+    "eventType": "user.session.start",
+    "severity": "WARN",
+    "displayMessage": "User login to Okta",
+    "actor": {"id": "00u9z8y7x6w5v4u3t2", "type": "User", "alternateId": "attacker@evil.com", "displayName": "Unknown User"},
+    "client": {"ipAddress": "185.220.101.34", "userAgent": {"os": "Linux", "browser": "Python-Requests"}},
+    "outcome": {"result": "FAILURE", "reason": "VERIFICATION_ERROR"},
+    "target": [{"id": "00u9z8y7x6w5v4u3t2", "type": "User", "alternateId": "attacker@evil.com"}],
+    "authenticationContext": {"authenticationProvider": "ACTIVE_DIRECTORY"}
+  },
+  {
+    "uuid": "22334455-6677-8899-aabb-ccddeeff0011",
+    "published": "2026-04-08T14:21:31.123Z",
+    "eventType": "user.session.start",
+    "severity": "WARN",
+    "displayMessage": "User login to Okta",
+    "actor": {"id": "00u9z8y7x6w5v4u3t2", "type": "User", "alternateId": "attacker@evil.com"},
+    "client": {"ipAddress": "185.220.101.34", "userAgent": {"os": "Linux", "browser": "Python-Requests"}},
+    "outcome": {"result": "FAILURE", "reason": "INVALID_CREDENTIALS"},
+    "target": [{"id": "00u9z8y7x6w5v4u3t2", "type": "User", "alternateId": "attacker@evil.com"}],
+    "authenticationContext": {"authenticationProvider": "ACTIVE_DIRECTORY"}
+  },
+  {
+    "uuid": "33445566-7788-99aa-bbcc-ddeeff001122",
+    "published": "2026-04-08T14:25:00.456Z",
+    "eventType": "user.account.lock",
+    "severity": "WARN",
+    "displayMessage": "Max sign on attempts exceeded",
+    "actor": {"id": "00u9z8y7x6w5v4u3t2", "type": "User", "alternateId": "attacker@evil.com"},
+    "client": {"ipAddress": "185.220.101.34", "userAgent": {"os": "Linux", "browser": "Python-Requests"}},
+    "outcome": {"result": "SUCCESS"},
+    "target": [{"id": "00u9z8y7x6w5v4u3t2", "type": "User", "alternateId": "attacker@evil.com"}],
+    "authenticationContext": {}
+  }
+]

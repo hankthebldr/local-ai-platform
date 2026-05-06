@@ -1,0 +1,22 @@
+<Events>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System><Provider Name="Microsoft-Windows-Security-Auditing" Guid="{54849625-5478-4994-A5BA-3E3B0328C30D}"/><EventID>4624</EventID><Level>0</Level><TimeCreated SystemTime="2026-04-08T14:15:32.4567890Z"/><Computer>DC01.corp.contoso.com</Computer><Channel>Security</Channel></System>
+  <EventData><Data Name="SubjectUserSid">S-1-5-18</Data><Data Name="SubjectUserName">DC01$</Data><Data Name="SubjectDomainName">CORP</Data><Data Name="TargetUserSid">S-1-5-21-3623811015-3361044348-30300820-1013</Data><Data Name="TargetUserName">jsmith</Data><Data Name="TargetDomainName">CORP</Data><Data Name="LogonType">10</Data><Data Name="LogonProcessName">User32</Data><Data Name="AuthenticationPackageName">Negotiate</Data><Data Name="WorkstationName">WS-JSMITH01</Data><Data Name="IpAddress">10.1.50.88</Data><Data Name="IpPort">49671</Data><Data Name="ProcessName">C:\Windows\System32\svchost.exe</Data></EventData>
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID><Level>0</Level><TimeCreated SystemTime="2026-04-08T14:16:45.1234567Z"/><Computer>DC01.corp.contoso.com</Computer><Channel>Security</Channel></System>
+  <EventData><Data Name="SubjectUserSid">S-1-0-0</Data><Data Name="SubjectUserName">-</Data><Data Name="SubjectDomainName">-</Data><Data Name="TargetUserSid">S-1-0-0</Data><Data Name="TargetUserName">admin</Data><Data Name="TargetDomainName">CORP</Data><Data Name="Status">0xc000006d</Data><Data Name="SubStatus">0xc000006a</Data><Data Name="LogonType">3</Data><Data Name="LogonProcessName">NtLmSsp</Data><Data Name="AuthenticationPackageName">NTLM</Data><Data Name="WorkstationName">KALI-ATTACK</Data><Data Name="IpAddress">192.168.1.200</Data><Data Name="IpPort">0</Data><Data Name="ProcessName">-</Data></EventData>
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID><Level>0</Level><TimeCreated SystemTime="2026-04-08T14:16:46.2345678Z"/><Computer>DC01.corp.contoso.com</Computer><Channel>Security</Channel></System>
+  <EventData><Data Name="SubjectUserSid">S-1-0-0</Data><Data Name="SubjectUserName">-</Data><Data Name="SubjectDomainName">-</Data><Data Name="TargetUserSid">S-1-0-0</Data><Data Name="TargetUserName">administrator</Data><Data Name="TargetDomainName">CORP</Data><Data Name="Status">0xc000006d</Data><Data Name="SubStatus">0xc0000064</Data><Data Name="LogonType">3</Data><Data Name="LogonProcessName">NtLmSsp</Data><Data Name="AuthenticationPackageName">NTLM</Data><Data Name="WorkstationName">KALI-ATTACK</Data><Data Name="IpAddress">192.168.1.200</Data><Data Name="IpPort">0</Data><Data Name="ProcessName">-</Data></EventData>
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4688</EventID><Level>0</Level><TimeCreated SystemTime="2026-04-08T14:17:22.9876543Z"/><Computer>WS-JSMITH01.corp.contoso.com</Computer><Channel>Security</Channel></System>
+  <EventData><Data Name="SubjectUserSid">S-1-5-21-3623811015-3361044348-30300820-1013</Data><Data Name="SubjectUserName">jsmith</Data><Data Name="SubjectDomainName">CORP</Data><Data Name="NewProcessId">0x1a40</Data><Data Name="NewProcessName">C:\Windows\System32\cmd.exe</Data><Data Name="ProcessId">0x1234</Data><Data Name="CommandLine">cmd.exe /c whoami /all</Data><Data Name="ParentProcessName">C:\Windows\explorer.exe</Data></EventData>
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4624</EventID><Level>0</Level><TimeCreated SystemTime="2026-04-08T14:18:01.5555555Z"/><Computer>SRV-DB01.corp.contoso.com</Computer><Channel>Security</Channel></System>
+  <EventData><Data Name="SubjectUserSid">S-1-5-18</Data><Data Name="SubjectUserName">SRV-DB01$</Data><Data Name="SubjectDomainName">CORP</Data><Data Name="TargetUserSid">S-1-5-21-3623811015-3361044348-30300820-1013</Data><Data Name="TargetUserName">jsmith</Data><Data Name="TargetDomainName">CORP</Data><Data Name="LogonType">3</Data><Data Name="AuthenticationPackageName">Kerberos</Data><Data Name="WorkstationName">WS-JSMITH01</Data><Data Name="IpAddress">10.1.50.88</Data><Data Name="IpPort">50234</Data><Data Name="ProcessName">-</Data></EventData>
+</Event>
+</Events>

@@ -13,11 +13,15 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List
 
+import yaml
+
 from ..logging_config import logger
 
 EXPORTS_DIR = Path(__file__).parent.parent.parent / "data" / "exports"
 GRAPH_CACHE = Path(__file__).parent.parent.parent / "data" / "graph" / "knowledge_graph.json"
 GRAPH_TTL = 300  # seconds before cache is stale
+AGENTS_DIR = Path(__file__).parent.parent.parent / "agents"
+WORKFLOWS_DIR = Path(__file__).parent.parent.parent / "data" / "workflows"
 
 STOP_WORDS = {
     "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her",
@@ -102,10 +106,118 @@ def _parse_session(filepath: Path) -> Dict[str, Any]:
     }
 
 
+# ── Agent & Workflow Helpers ───────────────────────────────────────────────
+
+
+def _build_agent_nodes(
+    nodes: List[Dict], links: List[Dict], topic_set: set
+) -> None:
+    """Scan agents/*.yaml and add agent nodes + uses links to matching topics."""
+    if not AGENTS_DIR.is_dir():
+        return
+    for filepath in sorted(AGENTS_DIR.glob("*.yaml")):
+        try:
+            with open(filepath, encoding="utf-8") as f:
+                agent = yaml.safe_load(f)
+            if not agent or not isinstance(agent, dict):
+                continue
+            agent_id = agent.get("id", filepath.stem)
+            node = {
+                "id": f"agent:{agent_id}",
+                "type": "agent",
+                "name": agent.get("name", agent_id),
+                "description": agent.get("description", ""),
+                "icon": agent.get("icon", ""),
+                "model": agent.get("model", ""),
+                "tags": agent.get("tags", []),
+            }
+            nodes.append(node)
+
+            # Build match words from tags + context query words
+            match_words: set = set()
+            for tag in agent.get("tags", []):
+                match_words.add(tag.lower())
+            # Extract words from context entries (graph_query or description)
+            for ctx in agent.get("context", []):
+                if isinstance(ctx, dict):
+                    label = ctx.get("label", "")
+                    for word in re.findall(r"\b[a-zA-Z]{4,}\b", label.lower()):
+                        if word not in STOP_WORDS:
+                            match_words.add(word)
+
+            for word in match_words:
+                topic_id = f"topic:{word}"
+                if topic_id in topic_set:
+                    links.append({
+                        "source": f"agent:{agent_id}",
+                        "target": topic_id,
+                        "type": "uses",
+                    })
+        except Exception as e:
+            logger.warning(f"Failed to parse agent {filepath.name}: {e}")
+
+
+def _build_workflow_nodes(
+    nodes: List[Dict], links: List[Dict], topic_set: set
+) -> None:
+    """Scan data/workflows/*/run.json and add workflow_run nodes + produced links."""
+    if not WORKFLOWS_DIR.is_dir():
+        return
+    run_files = sorted(WORKFLOWS_DIR.glob("*/run.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    for filepath in run_files[:20]:
+        try:
+            run_data = json.loads(filepath.read_text(encoding="utf-8"))
+            run_id = run_data.get("run_id", filepath.parent.name)
+            status = run_data.get("status", "unknown")
+            workflow_id = run_data.get("workflow_id", "unknown")
+
+            # Calculate total duration and tokens from step results
+            total_duration = 0.0
+            total_tokens = 0
+            for step in run_data.get("step_results", []):
+                total_duration += step.get("duration_seconds", 0)
+                tc = step.get("token_count", {})
+                total_tokens += tc.get("total_tokens", 0)
+
+            node = {
+                "id": f"run:{run_id[:12]}",
+                "type": "workflow_run",
+                "name": workflow_id,
+                "status": status,
+                "duration": round(total_duration, 3),
+                "tokens": total_tokens,
+                "started_at": run_data.get("started_at", ""),
+            }
+            nodes.append(node)
+
+            # Extract keywords from workspace outputs for topic matching
+            workspace = run_data.get("context", {}).get("workspace", {})
+            workspace_text = json.dumps(workspace).lower()
+            for word in re.findall(r"\b[a-zA-Z]{4,}\b", workspace_text):
+                if word in STOP_WORDS:
+                    continue
+                topic_id = f"topic:{word}"
+                if topic_id in topic_set:
+                    # Avoid duplicate links for the same run→topic
+                    link_key = (f"run:{run_id[:12]}", topic_id)
+                    if not any(
+                        l["source"] == link_key[0] and l["target"] == link_key[1]
+                        for l in links
+                    ):
+                        links.append({
+                            "source": f"run:{run_id[:12]}",
+                            "target": topic_id,
+                            "type": "produced",
+                        })
+        except Exception as e:
+            logger.warning(f"Failed to parse workflow run {filepath}: {e}")
+
+
 # ── Graph Builder ──────────────────────────────────────────────────────────
 
 
-def build_graph() -> Dict[str, Any]:
+def build_graph(force: bool = False) -> Dict[str, Any]:
     """Parse all session exports and build the knowledge graph."""
     EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
     GRAPH_CACHE.parent.mkdir(parents=True, exist_ok=True)
@@ -184,12 +296,22 @@ def build_graph() -> Dict[str, Any]:
                     "shared_topics": list(shared)[:5],
                 })
 
+    # Agent and workflow run nodes (linked to existing topic nodes)
+    _build_agent_nodes(nodes, links, topic_nodes_added)
+    _build_workflow_nodes(nodes, links, topic_nodes_added)
+
+    # Count agent and workflow_run nodes
+    agent_count = sum(1 for n in nodes if n.get("type") == "agent")
+    run_count = sum(1 for n in nodes if n.get("type") == "workflow_run")
+
     graph = {
         "nodes": nodes,
         "links": links,
         "session_count": len(session_files),
         "topic_count": len(topic_nodes_added),
         "source_count": len(source_nodes_added),
+        "agent_count": agent_count,
+        "workflow_run_count": run_count,
         "built_at": time.time(),
     }
 
@@ -211,3 +333,26 @@ def get_graph() -> Dict[str, Any]:
             except Exception:
                 pass
     return build_graph()
+
+
+def search_nodes(query: str) -> List[Dict[str, Any]]:
+    """Search the cached graph for nodes matching a query string.
+
+    Performs case-insensitive substring matching on node name, label,
+    description, and tags. Returns matching nodes for agent service
+    graph_query context resolution.
+    """
+    graph = get_graph()
+    if not query:
+        return []
+    q = query.lower()
+    results: List[Dict[str, Any]] = []
+    for node in graph.get("nodes", []):
+        searchable = " ".join(
+            str(v) for k, v in node.items()
+            if k in ("name", "label", "description", "tags")
+            and v
+        )
+        if q in searchable.lower():
+            results.append(node)
+    return results
