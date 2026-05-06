@@ -349,13 +349,16 @@ curl -X POST http://localhost:8000/api/workflows/run \
 **Features Not Yet Built**:
 - Fine-tuning pipeline (dependencies installed but no implementation)
 - Additional inference backends beyond Ollama (vLLM, llama.cpp — scaffolding only)
-- Web UI (Open WebUI installable but not integrated into the distribution)
-- Rate limiting per API key
+- Rate limiting per API key (scopes enforced; per-key RPM field stored but not rate-limited yet)
+- MCP transport adapter (design doc at `docs/plans/2026-04-27-mcp-transport-adapter-design.md`)
 
 **Data Persistence**:
 - CLI conversation history is in-memory only (lost on exit)
-- No conversation logging/export
-- No metrics/usage tracking beyond API-key usage counters
+- `/api/context` endpoints expose active in-memory conversation state; no persistent store
+
+**UI Coverage**:
+- All 16 routers are registered and have UI surfaces in `api/static/index.html`
+- `GET /api/context` and `GET /api/agents/{id}/context` are debug endpoints without UI panels (by design)
 
 ## Troubleshooting
 
