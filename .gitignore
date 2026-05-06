@@ -159,6 +159,11 @@ data/graph/
 *.icns.backup
 data/logs/*.jsonl
 
+# Desktop app build artifacts (from magical-payne)
+desktop/dist/
+desktop/build/
+*.app
+
 # ── Claude Code worktrees (project-local isolation) ─────────────────
 .claude/worktrees/
 .worktrees/

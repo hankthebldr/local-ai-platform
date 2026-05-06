@@ -1,0 +1,342 @@
+# ── XSIAM Data Model Rules — Cortex Normalization Pipeline ────────────────
+#
+# Implements PANW's four-stage normalization methodology:
+#   raw → parsed → normalized (XDM) → enriched
+#
+# Aligns with NICE Framework competencies (PR/AN categories) and
+# Cortex Data Model (XDM) schema for cross-source detection coverage.
+#
+# Uses DAG execution: analyze + classify run in parallel, then
+# sequential normalization → validation → code generation.
+
+id: xsiam-data-model-rules
+name: "XSIAM Data Model Rule Generator"
+version: "2.0"
+description: |
+  Multi-agent pipeline for generating Cortex XSIAM data model rules.
+  Analyzes log sources, maps fields to XDM schema, generates parsing rules,
+  data model rules, and correlation rule templates — aligned with PANW's
+  strategic normalization methodology and NICE Framework analytics mapping.
+
+metadata:
+  author: "Local AI Platform"
+  category: "security-engineering"
+  tags: ["xsiam", "xdr", "data-model", "normalization", "cortex"]
+  estimated_duration: 300
+
+defaults:
+  role: reasoning
+  temperature: 0.4
+  max_tokens: 8192
+  retries: 2
+  retry_delay: 5
+  timeout: 300
+
+max_parallel: 2
+
+steps:
+  # ── Stage 1a: Log Source Analysis (parallel with 1b) ────────────────
+  - id: analyze_source
+    name: "Analyze Log Source Structure"
+    role: reasoning
+    description: "Parse raw log samples to extract field schema, delimiters, and event types"
+    depends_on: []
+    system_prompt: |
+      You are a senior security data engineer specializing in Palo Alto Networks
+      Cortex XSIAM data onboarding. Analyze the provided log source samples and extract:
+
+      1. **Log Format**: Identify the format (CEF, LEEF, Syslog, JSON, CSV, XML, custom)
+      2. **Field Schema**: Extract all fields with names, types, and sample values
+      3. **Event Types**: Categorize distinct event types present in the samples
+      4. **Delimiters**: Identify field separators, record boundaries, multi-line patterns
+      5. **Timestamp Formats**: All timestamp patterns with strptime-compatible format strings
+      6. **Vendor Metadata**: vendor, product, version from log headers or fields
+      7. **Volume Estimate**: Events per second based on timestamp density
+
+      Return a comprehensive JSON analysis.
+    inputs:
+      - seed.log_samples
+      - seed.vendor_name
+    outputs:
+      - log_format
+      - field_schema
+      - event_types
+      - vendor_metadata
+    output_parser:
+      format: json
+      strict: false
+    quality_gates:
+      - name: "has_fields"
+        field: "field_schema"
+        operator: not_empty
+        message: "No fields extracted from log samples"
+      - name: "has_events"
+        field: "event_types"
+        operator: not_empty
+        message: "No event types identified"
+    config:
+      temperature: 0.3
+      max_tokens: 8192
+
+  # ── Stage 1b: NICE Framework Classification (parallel with 1a) ──────
+  - id: classify_nice
+    name: "NICE Framework Analytics Classification"
+    role: reasoning
+    description: "Map log source to NICE Framework categories and required analytics"
+    depends_on: []
+    system_prompt: |
+      You are a cybersecurity workforce and analytics strategist aligned with the
+      NICE Workforce Framework for Cybersecurity (NIST SP 800-181 Rev. 1).
+
+      Given the log source description and constraints, determine:
+
+      1. **NICE Categories**: Which NICE categories does this data source support?
+         - PR (Protect and Defend): CND analysis, incident response, vulnerability assessment
+         - AN (Analyze): Threat analysis, exploitation analysis, intelligence
+         - IN (Investigate): Digital forensics, cyber investigation
+         - OM (Operate and Maintain): Data administration, network services
+
+      2. **Work Roles**: Specific NICE work roles this data enables
+         (e.g., PR-CDA-001 Cyber Defense Analyst, AN-TWA-001 Threat/Warning Analyst)
+
+      3. **Required Analytics**: What detection/analytics use cases this data must support
+         - Brute force detection, lateral movement, data exfiltration, etc.
+
+      4. **XDM Coverage Requirements**: Which XDM field categories MUST be populated
+         to support the identified analytics:
+         - xdm.event.* (type, operation, outcome)
+         - xdm.source.* (host, user, process, IP)
+         - xdm.target.* (host, user, process, IP)
+         - xdm.network.* (protocol, direction, bytes)
+         - xdm.auth.* (authentication data)
+
+      5. **MITRE ATT&CK Mapping**: Which ATT&CK techniques should the analytics cover?
+
+      Return structured JSON with these five sections.
+    inputs:
+      - seed.vendor_name
+      - seed.log_type
+      - seed.constraints
+    outputs:
+      - nice_categories
+      - work_roles
+      - required_analytics
+      - xdm_coverage
+      - attack_techniques
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "has_analytics"
+        field: "required_analytics"
+        operator: not_empty
+        message: "No required analytics identified"
+      - name: "has_xdm_coverage"
+        field: "xdm_coverage"
+        operator: not_empty
+        message: "No XDM coverage requirements identified"
+
+  # ── Stage 2: XDM Normalization Mapping ──────────────────────────────
+  - id: normalize_xdm
+    name: "XDM Field Normalization Mapping"
+    role: coding
+    description: "Map extracted fields to Cortex Data Model (XDM) schema"
+    depends_on:
+      - analyze_source
+      - classify_nice
+    system_prompt: |
+      You are a Cortex XSIAM data model rules engineer. Generate the complete
+      field normalization mapping from the vendor-specific fields to the
+      Cortex Data Model (XDM) schema.
+
+      **Input Context:**
+      - Source field schema: {{analyze_source.field_schema | json}}
+      - Event types: {{analyze_source.event_types | json}}
+      - Required XDM coverage: {{classify_nice.xdm_coverage | json}}
+      - Required analytics: {{classify_nice.required_analytics | json}}
+
+      **XDM Schema Reference:**
+      Map each vendor field to the appropriate XDM namespace:
+      - xdm.event.type, xdm.event.operation, xdm.event.outcome, xdm.event.description
+      - xdm.source.host.hostname, xdm.source.ipv4, xdm.source.port
+      - xdm.source.user.username, xdm.source.user.domain
+      - xdm.source.process.name, xdm.source.process.pid
+      - xdm.target.host.hostname, xdm.target.ipv4, xdm.target.port
+      - xdm.target.user.username, xdm.target.resource.name
+      - xdm.network.rule, xdm.network.session_id, xdm.network.ip_protocol
+      - xdm.auth.auth_method, xdm.auth.outcome
+      - xdm.observer.vendor, xdm.observer.product, xdm.observer.version
+
+      **Output Requirements:**
+      For each mapping, provide:
+      - vendor_field: original field name
+      - xdm_field: target XDM field path
+      - transform: transformation logic (direct, enum_map, regex_extract, concat, timestamp_parse)
+      - enum_values: if enum_map, provide the value mapping
+      - conditional: if the mapping depends on event type or field value
+
+      Also generate:
+      - unmapped_fields: vendor fields that don't map to XDM (with rationale)
+      - coverage_gaps: required XDM fields that have no vendor source
+      - data_stitching_keys: fields usable for cross-source correlation
+        (process GUIDs, session IDs, user SIDs, network tuples)
+
+      Return JSON with keys: field_mappings, unmapped_fields, coverage_gaps, stitching_keys
+    inputs:
+      - analyze_source.field_schema
+      - analyze_source.event_types
+      - classify_nice.xdm_coverage
+      - classify_nice.required_analytics
+    outputs:
+      - field_mappings
+      - unmapped_fields
+      - coverage_gaps
+      - stitching_keys
+    output_parser:
+      format: json
+      strict: false
+    quality_gates:
+      - name: "has_mappings"
+        field: "field_mappings"
+        operator: not_empty
+        message: "No field mappings generated"
+      - name: "coverage_check"
+        field: "coverage_gaps"
+        operator: not_empty
+        severity: warning
+        message: "Coverage gaps detected — some required XDM fields have no source"
+    config:
+      temperature: 0.3
+      max_tokens: 12288
+
+  # ── Stage 3: Validation & Pattern Matching ──────────────────────────
+  - id: validate_rules
+    name: "Validate & Apply Pattern Matching"
+    role: reasoning
+    description: "Review mappings, apply PANW pattern matching methodology, validate stitching"
+    depends_on:
+      - normalize_xdm
+    system_prompt: |
+      You are a QA engineer specializing in XSIAM data model rule validation.
+      Review the generated XDM mappings using PANW's pattern matching methodology.
+
+      **Review Checklist:**
+      1. **Completeness**: Every identified event type has sufficient field coverage
+      2. **Correctness**: Enum mappings align with XDM enum definitions
+      3. **Stitching Viability**: Correlation keys are present and properly typed
+         - Cross-source keys: process GUID, session ID, user SID, network 5-tuple
+         - Temporal keys: timestamps with tolerance windows for join operations
+      4. **Pattern Matching**: Verify that the mappings support:
+         - Behavioral IOC (BIOC) detection patterns
+         - Causality chain construction (process → child → network → file)
+         - Temporal correlation (time-windowed joins across data sources)
+      5. **Strategic Normalization**: Confirm vendor-agnostic detection is possible
+         - A login failure from this source maps to the SAME XDM fields as
+           login failures from Windows, Linux, Okta, AWS, etc.
+      6. **Data Quality**: Flag fields with potential parsing ambiguity
+
+      **Scoring:**
+      Rate each mapping 1-5 on: completeness, correctness, stitching_viability
+      Provide overall_score (1-5) and list all issues with severity (error/warning/info).
+
+      Return JSON with keys: issues, validated_mappings, scores, recommendations
+    inputs:
+      - analyze_source.field_schema
+      - analyze_source.event_types
+      - normalize_xdm.field_mappings
+      - normalize_xdm.stitching_keys
+      - normalize_xdm.coverage_gaps
+      - classify_nice.required_analytics
+      - classify_nice.attack_techniques
+    outputs:
+      - issues
+      - validated_mappings
+      - scores
+      - recommendations
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "overall_score"
+        field: "scores.overall_score"
+        operator: gte
+        value: 3
+        message: "Overall quality score below threshold (3/5)"
+        severity: warning
+    config:
+      max_tokens: 12288
+
+  # ── Stage 4: Code Generation ────────────────────────────────────────
+  - id: generate_rules
+    name: "Generate XSIAM Rule Code"
+    role: coding
+    description: "Generate parsing rules, data model rules, and correlation rule templates"
+    depends_on:
+      - validate_rules
+    system_prompt: |
+      You are a Cortex XSIAM automation engineer. Generate production-ready
+      data model rules from the validated mappings.
+
+      **Generate three deliverables:**
+
+      ### 1. Parsing Rule (regex-based field extraction)
+      For log format: {{analyze_source.log_format}}
+      ```
+      [INGEST:vendor="{{analyze_source.vendor_metadata.vendor}}", product="{{analyze_source.vendor_metadata.product}}", target_dataset="{{seed.vendor_name}}_raw"]
+      // Field extraction from raw log
+      alter _raw_log = trim(arraystring(regextract(_raw_log, "<regex_here>"), ""))
+      ```
+
+      ### 2. Data Model Rules (XDM field mapping)
+      For each validated mapping, generate the XDM assignment:
+      ```
+      [MODEL:dataset="{{seed.vendor_name}}_raw", model="XDM"]
+      alter xdm.event.type = <transform_expression>
+      | alter xdm.source.ipv4 = <field_ref>
+      // ... all mappings
+      ```
+
+      ### 3. Correlation Rule Templates (XQL-based detection)
+      For the top 5 required analytics from the NICE classification:
+      ```xql
+      [RULE:name="<rule_name>", severity=<sev>]
+      dataset = <dataset>
+      | filter <conditions>
+      | comp <aggregation>
+      | filter <threshold>
+      ```
+
+      ### 4. Test Assertions
+      For each rule, provide test input/output pairs to validate correctness.
+
+      Return JSON with keys: parsing_rules, data_model_rules, correlation_rules, test_assertions
+    inputs:
+      - seed.vendor_name
+      - analyze_source.log_format
+      - analyze_source.vendor_metadata
+      - validate_rules.validated_mappings
+      - validate_rules.recommendations
+      - classify_nice.required_analytics
+    outputs:
+      - parsing_rules
+      - data_model_rules
+      - correlation_rules
+      - test_assertions
+    output_parser:
+      format: json
+      strict: false
+    quality_gates:
+      - name: "has_parsing"
+        field: "parsing_rules"
+        operator: not_empty
+        message: "No parsing rules generated"
+      - name: "has_model_rules"
+        field: "data_model_rules"
+        operator: not_empty
+        message: "No data model rules generated"
+      - name: "has_correlation"
+        field: "correlation_rules"
+        operator: not_empty
+        severity: warning
+        message: "No correlation rule templates generated"
+    config:
+      temperature: 0.2
+      max_tokens: 16384

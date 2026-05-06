@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
-from .routers import chat, completions, models, inventory, exports, graph, workflows, api_keys, plugins, setup, context, memory, profiles, documents, roles, a2a
+from .routers import chat, completions, models, inventory, exports, graph, workflows, api_keys, plugins, setup, context, memory, profiles, documents, roles, a2a, agents
 from .services.ollama_service import OllamaService
 from .services.workflow_engine import WorkflowEngine
 from .services.a2a_service import A2AService
@@ -190,6 +190,7 @@ app.include_router(profiles.router)
 app.include_router(documents.router)
 app.include_router(roles.router)
 app.include_router(a2a.router)
+app.include_router(agents.router)
 
 
 # ── Public Endpoints ───────────────────────────────────────────────────────
