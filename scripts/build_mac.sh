@@ -8,6 +8,26 @@ echo ""
 cd "$(dirname "$0")/.."
 PROJECT_ROOT="$(pwd)"
 
+# Resolve a version string for CFBundle{Short}VersionString.
+# Priority: explicit ENCLAVE_VERSION env > git tag > short SHA > "0.0.0-dev".
+# Strips a leading "v" so "v1.1.0" → "1.1.0" (CFBundle expects no prefix).
+if [ -n "${ENCLAVE_VERSION:-}" ]; then
+    BUILD_VERSION="${ENCLAVE_VERSION#v}"
+elif command -v git &>/dev/null && git -C "$PROJECT_ROOT" rev-parse --git-dir &>/dev/null; then
+    GIT_DESC="$(git -C "$PROJECT_ROOT" describe --tags --always --dirty 2>/dev/null || echo "")"
+    if [ -n "$GIT_DESC" ]; then
+        BUILD_VERSION="${GIT_DESC#v}"
+    else
+        BUILD_VERSION="0.0.0-dev"
+    fi
+else
+    BUILD_VERSION="0.0.0-dev"
+fi
+# CFBundleShortVersionString must be numeric-only (X.Y.Z). Strip any trailing
+# "-N-gSHA-dirty" suffix that git describe adds between tags.
+BUILD_SHORT_VERSION="$(echo "$BUILD_VERSION" | sed -E 's/-[0-9]+-g[0-9a-f]+(-dirty)?$//')"
+echo "  Building Enclave version: ${BUILD_VERSION} (short: ${BUILD_SHORT_VERSION})"
+
 # ── Step 1: Check prerequisites ─────────────────────────────────────
 echo "[1/5] Checking prerequisites..."
 
@@ -125,8 +145,8 @@ exec "${DIR}/launch.sh"
 EXEC
 chmod +x "${MACOS}/${APP_NAME}"
 
-# Create Info.plist
-cat > "${CONTENTS}/Info.plist" << 'PLIST'
+# Create Info.plist (version stamped from BUILD_VERSION resolved above)
+cat > "${CONTENTS}/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -138,9 +158,9 @@ cat > "${CONTENTS}/Info.plist" << 'PLIST'
     <key>CFBundleIdentifier</key>
     <string>com.ohno.enclave</string>
     <key>CFBundleVersion</key>
-    <string>0.1.0</string>
+    <string>${BUILD_VERSION}</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>${BUILD_SHORT_VERSION}</string>
     <key>CFBundleExecutable</key>
     <string>Enclave</string>
     <key>CFBundleIconFile</key>

@@ -2,8 +2,10 @@ name: Release
 
 on:
   push:
+    branches: [master]
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,8 +15,30 @@ jobs:
     name: Build macOS DMG
     runs-on: macos-14
 
+    outputs:
+      release_kind: ${{ steps.meta.outputs.release_kind }}
+      version: ${{ steps.meta.outputs.version }}
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Tags are needed so build_mac.sh's git describe sees them.
+          fetch-depth: 0
+
+      - name: Determine release kind + version
+        id: meta
+        # Tag push -> stable release named after the tag.
+        # Master push or manual run -> rolling "nightly" prerelease.
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              version="${GITHUB_REF#refs/tags/}"
+              echo "release_kind=stable" >> "$GITHUB_OUTPUT"
+              echo "version=${version}" >> "$GITHUB_OUTPUT"
+          else
+              short_sha="$(git rev-parse --short HEAD)"
+              echo "release_kind=nightly" >> "$GITHUB_OUTPUT"
+              echo "version=nightly-${short_sha}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -22,7 +46,7 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install librsvg (for icon generation)
+      - name: Install librsvg + create-dmg
         run: brew install librsvg create-dmg
 
       - name: Regenerate assets
@@ -36,6 +60,8 @@ jobs:
           pip install -r setup/requirements-core.txt
 
       - name: Build DMG
+        env:
+          ENCLAVE_VERSION: ${{ steps.meta.outputs.version }}
         run: ./scripts/build_mac.sh
 
       - name: Verify DMG exists
@@ -43,33 +69,126 @@ jobs:
           test -f dist/Enclave.dmg
           ls -la dist/
 
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Boot the freshly built bundle and probe UX routes
+        # Same gate dmg-smoke runs in ci.yml — never publish a broken DMG.
+        run: |
+          set -e
+          BUNDLE="dist/Enclave.app/Contents/Resources"
+          export PYTHONPATH="$BUNDLE"
+          export ENABLE_API_AUTH=false
+          export API_HOST=127.0.0.1
+          export API_PORT=8765
 
-      - name: Create GitHub Release
+          "$BUNDLE/venv/bin/python" -m api.main >api.log 2>&1 &
+          API_PID=$!
+          trap "kill $API_PID 2>/dev/null || true" EXIT
+
+          for _ in $(seq 1 30); do
+              if curl -sf -m 2 http://127.0.0.1:8765/health >/dev/null; then
+                  break
+              fi
+              sleep 0.5
+          done
+
+          for path in /health / /static/index.html /setup /api/info; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -m 5 "http://127.0.0.1:8765${path}")
+              if [ "$code" != "200" ]; then
+                  echo "::error::UX route ${path} returned HTTP ${code}"
+                  echo "--- api log ---"; tail -80 api.log
+                  exit 1
+              fi
+              echo "  ok  ${path} -> ${code}"
+          done
+
+      - name: Publish stable release (tag push only)
+        if: steps.meta.outputs.release_kind == 'stable'
         uses: softprops/action-gh-release@v2
         with:
-          name: Enclave ${{ steps.version.outputs.version }}
+          name: Enclave ${{ steps.meta.outputs.version }}
+          generate_release_notes: true
           body: |
-            ## Enclave ${{ steps.version.outputs.version }}
+            ## Enclave ${{ steps.meta.outputs.version }}
 
             Self-hosted AI inference. CPU-optimized. By ohno llc.
 
-            ### Download
+            ### Install (macOS app)
 
-            Download `Enclave.dmg` below and drag to your Applications folder.
+            1. Download **Enclave.dmg** from the Assets below.
+            2. Open the DMG and drag **Enclave.app** to `/Applications`.
+            3. First launch — Gatekeeper will warn (the build is **not yet signed/notarized**). Bypass once with:
+               ```bash
+               xattr -dr com.apple.quarantine /Applications/Enclave.app
+               ```
+            4. Launch **Enclave** — the native window opens the first-run setup wizard at `/setup`, which installs Ollama and pulls a starter model. Then you land on the dashboard.
 
-            **Requirements:** macOS 12.0+ (Monterey or later)
+            **Requirements:** macOS 12.0 (Monterey) or later · ~6 GB free disk for runtime + a small starter model.
+
+            ### Install (from source)
+
+            ```bash
+            git clone https://github.com/hankthebldr/local-ai-platform.git
+            cd local-ai-platform
+            git checkout ${{ steps.meta.outputs.version }}
+            ./setup/install.sh
+            ./scripts/start.sh             # browser dashboard
+            # or, on macOS:
+            ./scripts/start_desktop.sh     # native pywebview window (same as the DMG)
+            ```
+
+            See the [README](https://github.com/hankthebldr/local-ai-platform/blob/${{ steps.meta.outputs.version }}/README.md) for API usage, model registry, and the workflow engine.
+
+            ### Verify the build
+
+            Every release passes a macOS boot probe in CI before publish: the DMG is built, the .app is launched, and the dashboard / setup wizard / API surfaces are all confirmed serving 200s. If you see this release, those checks passed.
 
             ### License
 
-            Commercial license required to use Enclave. See [LICENSE](https://github.com/hankthebldr/local-ai-platform/blob/master/LICENSE) for terms.
-
-            Contact ohno llc for Individual or Teams license pricing.
+            Commercial software. See [LICENSE](https://github.com/hankthebldr/local-ai-platform/blob/master/LICENSE). Contact ohno llc for Individual or Teams pricing.
           files: |
             dist/Enclave.dmg
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish nightly release (master push / manual)
+        # Replaces the existing `nightly` tag + release on every master merge,
+        # so anyone who clicks "latest pre-release" always gets a fresh,
+        # smoke-tested DMG built from current master.
+        if: steps.meta.outputs.release_kind == 'nightly'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -e
+          # Best-effort: tear down the previous nightly so the new one becomes
+          # the canonical pre-release. --cleanup-tag removes the moving tag too.
+          gh release delete nightly --yes --cleanup-tag 2>/dev/null || true
+
+          gh release create nightly \
+              --title "Enclave nightly (${VERSION})" \
+              --notes "## Nightly build
+
+          Auto-built and smoke-tested from \`master\` @ \`${GITHUB_SHA}\`.
+
+          **This release is replaced on every \`master\` merge.** For a pinned,
+          immutable build use a numbered \`vX.Y.Z\` release instead.
+
+          ### Install
+
+          1. Download **Enclave.dmg** from Assets below.
+          2. Open it and drag **Enclave.app** to \`/Applications\`.
+          3. First launch (Gatekeeper bypass — build is unsigned):
+             \`\`\`
+             xattr -dr com.apple.quarantine /Applications/Enclave.app
+             \`\`\`
+          4. Launch Enclave \xe2\x86\x92 setup wizard \xe2\x86\x92 dashboard.
+
+          **Requirements:** macOS 12.0 (Monterey) or later.
+
+          See the [README](https://github.com/hankthebldr/local-ai-platform/blob/master/README.md) for full quickstart + dev setup.
+          " \
+              --prerelease \
+              --target "${GITHUB_SHA}" \
+              dist/Enclave.dmg
