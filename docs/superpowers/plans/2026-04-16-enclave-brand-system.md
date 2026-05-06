@@ -1333,9 +1333,9 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
   pull_request:
-    branches: [master, main]
+    branches: [master]
 
 jobs:
   test:
@@ -1914,7 +1914,7 @@ name: Deploy Pages
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
     paths:
       - "docs/pages/**"
       - ".github/workflows/pages.yml"
