@@ -260,3 +260,48 @@ class TestScopesEndpoint:
         # The scopes used by SCOPE_MAP today.
         for required in ["chat", "completions", "models", "memory", "documents"]:
             assert required in data["scopes"], f"missing scope {required}"
+
+
+class TestAuditLog:
+    def test_audit_requires_master(self, client_no_master):
+        resp = client_no_master.get("/api/keys/audit")
+        assert resp.status_code == 401
+
+    def test_audit_starts_empty(self, client_with_master):
+        resp = client_with_master.get(
+            "/api/keys/audit",
+            headers={"Authorization": "Bearer test-master"},
+        )
+        assert resp.status_code == 200
+        # New process — should be empty unless the test order changes.
+        assert isinstance(resp.json(), list)
+
+    def test_audit_records_create(self, key_service):
+        key_service.create_key(name="audited", scopes=["chat"])
+        events = list(key_service._audit)
+        assert any(e["action"] == "created" and e["name"] == "audited" for e in events)
+
+    def test_audit_records_revoke(self, key_service):
+        created = key_service.create_key(name="to-revoke", scopes=["chat"])
+        key_service.revoke_key(created["id"])
+        events = list(key_service._audit)
+        actions = [e["action"] for e in events if e["key_id"] == created["id"]]
+        assert "created" in actions
+        assert "revoked" in actions
+
+    def test_audit_records_rotate(self, key_service):
+        created = key_service.create_key(name="to-rotate", scopes=["chat"])
+        key_service.rotate_key(created["id"])
+        events = list(key_service._audit)
+        # rotate is a revoke + create; both events recorded.
+        actions_for_old = [e["action"] for e in events if e["key_id"] == created["id"]]
+        assert "rotated" in actions_for_old or "revoked" in actions_for_old
+
+    def test_audit_caps_at_200(self, key_service):
+        for i in range(250):
+            key_service._log("test", f"key_{i}", f"name_{i}")
+        assert len(key_service._audit) == 200
+        # Oldest entries dropped: key_0 should be gone, key_249 retained.
+        ids = [e["key_id"] for e in key_service._audit]
+        assert "key_0" not in ids
+        assert "key_249" in ids

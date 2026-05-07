@@ -51,6 +51,13 @@ async def list_scopes(request: Request):
     return {"scopes": scopes}
 
 
+@router.get("/audit")
+async def get_audit(request: Request):
+    """Return the in-memory audit log (last 200 events). Master-key gated."""
+    _require_master(request)
+    return list(_service._audit)
+
+
 @router.delete("/{key_id}")
 async def revoke_key(key_id: str, request: Request):
     _require_master(request)
