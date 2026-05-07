@@ -304,6 +304,118 @@ body::before {
 }
 .admin-menu-signout:hover { color: var(--accent); border-color: var(--accent-dim); }
 
+/* === Admin modal (shared by sign-in, create-key, etc.) ========== */
+.admin-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.admin-modal[hidden] { display: none; }
+
+.admin-modal-card {
+  background: var(--bg-panel, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 22px 24px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.55);
+}
+
+.admin-modal-card h3 {
+  margin: 0 0 6px 0;
+  color: var(--accent);
+  font-size: 0.95rem;
+}
+
+.admin-modal-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0 0 14px 0;
+}
+
+.admin-modal-card input[type="password"],
+.admin-modal-card input[type="text"],
+.admin-modal-card input[type="number"],
+.admin-modal-card input[type="date"],
+.admin-modal-card textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.admin-modal-error {
+  background: rgba(229,75,75,0.12);
+  border: 1px solid var(--danger, #e54b4b);
+  color: var(--danger, #e54b4b);
+  padding: 6px 10px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  margin-top: 8px;
+}
+
+.admin-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.admin-modal-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 14px;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.admin-modal-btn.primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.admin-modal-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+.admin-modal-btn.primary:hover { background: var(--accent); color: #000; opacity: 0.85; }
+
+/* ── Lock state (shown inside admin panels when not signed in) ── */
+.admin-lock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  gap: 12px;
+}
+.admin-lock .lock-icon { font-size: 2rem; opacity: 0.55; }
+.admin-lock .lock-msg { font-size: 0.82rem; }
+.admin-lock .lock-btn {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
@@ -1986,6 +2098,30 @@ body::before {
 
   <div class="tab-content" id="tab-admin-exports" style="display:none">
     <!-- populated by Task 14-15 -->
+  </div>
+
+  <!-- ── Admin sign-in modal ───────────────────────────────────────── -->
+  <div id="admin-signin-modal" class="admin-modal" hidden role="dialog"
+       aria-modal="true" aria-labelledby="admin-signin-title">
+    <div class="admin-modal-card">
+      <h3 id="admin-signin-title">Sign in as admin</h3>
+      <p class="admin-modal-sub">
+        Enter the <code>MASTER_API_KEY</code> set on the server. The key
+        is held in <code>sessionStorage</code> for this tab only and is
+        cleared when the tab closes.
+      </p>
+      <input id="admin-signin-input" type="password" autocomplete="off"
+             placeholder="MASTER_API_KEY" />
+      <div id="admin-signin-error" class="admin-modal-error" hidden>
+        Master key rejected.
+      </div>
+      <div class="admin-modal-actions">
+        <button type="button" class="admin-modal-btn"
+                onclick="AdminAuth._cancelSignIn()">Cancel</button>
+        <button type="button" class="admin-modal-btn primary"
+                onclick="AdminAuth._submitSignIn()">Sign in</button>
+      </div>
+    </div>
   </div>
 
   <!-- FOOTER -->
@@ -4966,6 +5102,144 @@ window.AdminMenu = (function () {
   }, true);
 
   return { toggle, select, open, close, showPanel };
+})();
+
+// ── AdminAuth ─────────────────────────────────────────────────────────────
+window.AdminAuth = (function () {
+  const STORAGE_KEY = 'enclave.admin.masterKey';
+  // After successful sign-in, the panel that triggered the modal gets reloaded.
+  let pendingPanel = null;
+
+  function getKey() {
+    return sessionStorage.getItem(STORAGE_KEY) || '';
+  }
+
+  function isSignedIn() {
+    return !!getKey();
+  }
+
+  function setKey(key) {
+    sessionStorage.setItem(STORAGE_KEY, key);
+    _refreshStatus();
+  }
+
+  function clearKey() {
+    sessionStorage.removeItem(STORAGE_KEY);
+    _refreshStatus();
+  }
+
+  function authHeaders() {
+    const key = getKey();
+    return key ? { 'Authorization': 'Bearer ' + key } : {};
+  }
+
+  /** Wrap a fetch with master-key handling. Returns fetch's Response promise.
+   *  If the response is 401, clears the key and re-renders the lock state for
+   *  the panel identified by panelId (so the user can re-auth). */
+  async function fetch(url, opts, panelId) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, authHeaders());
+    const r = await window.fetch(url, opts);
+    if (r.status === 401) {
+      clearKey();
+      if (panelId) renderLock(panelId, 'Master key rejected — sign in again.');
+    }
+    return r;
+  }
+
+  /** Render a lock state into the named panel container. */
+  function renderLock(panelId, banner) {
+    const host = document.getElementById('tab-' + panelId);
+    if (!host) return;
+    host.innerHTML = `
+      <div class="admin-lock">
+        <div class="lock-icon" aria-hidden="true">🔒</div>
+        <div class="lock-msg">Admin actions require the master key.</div>
+        ${banner ? `<div class="admin-modal-error" style="margin:0">${banner}</div>` : ''}
+        <button class="lock-btn" onclick="AdminAuth.signIn('${panelId}')">Sign in as admin</button>
+      </div>
+    `;
+  }
+
+  function signIn(panelId) {
+    pendingPanel = panelId;
+    document.getElementById('admin-signin-error').hidden = true;
+    document.getElementById('admin-signin-input').value = '';
+    document.getElementById('admin-signin-modal').hidden = false;
+    setTimeout(() => document.getElementById('admin-signin-input').focus(), 0);
+  }
+
+  function _cancelSignIn() {
+    document.getElementById('admin-signin-modal').hidden = true;
+    pendingPanel = null;
+  }
+
+  async function _submitSignIn() {
+    const input = document.getElementById('admin-signin-input');
+    const errBox = document.getElementById('admin-signin-error');
+    const candidate = input.value.trim();
+    if (!candidate) { errBox.hidden = false; errBox.textContent = 'Enter the master key.'; return; }
+
+    // Validate by hitting an endpoint we know is master-key gated.
+    const r = await window.fetch('/api/keys/scopes', {
+      headers: { 'Authorization': 'Bearer ' + candidate },
+    });
+    if (r.status !== 200) {
+      errBox.hidden = false;
+      errBox.textContent = 'Master key rejected.';
+      return;
+    }
+    setKey(candidate);
+    document.getElementById('admin-signin-modal').hidden = true;
+    if (pendingPanel) {
+      // Re-render the originating panel.
+      window.dispatchEvent(new CustomEvent('adminPanelActivated', {detail: {panel: pendingPanel}}));
+    }
+    pendingPanel = null;
+  }
+
+  function signOut() {
+    clearKey();
+    // Re-render any visible admin panel as locked.
+    document.querySelectorAll('.tab-content[id^="tab-admin-"]').forEach(el => {
+      const id = el.id.replace(/^tab-/, '');
+      if (el.classList.contains('active')) renderLock(id);
+    });
+  }
+
+  function _refreshStatus() {
+    const status = document.getElementById('admin-menu-status');
+    const text = document.getElementById('admin-menu-status-text');
+    const so = document.getElementById('admin-menu-signout');
+    if (!status || !text || !so) return;
+    if (isSignedIn()) {
+      status.classList.add('unlocked');
+      text.textContent = 'Signed in as admin';
+      so.hidden = false;
+    } else {
+      status.classList.remove('unlocked');
+      text.textContent = 'Locked';
+      so.hidden = true;
+    }
+  }
+
+  // Initial paint after DOM is ready.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _refreshStatus);
+  } else {
+    _refreshStatus();
+  }
+
+  // Listen for Enter in the sign-in input.
+  document.addEventListener('keydown', function (e) {
+    const modal = document.getElementById('admin-signin-modal');
+    if (!modal || modal.hidden) return;
+    if (e.key === 'Enter') { e.preventDefault(); _submitSignIn(); }
+    if (e.key === 'Escape') { e.preventDefault(); _cancelSignIn(); }
+  });
+
+  return { isSignedIn, getKey, authHeaders, fetch, renderLock,
+           signIn, signOut, _cancelSignIn, _submitSignIn };
 })();
 </script>
 </body>
