@@ -38,6 +38,19 @@ async def list_keys(request: Request):
     return _service.list_keys()
 
 
+@router.get("/scopes")
+async def list_scopes(request: Request):
+    """Return the scope identifiers known to the middleware.
+
+    Master-key gated for consistency with the rest of /api/keys/*.
+    """
+    _require_master(request)
+    from ..middleware import SCOPE_MAP
+    # SCOPE_MAP values are scope names; deduplicate while preserving insertion order.
+    scopes = list(dict.fromkeys(SCOPE_MAP.values()))
+    return {"scopes": scopes}
+
+
 @router.delete("/{key_id}")
 async def revoke_key(key_id: str, request: Request):
     _require_master(request)
