@@ -412,3 +412,14 @@ def test_create_key_modal_has_copy_button(index_html_text):
     assert "navigator.clipboard.writeText" in index_html_text or \
            "copyKey" in index_html_text, \
         "expected a clipboard copy mechanism"
+
+
+def test_api_keys_panel_has_audit_strip(index_html_text):
+    """Audit log strip must be present and call /api/keys/audit."""
+    assert 'id="api-keys-audit"' in index_html_text
+    assert "/api/keys/audit" in index_html_text
+
+
+def test_api_keys_panel_has_rotate_and_revoke_handlers(index_html_text):
+    assert "ApiKeysPanel.rotate" in index_html_text
+    assert "ApiKeysPanel.revoke" in index_html_text
