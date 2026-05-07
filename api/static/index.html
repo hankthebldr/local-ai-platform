@@ -438,6 +438,18 @@ body::before {
   color: var(--accent); padding: 1px 7px; border-radius: 999px;
   margin-right: 2px;
 }
+.admin-modal-label {
+  display: block; margin: 10px 0 4px;
+  font-size: 0.7rem; color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+.scope-picker {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 8px; min-height: 38px; background: var(--bg);
+}
+.scope-picker .scope-chip { cursor: pointer; opacity: 0.5; }
+.scope-picker .scope-chip.selected { opacity: 1; }
 .action-btn.small { padding: 3px 9px; font-size: 0.66rem; }
 .action-btn.danger { color: var(--danger, #e54b4b); border-color: rgba(229,75,75,0.4); }
 .action-btn.danger:hover { background: rgba(229,75,75,0.08); }
@@ -2173,6 +2185,57 @@ body::before {
                 onclick="AdminAuth._cancelSignIn()">Cancel</button>
         <button type="button" class="admin-modal-btn primary"
                 onclick="AdminAuth._submitSignIn()">Sign in</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Create API key modal ──────────────────────────────────────── -->
+  <div id="create-key-modal" class="admin-modal" hidden role="dialog"
+       aria-modal="true" aria-labelledby="create-key-title">
+    <div class="admin-modal-card" style="width:480px">
+      <h3 id="create-key-title">Create API key</h3>
+      <div id="create-key-form">
+        <label class="admin-modal-label">Name</label>
+        <input id="new-key-name" type="text" placeholder="e.g. homelab-client" autocomplete="off">
+
+        <label class="admin-modal-label">Scopes</label>
+        <div id="new-key-scopes" class="scope-picker"></div>
+
+        <label class="admin-modal-label">Rate limit (requests / minute) — optional</label>
+        <input id="new-key-rpm" type="number" min="1" placeholder="leave blank for unlimited">
+
+        <label class="admin-modal-label">Expires — optional</label>
+        <input id="new-key-expires" type="date">
+
+        <div id="create-key-error" class="admin-modal-error" hidden></div>
+
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn"
+                  onclick="ApiKeysPanel._closeCreate()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" id="create-key-submit"
+                  onclick="ApiKeysPanel._submitCreate()">Create key</button>
+        </div>
+      </div>
+
+      <div id="create-key-reveal" hidden>
+        <div class="admin-modal-error" style="background:rgba(245,166,35,0.12);border-color:#F5A623;color:#F5A623;margin-bottom:12px">
+          This is the only time this key will be displayed. Copy it now.
+        </div>
+        <label class="admin-modal-label">Your new key</label>
+        <div style="display:flex;gap:8px">
+          <code id="new-key-value" style="flex:1;background:var(--bg);border:1px solid var(--accent);color:var(--accent);padding:8px 10px;border-radius:4px;font-size:0.78rem;word-break:break-all"></code>
+          <button class="admin-modal-btn primary" onclick="ApiKeysPanel._copyKey()">Copy</button>
+        </div>
+        <div id="copy-confirm" style="display:none;color:var(--accent);font-size:0.7rem;margin-top:6px">Copied to clipboard.</div>
+        <div class="admin-modal-actions" style="margin-top:18px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:var(--text-dim);cursor:pointer">
+            <input type="checkbox" id="new-key-confirm-copied"
+                   onchange="document.getElementById('create-key-close-btn').disabled = !this.checked">
+            I've copied this key
+          </label>
+          <button type="button" class="admin-modal-btn primary" id="create-key-close-btn"
+                  onclick="ApiKeysPanel._closeCreate()" disabled>Close</button>
+        </div>
       </div>
     </div>
   </div>
@@ -5367,6 +5430,10 @@ window.ApiKeysPanel = (function () {
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  let _knownScopes = null;     // cached list from /api/keys/scopes
+  let _selectedScopes = new Set();
+  let _newKeyValue = '';
+
   async function load() {
     if (!AdminAuth.isSignedIn()) {
       AdminAuth.renderLock('admin-keys');
@@ -5433,8 +5500,103 @@ window.ApiKeysPanel = (function () {
 
   function refresh() { load(); }
 
-  // Stubs — implemented in Task 10/11.
-  function showCreate() { /* Task 10 */ }
+  async function _ensureScopes() {
+    if (_knownScopes) return _knownScopes;
+    const r = await AdminAuth.fetch('/api/keys/scopes', {}, 'admin-keys');
+    if (!r.ok) throw new Error('failed to load scopes');
+    _knownScopes = (await r.json()).scopes || [];
+    return _knownScopes;
+  }
+
+  async function showCreate() {
+    if (!AdminAuth.isSignedIn()) { AdminAuth.renderLock('admin-keys'); return; }
+    document.getElementById('create-key-form').hidden = false;
+    document.getElementById('create-key-reveal').hidden = true;
+    document.getElementById('create-key-error').hidden = true;
+    document.getElementById('new-key-name').value = '';
+    document.getElementById('new-key-rpm').value = '';
+    document.getElementById('new-key-expires').value = '';
+    document.getElementById('new-key-confirm-copied').checked = false;
+    document.getElementById('create-key-close-btn').disabled = true;
+
+    _selectedScopes = new Set();
+    const scopes = await _ensureScopes();
+    const picker = document.getElementById('new-key-scopes');
+    picker.innerHTML = scopes.map(s =>
+      `<span class="scope-chip" data-scope="${esc(s)}"
+        onclick="ApiKeysPanel._toggleScope('${esc(s)}', this)">${esc(s)}</span>`
+    ).join('');
+
+    document.getElementById('create-key-modal').hidden = false;
+    setTimeout(() => document.getElementById('new-key-name').focus(), 0);
+  }
+
+  function _toggleScope(s, el) {
+    if (_selectedScopes.has(s)) {
+      _selectedScopes.delete(s);
+      el.classList.remove('selected');
+    } else {
+      _selectedScopes.add(s);
+      el.classList.add('selected');
+    }
+  }
+
+  async function _submitCreate() {
+    const name = document.getElementById('new-key-name').value.trim();
+    const rpmRaw = document.getElementById('new-key-rpm').value.trim();
+    const expRaw = document.getElementById('new-key-expires').value.trim();
+    const errBox = document.getElementById('create-key-error');
+
+    if (!name) { errBox.hidden = false; errBox.textContent = 'Name is required.'; return; }
+    if (_selectedScopes.size === 0) {
+      errBox.hidden = false; errBox.textContent = 'Pick at least one scope.'; return;
+    }
+
+    const body = {
+      name,
+      scopes: Array.from(_selectedScopes),
+      rate_limit_rpm: rpmRaw ? Number(rpmRaw) : null,
+      expires_at: expRaw ? expRaw + 'T00:00:00Z' : null,
+    };
+
+    const r = await AdminAuth.fetch('/api/keys', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    }, 'admin-keys');
+
+    if (!r.ok) {
+      const detail = await r.json().catch(() => ({}));
+      errBox.hidden = false;
+      errBox.textContent = detail.detail || `Failed (HTTP ${r.status})`;
+      return;
+    }
+
+    const result = await r.json();
+    _newKeyValue = result.key || '';
+    document.getElementById('new-key-value').textContent = _newKeyValue;
+    document.getElementById('create-key-form').hidden = true;
+    document.getElementById('create-key-reveal').hidden = false;
+    document.getElementById('copy-confirm').style.display = 'none';
+    load(); // refresh the table behind the modal
+  }
+
+  function _copyKey() {
+    if (!_newKeyValue || !navigator.clipboard) return;
+    navigator.clipboard.writeText(_newKeyValue).then(() => {
+      const c = document.getElementById('copy-confirm');
+      c.style.display = 'block';
+      setTimeout(() => { c.style.display = 'none'; }, 1500);
+    });
+  }
+
+  function _closeCreate() {
+    _newKeyValue = '';
+    document.getElementById('new-key-value').textContent = '';
+    document.getElementById('create-key-modal').hidden = true;
+  }
+
+  // Stubs — implemented in Task 11.
   function rotate(id, name) { /* Task 11 */ }
   function revoke(id, name) { /* Task 11 */ }
 
@@ -5443,7 +5605,8 @@ window.ApiKeysPanel = (function () {
     if (e.detail && e.detail.panel === 'admin-keys') load();
   });
 
-  return { load, refresh, showCreate, rotate, revoke };
+  return { load, refresh, showCreate, rotate, revoke,
+           _toggleScope, _submitCreate, _copyKey, _closeCreate };
 })();
 </script>
 </body>

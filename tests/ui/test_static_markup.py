@@ -390,3 +390,25 @@ def test_api_keys_panel_has_new_key_button(index_html_text):
            "showNewKeyModal" in index_html_text or \
            "ApiKeysPanel.showCreate" in index_html_text, \
         "expected a 'New Key' trigger function"
+
+
+def test_create_key_modal_present(index_soup):
+    modal = index_soup.find(id="create-key-modal")
+    assert modal is not None
+    name = modal.find(id="new-key-name")
+    scopes_field = modal.find(id="new-key-scopes")
+    assert name is not None and scopes_field is not None
+
+
+def test_create_key_modal_has_one_time_reveal_warning(index_html_text):
+    """The reveal area must say the key is shown once."""
+    needle = "only time"
+    assert needle in index_html_text.lower(), (
+        "expected one-time-reveal warning copy in create-key modal"
+    )
+
+
+def test_create_key_modal_has_copy_button(index_html_text):
+    assert "navigator.clipboard.writeText" in index_html_text or \
+           "copyKey" in index_html_text, \
+        "expected a clipboard copy mechanism"
