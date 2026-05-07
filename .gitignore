@@ -159,6 +159,9 @@ data/graph/
 *.icns.backup
 data/logs/*.jsonl
 
+# Claude Code user-specific overrides
+.claude/settings.local.json
+
 # Desktop app build artifacts (from magical-payne)
 desktop/dist/
 desktop/build/
