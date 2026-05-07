@@ -60,10 +60,8 @@
       {
         "matcher": "Edit|Write|MultiEdit",
         "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/format-python.sh"
-          }
+          { "type": "command", "command": ".claude/hooks/format-python.sh" },
+          { "type": "command", "command": ".claude/hooks/models-md-sync.sh" }
         ]
       }
     ],

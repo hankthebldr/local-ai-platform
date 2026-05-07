@@ -171,6 +171,49 @@ if [[ -z "$out" ]]; then echo "  PASS: silent when CLAUDE.md also touched"; PASS
 
 rm -rf "$tmp_repo"
 
+# ── models-md-sync ────────────────────────────────────────────────────────
+section "models-md-sync.sh"
+
+tmp_repo="$(mktemp -d)"
+(
+  cd "$tmp_repo"
+  git init -q
+  git config user.email t@t.test
+  git config user.name Test
+  mkdir -p .claude/hooks models
+  cp "$OLDPWD/.claude/hooks/models-md-sync.sh" .claude/hooks/
+  echo "MODEL_REGISTRY = {'a': {'name': 'A', 'ollama': 'a'}}" > models/download.py
+  echo "# MODELS.md" > MODELS.md
+  git add -A && git commit -q -m init
+)
+
+# Test 1: edit unrelated file → silent
+pushd "$tmp_repo" >/dev/null
+printf '%s' '{"tool_input": {"file_path": "README.md"}}' | bash .claude/hooks/models-md-sync.sh >/dev/null
+code=$?
+popd >/dev/null
+assert_exit "unrelated file no-op" 0 "$code"
+
+# Test 2: edit models/download.py without touching MODELS.md → nudge
+pushd "$tmp_repo" >/dev/null
+echo "MODEL_REGISTRY['b'] = {'name': 'B', 'ollama': 'b'}" >> models/download.py
+out="$(printf '%s' '{"tool_input": {"file_path": "models/download.py"}}' | bash .claude/hooks/models-md-sync.sh 2>/dev/null)"
+popd >/dev/null
+if [[ "$out" == *"systemMessage"* ]] && [[ "$out" == *"MODELS.md"* ]]; then
+  echo "  PASS: nudges on registry edit"; PASS=$((PASS+1))
+else
+  echo "  FAIL: no nudge; got '$out'"; FAIL=$((FAIL+1))
+fi
+
+# Test 3: edit both download.py and MODELS.md → silent
+pushd "$tmp_repo" >/dev/null
+echo "extra" >> MODELS.md
+out="$(printf '%s' '{"tool_input": {"file_path": "models/download.py"}}' | bash .claude/hooks/models-md-sync.sh 2>/dev/null)"
+popd >/dev/null
+if [[ -z "$out" ]]; then echo "  PASS: silent when MODELS.md also touched"; PASS=$((PASS+1)); else echo "  FAIL: emitted '$out'"; FAIL=$((FAIL+1)); fi
+
+rm -rf "$tmp_repo"
+
 echo ""
 echo "Total: $((PASS+FAIL)) | Pass: $PASS | Fail: $FAIL"
 exit $FAIL
