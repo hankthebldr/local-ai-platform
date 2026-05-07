@@ -129,6 +129,48 @@ assert_exit ".env.example allowed" 0 "$code"
 
 rm -rf "$tmp_repo"
 
+# ── claude-md-drift ───────────────────────────────────────────────────────
+section "claude-md-drift.sh"
+
+tmp_repo="$(mktemp -d)"
+(
+  cd "$tmp_repo"
+  git init -q
+  git config user.email t@t.test
+  git config user.name Test
+  mkdir -p .claude/hooks api/services
+  cp "$OLDPWD/.claude/hooks/claude-md-drift.sh" .claude/hooks/
+  echo "# CLAUDE.md" > CLAUDE.md
+  echo "print('ok')" > api/services/foo.py
+  git add -A && git commit -q -m init
+)
+
+# Test 1: no changes → silent no-op
+pushd "$tmp_repo" >/dev/null
+out="$(bash .claude/hooks/claude-md-drift.sh 2>/dev/null || true)"
+popd >/dev/null
+if [[ -z "$out" ]]; then echo "  PASS: no changes silent"; PASS=$((PASS+1)); else echo "  FAIL: no changes emitted '$out'"; FAIL=$((FAIL+1)); fi
+
+# Test 2: edited api/services without CLAUDE.md → nudges
+pushd "$tmp_repo" >/dev/null
+echo "print('changed')" >> api/services/foo.py
+out="$(bash .claude/hooks/claude-md-drift.sh 2>/dev/null || true)"
+popd >/dev/null
+if [[ "$out" == *"systemMessage"* ]] && [[ "$out" == *"api/services/foo.py"* ]]; then
+  echo "  PASS: nudges on service edit"; PASS=$((PASS+1))
+else
+  echo "  FAIL: no nudge; got '$out'"; FAIL=$((FAIL+1))
+fi
+
+# Test 3: edited api/services AND CLAUDE.md → silent (doc was updated)
+pushd "$tmp_repo" >/dev/null
+echo "new section" >> CLAUDE.md
+out="$(bash .claude/hooks/claude-md-drift.sh 2>/dev/null || true)"
+popd >/dev/null
+if [[ -z "$out" ]]; then echo "  PASS: silent when CLAUDE.md also touched"; PASS=$((PASS+1)); else echo "  FAIL: emitted '$out'"; FAIL=$((FAIL+1)); fi
+
+rm -rf "$tmp_repo"
+
 echo ""
 echo "Total: $((PASS+FAIL)) | Pass: $PASS | Fail: $FAIL"
 exit $FAIL

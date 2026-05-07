@@ -66,6 +66,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/claude-md-drift.sh"
+          }
+        ]
+      }
     ]
   }
 }
