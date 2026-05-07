@@ -33,7 +33,7 @@ Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero 
 
 ## Quick start
 
-Two paths — pick one:
+Three paths — pick one:
 
 ### macOS app (DMG) — for end users
 
@@ -48,6 +48,27 @@ Two paths — pick one:
 4. The native window opens the **first-run setup wizard** (`/setup`) which installs Ollama if needed and pulls a starter model. After that you land on the dashboard.
 
 > **Requirements:** macOS 12.0 (Monterey) or later. ~6 GB free disk for the bundled runtime + a small starter model. Ollama is installed automatically by the wizard if missing.
+
+### Docker — any platform with Docker Desktop
+
+For non-developers on Linux / Windows, or anyone who wants Enclave fully isolated in containers. No Python, no virtualenv, no manual Ollama install.
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux) and make sure the whale icon is running.
+2. Clone or download this repo, open a terminal in the project folder, and run:
+   ```bash
+   ./run.sh
+   ```
+3. The script verifies Docker, brings up the stack (`ollama` + `api` + `webui`), pulls a small starter model on first run (`llama3.2:3b`, ~2 GB), and opens the dashboard in your browser.
+
+| | URL |
+|---|---|
+| **Dashboard** (recommended) | `http://localhost:8000` |
+| Chat UI (Open WebUI)        | `http://localhost:8080` |
+| API docs                    | `http://localhost:8000/docs` |
+
+To stop: `./stop.sh` (data preserved) — or `./stop.sh --reset` to wipe models and chat history.
+
+> **Requirements:** ~4 GB free RAM and ~3 GB free disk for the starter model. Pick a different starter with `ENCLAVE_DEFAULT_MODEL=qwen2.5:3b ./run.sh`.
 
 ### From source — for developers
 
