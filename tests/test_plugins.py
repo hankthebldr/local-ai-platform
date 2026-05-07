@@ -122,9 +122,10 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(scope="module")
 def plugin_client():
-    """Test client with plugins loaded"""
+    """Test client with plugins loaded and master-key auth attached"""
     os.environ["ENABLE_API_AUTH"] = "false"
     os.environ["RATE_LIMIT_RPM"] = "0"
+    os.environ["MASTER_API_KEY"] = "test-master"
     os.environ["PLUGINS_DIR"] = str(
         Path(__file__).parent.parent / "plugins"
     )
@@ -133,7 +134,9 @@ def plugin_client():
     import api.main
     importlib.reload(api.main)
     from api.main import app
-    return TestClient(app)
+    client = TestClient(app)
+    client.headers.update({"Authorization": "Bearer test-master"})
+    return client
 
 
 class TestPluginRouter:
@@ -253,3 +256,34 @@ class TestPluginToolConversion:
             assert svc.get_ollama_tools() == []
         finally:
             shutil.rmtree(tmpdir)
+
+
+class TestPluginsAuthGate:
+    def test_list_requires_master(self, monkeypatch):
+        monkeypatch.delenv("MASTER_API_KEY", raising=False)
+        import importlib, api.middleware, api.main
+        importlib.reload(api.middleware); importlib.reload(api.main)
+        from api.main import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        assert client.get("/api/plugins").status_code == 401
+
+    def test_list_passes_with_master(self, monkeypatch):
+        monkeypatch.setenv("MASTER_API_KEY", "test-master")
+        import importlib, api.middleware, api.main
+        importlib.reload(api.middleware); importlib.reload(api.main)
+        from api.main import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        resp = client.get("/api/plugins", headers={"Authorization": "Bearer test-master"})
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+    def test_invoke_requires_master(self, monkeypatch):
+        monkeypatch.delenv("MASTER_API_KEY", raising=False)
+        import importlib, api.middleware, api.main
+        importlib.reload(api.middleware); importlib.reload(api.main)
+        from api.main import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        assert client.post("/api/plugins/some-id/tools/some-tool", json={}).status_code == 401
