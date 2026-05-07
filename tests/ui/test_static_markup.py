@@ -368,3 +368,12 @@ def test_admin_signin_modal_present(index_soup):
     assert modal is not None
     pwd = modal.find("input", attrs={"type": "password"})
     assert pwd is not None, "modal must include a <input type=password>"
+
+
+def test_render_markdown_helper_present(index_html_text):
+    """A renderMarkdown helper must be defined in the script block."""
+    assert (
+        "function renderMarkdown" in index_html_text
+        or "renderMarkdown =" in index_html_text
+        or "window.renderMarkdown" in index_html_text
+    ), "renderMarkdown helper missing"

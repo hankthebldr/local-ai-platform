@@ -416,6 +416,23 @@ body::before {
   cursor: pointer;
 }
 
+/* === renderMarkdown output styling ============================== */
+.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6 { color: var(--text); margin: 14px 0 6px; }
+.md-h1 { font-size: 1.1rem; }  .md-h2 { font-size: 1.0rem; }
+.md-h3 { font-size: 0.92rem; } .md-h4 { font-size: 0.85rem; }
+.md-h5 { font-size: 0.78rem; } .md-h6 { font-size: 0.72rem; }
+.md-code {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px 12px; font-size: 0.74rem;
+  overflow-x: auto;
+}
+.md-inline-code {
+  background: var(--bg); border: 1px solid var(--border);
+  padding: 1px 5px; border-radius: 2px; font-size: 0.78em;
+}
+.md-ul, .md-ol { padding-left: 22px; margin: 6px 0; }
+.md-ul li, .md-ol li { margin-bottom: 2px; font-size: 0.78rem; line-height: 1.5; }
+
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
@@ -2139,6 +2156,69 @@ body::before {
 </div>
 
 <script>
+// ── renderMarkdown(text) — shared CommonMark subset renderer ─────────────
+//
+// Handles: H1–H6, paragraphs, fenced code blocks, inline code, ul/ol lists,
+// links (rel=noopener target=_blank), bold, italic. Anything else falls
+// through as escaped text.  Output is always HTML-escaped before substitution
+// so it cannot produce executable markup.
+//
+// Used by the Plugins panel (skill bodies) and the Exports panel (View modal).
+window.renderMarkdown = function renderMarkdown(text) {
+  if (text == null) return '';
+  const esc = s => String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  // Pull fenced code blocks out first so their contents aren't mangled.
+  const codeBlocks = [];
+  text = text.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, body) => {
+    codeBlocks.push(`<pre class="md-code"><code>${esc(body)}</code></pre>`);
+    return ` CODE${codeBlocks.length - 1} `;
+  });
+
+  // Escape the rest, then apply inline + block patterns.
+  let html = esc(text);
+
+  // Headings (H1..H6).
+  for (let n = 6; n >= 1; n--) {
+    const re = new RegExp('^#{' + n + '} +(.*)$', 'gm');
+    html = html.replace(re, (_, t) => `<h${n} class="md-h${n}">${t}</h${n}>`);
+  }
+
+  // Lists: collapse consecutive list lines into <ul>/<ol>.
+  html = html.replace(/(?:^|\n)((?:[*-] .+\n?)+)/g, (_, block) => {
+    const items = block.trim().split(/\n/).map(l => l.replace(/^[*-] /, '').trim());
+    return '\n<ul class="md-ul">' + items.map(i => `<li>${i}</li>`).join('') + '</ul>';
+  });
+  html = html.replace(/(?:^|\n)((?:\d+\. .+\n?)+)/g, (_, block) => {
+    const items = block.trim().split(/\n/).map(l => l.replace(/^\d+\. /, '').trim());
+    return '\n<ol class="md-ol">' + items.map(i => `<li>${i}</li>`).join('') + '</ol>';
+  });
+
+  // Inline: code, links, bold, italic.
+  html = html.replace(/`([^`\n]+)`/g, '<code class="md-inline-code">$1</code>');
+  html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, u) => {
+    if (!/^https?:\/\//.test(u) && !u.startsWith('/')) return m; // safety: only allow http(s) or root-relative
+    return `<a href="${esc(u)}" rel="noopener" target="_blank">${t}</a>`;
+  });
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+  // Paragraphs: split on blank lines, wrap non-block chunks.
+  html = html.split(/\n{2,}/).map(chunk => {
+    const t = chunk.trim();
+    if (!t) return '';
+    if (/^<(h[1-6]|ul|ol|pre|div)/.test(t)) return t;
+    return `<p>${t.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+
+  // Restore code blocks.
+  html = html.replace(/ CODE(\d+) /g, (_, i) => codeBlocks[+i]);
+
+  return html;
+};
+
 /* ── TAB SWITCHING ─────────────────────────────────────────────── */
 function switchTab(name, el) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
