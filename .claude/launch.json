@@ -6,6 +6,12 @@
       "runtimeExecutable": "/Users/henry/Github/Github_desktop/local-ai-platform/venv/bin/uvicorn",
       "runtimeArgs": ["api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
       "port": 8000
+    },
+    {
+      "name": "landing-page",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4173", "--directory", "docs/pages"],
+      "port": 4173
     }
   ]
 }

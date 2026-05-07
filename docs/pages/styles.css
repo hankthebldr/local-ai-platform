@@ -176,6 +176,63 @@ nav a:hover { color: var(--green); }
   margin-bottom: 24px;
   font-size: 14px;
 }
+.license p.micro {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+.license p.micro a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--border);
+}
+.license p.micro a:hover { color: var(--green); border-bottom-color: var(--green); }
+
+.install-note {
+  margin-top: 40px;
+  padding: 24px;
+  background: var(--void);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cyan);
+  border-radius: 4px;
+}
+.install-note h4 {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+.install-note p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+.install-note p:last-child { margin-bottom: 0; }
+.install-note pre {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  overflow-x: auto;
+}
+.install-note code,
+.install-note pre code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--green);
+}
+.install-note p code {
+  background: var(--surface);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
 
 footer {
   padding: 40px 0;

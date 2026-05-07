@@ -92,13 +92,42 @@ API_PORT_RAW="$(grep -E '^[[:space:]]*API_PORT=' "$PROJECT_ROOT/.env" 2>/dev/nul
 API_PORT_RAW="${API_PORT_RAW:-8000}"
 UI_URL="http://${UI_HOST}:${API_PORT_RAW}"
 
+# Detect first-run state so we can point the user at the right entry surface.
+# Mirrors desktop/app.py: ~/.enclave/setup_complete is the wizard-done flag.
+SETUP_FLAG="${HOME}/.enclave/setup_complete"
+if [ -f "$SETUP_FLAG" ]; then
+    LANDING_PATH="/"
+    LANDING_NOTE="dashboard"
+else
+    LANDING_PATH="/setup"
+    LANDING_NOTE="first-run setup wizard"
+fi
+
 # Start the API server (also serves the web dashboard at /)
 echo ""
-echo "🌐 Starting API + Web UI..."
-echo "   Web dashboard:  ${UI_URL}/"
-echo "   API docs:       ${UI_URL}/docs"
-echo "   Health:         ${UI_URL}/health"
+echo "🌐 Starting API + Web UI ..."
 echo ""
+echo "   Entry surface (${LANDING_NOTE}):"
+echo "       ${UI_URL}${LANDING_PATH}"
+echo ""
+echo "   Full UX routes:"
+echo "       Dashboard      ${UI_URL}/"
+echo "       Setup wizard   ${UI_URL}/setup"
+echo "       API docs       ${UI_URL}/docs"
+echo "       Health         ${UI_URL}/health"
+echo ""
+echo "   API surfaces (clickable from the dashboard):"
+echo "       Models         ${UI_URL}/v1/models"
+echo "       Workflows      ${UI_URL}/api/workflows"
+echo "       Agents         ${UI_URL}/api/agents"
+echo "       Graph          ${UI_URL}/api/graph"
+echo "       Plugins        ${UI_URL}/api/plugins"
+echo ""
+if [ ! -f "$SETUP_FLAG" ]; then
+    echo "   👉 First run detected. The browser will open the setup wizard."
+    echo "      Touch ${SETUP_FLAG} to skip the wizard on next launch."
+    echo ""
+fi
 
 # Best-effort: open the dashboard in the user's browser once the server
 # is responding. Skipped if SKIP_BROWSER=1 or no opener is available.
@@ -107,9 +136,9 @@ if [ "${SKIP_BROWSER:-0}" != "1" ]; then
         for _ in $(seq 1 30); do
             if curl -sf -m 1 "${UI_URL}/health" >/dev/null 2>&1; then
                 if command -v xdg-open >/dev/null 2>&1; then
-                    xdg-open "${UI_URL}/" >/dev/null 2>&1 || true
+                    xdg-open "${UI_URL}${LANDING_PATH}" >/dev/null 2>&1 || true
                 elif command -v open >/dev/null 2>&1; then
-                    open "${UI_URL}/" >/dev/null 2>&1 || true
+                    open "${UI_URL}${LANDING_PATH}" >/dev/null 2>&1 || true
                 fi
                 exit 0
             fi

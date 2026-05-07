@@ -40,7 +40,7 @@ echo "==> 3/6  api.main import smoke test"
     || fail "api.main failed to import"
 ok "api.main imports"
 
-echo "==> 4/6  API boot + /health probe"
+echo "==> 4/6  API boot + UX-route probe"
 [ -f .env ] || cp .env.example .env
 LOG=$(mktemp)
 ENABLE_API_AUTH=false API_HOST=127.0.0.1 \
@@ -63,6 +63,24 @@ STATUS=$(curl -s http://127.0.0.1:8000/health | \
     ./venv/bin/python -c "import sys,json; print(json.load(sys.stdin)['status'])")
 ok "API /health responding (status=$STATUS)"
 [ "$STATUS" = "degraded" ] && warn "  degraded is expected when Ollama is not running"
+
+# Hit every user-facing surface the dashboard exposes. A 200 with a non-empty
+# body is the bar: catches static-mount regressions, missing index.html, and
+# router include drift before they ship in a DMG.
+UX_FAIL=0
+for path in / /static/index.html /setup /api/info; do
+    body=$(curl -s -m 5 -o /tmp/probe.body -w '%{http_code}' \
+        "http://127.0.0.1:8000${path}")
+    size=$(wc -c </tmp/probe.body | tr -d ' ')
+    if [ "$body" != "200" ] || [ "$size" -lt 16 ]; then
+        warn "  UX route ${path} -> HTTP ${body}, ${size} bytes"
+        UX_FAIL=1
+    else
+        ok "  UX route ${path} -> ${body} (${size}B)"
+    fi
+done
+rm -f /tmp/probe.body
+[ "$UX_FAIL" = "1" ] && fail "one or more UX routes failed to render"
 
 kill $API_PID 2>/dev/null || true
 wait $API_PID 2>/dev/null || true
