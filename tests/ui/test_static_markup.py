@@ -435,3 +435,18 @@ def test_plugins_panel_has_warning_banner(index_html_text):
 def test_plugins_panel_has_two_pane_layout(index_html_text):
     assert 'id="plugins-list"' in index_html_text
     assert 'id="plugin-detail"' in index_html_text
+
+
+def test_plugins_panel_has_tool_tester(index_html_text):
+    """Each tool accordion must contain a Run button + result container."""
+    assert "tool-tester-run" in index_html_text or \
+           "PluginsPanel.runTool" in index_html_text, (
+        "expected a tool-tester run handler"
+    )
+
+
+def test_plugins_panel_has_param_form_renderer(index_html_text):
+    assert "renderToolForm" in index_html_text or \
+           "buildToolForm" in index_html_text, (
+        "expected a tool-form renderer"
+    )

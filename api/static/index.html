@@ -464,6 +464,10 @@ body::before {
   border-radius: 4px; padding: 10px 12px; font-size: 0.74rem;
   overflow-x: auto;
 }
+.md-code.error {
+  border-color: var(--danger, #e54b4b);
+  color: var(--danger, #e54b4b);
+}
 .md-inline-code {
   background: var(--bg); border: 1px solid var(--border);
   padding: 1px 5px; border-radius: 2px; font-size: 0.78em;
@@ -5847,15 +5851,167 @@ window.PluginsPanel = (function () {
     `;
   }
 
-  // Stub — implemented in Task 13.
+  // Per-tool last-5 invocations kept in memory for this panel session.
+  const _runHistory = new Map(); // key: `${pluginId}:${toolId}` → array of {ts, ms, status, body}
+
   function renderToolAccordion(pluginId, tool) {
+    const key = `${pluginId}:${tool.id}`;
     return `
       <details class="tool-accordion">
-        <summary><span style="flex:1">${esc(tool.id)}</span></summary>
-        <div class="body" style="color:var(--text-muted);font-size:0.7rem">
-          Tester arrives in Task 13.
+        <summary>
+          <span style="flex:1">${esc(tool.id)}</span>
+          <span style="color:var(--text-muted);font-size:0.66rem">${esc(tool.description || '')}</span>
+        </summary>
+        <div class="body">
+          <form id="tool-form-${esc(key)}" onsubmit="event.preventDefault(); PluginsPanel.runTool('${esc(pluginId)}','${esc(tool.id)}')">
+            ${renderToolForm(tool)}
+            <div style="display:flex;justify-content:flex-end;margin-top:10px">
+              <button type="submit" id="tool-tester-run-${esc(key)}"
+                class="admin-modal-btn primary" style="padding:6px 18px">Run</button>
+            </div>
+          </form>
+          <div id="tool-result-${esc(key)}" style="margin-top:10px"></div>
+          <div id="tool-history-${esc(key)}" style="margin-top:10px"></div>
         </div>
       </details>
+    `;
+  }
+
+  function renderToolForm(tool) {
+    const params = tool.parameters || {};
+    if (typeof params !== 'object' || Array.isArray(params)) {
+      return '<div style="color:var(--text-muted);font-size:0.7rem">No parameter schema declared.</div>';
+    }
+    return Object.entries(params).map(([name, spec]) => {
+      const required = spec && spec.required === true;
+      const type = (spec && spec.type) || 'string';
+      const def = spec && spec.default;
+      const id = `tool-param-${name}`;
+      const label = `<label class="admin-modal-label">${esc(name)}${required ? ' *' : ''}
+        <span style="color:var(--text-muted);font-size:0.62rem">(${esc(type)})</span></label>`;
+      let input;
+      if (type === 'boolean') {
+        input = `<input type="checkbox" id="${id}" ${def === true ? 'checked' : ''}>`;
+      } else if (type === 'integer' || type === 'number') {
+        input = `<input type="number" id="${id}" value="${esc(def ?? '')}" ${type === 'integer' ? 'step="1"' : ''}>`;
+      } else if (Array.isArray(spec.enum)) {
+        input = `<select id="${id}">${spec.enum.map(o =>
+          `<option value="${esc(o)}" ${o === def ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+      } else if (type === 'array' || type === 'object') {
+        input = `<textarea id="${id}" rows="3" placeholder="JSON or one item per line"></textarea>`;
+      } else {
+        input = `<input type="text" id="${id}" value="${esc(def ?? '')}">`;
+      }
+      return label + input;
+    }).join('');
+  }
+
+  function _collectParams(tool) {
+    const out = {};
+    const params = tool.parameters || {};
+    for (const [name, spec] of Object.entries(params)) {
+      const el = document.getElementById('tool-param-' + name);
+      if (!el) continue;
+      const type = (spec && spec.type) || 'string';
+      let v;
+      if (type === 'boolean') v = el.checked;
+      else if (type === 'integer') v = el.value === '' ? null : parseInt(el.value, 10);
+      else if (type === 'number') v = el.value === '' ? null : parseFloat(el.value);
+      else if (type === 'array' || type === 'object') {
+        const raw = el.value.trim();
+        if (!raw) { v = type === 'array' ? [] : {}; }
+        else if (raw[0] === '[' || raw[0] === '{') {
+          try { v = JSON.parse(raw); } catch (e) { throw new Error(`${name}: invalid JSON`); }
+        } else {
+          v = raw.split(/\n/).map(s => s.trim()).filter(Boolean);
+        }
+      } else {
+        v = el.value;
+      }
+      if (spec && spec.required && (v === null || v === undefined || v === '')) {
+        throw new Error(`${name} is required`);
+      }
+      if (v !== null && v !== undefined && v !== '') out[name] = v;
+    }
+    return out;
+  }
+
+  async function runTool(pluginId, toolId) {
+    const key = `${pluginId}:${toolId}`;
+    const resultBox = document.getElementById('tool-result-' + key);
+    const runBtn = document.getElementById('tool-tester-run-' + key);
+
+    // Re-fetch the tool spec to pick up any param schema we cached.
+    const detailR = await AdminAuth.fetch(`/api/plugins/${encodeURIComponent(pluginId)}`, {}, 'admin-plugins');
+    if (!detailR.ok) { resultBox.innerHTML = `<div class="admin-modal-error" style="margin:0">Cannot load plugin (HTTP ${detailR.status})</div>`; return; }
+    const plugin = await detailR.json();
+    const tool = (plugin.tools || []).find(t => t.id === toolId);
+    if (!tool) { resultBox.innerHTML = '<div class="admin-modal-error" style="margin:0">Tool not found.</div>'; return; }
+
+    let params;
+    try { params = _collectParams(tool); }
+    catch (e) { resultBox.innerHTML = `<div class="admin-modal-error" style="margin:0">${esc(e.message)}</div>`; return; }
+
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running…';
+    const t0 = performance.now();
+    let r, body, status;
+    try {
+      r = await AdminAuth.fetch(`/api/plugins/${encodeURIComponent(pluginId)}/tools/${encodeURIComponent(toolId)}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(params),
+      }, 'admin-plugins');
+      const ms = Math.round(performance.now() - t0);
+      status = r.status;
+      const ct = r.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        body = await r.json();
+        resultBox.innerHTML = `
+          <div style="font-size:0.66rem;color:var(--text-dim);margin-bottom:4px">
+            ${ms} ms · status ${status}
+          </div>
+          <pre class="md-code" style="font-size:0.72rem;max-height:280px;overflow:auto">${esc(JSON.stringify(body, null, 2))}</pre>
+        `;
+      } else {
+        body = await r.text();
+        resultBox.innerHTML = `
+          <div style="font-size:0.66rem;color:var(--text-dim);margin-bottom:4px">${ms} ms · status ${status}</div>
+          <pre class="md-code">${esc(body)}</pre>
+        `;
+      }
+      if (!r.ok) {
+        resultBox.querySelector('pre').classList.add('error');
+      }
+
+      const hist = _runHistory.get(key) || [];
+      hist.push({ts: Date.now(), ms, status, summary: typeof body === 'object' ? JSON.stringify(body).slice(0,80) : String(body).slice(0,80)});
+      while (hist.length > 5) hist.shift();
+      _runHistory.set(key, hist);
+      _renderHistory(key);
+    } catch (e) {
+      resultBox.innerHTML = `<div class="admin-modal-error" style="margin:0">${esc(e.message)}</div>`;
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run';
+    }
+  }
+
+  function _renderHistory(key) {
+    const host = document.getElementById('tool-history-' + key);
+    if (!host) return;
+    const hist = _runHistory.get(key) || [];
+    if (!hist.length) { host.innerHTML = ''; return; }
+    host.innerHTML = `
+      <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:8px">Last invocations</div>
+      ${hist.slice().reverse().map(h => `
+        <div style="display:flex;gap:10px;font-size:0.66rem;color:var(--text-dim);padding:2px 0">
+          <span style="color:var(--text-muted);min-width:130px">${new Date(h.ts).toLocaleTimeString()}</span>
+          <span style="color:${h.status >= 200 && h.status < 300 ? 'var(--accent)' : 'var(--danger,#e54b4b)'};min-width:40px">${h.status}</span>
+          <span style="min-width:50px">${h.ms} ms</span>
+          <span style="opacity:0.85">${esc(h.summary)}…</span>
+        </div>
+      `).join('')}
     `;
   }
 
@@ -5865,7 +6021,8 @@ window.PluginsPanel = (function () {
     if (e.detail && e.detail.panel === 'admin-plugins') load();
   });
 
-  return { load, refresh, select, renderDetail, renderToolAccordion };
+  return { load, refresh, select, renderDetail, renderToolAccordion,
+           runTool, renderToolForm, _collectParams };
 })();
 </script>
 </body>
