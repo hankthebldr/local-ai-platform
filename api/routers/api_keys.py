@@ -3,25 +3,16 @@
 API Keys Router — Key management endpoints (master key protected)
 """
 
-import hmac
-import os
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ..middleware import require_master_key as _require_master
 from ..services.api_key_service import APIKeyService
 
 router = APIRouter(prefix="/api/keys", tags=["api-keys"])
 _service = APIKeyService()
-
-def _require_master(request: Request):
-    """Check that the request carries the master API key."""
-    master_key = os.getenv("MASTER_API_KEY", "")
-    auth = request.headers.get("Authorization", "")
-    token = auth[7:] if auth.startswith("Bearer ") else ""
-    if not token or not master_key or not hmac.compare_digest(token, master_key):
-        raise HTTPException(status_code=401, detail="Master API key required")
 
 
 class CreateKeyRequest(BaseModel):

@@ -209,3 +209,9 @@ class TestMultiKeyAuth:
             headers={"Authorization": f"Bearer {raw_key}"},
         )
         assert resp.status_code == 401
+
+
+def test_require_master_helper_lives_in_middleware():
+    """Smoke: helper is importable from middleware so plugins.py can use it."""
+    from api.middleware import require_master_key
+    assert callable(require_master_key)
