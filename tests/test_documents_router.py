@@ -8,6 +8,8 @@ import tempfile
 import shutil
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.rag
 import io
 
 

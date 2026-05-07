@@ -87,3 +87,91 @@ class TestWorkflowAPI:
         response = client.get("/api/workflows/runs")
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+
+    def test_get_workflow_definition(self, client):
+        """GET /api/workflows/{id} returns full definition with steps for the UI."""
+        response = client.get("/api/workflows/data-model-rules")
+        assert response.status_code == 200
+        defn = response.json()
+        assert defn["id"] == "data-model-rules"
+        assert isinstance(defn["steps"], list)
+        assert len(defn["steps"]) >= 1
+        # Each step must expose the hooks block (may be empty) so the UI
+        # can reliably render hook slots.
+        for step in defn["steps"]:
+            assert "hooks" in step
+            hooks = step["hooks"] or {}
+            for slot in (
+                "before_step",
+                "transform_prompt",
+                "validate_output",
+                "after_step",
+                "on_failure",
+            ):
+                assert slot in hooks
+
+    def test_get_missing_workflow_returns_404(self, client):
+        response = client.get("/api/workflows/does-not-exist")
+        assert response.status_code == 404
+
+    def test_get_workflow_rejects_path_traversal(self, client):
+        response = client.get("/api/workflows/..%2F..%2Fetc%2Fpasswd")
+        assert response.status_code in (400, 404)
+
+    def test_save_workflow_writes_yaml_and_round_trips(self, client, tmp_path, monkeypatch):
+        """POST /api/workflows/save persists a validated def to workflows/{id}.yaml."""
+        monkeypatch.setattr("api.routers.workflows.WORKFLOWS_DIR", str(tmp_path))
+        wf = {
+            "id": "saved-workflow",
+            "name": "Saved",
+            "defaults": {"role": "general", "retries": 0, "retry_delay": 0},
+            "steps": [
+                {
+                    "id": "s1",
+                    "name": "Step 1",
+                    "role": "fast",
+                    "system_prompt": "Do thing.",
+                    "inputs": ["seed.input"],
+                    "outputs": ["result"],
+                }
+            ],
+        }
+        r = client.post("/api/workflows/save", json={"definition": wf})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["saved"] is True
+        assert body["workflow_id"] == "saved-workflow"
+
+        target = tmp_path / "saved-workflow.yaml"
+        assert target.exists(), "yaml file was not written"
+        content = target.read_text()
+        assert "id: saved-workflow" in content
+        assert "Do thing." in content
+
+    def test_save_workflow_refuses_clobber_without_overwrite(self, client, tmp_path, monkeypatch):
+        monkeypatch.setattr("api.routers.workflows.WORKFLOWS_DIR", str(tmp_path))
+        wf = {
+            "id": "existing",
+            "name": "x",
+            "defaults": {"role": "general", "retries": 0, "retry_delay": 0},
+            "steps": [{"id": "s1", "name": "S1", "role": "fast",
+                       "system_prompt": "p", "inputs": ["seed.x"], "outputs": ["y"]}],
+        }
+        assert client.post("/api/workflows/save", json={"definition": wf}).status_code == 200
+        assert client.post("/api/workflows/save", json={"definition": wf}).status_code == 409
+        assert client.post(
+            "/api/workflows/save",
+            json={"definition": wf, "overwrite": True},
+        ).status_code == 200
+
+    def test_save_workflow_validates_before_writing(self, client, tmp_path, monkeypatch):
+        monkeypatch.setattr("api.routers.workflows.WORKFLOWS_DIR", str(tmp_path))
+        broken = {
+            "id": "broken-save",
+            "name": "broken",
+            "steps": [{"id": "s1", "name": "S1", "role": "fast",
+                       "system_prompt": "p", "inputs": ["nonexistent.x"], "outputs": ["y"]}],
+        }
+        r = client.post("/api/workflows/save", json={"definition": broken})
+        assert r.status_code == 422
+        assert not (tmp_path / "broken-save.yaml").exists()

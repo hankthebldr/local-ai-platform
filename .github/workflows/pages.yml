@@ -2,10 +2,14 @@ name: Deploy Pages
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
     paths:
       - "docs/pages/**"
       - ".github/workflows/pages.yml"
+  release:
+    # Republish whenever a release is published so the displayed version
+    # string on the landing page tracks the latest GitHub Release.
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -28,10 +32,42 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
+      - name: Resolve latest stable release tag
+        id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Pulls the most recent NON-prerelease tag (skips the rolling `nightly`
+        # release). Falls back to "v0.0.0" if no stable release exists yet so
+        # the build never fails on a fresh repo.
+        run: |
+          tag=$(gh release list --limit 20 --json tagName,isPrerelease \
+                  --jq '[.[] | select(.isPrerelease == false)][0].tagName' \
+                  2>/dev/null || echo "")
+          if [ -z "$tag" ] || [ "$tag" = "null" ]; then
+              tag="v0.0.0"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${tag}"
+
+      - name: Stage pages with version substituted
+        env:
+          VERSION: ${{ steps.ver.outputs.tag }}
+        # Copy to a working dir then sed in the version. Only index.html
+        # carries the placeholder today; the loop is future-proofing.
+        run: |
+          rm -rf _pages
+          cp -R docs/pages _pages
+          for f in _pages/*.html; do
+              [ -f "$f" ] || continue
+              sed -i "s|__ENCLAVE_VERSION__|${VERSION}|g" "$f"
+          done
+          echo "--- substituted version strings ---"
+          grep -h "${VERSION}" _pages/*.html || true
+
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/pages
+          path: _pages
 
       - name: Deploy to GitHub Pages
         id: deployment

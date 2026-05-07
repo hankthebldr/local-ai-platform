@@ -34,15 +34,29 @@ class APIKeyService:
             self._config_dir = Path(os.getenv("DATA_CONFIG_DIR", "data/config"))
         self._config_dir.mkdir(parents=True, exist_ok=True)
         self._file = self._config_dir / "api_keys.yaml"
+        # In-memory cache invalidated by file mtime to avoid repeated disk I/O.
+        self._cache: Optional[list] = None
+        self._cache_mtime: Optional[float] = None
 
     def _load(self) -> list:
         if not self._file.exists():
+            self._cache = []
+            self._cache_mtime = None
             return []
+
+        current_mtime = self._file.stat().st_mtime
+        if self._cache is not None and self._cache_mtime == current_mtime:
+            return self._cache
+
         data = yaml.safe_load(self._file.read_text()) or {}
-        return data.get("keys", [])
+        self._cache = data.get("keys", [])
+        self._cache_mtime = current_mtime
+        return self._cache
 
     def _save(self, keys: list) -> None:
         self._file.write_text(yaml.dump({"keys": keys}, default_flow_style=False))
+        self._cache = keys
+        self._cache_mtime = self._file.stat().st_mtime
 
     def create_key(self, name: str, scopes: list, rate_limit_rpm: Optional[int] = None, expires_at: Optional[str] = None) -> dict:
         slug = _slug(name)
@@ -123,3 +137,38 @@ class APIKeyService:
                 k["last_used_at"] = _now_iso()
                 self._save(keys)
                 return
+
+
+# ── First-run bootstrap ───────────────────────────────────────────────────
+#
+# When the operator enables auth on a fresh install, they shouldn't have to
+# manually provision a key before the API works. This helper auto-creates a
+# master key on first start (idempotent: returns None if any key already
+# exists or if API_KEY is set in env).
+
+ALL_SCOPES = [
+    "chat", "completions", "models",
+    "documents", "memory", "context",
+    "profiles", "plugins", "workflows",
+    "keys", "a2a",
+]
+
+
+def bootstrap_first_run_key(svc: "APIKeyService") -> Optional[dict]:
+    """
+    Provision a master key if and only if the keystore is empty AND no
+    legacy API_KEY env var is set. Returns the {id, name, key, scopes}
+    dict on creation, or None if no provisioning was needed.
+
+    The raw key is included in the return so the caller can write it to
+    a sentinel file and log it once — it cannot be retrieved later.
+    """
+    if os.getenv("API_KEY"):
+        return None
+    if svc.list_keys():
+        return None
+    return svc.create_key(
+        name="first-run-master",
+        scopes=ALL_SCOPES,
+        rate_limit_rpm=None,
+    )

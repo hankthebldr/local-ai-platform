@@ -15,8 +15,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
-from .routers import chat, completions, models, inventory, exports, graph, workflows, api_keys, plugins, setup, context, memory, profiles, documents
+from .routers import chat, completions, models, inventory, exports, graph, workflows, api_keys, plugins, setup, context, memory, profiles, documents, roles, a2a, agents
 from .services.ollama_service import OllamaService
+from .services.workflow_engine import WorkflowEngine
+from .services.a2a_service import A2AService
 from .middleware import APIKeyAuthMiddleware, RateLimitMiddleware
 from .exceptions import register_exception_handlers
 from .logging_config import logger
@@ -42,21 +44,59 @@ except (json.JSONDecodeError, TypeError):
 # ── Services ───────────────────────────────────────────────────────────────
 
 ollama_service = OllamaService(OLLAMA_HOST)
+_workflow_engine = WorkflowEngine(ollama_service)
+a2a.init_a2a_service(A2AService(ollama_service, _workflow_engine))
 
 
 # ── Lifespan ───────────────────────────────────────────────────────────────
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _is_network_exposed(host: str) -> bool:
+    return host not in _LOOPBACK_HOSTS
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for the application"""
-    auth_status = "enabled" if os.getenv("ENABLE_API_AUTH", "false").lower() == "true" else "disabled"
+    # Default-on auth: 1.x ships with ENABLE_API_AUTH=true. Fresh installs
+    # auto-provision a master key on first boot (see _bootstrap_auth_if_needed).
+    auth_enabled = os.getenv("ENABLE_API_AUTH", "true").lower() == "true"
+    auth_status = "enabled" if auth_enabled else "disabled"
     logger.info("Starting Enclave API")
     logger.info(f"  Ollama Host: {OLLAMA_HOST}")
+    logger.info(f"  API Host: {API_HOST}")
     logger.info(f"  API Port: {API_PORT}")
     logger.info(f"  Auth: {auth_status}")
     logger.info(f"  CORS Origins: {CORS_ORIGINS}")
     logger.info(f"  Rate Limit: {os.getenv('RATE_LIMIT_RPM', '60')} rpm")
     logger.info(f"  Request Timeout: {REQUEST_TIMEOUT}s")
+
+    if auth_enabled:
+        _bootstrap_auth_if_needed()
+    else:
+        # Auth off is now an explicit override (dev mode only). Warn loudly,
+        # and louder still when the override coincides with a network-exposed
+        # bind — that combination would expose workflows, document ingestion,
+        # and key management endpoints unauthenticated.
+        if _is_network_exposed(API_HOST):
+            logger.warning(
+                "SECURITY: API_HOST=%s is network-exposed but ENABLE_API_AUTH=false. "
+                "Workflow execution, document ingestion, and key management endpoints "
+                "are unauthenticated. Remove the override before exposing this service.",
+                API_HOST,
+            )
+        else:
+            logger.warning(
+                "SECURITY: ENABLE_API_AUTH=false — every endpoint is unauthenticated. "
+                "This is dev mode only; remove the override before exposing the API."
+            )
+    if "*" in CORS_ORIGINS:
+        logger.warning(
+            "SECURITY: CORS_ORIGINS contains '*' — any browser origin can call "
+            "this API. Restrict CORS_ORIGINS before exposing this service."
+        )
 
     if ollama_service.health_check():
         model_list = ollama_service.list_models()
@@ -66,6 +106,43 @@ async def lifespan(app: FastAPI):
 
     yield
     logger.info("Shutting down Enclave API")
+
+
+def _bootstrap_auth_if_needed() -> None:
+    """
+    On first boot with auth enabled, provision a master key and write the
+    raw value to data/config/first-run-key.txt (chmod 0600). Subsequent
+    boots are no-ops (the keystore won't be empty).
+
+    The raw key is logged ONCE here — never persisted in the YAML, never
+    retrievable later. Operators can find it in:
+      1. The startup log banner below
+      2. data/config/first-run-key.txt
+    """
+    from .services.api_key_service import APIKeyService, bootstrap_first_run_key
+
+    svc = APIKeyService()
+    provisioned = bootstrap_first_run_key(svc)
+    if provisioned is None:
+        return
+
+    raw_key = provisioned["key"]
+    marker_path = Path(os.getenv("DATA_CONFIG_DIR", "data/config")) / "first-run-key.txt"
+    try:
+        marker_path.parent.mkdir(parents=True, exist_ok=True)
+        marker_path.write_text(f"{raw_key}\n")
+        os.chmod(marker_path, 0o600)
+    except OSError as exc:
+        logger.warning("Failed to write first-run-key.txt: %s", exc)
+
+    banner = "=" * 70
+    logger.warning(banner)
+    logger.warning("FIRST-RUN: provisioned master API key (id=%s)", provisioned["id"])
+    logger.warning("KEY: %s", raw_key)
+    logger.warning("Saved to: %s (mode 0600)", marker_path)
+    logger.warning("Use:  Authorization: Bearer %s", raw_key)
+    logger.warning("This key has all scopes; rotate it via /api/keys when ready.")
+    logger.warning(banner)
 
 
 # ── App ────────────────────────────────────────────────────────────────────
@@ -111,6 +188,9 @@ app.include_router(context.router)
 app.include_router(memory.router)
 app.include_router(profiles.router)
 app.include_router(documents.router)
+app.include_router(roles.router)
+app.include_router(a2a.router)
+app.include_router(agents.router)
 
 
 # ── Public Endpoints ───────────────────────────────────────────────────────
@@ -155,6 +235,12 @@ async def health_check():
 # ── Dashboard & Static Files ──────────────────────────────────────────────
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Mount /static for all assets under api/static/ (favicon, index.html,
+# setup.html, vendor fonts, vendor d3, etc). Previously StaticFiles was
+# imported but never mounted — favicon and every /static/* request 404'd.
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/")

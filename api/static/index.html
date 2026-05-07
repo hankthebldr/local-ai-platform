@@ -6,10 +6,12 @@
 <title>ENCLAVE</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js" crossorigin="anonymous"></script>
+<link href="/static/vendor/fonts/fonts.css" rel="stylesheet">
+<script src="/static/vendor/d3.v7.min.js" defer></script>
+<link href="/static/vendor/drawflow.min.css" rel="stylesheet">
+<script src="/static/vendor/dagre.min.js"></script>
+<script src="/static/vendor/drawflow.min.js"></script>
+<script src="/static/vendor/js-yaml.min.js"></script>
 <style>
 /* ── DESIGN TOKENS ──────────────────────────────────────────────── */
 :root {
@@ -19,17 +21,39 @@
   --bg-panel: rgba(20, 20, 20, 0.9);
   --border: #2a2a2a;
   --border-glow: #00CC6618;
-  --cyan: #00CC66;              /* Enclave Terminal Green — primary accent */
-  --cyan-dim: #00CC6660;
-  --cyan-ghost: #00CC6615;
-  --amber: #19AA61;             /* Enclave Secondary Green */
-  --amber-dim: #19AA6160;
-  --green: #00CC66;             /* Enclave Terminal Green — success/status */
-  --green-dim: #00CC6660;
-  --red: #FA582D;               /* Enclave Alert Orange — danger/error */
+
+  /* === Primary accent (Enclave Terminal Green) === */
+  --accent: #00CC66;
+  --accent-dim: #00CC6660;
+  --accent-ghost: #00CC6615;
+
+  /* === Secondary accent (muted green for less-prominent highlights) === */
+  --accent-2: #19AA61;
+  --accent-2-dim: #19AA6160;
+
+  /* === Semantic status === */
+  --success: #00CC66;
+  --success-dim: #00CC6660;
+  --warn: #F5A623;              /* real amber — warnings only */
+  --warn-dim: #F5A62360;
+  --danger: #E54B4B;            /* real red — errors only */
+  --danger-dim: #E54B4B60;
+  --info: #00C0E8;              /* signal cyan — info accents */
+  --info-dim: #00C0E860;
+
+  /* === DEPRECATED aliases — remove after Month-1 token pass === */
+  --cyan: var(--accent);
+  --cyan-dim: var(--accent-dim);
+  --cyan-ghost: var(--accent-ghost);
+  --amber: var(--accent-2);      /* was misnamed: this is green, not amber */
+  --amber-dim: var(--accent-2-dim);
+  --green: var(--success);
+  --green-dim: var(--success-dim);
+  --red: #FA582D;                /* Enclave Alert Orange — legacy; prefer --danger */
   --red-dim: #FA582D60;
-  --purple: #00C0E8;            /* Enclave Signal Cyan — info accent */
-  --purple-dim: #00C0E860;
+  --purple: var(--info);
+  --purple-dim: var(--info-dim);
+
   --text: #e0e0e0;
   --text-dim: #8D8D8D;
   --text-muted: #555555;
@@ -38,12 +62,37 @@
   --glow-cyan: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
   --glow-green: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
   --glow-red: 0 0 12px #FA582D30, 0 0 4px #FA582D20;
-  --glow-amber: 0 0 12px #19AA6130, 0 0 4px #19AA6120;
+  --glow-amber: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
+  --glow-warn: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
 }
 
 /* ── RESET & BASE ───────────────────────────────────────────────── */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html { font-size: 14px; }
+
+/* ── KEYBOARD FOCUS (a11y) ──────────────────────────────────────── */
+:focus { outline: none; }  /* reset default chrome; :focus-visible restores */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* Elements that already indicate focus via border-color — don't double up. */
+.chat-input:focus-visible,
+.model-select:focus-visible,
+.inv-toolbar .search-input:focus-visible,
+.settings-row input:focus-visible,
+.settings-row select:focus-visible { outline: none; }
+
+/* Respect reduced-motion users — disable our ambient/pulse animations. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 body {
   font-family: var(--mono);
   background: var(--bg-deep);
@@ -96,12 +145,14 @@ body::before {
 }
 .logo { display: flex; align-items: center; gap: 16px; }
 .logo-text { display: flex; flex-direction: column; gap: 4px; }
-.logo-hex {
+.logo-mark {
   width: 48px;
   height: 48px;
   flex-shrink: 0;
+  color: var(--accent);             /* Drives currentColor in the nested SVG */
+  filter: drop-shadow(0 0 6px var(--accent-dim));
 }
-.logo-hex svg { width: 100%; height: 100%; }
+.logo-mark svg { width: 100%; height: 100%; display: block; }
 .logo-title {
   font-family: var(--sans);
   font-size: 1.6rem;
@@ -207,14 +258,16 @@ body::before {
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: auto auto;
+  grid-template-rows: minmax(420px, auto) auto;
   gap: 16px;
   margin-bottom: 16px;
 }
-.dashboard-grid .panel-system { grid-column: 1; }
-.dashboard-grid .panel-models { grid-column: 2; }
-.dashboard-grid .panel-perf { grid-column: 3; }
-.dashboard-grid .panel-chat { grid-column: 1 / -1; }
+/* Chat is the primary surface — put it on row 1 spanning all columns.
+   Metrics panels live on row 2. */
+.dashboard-grid .panel-chat   { grid-column: 1 / -1; grid-row: 1; }
+.dashboard-grid .panel-system { grid-column: 1; grid-row: 2; }
+.dashboard-grid .panel-models { grid-column: 2; grid-row: 2; }
+.dashboard-grid .panel-perf   { grid-column: 3; grid-row: 2; }
 
 /* ── STATUS INDICATORS ──────────────────────────────────────────── */
 @keyframes pulse-glow {
@@ -231,7 +284,7 @@ body::before {
 }
 .status-pip.online { background: var(--green); box-shadow: var(--glow-green); }
 .status-pip.offline { background: var(--red); box-shadow: var(--glow-red); animation: none; }
-.status-pip.warn { background: var(--amber); box-shadow: var(--glow-amber); }
+.status-pip.warn { background: var(--warn); box-shadow: var(--glow-warn); }
 
 .metric-row {
   display: flex;
@@ -502,9 +555,14 @@ body::before {
   color: var(--text);
   font-family: var(--mono);
   font-size: 0.82rem;
+  line-height: 1.5;
   padding: 12px 16px;
   outline: none;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  resize: none;
+  min-height: 44px;
+  max-height: 240px;
+  overflow-y: auto;
 }
 .chat-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 8px #00CC6610; }
 .chat-input::placeholder { color: var(--text-muted); }
@@ -622,7 +680,7 @@ body::before {
 }
 .inv-card-badge.installed { color: var(--green); border-color: var(--green-dim); }
 .inv-card-badge.available { color: var(--text-muted); border-color: var(--text-muted); }
-.inv-card-badge.pulling { color: var(--amber); border-color: var(--amber-dim); }
+.inv-card-badge.pulling { color: var(--warn); border-color: var(--warn-dim); }
 
 .inv-card-desc {
   font-size: 0.72rem;
@@ -1038,21 +1096,172 @@ body::before {
 .wf-run-status { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; }
 .wf-run-time { color: var(--text-muted); font-size: 0.65rem; }
 
+/* Role Library (v2 prompt framework) */
+.wf-role-card {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.wf-role-card:hover { border-color: var(--accent-dim); background: #00CC6608; }
+.wf-role-name { color: var(--text); font-weight: 500; font-size: 0.78rem; }
+.wf-role-summary {
+  color: var(--text-dim); font-size: 0.68rem; margin-top: 4px;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.wf-role-id {
+  color: var(--text-muted); font-size: 0.6rem; margin-top: 6px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+
+/* Hook chips on pipeline */
+.wf-step-hooks { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.wf-hook-slot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wf-hook-slot-label {
+  font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted); min-width: 110px;
+}
+.wf-hook-pill {
+  font-size: 0.62rem; padding: 2px 8px;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent); background: var(--accent-ghost);
+  border-radius: 999px; cursor: help;
+}
+.wf-role-chip {
+  display: inline-block; font-size: 0.62rem; padding: 2px 8px;
+  border: 1px solid var(--accent-2-dim); color: var(--accent-2);
+  border-radius: 999px; cursor: pointer; margin-top: 6px;
+}
+.wf-role-chip:hover { border-color: var(--accent-2); background: rgba(25,170,97,0.08); }
+.wf-role-chip.inline { cursor: default; }
+
+/* Attempt / escalation indicators */
+.wf-attempt-badge {
+  font-size: 0.6rem; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--warn-dim); color: var(--warn);
+  margin-left: 8px;
+}
+.wf-escalation {
+  font-size: 0.66rem; color: var(--text-dim);
+  margin-top: 4px; padding-left: 12px; border-left: 2px solid var(--warn-dim);
+}
+.wf-escalation strong { color: var(--text); }
+
+/* Workflow context inspector (seed / workspace / shared) */
+.ctx-inspector {
+  margin-top: 16px; padding: 10px 12px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+}
+.ctx-inspector > summary {
+  cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; list-style: none;
+}
+.ctx-inspector > summary::-webkit-details-marker { display: none; }
+.ctx-inspector > summary::after {
+  content: '▸'; color: var(--text-muted); font-size: 0.75rem;
+  transition: transform 0.15s;
+}
+.ctx-inspector[open] > summary::after { transform: rotate(90deg); }
+.ctx-label {
+  color: var(--accent); font-size: 0.7rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+}
+.ctx-meta {
+  color: var(--text-muted); font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+.ctx-body { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
+.ctx-heading {
+  font-size: 0.62rem; color: var(--text-dim);
+  letter-spacing: 0.15em; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.ctx-sub {
+  color: var(--text-muted); font-size: 0.58rem;
+  letter-spacing: 0.05em; margin-left: 6px; text-transform: none;
+}
+.ctx-json {
+  background: var(--bg);
+  border-left: 2px solid var(--accent-dim);
+  padding: 8px 12px;
+  font-family: var(--mono); font-size: 0.66rem; line-height: 1.55;
+  color: var(--text-dim); white-space: pre-wrap; word-break: break-all;
+  max-height: 220px; overflow-y: auto;
+}
+.ctx-step {
+  margin-bottom: 6px; padding: 6px 10px;
+  background: var(--bg); border-left: 2px solid var(--accent-2-dim);
+}
+.ctx-step > summary {
+  cursor: pointer; font-size: 0.7rem; color: var(--text); list-style: none;
+}
+.ctx-step > summary::-webkit-details-marker { display: none; }
+.ctx-step-keys { color: var(--text-muted); font-size: 0.6rem; margin-left: 8px; }
+.ctx-empty { color: var(--text-muted); font-size: 0.7rem; padding: 4px 0; }
+
 /* ── RESPONSIVE ─────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .dashboard-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
+  .dashboard-grid .panel-chat   { grid-column: 1; grid-row: 1; }
+  .dashboard-grid .panel-system { grid-column: 1; grid-row: 2; }
+  .dashboard-grid .panel-models { grid-column: 1; grid-row: 3; }
+  .dashboard-grid .panel-perf   { grid-column: 1; grid-row: 4; }
+  .inv-grid { grid-template-columns: 1fr 1fr; }
+  .mem-grid { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 800px) {
   .research-layout { grid-template-columns: 1fr; height: auto; }
   .research-left, .research-right { min-height: 300px; }
-}
   .dashboard-grid { grid-template-columns: 1fr; }
-  .dashboard-grid .panel-system,
-  .dashboard-grid .panel-models,
-  .dashboard-grid .panel-perf,
-  .dashboard-grid .panel-chat { grid-column: 1; }
   .header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .inv-grid { grid-template-columns: 1fr; }
   .mem-grid { grid-template-columns: 1fr; }
   .tab-btn { padding: 10px 14px; font-size: 0.65rem; }
 }
+
+/* ── Drawflow Composer ─────────────────────────────────────────── */
+.wf-mode-btn {
+  padding: 4px 14px;
+  font-size: 0.65rem;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.wf-mode-btn.active { background: var(--cyan-ghost); color: var(--cyan); }
+.wf-mode-btn:hover:not(.active) { color: var(--text); }
+
+#drawflow-canvas { width: 100%; height: 100%; min-height: 440px; }
+#drawflow-canvas .drawflow { background: var(--bg-deep); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
+#drawflow-canvas .drawflow .drawflow-node { background: var(--bg); border: 1.5px solid var(--border); border-radius: 6px; min-width: 160px; color: var(--text); font-family: var(--mono); font-size: 0.72rem; }
+#drawflow-canvas .drawflow .drawflow-node.selected { border-color: var(--cyan); box-shadow: var(--glow-cyan); }
+#drawflow-canvas .drawflow .drawflow-node:hover { border-color: var(--cyan-dim); }
+#drawflow-canvas .drawflow .drawflow-node .input, #drawflow-canvas .drawflow .drawflow-node .output { background: var(--border); border: 2px solid var(--text-muted); }
+#drawflow-canvas .drawflow .drawflow-node .input:hover, #drawflow-canvas .drawflow .drawflow-node .output:hover { background: var(--cyan); border-color: var(--cyan); }
+#drawflow-canvas .drawflow .connection .main-path { stroke: var(--text-muted); stroke-width: 2; }
+#drawflow-canvas .drawflow .connection .main-path.selected { stroke: var(--cyan); stroke-width: 3; }
+
+.df-palette { display: flex; flex-direction: column; gap: 4px; padding: 6px; overflow-y: auto; }
+.df-palette-item { padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; cursor: grab; font-size: 0.64rem; font-family: var(--mono); display: flex; align-items: center; gap: 6px; transition: border-color 0.2s; }
+.df-palette-item:hover { border-color: var(--cyan-dim); }
+.df-palette-item:active { cursor: grabbing; }
+.df-palette-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.df-palette-label { flex: 1; }
+.df-palette-role { font-size: 0.5rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.df-config-label { font-size: 0.54rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
+.df-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; background: var(--cyan-ghost); border: 1px solid var(--cyan-dim); font-size: 0.58rem; color: var(--cyan); margin: 2px; border-radius: 2px; }
+.df-tag-remove { cursor: pointer; opacity: 0.6; font-size: 0.7rem; }
+.df-tag-remove:hover { opacity: 1; color: var(--red); }
+.df-gate-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 4px; margin-bottom: 4px; font-size: 0.6rem; }
+.df-gate-row select, .df-gate-row input { font-size: 0.6rem; padding: 3px 6px; }
 </style>
 </head>
 <body>
@@ -1063,16 +1272,20 @@ body::before {
   <!-- HEADER -->
   <div class="header">
     <div class="logo">
-      <div class="logo-hex">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <path d="M50 2 L93 27 L93 73 L50 98 L7 73 L7 27 Z" rx="8" fill="var(--cyan)" opacity="0.9"/>
-          <text x="50" y="42" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">COR</text>
-          <text x="50" y="68" text-anchor="middle" font-family="var(--sans)" font-weight="800" font-size="20" fill="var(--bg-deep)" letter-spacing="1">TEX</text>
+      <div class="logo-mark" aria-label="Enclave logo">
+        <!-- Canonical Enclave mark: nested rectangles (enclosure / containment
+             / layered security). Mirrors assets/logo/enclave-mark.svg and the
+             installer DMG background. Uses currentColor so CSS themes it. -->
+        <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" role="img">
+          <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+          <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+          <rect x="28" y="28" width="24" height="24" rx="2" fill="currentColor" opacity="0.2"/>
+          <rect x="34" y="34" width="12" height="12" rx="1" fill="currentColor" opacity="0.75"/>
         </svg>
       </div>
       <div class="logo-text">
-        <div class="logo-title">LOCAL <span>AI</span> PLATFORM</div>
-        <div class="logo-sub">CORTEX &mdash; Mission Control</div>
+        <div class="logo-title">EN<span>CLAVE</span></div>
+        <div class="logo-sub">Local sovereign AI &mdash; by ohno llc</div>
       </div>
     </div>
     <div class="header-status">
@@ -1082,14 +1295,14 @@ body::before {
   </div>
 
   <!-- TAB NAVIGATION -->
-  <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
-    <button class="tab-btn" onclick="switchTab('inventory')">Models<span class="tab-count" id="inv-count"></span></button>
-    <button class="tab-btn" onclick="switchTab('memory')">Memory<span class="tab-count" id="mem-count"></span></button>
-    <button class="tab-btn" onclick="switchTab('discover')">Discover<span class="tab-count" id="disc-count"></span></button>
-    <button class="tab-btn" onclick="switchTab('research')">Research<span class="tab-count" id="res-count"></span></button>
-    <button class="tab-btn" onclick="switchTab('workflows')">Workflows</button>
-    <button class="tab-btn" data-tab="documents" onclick="switchTab('documents')">
+  <div class="tab-nav" role="tablist">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Dashboard</button>
+    <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
+    <button class="tab-btn" data-tab="memory" onclick="switchTab('memory', this)">Memory<span class="tab-count" id="mem-count"></span></button>
+    <button class="tab-btn" data-tab="discover" onclick="switchTab('discover', this)">Discover<span class="tab-count" id="disc-count"></span></button>
+    <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Research<span class="tab-count" id="res-count"></span></button>
+    <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows', this)">Workflows</button>
+    <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">
       <span>Documents</span>
     </button>
   </div>
@@ -1159,9 +1372,29 @@ body::before {
           <div class="panel-label" style="margin-bottom:0">Chat Interface</div>
           <div style="display:flex;align-items:center;gap:8px">
             <select class="model-select" id="model-select"><option>loading...</option></select>
+            <button class="action-btn" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border)">System</button>
             <button class="action-btn" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border);display:none">EXPORT</button>
           </div>
         </div>
+
+        <!-- System Prompt (collapsible; applies to every turn in this session) -->
+        <div class="system-prompt-row" id="system-prompt-row" style="display:none">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.15em;text-transform:uppercase">System Prompt</label>
+            <select id="sysprompt-role-select" class="model-select" style="min-width:180px;font-size:0.7rem" onchange="applyRoleAsSystemPrompt()">
+              <option value="">— load from role library —</option>
+            </select>
+            <span style="flex:1"></span>
+            <button class="action-btn" onclick="saveSystemPrompt()" style="padding:3px 10px;font-size:0.65rem">Save</button>
+            <button class="action-btn" onclick="clearSystemPrompt()" style="padding:3px 10px;font-size:0.65rem;border-color:var(--border);color:var(--text-dim)">Clear</button>
+          </div>
+          <textarea id="system-prompt" class="chat-input" rows="3" style="min-height:60px;max-height:200px;font-size:0.72rem" placeholder="Define the assistant's persona, tone, and constraints. Applied as role=system on every turn."></textarea>
+          <div style="font-size:0.58rem;color:var(--text-muted);margin-top:4px;letter-spacing:0.1em;text-transform:uppercase">
+            <span id="sysprompt-status">off</span>
+            <span style="margin-left:10px">saved in localStorage</span>
+          </div>
+        </div>
+
         <div class="chat-messages" id="messages">
           <div class="msg system-msg">Select a model and start chatting. All inference runs locally.</div>
         </div>
@@ -1209,9 +1442,9 @@ body::before {
             <span class="toggle-label" id="search-label">Search: OFF</span>
             &#x1F310;
           </button>
-          <input class="chat-input" id="prompt" type="text" placeholder="Enter query..." autocomplete="off" spellcheck="false" />
+          <textarea class="chat-input" id="prompt" rows="1" placeholder="Enter query... (Enter to send, Shift+Enter for newline)" autocomplete="off" spellcheck="false"></textarea>
           <button class="action-btn" onclick="toggleSettings()" title="Search settings" style="padding:0 12px;font-size:1rem;border-color:var(--border)">&#x2699;</button>
-          <button class="send-btn" id="send-btn" onclick="sendMessage()">TRANSMIT</button>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
         </div>
       </div>
     </div>
@@ -1270,6 +1503,16 @@ body::before {
       <input type="text" id="memory-search" placeholder="Search sessions and facts..."
         style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:0.85rem;"
         oninput="searchMemory(this.value)">
+    </div>
+
+    <!-- ── MEMORY LEDGER — INJECTION PREVIEW ───────────────────────── -->
+    <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3 style="color:var(--cyan);font-size:0.9rem;">Injection Preview</h3>
+        <span style="font-size:0.7rem;color:var(--text-dim);">What gets prepended to every chat</span>
+      </div>
+      <pre id="injection-preview" style="margin:0;padding:10px;background:var(--bg-deep);border-radius:4px;color:var(--text);font-size:0.78rem;line-height:1.4;white-space:pre-wrap;max-height:160px;overflow-y:auto;">Loading…</pre>
+      <div id="injection-empty" style="display:none;color:var(--text-muted);font-size:0.78rem;font-style:italic;">No facts enabled — nothing is injected into the system message.</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
@@ -1385,7 +1628,7 @@ body::before {
           <div class="panel-label">Deep Research Mode</div>
           <div class="deep-dive-form">
             <input type="text" id="research-topic" placeholder="Enter research topic or question..." autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')runDeepDive()" />
-            <button class="action-btn pull" id="dive-btn" onclick="runDeepDive()">DIVE</button>
+            <button class="action-btn pull" id="dive-btn" onclick="runDeepDive()">Research</button>
           </div>
           <div class="deep-dive-options">
             <label>Model</label>
@@ -1400,7 +1643,7 @@ body::before {
           <span class="corner-tr"></span><span class="corner-bl"></span>
           <div class="panel-label">Research Results</div>
           <div id="research-output">
-            <div class="research-empty">Enter a topic above and click DIVE to start deep research.<br><br>The model will decompose your topic, search each angle, then synthesize a structured report.</div>
+            <div class="research-empty">Enter a topic above and click Research to start a deep investigation.<br><br>The model will decompose your topic, search each angle, then synthesize a structured report.</div>
           </div>
         </div>
       </div>
@@ -1413,16 +1656,117 @@ body::before {
 
   <!-- TAB: WORKFLOWS -->
   <div class="tab-content" id="tab-workflows">
+    <!-- A2A Integrations panel — advertises this Enclave to remote agents -->
+    <div class="panel" id="a2a-panel" style="margin-bottom:16px;display:none">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">A2A
+        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">agent-to-agent protocol</span>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+        <div style="font-size:0.7rem;color:var(--text-dim);flex:1;min-width:200px">
+          External agents can discover and call this Enclave via Google's A2A protocol.
+          <span id="a2a-skill-count" style="color:var(--cyan)"></span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;font-family:var(--mono);font-size:0.68rem">
+          <span style="color:var(--text-muted)">Agent Card</span>
+          <code id="a2a-card-url" style="background:var(--bg-deep);padding:3px 8px;border-radius:3px;color:var(--cyan);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">…</code>
+          <button class="action-btn" style="padding:2px 8px;font-size:0.65rem" onclick="copyA2ACardUrl()" title="Copy Agent Card URL">Copy</button>
+          <button class="action-btn" style="padding:2px 8px;font-size:0.65rem" onclick="toggleA2ASkills()" title="Toggle skill list">Skills</button>
+        </div>
+      </div>
+      <div id="a2a-skills-list" style="display:none;margin-top:10px;padding:10px;background:var(--bg-deep);border-radius:4px;font-family:var(--mono);font-size:0.7rem;max-height:180px;overflow-y:auto"></div>
+    </div>
+
     <div class="panel" style="margin-bottom:16px">
       <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">Workflow Runner</div>
+      <div class="panel-label">Workflows
+        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">workflows/</span>
+      </div>
       <div class="wf-toolbar">
-        <select id="wf-select" class="model-select" style="min-width:260px">
-          <option value="">-- select workflow --</option>
-        </select>
-        <button class="action-btn" onclick="loadWorkflowDetail()" style="color:var(--cyan);border-color:var(--cyan-dim)">Load</button>
-        <div style="flex:1"></div>
-        <button class="action-btn" onclick="refreshWorkflows()">Refresh</button>
+        <!-- Mode toggle -->
+        <div style="display:flex;border:1px solid var(--border);overflow:hidden;border-radius:3px">
+          <button class="wf-mode-btn active" id="wf-mode-run" onclick="setWfMode('run')">Runner</button>
+          <button class="wf-mode-btn" id="wf-mode-compose" onclick="setWfMode('compose')">Composer</button>
+        </div>
+        <div style="width:1px;background:var(--border);margin:0 8px"></div>
+        <!-- Runner controls -->
+        <div id="wf-runner-controls" style="display:flex;gap:8px;align-items:center;flex:1">
+          <select id="wf-select" class="model-select" style="min-width:260px">
+            <option value="">-- select workflow --</option>
+          </select>
+          <button class="action-btn" onclick="loadWorkflowDetail()" style="color:var(--cyan);border-color:var(--cyan-dim)">Load</button>
+          <div style="flex:1"></div>
+          <button class="action-btn" onclick="refreshWorkflows()">Refresh</button>
+        </div>
+        <!-- Composer controls (hidden by default) -->
+        <div id="wf-composer-controls" style="display:none;gap:8px;align-items:center;flex:1">
+          <span style="font-size:0.6rem;color:var(--text-dim)">Drag steps from the palette onto the canvas</span>
+          <div style="flex:1"></div>
+          <button class="action-btn" onclick="dfImportYaml()">Import YAML</button>
+          <button class="action-btn" onclick="dfAutoLayout()">Auto-Layout</button>
+          <button class="action-btn" onclick="dfExportYaml()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export YAML</button>
+          <button class="action-btn" onclick="dfSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── COMPOSER (hidden until Composer mode selected) ───────── -->
+    <div id="wf-composer" style="display:none;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:140px 1fr 300px;gap:10px;margin-bottom:10px">
+        <!-- LEFT: Node Palette -->
+        <div class="panel" style="overflow-y:auto;max-height:480px">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">Steps</div>
+          <div class="df-palette" id="df-palette"></div>
+        </div>
+        <!-- CENTER: Drawflow Canvas -->
+        <div class="panel" style="min-height:440px;position:relative;padding:0;overflow:hidden">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div id="drawflow-canvas"></div>
+        </div>
+        <!-- RIGHT: Config Panel -->
+        <div class="panel" style="display:flex;flex-direction:column;overflow-y:auto;max-height:480px">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label" id="df-config-title">Config</div>
+          <div id="df-config-panel" style="flex:1;overflow-y:auto;font-size:0.72rem;color:var(--text-dim);padding:0 2px">
+            <div style="padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.64rem">
+              Drag a step from the palette to begin. Click a node to configure it.
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Bottom bar: workflow metadata -->
+      <div class="panel" style="margin-bottom:10px">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+          <div><div class="df-config-label">Workflow ID</div><input type="text" id="df-wf-id" class="chat-input" style="font-size:0.68rem;padding:5px 8px" placeholder="my-workflow" /></div>
+          <div><div class="df-config-label">Name</div><input type="text" id="df-wf-name" class="chat-input" style="font-size:0.68rem;padding:5px 8px" placeholder="My Workflow" /></div>
+          <div><div class="df-config-label">Default Role</div>
+            <select id="df-wf-role" class="model-select" style="font-size:0.68rem;padding:3px 6px">
+              <option value="reasoning">reasoning</option>
+              <option value="coding">coding</option>
+              <option value="fast">fast</option>
+              <option value="general" selected>general</option>
+              <option value="uncensored">uncensored</option>
+            </select>
+          </div>
+          <div><div class="df-config-label">Description</div><input type="text" id="df-wf-desc" class="chat-input" style="font-size:0.68rem;padding:5px 8px" placeholder="What does this workflow do?" /></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="action-btn" onclick="dfExportYaml()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export YAML</button>
+          <button class="action-btn" onclick="dfSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
+          <button class="action-btn" onclick="dfImportYaml()">Import YAML</button>
+          <button class="action-btn" onclick="dfAutoLayout()">Auto-Layout</button>
+          <div style="flex:1"></div>
+          <button class="action-btn" onclick="dfRunWorkflow()" style="color:var(--green);border-color:var(--green-dim)">Run ▶</button>
+        </div>
+      </div>
+      <!-- YAML preview panel (shown after Export) -->
+      <div class="panel" id="df-yaml-panel" style="display:none;margin-bottom:10px">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">Generated YAML</div>
+        <pre id="df-yaml-output" style="font-size:0.6rem;color:var(--text-dim);max-height:280px;overflow:auto;white-space:pre-wrap"></pre>
+        <button class="action-btn" onclick="navigator.clipboard.writeText(document.getElementById('df-yaml-output').textContent)" style="font-size:0.56rem;padding:3px 10px;margin-top:6px">Copy YAML</button>
       </div>
     </div>
 
@@ -1443,7 +1787,7 @@ body::before {
         </div>
 
         <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:8px 28px">EXECUTE</button>
+          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:8px 28px">Run</button>
         </div>
       </div>
 
@@ -1455,6 +1799,16 @@ body::before {
           <div id="wf-results-content"></div>
         </div>
       </div>
+    </div>
+
+    <!-- Role Library (v2 prompt framework) -->
+    <div class="panel" style="margin-bottom:16px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// ROLE LIBRARY
+        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">prompts/roles/</span>
+      </div>
+      <div id="wf-roles-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px"></div>
+      <div id="wf-role-preview" style="display:none;margin-top:14px;padding:12px;background:var(--bg-deep);border-left:2px solid var(--accent-dim);font-family:var(--mono);font-size:0.72rem;line-height:1.6;white-space:pre-wrap;color:var(--text-dim)"></div>
     </div>
 
     <!-- Recent Runs -->
@@ -1513,18 +1867,24 @@ body::before {
       <a href="/v1/models">MODELS</a>
       <a href="/api/info">INFO</a>
     </div>
-    <div class="footer-meta">ENCLAVE v1.0.0 &mdash; by ohno llc</div>
+    <div class="footer-meta">Enclave v0.1.0 &mdash; by ohno llc</div>
   </div>
 
 </div>
 
 <script>
 /* ── TAB SWITCHING ─────────────────────────────────────────────── */
-function switchTab(name) {
+function switchTab(name, el) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  event.currentTarget.classList.add('active');
+  // Prefer explicitly-passed element; fall back to data-tab, then to onclick-string match.
+  const btn = el
+    || document.querySelector('.tab-btn[data-tab="' + name + '"]')
+    || Array.from(document.querySelectorAll('.tab-btn')).find(
+      b => (b.getAttribute('onclick') || '').indexOf("'" + name + "'") !== -1
+    );
+  if (btn) btn.classList.add('active');
 
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
   if (name === 'memory') { loadMemory(); loadMemoryTab(); }
@@ -1761,6 +2121,90 @@ function updateExportBtn() {
   if (chatMetadata.length > 0) btn.style.display = 'inline-block';
 }
 
+// ── SYSTEM PROMPT (applied to every chat turn) ─────────────────────────
+const SYSPROMPT_KEY = 'enclave.chat.systemPrompt';
+
+function toggleSystemPrompt() {
+  const row = document.getElementById('system-prompt-row');
+  const show = row.style.display === 'none';
+  row.style.display = show ? 'block' : 'none';
+  if (show) populateSystemPromptRoles();
+}
+
+async function populateSystemPromptRoles() {
+  const sel = document.getElementById('sysprompt-role-select');
+  if (!sel || sel.dataset.loaded === '1') return;
+  try {
+    const r = await fetch('/api/roles');
+    const roles = await r.json();
+    for (const role of roles) {
+      const opt = document.createElement('option');
+      opt.value = role.id;
+      opt.textContent = role.name;
+      sel.appendChild(opt);
+    }
+    sel.dataset.loaded = '1';
+  } catch (e) {
+    console.warn('Failed to load roles for system prompt:', e);
+  }
+}
+
+async function applyRoleAsSystemPrompt() {
+  const sel = document.getElementById('sysprompt-role-select');
+  const id = sel.value;
+  if (!id) return;
+  try {
+    const r = await fetch(`/api/roles/${encodeURIComponent(id)}`);
+    if (!r.ok) return;
+    const role = await r.json();
+    document.getElementById('system-prompt').value = role.content;
+    saveSystemPrompt();
+  } catch (e) { console.warn(e); }
+}
+
+function saveSystemPrompt() {
+  const text = document.getElementById('system-prompt').value;
+  try { localStorage.setItem(SYSPROMPT_KEY, text); } catch (_) {}
+  updateSystemPromptStatus();
+}
+
+function clearSystemPrompt() {
+  document.getElementById('system-prompt').value = '';
+  try { localStorage.removeItem(SYSPROMPT_KEY); } catch (_) {}
+  updateSystemPromptStatus();
+}
+
+function loadSystemPrompt() {
+  try {
+    const saved = localStorage.getItem(SYSPROMPT_KEY);
+    if (saved) document.getElementById('system-prompt').value = saved;
+  } catch (_) {}
+  updateSystemPromptStatus();
+}
+
+function updateSystemPromptStatus() {
+  const ta = document.getElementById('system-prompt');
+  const status = document.getElementById('sysprompt-status');
+  const btn = document.getElementById('sysprompt-btn');
+  const active = !!(ta && ta.value.trim());
+  if (status) status.textContent = active ? `active · ${ta.value.length} chars` : 'off';
+  if (btn) btn.style.borderColor = active ? 'var(--accent-dim)' : 'var(--border)';
+  if (btn) btn.style.color = active ? 'var(--accent)' : '';
+}
+
+function getSystemPromptMessage() {
+  const ta = document.getElementById('system-prompt');
+  const text = ta && ta.value.trim();
+  return text ? { role: 'system', content: text } : null;
+}
+
+// Load on first paint; keep status synced as the user edits
+document.addEventListener('DOMContentLoaded', () => {
+  loadSystemPrompt();
+  const ta = document.getElementById('system-prompt');
+  if (ta) ta.addEventListener('input', updateSystemPromptStatus);
+});
+
 async function sendMessage() {
   const input = document.getElementById('prompt');
   const text = input.value.trim();
@@ -1777,8 +2221,9 @@ async function sendMessage() {
   const searchBadge = webSearchEnabled ? ' <span style="color:var(--amber);font-size:0.6rem;vertical-align:middle">&#x1F310; SEARCH</span>' : '';
   messages.innerHTML += `<div class="msg user">${esc(text)}${searchBadge}</div>`;
   input.value = '';
+  input.style.height = 'auto';
   btn.disabled = true;
-  btn.textContent = webSearchEnabled ? 'SEARCHING...' : 'SENDING...';
+  btn.textContent = webSearchEnabled ? 'Searching…' : 'Sending…';
 
   const typingId = 'typing-' + Date.now();
   const typingLabel = webSearchEnabled ? 'searching & generating' : 'generating';
@@ -1786,12 +2231,16 @@ async function sendMessage() {
   messages.scrollTop = messages.scrollHeight;
 
   try {
+    // Prepend the saved system prompt (if any) — OpenAI-style role=system turn.
+    const sysMsg = getSystemPromptMessage();
+    const outboundMessages = sysMsg ? [sysMsg, ...chatHistory] : chatHistory;
+
     const r = await fetch('/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        messages: chatHistory,
+        messages: outboundMessages,
         max_tokens: 1024,
         web_search: webSearchEnabled,
       })
@@ -1829,7 +2278,7 @@ async function sendMessage() {
   }
 
   btn.disabled = false;
-  btn.textContent = 'TRANSMIT';
+  btn.textContent = 'Send';
   messages.scrollTop = messages.scrollHeight;
   updateExportBtn();
 }
@@ -1919,9 +2368,24 @@ async function exportSession() {
   setTimeout(() => { btn.textContent = 'EXPORT'; }, 1500);
 }
 
-document.getElementById('prompt').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
+(function wireChatInput() {
+  const ta = document.getElementById('prompt');
+  if (!ta) return;
+  const autoGrow = () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 240) + 'px';
+  };
+  ta.addEventListener('input', autoGrow);
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    } else if (e.key === 'Escape') {
+      ta.value = '';
+      autoGrow();
+    }
+  });
+})();
 
 /* ══════════════════════════════════════════════════════════════════
    INVENTORY TAB
@@ -2566,7 +3030,7 @@ async function runDeepDive() {
   const out = document.getElementById('research-output');
   const btn = document.getElementById('dive-btn');
   btn.disabled = true;
-  btn.textContent = 'RESEARCHING...';
+  btn.textContent = 'Researching…';
 
   // Show progress UI
   out.innerHTML = `
@@ -2609,7 +3073,7 @@ async function runDeepDive() {
     out.innerHTML = `<div class="research-empty" style="color:var(--red)">Research failed: ${esc(String(e))}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'DIVE';
+    btn.textContent = 'Research';
   }
 }
 
@@ -2739,6 +3203,47 @@ async function loadWorkflowsTab() {
     await loadRecentRuns();
     workflowsLoaded = true;
   }
+  // Roles are cheap to reload; refresh each time the tab is opened so edits
+  // to prompts/roles/ show up without a page reload.
+  await loadRoles();
+}
+
+async function loadRoles() {
+  const container = document.getElementById('wf-roles-list');
+  if (!container) return;
+  try {
+    const resp = await fetch('/api/roles');
+    const roles = await resp.json();
+    if (!Array.isArray(roles) || roles.length === 0) {
+      container.innerHTML = '<div class="model-empty">No roles defined in prompts/roles/</div>';
+      return;
+    }
+    container.innerHTML = roles.map(r => `
+      <div class="wf-role-card" onclick="previewRole('${esc(r.id)}')">
+        <div class="wf-role-name">${esc(r.name)}</div>
+        <div class="wf-role-summary">${esc(r.summary)}</div>
+        <div class="wf-role-id">${esc(r.id)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="model-empty">Failed to load roles: ${esc(e.message)}</div>`;
+  }
+}
+
+async function previewRole(id) {
+  const box = document.getElementById('wf-role-preview');
+  if (!box) return;
+  try {
+    const resp = await fetch(`/api/roles/${encodeURIComponent(id)}`);
+    if (!resp.ok) { box.style.display = 'none'; return; }
+    const r = await resp.json();
+    box.textContent = r.content;
+    box.style.display = 'block';
+    box.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  } catch (e) {
+    box.textContent = 'Preview failed: ' + e.message;
+    box.style.display = 'block';
+  }
 }
 
 async function refreshWorkflows() {
@@ -2759,6 +3264,64 @@ async function refreshWorkflows() {
   } catch (e) {
     console.error('Failed to load workflows:', e);
   }
+  // Refresh A2A panel alongside workflows: every YAML change is also an
+  // Agent Card change, so the two are inherently linked.
+  loadA2ACard();
+}
+
+// ── A2A Integrations Panel ─────────────────────────────────────────────
+// Surfaces the protocol surface from PR #18: shows the Agent Card URL
+// and the advertised skills (chat + workflow:<id>...). The panel only
+// renders if /.well-known/agent.json responds — older builds without
+// A2A wired up keep the workflows tab clean.
+
+async function loadA2ACard() {
+  const panel = document.getElementById('a2a-panel');
+  if (!panel) return;
+  try {
+    const resp = await fetch('/.well-known/agent.json');
+    if (!resp.ok) { panel.style.display = 'none'; return; }
+    const card = await resp.json();
+    panel.style.display = '';
+
+    // Resolve the absolute URL the way an external agent would see it.
+    const cardUrl = new URL('/.well-known/agent.json', window.location.origin).toString();
+    document.getElementById('a2a-card-url').textContent = cardUrl;
+    document.getElementById('a2a-card-url').dataset.url = cardUrl;
+
+    const skills = card.skills || [];
+    document.getElementById('a2a-skill-count').textContent =
+      `${skills.length} skill${skills.length === 1 ? '' : 's'} advertised`;
+
+    document.getElementById('a2a-skills-list').innerHTML = skills.map(s => `
+      <div style="padding:4px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--cyan)">${esc(s.id)}</span>
+        <span style="color:var(--text-muted)">·</span>
+        <span style="color:var(--text)">${esc(s.name || '')}</span>
+        ${s.description ? `<div style="color:var(--text-dim);font-size:0.65rem;margin-top:2px">${esc(s.description)}</div>` : ''}
+      </div>
+    `).join('') || '<div style="color:var(--text-muted)">No skills advertised.</div>';
+  } catch (e) {
+    // Don't surface a console error if the Agent Card endpoint just doesn't exist.
+    panel.style.display = 'none';
+  }
+}
+
+function copyA2ACardUrl() {
+  const el = document.getElementById('a2a-card-url');
+  const url = el.dataset.url || el.textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => {
+      const orig = el.textContent;
+      el.textContent = 'copied!';
+      setTimeout(() => { el.textContent = orig; }, 900);
+    });
+  }
+}
+
+function toggleA2ASkills() {
+  const el = document.getElementById('a2a-skills-list');
+  el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
 async function loadWorkflowDetail() {
@@ -2781,17 +3344,68 @@ async function loadWorkflowDetail() {
     document.getElementById('wf-detail').style.display = 'block';
     document.getElementById('wf-results').style.display = 'none';
 
-    // We need to get the steps - use the validate endpoint with inline definition
-    // For now, render based on what we know
-    currentWorkflowDef = { id: opt.dataset.id, name: opt.textContent, steps: wf.steps };
+    // Fetch the full workflow definition (with hooks + prompt blocks).
+    const defResp2 = await fetch(`/api/workflows/${encodeURIComponent(opt.dataset.id)}`);
+    const defn = defResp2.ok ? await defResp2.json() : null;
+    currentWorkflowDef = defn || { id: opt.dataset.id, name: opt.textContent, steps: [] };
 
-    // Build pipeline visualization placeholder
+    // Build static pipeline visualization showing declared hooks + role_ref.
     const pipeline = document.getElementById('wf-pipeline');
-    pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
+    if (defn && Array.isArray(defn.steps) && defn.steps.length > 0) {
+      pipeline.innerHTML = defn.steps.map((step, i) =>
+        (i > 0 ? '<div class="wf-arrow">&rarr;</div>' : '') +
+        renderStepBox(step, 'pending', null)
+      ).join('');
+    } else {
+      pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
+    }
 
   } catch (e) {
     console.error('Failed to load workflow:', e);
   }
+}
+
+function renderStepBox(step, status, result) {
+  // Declared hooks (from WorkflowDefinition). Live hook execution status
+  // will be added in a follow-up (requires engine instrumentation).
+  const hooks = step.hooks || {};
+  const slots = ['before_step', 'transform_prompt', 'validate_output', 'after_step', 'on_failure'];
+  const hookBlocks = slots.map(slot => {
+    const entries = (hooks[slot] || []);
+    if (!entries.length) return '';
+    const pills = entries.map(h =>
+      `<span class="wf-hook-pill" title="${esc(JSON.stringify(h.config || {}))}">${esc(h.name)}</span>`
+    ).join('');
+    return `<div class="wf-hook-slot">
+      <span class="wf-hook-slot-label">${slot.replace('_', ' ')}</span>${pills}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  // Role chip: prefer v2 prompt.role_ref (clickable), fallback to v1 role.
+  const roleRef = step.prompt && step.prompt.role_ref;
+  const roleChip = roleRef
+    ? `<span class="wf-role-chip" onclick="previewRole('${esc(roleRef)}')">role: ${esc(roleRef)}</span>`
+    : (step.role
+      ? `<span class="wf-role-chip inline" title="v1 role alias">role: ${esc(step.role)}</span>`
+      : '');
+
+  const modelUsed = (result && result.model_used) ? result.model_used : '';
+  const retries = (result && result.retries) ? result.retries : 0;
+  const attemptBadge = retries > 0
+    ? `<span class="wf-attempt-badge">${retries + 1} attempts</span>`
+    : '';
+
+  return `
+    <div class="wf-step">
+      <div class="wf-step-box ${status || 'pending'}">
+        <div class="wf-step-name">${esc(step.id || step.step_id)}${attemptBadge}</div>
+        <div class="wf-step-role">${esc(modelUsed)}</div>
+        ${roleChip}
+        <div class="wf-step-status ${status || 'pending'}">${status || 'pending'}</div>
+        ${hookBlocks ? `<div class="wf-step-hooks">${hookBlocks}</div>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 async function runWorkflow() {
@@ -2809,7 +3423,7 @@ async function runWorkflow() {
   } catch (e) {
     alert('Invalid JSON in seed data');
     btn.disabled = false;
-    btn.textContent = 'EXECUTE';
+    btn.textContent = 'Run';
     return;
   }
 
@@ -2829,23 +3443,20 @@ async function runWorkflow() {
     document.getElementById('wf-results').style.display = 'block';
     const content = document.getElementById('wf-results-content');
 
-    // Build pipeline visualization with results
+    // Build pipeline visualization with results. Prefer the declared-step
+    // metadata (hooks, role_ref) from currentWorkflowDef so each box still
+    // shows its hook chain + role chip even when execution is mid-flight.
     const pipeline = document.getElementById('wf-pipeline');
+    const defSteps = (currentWorkflowDef && currentWorkflowDef.steps) || [];
+    const byId = new Map(defSteps.map(s => [s.id, s]));
     let pipeHtml = '';
-    (run.step_results || []).forEach((step, i) => {
+    (run.step_results || []).forEach((res, i) => {
       if (i > 0) {
-        const arrowClass = step.status === 'completed' ? 'done' : (step.status === 'running' ? 'active' : '');
+        const arrowClass = res.status === 'completed' ? 'done' : (res.status === 'running' ? 'active' : '');
         pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
       }
-      pipeHtml += `
-        <div class="wf-step">
-          <div class="wf-step-box ${step.status}">
-            <div class="wf-step-name">${esc(step.step_id)}</div>
-            <div class="wf-step-role">${esc(step.model_used || '')}</div>
-            <div class="wf-step-status ${step.status}">${step.status}</div>
-          </div>
-        </div>
-      `;
+      const step = byId.get(res.step_id) || { id: res.step_id, hooks: {} };
+      pipeHtml += renderStepBox(step, res.status, res);
     });
     pipeline.innerHTML = pipeHtml;
 
@@ -2876,6 +3487,9 @@ async function runWorkflow() {
       html += `<div style="margin-top:10px;padding:10px;background:var(--red-dim);border:1px solid var(--red);font-size:0.72rem;color:var(--text)">${esc(run.error)}</div>`;
     }
 
+    // Context inspector — seed / workspace / shared
+    html += renderContextInspector(run.context);
+
     content.innerHTML = html;
 
     // Refresh recent runs
@@ -2887,7 +3501,7 @@ async function runWorkflow() {
       `<div style="color:var(--red);font-size:0.75rem">Execution failed: ${esc(String(e))}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'EXECUTE';
+    btn.textContent = 'Run';
   }
 }
 
@@ -2903,19 +3517,53 @@ async function loadRecentRuns() {
     }
 
     container.innerHTML = runs.map(r => {
-      const statusColor = r.status === 'completed' ? 'var(--green)' : 'var(--red)';
+      // status color: green=done, red=failed, amber=running (likely a
+      // crashed run since we only ever read persisted state, never live)
+      const statusColor = r.status === 'completed' ? 'var(--green)'
+                        : r.status === 'running' ? 'var(--amber)'
+                        : 'var(--red)';
       const time = r.started_at ? new Date(r.started_at).toLocaleString() : '-';
+      // Resume is offered only for runs left in "running" — those are
+      // crashed mid-flight and have a persisted checkpoint to pick up
+      // from. Terminal runs (completed/failed/canceled) don't show it
+      // because resume() is a no-op for them.
+      const resumeBtn = r.status === 'running'
+        ? `<button class="action-btn" style="padding:2px 8px;font-size:0.65rem;color:var(--amber);border-color:var(--amber);"
+                   onclick="event.stopPropagation();resumeRun('${esc(r.run_id)}', this)"
+                   title="Resume from the last checkpointed step">Resume</button>`
+        : '';
       return `
         <div class="wf-run-item" onclick="viewRun('${esc(r.run_id)}')">
           <span class="wf-run-wf">${esc(r.workflow_id)}</span>
           <span class="wf-run-status" style="color:${statusColor}">${r.status}</span>
           <span class="wf-run-id">${(r.run_id || '').slice(0, 8)}...</span>
           <span class="wf-run-time">${time}</span>
+          ${resumeBtn}
         </div>
       `;
     }).join('');
   } catch (e) {
     console.error('Failed to load runs:', e);
+  }
+}
+
+async function resumeRun(runId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Resuming...'; }
+  try {
+    const resp = await fetch(`/api/workflows/runs/${runId}/resume`, {method: 'POST'});
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    const run = await resp.json();
+    // Refresh the list to reflect the new terminal status, then open the
+    // detail panel so the operator sees what happened.
+    await loadRecentRuns();
+    viewRun(run.run_id);
+  } catch (e) {
+    console.error('Resume failed:', e);
+    alert('Resume failed: ' + e.message);
+    loadRecentRuns();
   }
 }
 
@@ -2930,23 +3578,28 @@ async function viewRun(runId) {
     document.getElementById('wf-detail-name').textContent = run.workflow_id;
     document.getElementById('wf-detail-desc').textContent = `Run: ${runId}`;
 
-    // Build pipeline from step results
+    // Build pipeline from step results. Fetch full definition so hook chips
+    // + role chips appear on historical runs too (requires engine workflow
+    // to still exist on disk — otherwise we fall back to step_results only).
     const pipeline = document.getElementById('wf-pipeline');
+    let defSteps = [];
+    try {
+      const dResp = await fetch(`/api/workflows/${encodeURIComponent(run.workflow_id)}`);
+      if (dResp.ok) {
+        const d = await dResp.json();
+        defSteps = d.steps || [];
+        currentWorkflowDef = d;
+      }
+    } catch (_) { /* fallback below */ }
+    const byId = new Map(defSteps.map(s => [s.id, s]));
     let pipeHtml = '';
-    (run.step_results || []).forEach((step, i) => {
+    (run.step_results || []).forEach((res, i) => {
       if (i > 0) {
-        const arrowClass = step.status === 'completed' ? 'done' : '';
+        const arrowClass = res.status === 'completed' ? 'done' : '';
         pipeHtml += `<div class="wf-arrow ${arrowClass}">&rarr;</div>`;
       }
-      pipeHtml += `
-        <div class="wf-step">
-          <div class="wf-step-box ${step.status}">
-            <div class="wf-step-name">${esc(step.step_id)}</div>
-            <div class="wf-step-role">${esc(step.model_used || '')}</div>
-            <div class="wf-step-status ${step.status}">${step.status}</div>
-          </div>
-        </div>
-      `;
+      const step = byId.get(res.step_id) || { id: res.step_id, hooks: {} };
+      pipeHtml += renderStepBox(step, res.status, res);
     });
     pipeline.innerHTML = pipeHtml;
 
@@ -2966,10 +3619,58 @@ async function viewRun(runId) {
         </div>
       `;
     });
+
+    html += renderContextInspector(run.context);
+
     content.innerHTML = html;
   } catch (e) {
     console.error('Failed to load run:', e);
   }
+}
+
+/**
+ * Render the three-layer workflow context as a collapsible inspector.
+ * Closes the "context-store has no UI" P1 gap from the 2026-04-23 audit.
+ */
+function renderContextInspector(ctx) {
+  if (!ctx || typeof ctx !== 'object') return '';
+  const seed = ctx.seed || {};
+  const workspace = ctx.workspace || {};
+  const shared = ctx.shared || {};
+  const hasData = Object.keys(seed).length + Object.keys(workspace).length + Object.keys(shared).length > 0;
+  if (!hasData) return '';
+
+  const workspaceHtml = Object.keys(workspace).length === 0
+    ? '<div class="ctx-empty">—</div>'
+    : Object.entries(workspace).map(([stepId, outputs]) => `
+        <details class="ctx-step">
+          <summary>${esc(stepId)} <span class="ctx-step-keys">(${Object.keys(outputs || {}).length} outputs)</span></summary>
+          <pre class="ctx-json">${esc(JSON.stringify(outputs, null, 2))}</pre>
+        </details>
+      `).join('');
+
+  return `
+    <details class="ctx-inspector">
+      <summary>
+        <span class="ctx-label">// WORKFLOW CONTEXT</span>
+        <span class="ctx-meta">seed: ${Object.keys(seed).length} · workspace: ${Object.keys(workspace).length} steps · shared: ${Object.keys(shared).length}</span>
+      </summary>
+      <div class="ctx-body">
+        <div class="ctx-section">
+          <div class="ctx-heading">SEED <span class="ctx-sub">immutable user input</span></div>
+          <pre class="ctx-json">${esc(JSON.stringify(seed, null, 2) || '{}')}</pre>
+        </div>
+        <div class="ctx-section">
+          <div class="ctx-heading">WORKSPACE <span class="ctx-sub">per-step outputs</span></div>
+          ${workspaceHtml}
+        </div>
+        <div class="ctx-section">
+          <div class="ctx-heading">SHARED <span class="ctx-sub">cross-cutting state</span></div>
+          <pre class="ctx-json">${esc(JSON.stringify(shared, null, 2) || '{}')}</pre>
+        </div>
+      </div>
+    </details>
+  `;
 }
 
 /* ── INIT ────────────────────────────────────────────────────────── */
@@ -2981,8 +3682,26 @@ setInterval(loadStatus, 10000);
 async function loadMemoryTab() {
   loadSessions();
   loadFacts();
+  loadInjectionPreview();
   loadMemoryStats();
   loadProfiles();
+}
+
+async function loadInjectionPreview() {
+  try {
+    const r = await fetch('/api/memory/injection-preview');
+    const data = await r.json();
+    const pre = document.getElementById('injection-preview');
+    const empty = document.getElementById('injection-empty');
+    if (!data.injection_text) {
+      pre.style.display = 'none';
+      empty.style.display = '';
+    } else {
+      pre.style.display = '';
+      empty.style.display = 'none';
+      pre.textContent = data.injection_text;
+    }
+  } catch(e) { console.error('Failed to load injection preview:', e); }
 }
 
 async function loadSessions() {
@@ -3048,18 +3767,78 @@ async function loadFacts() {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No pinned facts. Add one above.</div>';
       return;
     }
-    el.innerHTML = facts.map(f => `
-      <div style="padding:8px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
-        <div>
-          <div style="font-size:0.85rem;color:var(--text);">${esc(f.content)}</div>
+    // Each fact gets a toggle + click-to-edit on the content. Disabled
+    // facts are dimmed and excluded from the injection preview.
+    el.innerHTML = facts.map(f => {
+      const enabled = f.enabled !== false;
+      const dim = enabled ? '' : 'opacity:0.45;';
+      return `
+      <div style="padding:8px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;gap:8px;${dim}">
+        <div style="flex:1;min-width:0;">
+          <div class="fact-content" id="fact-content-${esc(f.id)}"
+               style="font-size:0.85rem;color:var(--text);cursor:text;word-wrap:break-word;"
+               onclick="editFact('${esc(f.id)}', this)"
+               title="Click to edit">${esc(f.content)}</div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">
             ${(f.tags||[]).map(t => '<span style="color:var(--cyan);">#'+esc(t)+'</span>').join(' ')}
           </div>
         </div>
-        <button onclick="deleteFact('${esc(f.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          <button onclick="toggleFact('${esc(f.id)}', ${enabled})"
+                  title="${enabled ? 'Disable (parks the fact, won\\'t inject)' : 'Enable (resume injection)'}"
+                  style="background:none;border:1px solid var(--border);color:${enabled ? 'var(--cyan)' : 'var(--text-muted)'};cursor:pointer;font-size:0.7rem;padding:2px 8px;border-radius:3px;">
+            ${enabled ? 'on' : 'off'}
+          </button>
+          <button onclick="deleteFact('${esc(f.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+        </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } catch(e) { console.error('Failed to load facts:', e); }
+}
+
+async function toggleFact(id, currentlyEnabled) {
+  try {
+    await fetch('/api/memory/facts/' + id, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: !currentlyEnabled}),
+    });
+    loadFacts();
+    loadInjectionPreview();
+  } catch(e) { console.error('Toggle failed:', e); }
+}
+
+async function editFact(id, contentEl) {
+  // Replace the content div with an inline textarea on click.
+  if (contentEl.querySelector('textarea')) return;  // already editing
+  const original = contentEl.textContent;
+  const ta = document.createElement('textarea');
+  ta.value = original;
+  ta.style.cssText = 'width:100%;min-height:40px;background:var(--bg-deep);color:var(--text);border:1px solid var(--cyan);border-radius:3px;padding:4px;font:inherit;';
+  contentEl.innerHTML = '';
+  contentEl.appendChild(ta);
+  ta.focus();
+  ta.select();
+
+  const commit = async () => {
+    const next = ta.value.trim();
+    if (!next || next === original) { loadFacts(); return; }
+    try {
+      await fetch('/api/memory/facts/' + id, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({content: next}),
+      });
+      loadFacts();
+      loadInjectionPreview();
+    } catch(e) { console.error('Edit failed:', e); loadFacts(); }
+  };
+  ta.addEventListener('blur', commit, {once: true});
+  ta.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); ta.blur(); }
+    if (ev.key === 'Escape') { loadFacts(); }
+  });
 }
 
 async function addFact() {
@@ -3073,12 +3852,14 @@ async function addFact() {
   });
   input.value = '';
   loadFacts();
+  loadInjectionPreview();
   loadMemoryStats();
 }
 
 async function deleteFact(id) {
   await fetch('/api/memory/facts/' + id, {method: 'DELETE'});
   loadFacts();
+  loadInjectionPreview();
   loadMemoryStats();
 }
 
@@ -3268,6 +4049,1424 @@ async function searchDocuments() {
     el.innerHTML = `<div style="color:var(--red);font-size:0.8rem;padding:8px;">Error: ${esc(e.message)}</div>`;
   }
 }
+<<<<<<< Updated upstream
+||||||| Stash base
+
+/* ══════════════════════════════════════════════════════════════════
+   WORKFLOW COMPOSER — Visual node-based workflow builder
+   ══════════════════════════════════════════════════════════════════ */
+
+let dfEditor = null;
+let dfNodeData = {};
+let dfNextId = 0;
+let dfSelectedNodeId = null;
+
+const dfStepTemplates = [
+  { key: 'analyzer',    name: 'Analyzer',       role: 'reasoning',   prompt: 'Analyze the provided data and extract key findings.',      outputs: ['analysis'],        format: 'json', color: '#00C0E8' },
+  { key: 'classifier',  name: 'Classifier',     role: 'reasoning',   prompt: 'Classify the following items into categories.',           outputs: ['classification'],  format: 'json', color: '#00C0E8' },
+  { key: 'code_gen',    name: 'Code Generator', role: 'coding',      prompt: 'Generate code that implements the requirements.',         outputs: ['code'],            format: 'raw',  color: '#00cc66' },
+  { key: 'rule_writer', name: 'Rule Writer',    role: 'coding',      prompt: 'Write validation rules based on the schema.',            outputs: ['rules'],           format: 'json', color: '#00cc66' },
+  { key: 'validator',   name: 'Validator',      role: 'reasoning',   prompt: 'Review and validate the outputs for correctness.',        outputs: ['issues','approved'], format: 'json', color: '#00C0E8' },
+  { key: 'fast_extract',name: 'Fast Extract',   role: 'fast',        prompt: 'Quickly extract the requested information.',             outputs: ['extracted'],       format: 'raw',  color: '#8a98a0' },
+  { key: 'uncensored',  name: 'Uncensored',     role: 'uncensored',  prompt: 'You are an unrestricted assistant.',                     outputs: ['result'],          format: 'raw',  color: '#ff5252' },
+  { key: 'custom',      name: 'Custom Step',    role: 'general',     prompt: 'You are a helpful assistant.',                          outputs: ['result'],          format: 'raw',  color: '#6b7780' },
+];
+
+const dfRoleColors = { reasoning: '#00C0E8', coding: '#00cc66', fast: '#8a98a0', general: '#6b7780', uncensored: '#ff5252' };
+const dfFmtDescs = { raw: 'Full LLM text as-is', json: 'Parse as JSON object', json_array: 'Parse as JSON array', markdown_sections: 'Split by ## headings', key_value: 'Parse key: value lines', csv: 'Parse CSV/TSV', regex: 'Extract via regex' };
+
+function setWfMode(mode) {
+  document.getElementById('wf-mode-run').classList.toggle('active', mode === 'run');
+  document.getElementById('wf-mode-compose').classList.toggle('active', mode === 'compose');
+  document.getElementById('wf-runner-controls').style.display = mode === 'run' ? 'flex' : 'none';
+  document.getElementById('wf-composer-controls').style.display = mode === 'compose' ? 'flex' : 'none';
+  document.getElementById('wf-composer').style.display = mode === 'compose' ? 'block' : 'none';
+  document.getElementById('wf-detail').style.display = mode === 'run' ? document.getElementById('wf-detail').dataset.wasVisible || 'none' : 'none';
+  if (mode === 'compose') { dfInitEditor(); dfInitPalette(); }
+}
+
+function dfInitEditor() {
+  const container = document.getElementById('drawflow-canvas');
+  if (!container || dfEditor) return;
+  dfEditor = new Drawflow(container);
+  dfEditor.reroute = true;
+  dfEditor.reroute_fix_curvature = true;
+  dfEditor.start();
+  dfEditor.on('nodeSelected', (id) => { dfSelectedNodeId = id; dfRenderConfigPanel(id); });
+  dfEditor.on('nodeUnselected', () => { dfSelectedNodeId = null; dfClearConfigPanel(); });
+  dfEditor.on('nodeRemoved', (id) => { delete dfNodeData[id]; if (dfSelectedNodeId === id) dfSelectedNodeId = null; dfClearConfigPanel(); });
+  dfEditor.on('connectionCreated', (conn) => dfOnConnectionCreated(conn));
+  dfEditor.on('connectionRemoved', (conn) => dfOnConnectionRemoved(conn));
+
+  container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+  container.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const key = e.dataTransfer.getData('application/df-template');
+    if (!key) return;
+    const rect = container.getBoundingClientRect();
+    const canvasX = (e.clientX - rect.left - dfEditor.precanvas.getBoundingClientRect().left + rect.left);
+    const canvasY = (e.clientY - rect.top  - dfEditor.precanvas.getBoundingClientRect().top  + rect.top);
+    dfAddNodeFromTemplate(key, canvasX, canvasY);
+  });
+}
+
+function dfInitPalette() {
+  const palette = document.getElementById('df-palette');
+  if (!palette || palette.dataset.initialized) return;
+  palette.dataset.initialized = '1';
+  palette.innerHTML = '';
+  dfStepTemplates.forEach(tmpl => {
+    const item = document.createElement('div');
+    item.className = 'df-palette-item';
+    item.draggable = true;
+    item.innerHTML = `<span class="df-palette-dot" style="background:${tmpl.color}"></span><span class="df-palette-label">${esc(tmpl.name)}</span><span class="df-palette-role">${esc(tmpl.role)}</span>`;
+    item.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/df-template', tmpl.key); e.dataTransfer.effectAllowed = 'move'; });
+    palette.appendChild(item);
+  });
+}
+
+function dfAddNodeFromTemplate(templateKey, x, y) {
+  const tmpl = dfStepTemplates.find(t => t.key === templateKey);
+  if (!tmpl) return;
+  const data = { id: templateKey + '_' + (++dfNextId), name: tmpl.name, role: tmpl.role, system_prompt: tmpl.prompt, outputs: [...tmpl.outputs], output_format: tmpl.format, quality_gates: [], inputs: [] };
+  const nodeId = dfEditor.addNode(data.id, 1, 1, x, y, data.id, {}, dfNodeHtml(data));
+  dfNodeData[nodeId] = data;
+  dfSelectedNodeId = nodeId;
+  dfRenderConfigPanel(nodeId);
+  return nodeId;
+}
+
+function dfNodeHtml(data) {
+  const color = dfRoleColors[data.role] || '#6b7780';
+  const outputTags = data.outputs.map(o => `<span style="color:var(--cyan);font-size:0.52rem;background:rgba(0,192,232,0.1);padding:1px 4px;border-radius:2px">${esc(o)}</span>`).join(' ');
+  const gateLabel = (data.quality_gates && data.quality_gates.length) ? `<span style="font-size:0.48rem;color:var(--amber);margin-left:4px">[${data.quality_gates.length}G]</span>` : '';
+  return `<div style="border-top:3px solid ${color};padding:0"><div style="padding:6px 10px 4px;font-size:0.68rem;font-weight:600;color:var(--text);display:flex;align-items:center;gap:4px"><span style="color:${color};font-size:0.5rem">&#9679;</span>${esc(data.name)}${gateLabel}</div><div style="padding:2px 10px 6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.5rem;text-transform:uppercase;letter-spacing:0.08em;color:${color}">${esc(data.role)}</span><span style="font-size:0.48rem;color:var(--text-muted)">${esc(data.output_format)}</span></div><div style="padding:0 10px 6px;display:flex;gap:3px;flex-wrap:wrap">${outputTags}</div></div>`;
+}
+
+function dfRenderConfigPanel(nodeId) {
+  const data = dfNodeData[nodeId];
+  const panel = document.getElementById('df-config-panel');
+  const title = document.getElementById('df-config-title');
+  if (!data || !panel) return;
+  title.textContent = data.id;
+  const gateOps = ['not_empty','contains','not_contains','matches','has_key','all_keys','gt','lt','gte','lte','equals','not_equals','length_gt','length_lt','is_type'];
+  let gatesHtml = (data.quality_gates || []).map((gate, idx) => `
+    <div class="df-gate-row">
+      <input type="text" value="${esc(gate.field||'')}" class="chat-input" placeholder="field" onchange="dfUpdateGate(${nodeId},${idx},'field',this.value)" />
+      <select class="model-select" onchange="dfUpdateGate(${nodeId},${idx},'operator',this.value)">${gateOps.map(op => `<option value="${op}"${gate.operator===op?' selected':''}>${op}</option>`).join('')}</select>
+      <input type="text" value="${esc(gate.value||'')}" class="chat-input" placeholder="value" onchange="dfUpdateGate(${nodeId},${idx},'value',this.value)" />
+      <button onclick="dfRemoveGate(${nodeId},${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;padding:2px 4px">✕</button>
+    </div>`).join('');
+  const fmtOptions = Object.keys(dfFmtDescs).map(f => `<option value="${f}"${data.output_format===f?' selected':''}>${f}</option>`).join('');
+  panel.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:0">
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Identity</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div><label class="df-config-label">Step ID</label><input type="text" value="${esc(data.id)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'id',this.value)" /></div>
+          <div><label class="df-config-label">Name</label><input type="text" value="${esc(data.name)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'name',this.value)" /></div>
+        </div>
+        <div style="margin-top:6px"><label class="df-config-label">Role</label>
+          <select class="model-select" style="font-size:0.66rem;padding:3px 6px" onchange="dfUpdateNodeData(${nodeId},'role',this.value)">
+            ${Object.keys(dfRoleColors).map(r=>`<option value="${r}"${data.role===r?' selected':''}>${r}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Prompt</div>
+        <textarea class="chat-input" style="min-height:80px;font-size:0.66rem;resize:vertical" onchange="dfUpdateNodeData(${nodeId},'system_prompt',this.value)">${esc(data.system_prompt)}</textarea>
+      </div>
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Outputs</div>
+        <div id="df-outputs-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${data.outputs.map((o,i)=>`<span class="df-tag">${esc(o)}<span class="df-tag-remove" onclick="dfRemoveOutput(${nodeId},${i})">✕</span></span>`).join('')}</div>
+        <div style="display:flex;gap:4px"><input type="text" id="df-new-output-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="output_key" onkeydown="if(event.key==='Enter'){dfAddOutput(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddOutput(${nodeId})">Add</button></div>
+        <div style="margin-top:6px"><label class="df-config-label">Output format</label><select class="model-select" style="font-size:0.64rem;padding:2px 4px" onchange="dfUpdateNodeData(${nodeId},'output_format',this.value)">${fmtOptions}</select></div>
+      </div>
+      <div style="padding:8px 0">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Quality Gates</div>
+        <div id="df-gates-${nodeId}">${gatesHtml}</div>
+        <button class="action-btn" style="font-size:0.56rem;padding:2px 8px;margin-top:4px" onclick="dfAddGate(${nodeId})">+ Gate</button>
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+          <button class="action-btn" style="font-size:0.56rem;padding:2px 10px;color:var(--red);border-color:var(--red)" onclick="dfDeleteNode(${nodeId})">Delete Node</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function dfUpdateNodeData(nodeId, field, value) {
+  if (!dfNodeData[nodeId]) return;
+  dfNodeData[nodeId][field] = value;
+  const html = dfNodeHtml(dfNodeData[nodeId]);
+  dfEditor.drawflow.drawflow.Home.data[nodeId].html = html;
+  const nodeEl = document.querySelector(`#node-${nodeId} .drawflow_content_node`);
+  if (nodeEl) nodeEl.innerHTML = html;
+  if (dfSelectedNodeId === nodeId) dfRenderConfigPanel(nodeId);
+}
+
+function dfAddOutput(nodeId) {
+  const inp = document.getElementById(`df-new-output-${nodeId}`);
+  if (!inp || !inp.value.trim()) return;
+  dfNodeData[nodeId].outputs.push(inp.value.trim());
+  inp.value = '';
+  dfUpdateNodeData(nodeId, 'outputs', dfNodeData[nodeId].outputs);
+}
+
+function dfRemoveOutput(nodeId, idx) {
+  if (!dfNodeData[nodeId]) return;
+  dfNodeData[nodeId].outputs.splice(idx, 1);
+  dfUpdateNodeData(nodeId, 'outputs', dfNodeData[nodeId].outputs);
+}
+
+function dfAddGate(nodeId) {
+  if (!dfNodeData[nodeId]) return;
+  if (!dfNodeData[nodeId].quality_gates) dfNodeData[nodeId].quality_gates = [];
+  dfNodeData[nodeId].quality_gates.push({ field: '', operator: 'not_empty', value: '' });
+  dfRenderConfigPanel(nodeId);
+}
+
+function dfRemoveGate(nodeId, idx) {
+  if (!dfNodeData[nodeId] || !dfNodeData[nodeId].quality_gates) return;
+  dfNodeData[nodeId].quality_gates.splice(idx, 1);
+  dfRenderConfigPanel(nodeId);
+}
+
+function dfUpdateGate(nodeId, idx, field, value) {
+  if (!dfNodeData[nodeId] || !dfNodeData[nodeId].quality_gates) return;
+  dfNodeData[nodeId].quality_gates[idx][field] = value;
+}
+
+function dfDeleteNode(nodeId) {
+  if (!dfEditor) return;
+  dfEditor.removeNodeId('node-' + nodeId);
+}
+
+function dfOnConnectionCreated(conn) {
+  const fromId = parseInt(conn.output_id), toId = parseInt(conn.input_id);
+  const from = dfNodeData[fromId], to = dfNodeData[toId];
+  if (from && to) {
+    from.outputs.forEach(out => { const ref = `${from.id}.${out}`; if (!to.inputs.includes(ref)) to.inputs.push(ref); });
+    if (dfSelectedNodeId === toId) dfRenderConfigPanel(toId);
+  }
+}
+
+function dfOnConnectionRemoved(conn) {
+  const fromId = parseInt(conn.output_id), toId = parseInt(conn.input_id);
+  const from = dfNodeData[fromId], to = dfNodeData[toId];
+  if (from && to) {
+    to.inputs = to.inputs.filter(ref => !ref.startsWith(from.id + '.'));
+    if (dfSelectedNodeId === toId) dfRenderConfigPanel(toId);
+  }
+}
+
+function dfExportYaml() {
+  if (!dfEditor) return;
+  const exported = dfEditor.export();
+  const homeData = exported.drawflow.Home.data;
+  const nodeIds = Object.keys(homeData).map(Number);
+  const wfId   = document.getElementById('df-wf-id')?.value   || 'my-workflow';
+  const wfName = document.getElementById('df-wf-name')?.value || 'My Workflow';
+  const wfDesc = document.getElementById('df-wf-desc')?.value || '';
+  const wfRole = document.getElementById('df-wf-role')?.value || 'general';
+
+  let yaml = `id: ${wfId}\nname: "${wfName}"\nversion: "1.0"\n`;
+  if (wfDesc) yaml += `description: "${wfDesc}"\n`;
+  yaml += `\ndefaults:\n  role: ${wfRole}\n  temperature: 0.7\n  max_tokens: 4096\n  retries: 2\n  retry_delay: 5\n\nsteps:\n`;
+
+  nodeIds.forEach(nid => {
+    const data = dfNodeData[nid];
+    if (!data) return;
+    const nodeInfo = homeData[nid];
+    const deps = [];
+    if (nodeInfo.inputs) Object.values(nodeInfo.inputs).forEach(inp => (inp.connections||[]).forEach(conn => { const src = dfNodeData[parseInt(conn.node)]; if (src && !deps.includes(src.id)) deps.push(src.id); }));
+    yaml += `  - id: ${data.id}\n    name: "${data.name}"\n    role: ${data.role}\n    system_prompt: |\n`;
+    data.system_prompt.split('\n').forEach(line => { yaml += `      ${line}\n`; });
+    if (data.inputs.length) { yaml += `    inputs:\n`; data.inputs.forEach(i => { yaml += `      - ${i}\n`; }); }
+    yaml += `    outputs:\n`; data.outputs.forEach(o => { yaml += `      - ${o}\n`; });
+    if (deps.length) { yaml += `    depends_on:\n`; deps.forEach(d => { yaml += `      - ${d}\n`; }); }
+    if (data.output_format !== 'raw') yaml += `    output_parser:\n      format: ${data.output_format}\n`;
+    if (data.quality_gates && data.quality_gates.length) {
+      yaml += `    quality_gates:\n`;
+      data.quality_gates.forEach(g => { yaml += `      - field: ${g.field}\n        operator: ${g.operator}\n`; if (g.value) yaml += `        value: "${g.value}"\n`; });
+    }
+    yaml += `\n`;
+  });
+
+  document.getElementById('df-yaml-panel').style.display = 'block';
+  document.getElementById('df-yaml-output').textContent = yaml;
+  return yaml;
+}
+
+async function dfSave() {
+  const yamlText = dfExportYaml();
+  if (!yamlText) return;
+  let definition;
+  try { definition = jsyaml.load(yamlText); } catch (e) { alert('YAML error: ' + e.message); return; }
+  const overwrite = true;
+  try {
+    const resp = await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite }) });
+    if (resp.ok) {
+      const result = await resp.json();
+      alert('Saved: ' + result.path);
+      if (typeof refreshWorkflows === 'function') refreshWorkflows();
+    } else {
+      const err = await resp.json();
+      alert('Save failed: ' + (err.detail || JSON.stringify(err)));
+    }
+  } catch (e) { alert('Save error: ' + e.message); }
+}
+
+async function dfRunWorkflow() {
+  const yamlText = dfExportYaml();
+  if (!yamlText) return;
+  let definition;
+  try { definition = jsyaml.load(yamlText); } catch (e) { alert('YAML error: ' + e.message); return; }
+  try { await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite: true }) }); } catch (e) { /* ignore save errors for run */ }
+  setWfMode('run');
+  const id = document.getElementById('df-wf-id')?.value || 'my-workflow';
+  if (typeof refreshWorkflows === 'function') {
+    await refreshWorkflows();
+    const sel = document.getElementById('wf-select');
+    if (sel) { sel.value = id; if (typeof loadWorkflowDetail === 'function') loadWorkflowDetail(); }
+  }
+}
+
+function dfClearConfigPanel() {
+  const panel = document.getElementById('df-config-panel');
+  const title = document.getElementById('df-config-title');
+  if (panel) panel.innerHTML = '<div style="padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.64rem">Drag a step from the palette to begin. Click a node to configure it.</div>';
+  if (title) title.textContent = 'Config';
+}
+
+function dfAutoLayout() {
+  if (!dfEditor || typeof dagre === 'undefined') return;
+  const exported = dfEditor.export();
+  const nodes = exported.drawflow.Home.data;
+  const nodeIds = Object.keys(nodes);
+  if (!nodeIds.length) return;
+
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 });
+  g.setDefaultEdgeLabel(() => ({}));
+  nodeIds.forEach(id => g.setNode(id, { width: 170, height: 70 }));
+  nodeIds.forEach(id => {
+    const node = nodes[id];
+    if (node.outputs && node.outputs.output_1 && node.outputs.output_1.connections) {
+      node.outputs.output_1.connections.forEach(conn => g.setEdge(id, String(conn.node)));
+    }
+  });
+  dagre.layout(g);
+  nodeIds.forEach(id => {
+    const pos = g.node(id);
+    if (!pos) return;
+    nodes[id].pos_x = pos.x - 85;
+    nodes[id].pos_y = pos.y - 35;
+    const el = document.querySelector(`#node-${id}`);
+    if (el) { el.style.left = (pos.x - 85) + 'px'; el.style.top = (pos.y - 35) + 'px'; }
+  });
+  nodeIds.forEach(id => { try { dfEditor.updateConnectionNodes(`node-${id}`); } catch(e) {} });
+}
+
+function dfImportYaml() {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);padding:20px;width:600px;max-height:80vh;display:flex;flex-direction:column;gap:10px"><div style="font-size:0.8rem;color:var(--text);font-weight:600">Import Workflow YAML</div><div style="font-size:0.6rem;color:var(--text-dim)">Paste a workflow YAML definition. All current nodes will be replaced.</div><textarea id="df-import-textarea" style="width:100%;min-height:300px;background:var(--bg-deep);color:var(--text);border:1px solid var(--border);font-family:var(--mono);font-size:0.65rem;padding:10px;resize:vertical"></textarea><div style="display:flex;gap:8px;justify-content:flex-end"><button class="action-btn" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button><button class="action-btn" onclick="dfDoImport()" style="color:var(--cyan);border-color:var(--cyan-dim)">Import</button></div></div>`;
+  document.body.appendChild(modal);
+}
+
+function dfDoImport() {
+  const textarea = document.getElementById('df-import-textarea');
+  if (!textarea) return;
+  const yamlText = textarea.value;
+  textarea.closest('div[style*=fixed]').remove();
+  if (!yamlText.trim()) return;
+
+  let parsed;
+  try { parsed = jsyaml.load(yamlText); } catch (e) { alert('Invalid YAML: ' + e.message); return; }
+  if (!parsed || !parsed.steps || !Array.isArray(parsed.steps)) { alert('YAML must have a "steps" array'); return; }
+
+  dfEditor.clear();
+  dfNodeData = {};
+  if (parsed.id)   document.getElementById('df-wf-id').value   = parsed.id;
+  if (parsed.name) document.getElementById('df-wf-name').value  = parsed.name;
+  if (parsed.description) document.getElementById('df-wf-desc').value = typeof parsed.description === 'string' ? parsed.description.trim() : '';
+  if (parsed.defaults && parsed.defaults.role) document.getElementById('df-wf-role').value = parsed.defaults.role;
+
+  if (typeof dagre === 'undefined') {
+    parsed.steps.forEach((step, i) => { dfAddNodeFromImportedStep(step, 80 + i * 200, 80); });
+    return;
+  }
+
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 });
+  g.setDefaultEdgeLabel(() => ({}));
+  const stepIds = new Set(parsed.steps.map(s => s.id));
+  parsed.steps.forEach(step => g.setNode(step.id, { width: 170, height: 70 }));
+  parsed.steps.forEach(step => {
+    const deps = new Set();
+    if (step.depends_on) step.depends_on.forEach(d => deps.add(d));
+    if (step.inputs) step.inputs.forEach(inp => { const ns = inp.split('.')[0]; if (ns !== 'seed' && ns !== 'shared' && stepIds.has(ns)) deps.add(ns); });
+    deps.forEach(dep => { if (stepIds.has(dep)) g.setEdge(dep, step.id); });
+  });
+  dagre.layout(g);
+
+  const stepToNodeId = {};
+  parsed.steps.forEach(step => {
+    const pos = g.node(step.id);
+    const x = pos ? pos.x - 85 : 100, y = pos ? pos.y - 35 : 80;
+    const nodeId = dfAddNodeFromImportedStep(step, x, y);
+    stepToNodeId[step.id] = nodeId;
+  });
+
+  parsed.steps.forEach(step => {
+    if (!step.depends_on) return;
+    step.depends_on.forEach(dep => {
+      const fromId = stepToNodeId[dep], toId = stepToNodeId[step.id];
+      if (fromId && toId) try { dfEditor.addConnection(fromId, toId, 'output_1', 'input_1'); } catch(e) {}
+    });
+  });
+}
+
+function dfAddNodeFromImportedStep(step, x, y) {
+  const tmpl = dfStepTemplates.find(t => t.key === (step.role || 'custom')) || dfStepTemplates[dfStepTemplates.length - 1];
+  const data = {
+    id: step.id || (tmpl.key + '_' + (++dfNextId)),
+    name: step.name || step.id || tmpl.name,
+    role: step.role || 'general',
+    system_prompt: (step.system_prompt || tmpl.prompt || '').trim(),
+    outputs: step.outputs || [...tmpl.outputs],
+    output_format: (step.output_parser && step.output_parser.format) || tmpl.format,
+    quality_gates: step.quality_gates || [],
+    inputs: step.inputs || [],
+  };
+  const nodeId = dfEditor.addNode(data.id, 1, 1, x, y, data.id, {}, dfNodeHtml(data));
+  dfNodeData[nodeId] = data;
+  return nodeId;
+}
+
+/* ── AGENTS TAB ─────────────────────────────────────────────────── */
+let _activeAgentId = null;
+let _agentHistory = [];
+
+async function loadAgentsTab() {
+  const listEl = document.getElementById('agents-list');
+  const emptyEl = document.getElementById('agents-empty');
+  listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">Loading…</div>';
+  emptyEl.style.display = 'none';
+
+  let agents = [];
+  try {
+    const r = await fetch('/api/agents');
+    if (r.ok) agents = await r.json();
+  } catch (e) {
+    listEl.innerHTML = '<div style="color:var(--red,#f44);font-size:0.8rem;padding:8px;">Failed to load agents.</div>';
+    return;
+  }
+
+  const countEl = document.getElementById('agents-count');
+  if (countEl) countEl.textContent = agents.length || '';
+
+  if (!agents.length) {
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  listEl.innerHTML = agents.map(a => `
+    <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;transition:border-color 0.15s;"
+         onclick="openAgentChat('${esc(a.id)}')"
+         onmouseenter="this.style.borderColor='var(--cyan)'"
+         onmouseleave="this.style.borderColor='var(--border)'">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="font-size:1.2rem;">${a.icon || '🤖'}</span>
+        <strong style="color:var(--text);font-size:0.88rem;flex:1">${esc(a.name)}</strong>
+        <button onclick="event.stopPropagation();showEditAgentModal('${esc(a.id)}')"
+                style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.75rem;padding:2px 6px;"
+                title="Edit agent">✎</button>
+        <button onclick="event.stopPropagation();deleteAgent('${esc(a.id)}')"
+                style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.75rem;padding:2px 6px;"
+                title="Delete agent">✕</button>
+      </div>
+      ${a.description ? `<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">${esc(a.description)}</div>` : ''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${(a.tags||[]).map(t=>`<span style="font-size:0.65rem;background:var(--bg-deep);border:1px solid var(--border);color:var(--text-muted);padding:1px 6px;border-radius:3px;">${esc(t)}</span>`).join('')}
+        ${a.role ? `<span style="font-size:0.65rem;background:var(--bg-deep);border:1px solid var(--cyan-dim);color:var(--cyan-dim);padding:1px 6px;border-radius:3px;">${esc(a.role)}</span>` : ''}
+      </div>
+      ${a.starters && a.starters.length ? `
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+          ${a.starters.slice(0,2).map(s=>`
+            <div onclick="event.stopPropagation();openAgentChatWithStarter('${esc(a.id)}','${esc(s)}')"
+                 style="font-size:0.72rem;color:var(--text-dim);background:var(--bg-deep);border:1px solid var(--border);padding:4px 8px;border-radius:4px;cursor:pointer;"
+                 onmouseenter="this.style.borderColor='var(--cyan)'"
+                 onmouseleave="this.style.borderColor='var(--border)'">
+              ↗ ${esc(s)}
+            </div>`).join('')}
+        </div>` : ''}
+    </div>`).join('');
+}
+
+async function openAgentChat(agentId) {
+  _activeAgentId = agentId;
+  _agentHistory = [];
+  let agent;
+  try {
+    const r = await fetch(`/api/agents/${agentId}`);
+    if (!r.ok) throw new Error('not found');
+    agent = await r.json();
+  } catch(e) {
+    alert('Failed to load agent: ' + agentId);
+    return;
+  }
+  document.getElementById('agent-chat-icon').textContent = agent.icon || '🤖';
+  document.getElementById('agent-chat-name').textContent = agent.name;
+  document.getElementById('agent-chat-model').textContent = agent.role ? `role:${agent.role}` : (agent.model || '');
+  document.getElementById('agent-chat-messages').innerHTML = `
+    <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;">
+      Chat with <strong style="color:var(--cyan)">${esc(agent.name)}</strong> — type a message below
+    </div>`;
+  document.getElementById('agent-chat-panel').style.display = 'block';
+  document.getElementById('agent-chat-input').focus();
+}
+
+function openAgentChatWithStarter(agentId, starter) {
+  openAgentChat(agentId).then(() => {
+    document.getElementById('agent-chat-input').value = starter;
+    sendAgentMessage();
+  });
+}
+
+function closeAgentChat() {
+  _activeAgentId = null;
+  _agentHistory = [];
+  document.getElementById('agent-chat-panel').style.display = 'none';
+}
+
+async function sendAgentMessage() {
+  if (!_activeAgentId) return;
+  const input = document.getElementById('agent-chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  _agentHistory.push({ role: 'user', content: text });
+
+  const msgEl = document.getElementById('agent-chat-messages');
+  const userBubble = `<div style="align-self:flex-end;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:80%;font-size:0.82rem;white-space:pre-wrap;">${esc(text)}</div>`;
+  const thinkingBubble = `<div id="agent-thinking" style="align-self:flex-start;color:var(--text-muted);font-size:0.78rem;padding:4px 8px;">thinking…</div>`;
+  msgEl.insertAdjacentHTML('beforeend', userBubble + thinkingBubble);
+  msgEl.scrollTop = msgEl.scrollHeight;
+
+  let result;
+  try {
+    const r = await fetch(`/api/agents/${_activeAgentId}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: _agentHistory }),
+    });
+    result = await r.json();
+    if (!r.ok) throw new Error(result.detail || 'Chat failed');
+  } catch(e) {
+    document.getElementById('agent-thinking')?.remove();
+    msgEl.insertAdjacentHTML('beforeend',
+      `<div style="align-self:flex-start;color:var(--red,#f44);font-size:0.78rem;padding:4px 8px;">${esc(String(e))}</div>`);
+    msgEl.scrollTop = msgEl.scrollHeight;
+    return;
+  }
+
+  document.getElementById('agent-thinking')?.remove();
+  const content = result.content || '';
+  _agentHistory.push({ role: 'assistant', content });
+  msgEl.insertAdjacentHTML('beforeend',
+    `<div style="align-self:flex-start;background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:85%;font-size:0.82rem;white-space:pre-wrap;">${esc(content)}</div>`);
+  msgEl.scrollTop = msgEl.scrollHeight;
+}
+
+async function deleteAgent(agentId) {
+  if (!confirm(`Delete agent "${agentId}"?`)) return;
+  try {
+    const r = await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Delete failed');
+    loadAgentsTab();
+    if (_activeAgentId === agentId) closeAgentChat();
+  } catch(e) {
+    alert('Failed to delete agent: ' + e.message);
+  }
+}
+
+/* ── Agent Create / Edit Modal ──────────────────────────────────────── */
+
+function _agentModalHtml(mode, a) {
+  const isEdit = mode === 'edit';
+  const inputStyle = 'width:100%;background:var(--bg-deep);border:1px solid var(--border);color:var(--text);padding:6px 9px;border-radius:4px;font-family:var(--mono);font-size:0.78rem;box-sizing:border-box;';
+  const labelStyle = 'font-size:0.7rem;color:var(--text-muted);margin-bottom:3px;display:block;';
+  const roleOpts = ['','general','coding','reasoning','fast','uncensored']
+    .map(r => `<option value="${r}" ${(a&&a.role===r)||(!a&&r==='')?'selected':''}>${r||'— none —'}</option>`)
+    .join('');
+  const startersVal = a && a.starters && a.starters.length ? a.starters.join('\n') : '';
+  const tempVal = a && a.temperature !== undefined ? a.temperature : 0.7;
+  const modelVal = a && a.model ? esc(a.model) : '';
+  const contextJson = JSON.stringify(a && a.context ? a.context : []);
+  const toolsJson   = JSON.stringify(a && a.tools   ? a.tools   : []);
+  return `
+  <div style="font-size:0.82rem;color:var(--text);font-weight:600;margin-bottom:2px;">${isEdit ? 'Edit Agent' : 'New Agent'}</div>
+  <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:12px;">${isEdit ? `Editing <strong style="color:var(--cyan)">${esc(a.id)}</strong>` : 'Define a custom AI persona'}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+    <div>
+      <label style="${labelStyle}">ID (slug) *</label>
+      <input id="am-id" type="text" placeholder="my-assistant" value="${a?esc(a.id):''}" ${isEdit?'disabled':''} style="${inputStyle}${isEdit?'opacity:0.5;cursor:not-allowed;':''}">
+    </div>
+    <div>
+      <label style="${labelStyle}">Display name *</label>
+      <input id="am-name" type="text" placeholder="My Assistant" value="${a?esc(a.name):''}" style="${inputStyle}">
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 60px;gap:10px;margin-top:8px;">
+    <div>
+      <label style="${labelStyle}">Description</label>
+      <input id="am-desc" type="text" placeholder="What this agent does…" value="${a&&a.description?esc(a.description):''}" style="${inputStyle}">
+    </div>
+    <div>
+      <label style="${labelStyle}">Icon</label>
+      <input id="am-icon" type="text" placeholder="🤖" value="${a&&a.icon?esc(a.icon):''}" style="${inputStyle}text-align:center;">
+    </div>
+  </div>
+  <div style="margin-top:8px;">
+    <label style="${labelStyle}">System prompt *</label>
+    <textarea id="am-prompt" rows="5" placeholder="You are a helpful assistant…" style="${inputStyle}resize:vertical;">${a?esc(a.system_prompt):''}</textarea>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+    <div>
+      <label style="${labelStyle}">Role</label>
+      <select id="am-role" style="${inputStyle}">${roleOpts}</select>
+    </div>
+    <div>
+      <label style="${labelStyle}">Tags (comma-separated)</label>
+      <input id="am-tags" type="text" placeholder="coding, review" value="${a&&a.tags?esc(a.tags.join(', ')):''}" style="${inputStyle}">
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 90px;gap:10px;margin-top:8px;">
+    <div>
+      <label style="${labelStyle}">Model override <span style="color:var(--text-dim)">(leave blank to use role)</span></label>
+      <input id="am-model" type="text" placeholder="llama3.2 or leave blank" value="${modelVal}" style="${inputStyle}">
+    </div>
+    <div>
+      <label style="${labelStyle}">Temperature</label>
+      <input id="am-temp" type="number" min="0" max="2" step="0.05" value="${tempVal}" style="${inputStyle}text-align:center;">
+    </div>
+  </div>
+  <div style="margin-top:8px;">
+    <label style="${labelStyle}">Conversation starters <span style="color:var(--text-dim)">(one per line, shown as quick-start chips)</span></label>
+    <textarea id="am-starters" rows="3" placeholder="Review this function for bugs&#10;What's the time complexity here?" style="${inputStyle}resize:vertical;">${esc(startersVal)}</textarea>
+  </div>
+  <input type="hidden" id="am-context-json" value="${esc(contextJson)}">
+  <input type="hidden" id="am-tools-json" value="${esc(toolsJson)}">
+  <div id="am-error" style="display:none;color:var(--red,#f44);font-size:0.72rem;margin-top:8px;padding:6px 8px;background:rgba(255,68,68,0.08);border-radius:4px;"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+    <button class="action-btn" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button>
+    <button class="action-btn" id="am-save-btn" onclick="_saveAgentModal('${isEdit?a.id:''}')"
+            style="color:var(--cyan);border-color:var(--cyan-dim);">${isEdit ? 'Save changes' : 'Create agent'}</button>
+  </div>`;
+}
+
+function showCreateAgentModal() {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:560px;max-height:90vh;overflow-y:auto;border-radius:6px;display:flex;flex-direction:column;gap:0;';
+  inner.innerHTML = _agentModalHtml('create', null);
+  modal.appendChild(inner);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  inner.querySelector('#am-id').focus();
+}
+
+async function showEditAgentModal(agentId) {
+  let agent;
+  try {
+    const r = await fetch(`/api/agents/${agentId}`);
+    if (!r.ok) throw new Error('not found');
+    agent = await r.json();
+  } catch(e) {
+    alert('Failed to load agent for editing: ' + agentId);
+    return;
+  }
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:560px;max-height:90vh;overflow-y:auto;border-radius:6px;display:flex;flex-direction:column;gap:0;';
+  inner.innerHTML = _agentModalHtml('edit', agent);
+  modal.appendChild(inner);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  inner.querySelector('#am-name').focus();
+}
+
+async function _saveAgentModal(existingId) {
+  const isEdit = !!existingId;
+  const idVal    = isEdit ? existingId : (document.getElementById('am-id')?.value.trim() || '');
+  const nameVal  = document.getElementById('am-name')?.value.trim() || '';
+  const descVal  = document.getElementById('am-desc')?.value.trim() || '';
+  const iconVal  = document.getElementById('am-icon')?.value.trim() || '';
+  const promptVal = document.getElementById('am-prompt')?.value.trim() || '';
+  const roleVal  = document.getElementById('am-role')?.value || '';
+  const tagsRaw  = document.getElementById('am-tags')?.value || '';
+  const tags     = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+
+  const errEl = document.getElementById('am-error');
+  const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+
+  if (!isEdit && !/^[a-z0-9-]+$/.test(idVal)) { showErr('ID must be lowercase letters, numbers, and hyphens only.'); return; }
+  if (!nameVal) { showErr('Display name is required.'); return; }
+  if (!promptVal) { showErr('System prompt is required.'); return; }
+
+  const modelField = document.getElementById('am-model')?.value.trim() || null;
+  const tempField  = parseFloat(document.getElementById('am-temp')?.value);
+  const temperature = isNaN(tempField) ? 0.7 : tempField;
+  const startersRaw = document.getElementById('am-starters')?.value || '';
+  const starters = startersRaw.split('\n').map(s => s.trim()).filter(Boolean);
+  let context = [], tools = [];
+  try { context = JSON.parse(document.getElementById('am-context-json')?.value || '[]'); } catch(_) {}
+  try { tools   = JSON.parse(document.getElementById('am-tools-json')?.value   || '[]'); } catch(_) {}
+
+  const payload = {
+    id: idVal, name: nameVal, description: descVal || null,
+    icon: iconVal || null, system_prompt: promptVal,
+    role: roleVal || null, tags,
+    model: modelField, temperature, starters, context, tools,
+  };
+
+  const btn = document.getElementById('am-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    const url = isEdit ? `/api/agents/${existingId}` : '/api/agents';
+    const method = isEdit ? 'PUT' : 'POST';
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (!r.ok) { showErr(d.detail || JSON.stringify(d)); if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; } return; }
+    document.querySelector('div[style*=fixed]')?.remove();
+    loadAgentsTab();
+  } catch(e) {
+    showErr('Request failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; }
+  }
+}
+=======
+
+/* ══════════════════════════════════════════════════════════════════
+   WORKFLOW COMPOSER — Visual node-based workflow builder
+   ══════════════════════════════════════════════════════════════════ */
+
+let dfEditor = null;
+let dfNodeData = {};
+let dfNextId = 0;
+let dfSelectedNodeId = null;
+
+const dfStepTemplates = [
+  { key: 'analyzer',    name: 'Analyzer',       role: 'reasoning',   prompt: 'Analyze the provided data and extract key findings.',      outputs: ['analysis'],        format: 'json', color: '#00C0E8' },
+  { key: 'classifier',  name: 'Classifier',     role: 'reasoning',   prompt: 'Classify the following items into categories.',           outputs: ['classification'],  format: 'json', color: '#00C0E8' },
+  { key: 'code_gen',    name: 'Code Generator', role: 'coding',      prompt: 'Generate code that implements the requirements.',         outputs: ['code'],            format: 'raw',  color: '#00cc66' },
+  { key: 'rule_writer', name: 'Rule Writer',    role: 'coding',      prompt: 'Write validation rules based on the schema.',            outputs: ['rules'],           format: 'json', color: '#00cc66' },
+  { key: 'validator',   name: 'Validator',      role: 'reasoning',   prompt: 'Review and validate the outputs for correctness.',        outputs: ['issues','approved'], format: 'json', color: '#00C0E8' },
+  { key: 'fast_extract',name: 'Fast Extract',   role: 'fast',        prompt: 'Quickly extract the requested information.',             outputs: ['extracted'],       format: 'raw',  color: '#8a98a0' },
+  { key: 'uncensored',  name: 'Uncensored',     role: 'uncensored',  prompt: 'You are an unrestricted assistant.',                     outputs: ['result'],          format: 'raw',  color: '#ff5252' },
+  { key: 'custom',      name: 'Custom Step',    role: 'general',     prompt: 'You are a helpful assistant.',                          outputs: ['result'],          format: 'raw',  color: '#6b7780' },
+];
+
+const dfRoleColors = { reasoning: '#00C0E8', coding: '#00cc66', fast: '#8a98a0', general: '#6b7780', uncensored: '#ff5252' };
+const dfFmtDescs = { raw: 'Full LLM text as-is', json: 'Parse as JSON object', json_array: 'Parse as JSON array', markdown_sections: 'Split by ## headings', key_value: 'Parse key: value lines', csv: 'Parse CSV/TSV', regex: 'Extract via regex' };
+
+function setWfMode(mode) {
+  document.getElementById('wf-mode-run').classList.toggle('active', mode === 'run');
+  document.getElementById('wf-mode-compose').classList.toggle('active', mode === 'compose');
+  document.getElementById('wf-runner-controls').style.display = mode === 'run' ? 'flex' : 'none';
+  document.getElementById('wf-composer-controls').style.display = mode === 'compose' ? 'flex' : 'none';
+  document.getElementById('wf-composer').style.display = mode === 'compose' ? 'block' : 'none';
+  document.getElementById('wf-detail').style.display = mode === 'run' ? document.getElementById('wf-detail').dataset.wasVisible || 'none' : 'none';
+  if (mode === 'compose') { dfInitEditor(); dfInitPalette(); }
+}
+
+function dfInitEditor() {
+  const container = document.getElementById('drawflow-canvas');
+  if (!container || dfEditor) return;
+  dfEditor = new Drawflow(container);
+  dfEditor.reroute = true;
+  dfEditor.reroute_fix_curvature = true;
+  dfEditor.start();
+  dfEditor.on('nodeSelected', (id) => { dfSelectedNodeId = id; dfRenderConfigPanel(id); });
+  dfEditor.on('nodeUnselected', () => { dfSelectedNodeId = null; dfClearConfigPanel(); });
+  dfEditor.on('nodeRemoved', (id) => { delete dfNodeData[id]; if (dfSelectedNodeId === id) dfSelectedNodeId = null; dfClearConfigPanel(); });
+  dfEditor.on('connectionCreated', (conn) => dfOnConnectionCreated(conn));
+  dfEditor.on('connectionRemoved', (conn) => dfOnConnectionRemoved(conn));
+
+  container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+  container.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const key = e.dataTransfer.getData('application/df-template');
+    if (!key) return;
+    const rect = container.getBoundingClientRect();
+    const canvasX = (e.clientX - rect.left - dfEditor.precanvas.getBoundingClientRect().left + rect.left);
+    const canvasY = (e.clientY - rect.top  - dfEditor.precanvas.getBoundingClientRect().top  + rect.top);
+    dfAddNodeFromTemplate(key, canvasX, canvasY);
+  });
+}
+
+function dfInitPalette() {
+  const palette = document.getElementById('df-palette');
+  if (!palette || palette.dataset.initialized) return;
+  palette.dataset.initialized = '1';
+  palette.innerHTML = '';
+  dfStepTemplates.forEach(tmpl => {
+    const item = document.createElement('div');
+    item.className = 'df-palette-item';
+    item.draggable = true;
+    item.innerHTML = `<span class="df-palette-dot" style="background:${tmpl.color}"></span><span class="df-palette-label">${esc(tmpl.name)}</span><span class="df-palette-role">${esc(tmpl.role)}</span>`;
+    item.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/df-template', tmpl.key); e.dataTransfer.effectAllowed = 'move'; });
+    palette.appendChild(item);
+  });
+}
+
+function dfAddNodeFromTemplate(templateKey, x, y) {
+  const tmpl = dfStepTemplates.find(t => t.key === templateKey);
+  if (!tmpl) return;
+  const data = { id: templateKey + '_' + (++dfNextId), name: tmpl.name, role: tmpl.role, system_prompt: tmpl.prompt, outputs: [...tmpl.outputs], output_format: tmpl.format, quality_gates: [], inputs: [] };
+  const nodeId = dfEditor.addNode(data.id, 1, 1, x, y, data.id, {}, dfNodeHtml(data));
+  dfNodeData[nodeId] = data;
+  dfSelectedNodeId = nodeId;
+  dfRenderConfigPanel(nodeId);
+  return nodeId;
+}
+
+function dfNodeHtml(data) {
+  const color = dfRoleColors[data.role] || '#6b7780';
+  const outputTags = data.outputs.map(o => `<span style="color:var(--cyan);font-size:0.52rem;background:rgba(0,192,232,0.1);padding:1px 4px;border-radius:2px">${esc(o)}</span>`).join(' ');
+  const gateLabel = (data.quality_gates && data.quality_gates.length) ? `<span style="font-size:0.48rem;color:var(--amber);margin-left:4px">[${data.quality_gates.length}G]</span>` : '';
+  return `<div style="border-top:3px solid ${color};padding:0"><div style="padding:6px 10px 4px;font-size:0.68rem;font-weight:600;color:var(--text);display:flex;align-items:center;gap:4px"><span style="color:${color};font-size:0.5rem">&#9679;</span>${esc(data.name)}${gateLabel}</div><div style="padding:2px 10px 6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.5rem;text-transform:uppercase;letter-spacing:0.08em;color:${color}">${esc(data.role)}</span><span style="font-size:0.48rem;color:var(--text-muted)">${esc(data.output_format)}</span></div><div style="padding:0 10px 6px;display:flex;gap:3px;flex-wrap:wrap">${outputTags}</div></div>`;
+}
+
+function dfRenderConfigPanel(nodeId) {
+  const data = dfNodeData[nodeId];
+  const panel = document.getElementById('df-config-panel');
+  const title = document.getElementById('df-config-title');
+  if (!data || !panel) return;
+  title.textContent = data.id;
+  const gateOps = ['not_empty','contains','not_contains','matches','has_key','all_keys','gt','lt','gte','lte','equals','not_equals','length_gt','length_lt','is_type'];
+  let gatesHtml = (data.quality_gates || []).map((gate, idx) => `
+    <div class="df-gate-row">
+      <input type="text" value="${esc(gate.field||'')}" class="chat-input" placeholder="field" onchange="dfUpdateGate(${nodeId},${idx},'field',this.value)" />
+      <select class="model-select" onchange="dfUpdateGate(${nodeId},${idx},'operator',this.value)">${gateOps.map(op => `<option value="${op}"${gate.operator===op?' selected':''}>${op}</option>`).join('')}</select>
+      <input type="text" value="${esc(gate.value||'')}" class="chat-input" placeholder="value" onchange="dfUpdateGate(${nodeId},${idx},'value',this.value)" />
+      <button onclick="dfRemoveGate(${nodeId},${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;padding:2px 4px">✕</button>
+    </div>`).join('');
+  const fmtOptions = Object.keys(dfFmtDescs).map(f => `<option value="${f}"${data.output_format===f?' selected':''}>${f}</option>`).join('');
+  panel.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:0">
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Identity</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div><label class="df-config-label">Step ID</label><input type="text" value="${esc(data.id)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'id',this.value)" /></div>
+          <div><label class="df-config-label">Name</label><input type="text" value="${esc(data.name)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'name',this.value)" /></div>
+        </div>
+        <div style="margin-top:6px"><label class="df-config-label">Role</label>
+          <select class="model-select" style="font-size:0.66rem;padding:3px 6px" onchange="dfUpdateNodeData(${nodeId},'role',this.value)">
+            ${Object.keys(dfRoleColors).map(r=>`<option value="${r}"${data.role===r?' selected':''}>${r}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Prompt</div>
+        <textarea class="chat-input" style="min-height:80px;font-size:0.66rem;resize:vertical" onchange="dfUpdateNodeData(${nodeId},'system_prompt',this.value)">${esc(data.system_prompt)}</textarea>
+      </div>
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Outputs</div>
+        <div id="df-outputs-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${data.outputs.map((o,i)=>`<span class="df-tag">${esc(o)}<span class="df-tag-remove" onclick="dfRemoveOutput(${nodeId},${i})">✕</span></span>`).join('')}</div>
+        <div style="display:flex;gap:4px"><input type="text" id="df-new-output-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="output_key" onkeydown="if(event.key==='Enter'){dfAddOutput(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddOutput(${nodeId})">Add</button></div>
+        <div style="margin-top:6px"><label class="df-config-label">Output format</label><select class="model-select" style="font-size:0.64rem;padding:2px 4px" onchange="dfUpdateNodeData(${nodeId},'output_format',this.value)">${fmtOptions}</select></div>
+      </div>
+      <div style="padding:8px 0">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Quality Gates</div>
+        <div id="df-gates-${nodeId}">${gatesHtml}</div>
+        <button class="action-btn" style="font-size:0.56rem;padding:2px 8px;margin-top:4px" onclick="dfAddGate(${nodeId})">+ Gate</button>
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+          <button class="action-btn" style="font-size:0.56rem;padding:2px 10px;color:var(--red);border-color:var(--red)" onclick="dfDeleteNode(${nodeId})">Delete Node</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function dfUpdateNodeData(nodeId, field, value) {
+  if (!dfNodeData[nodeId]) return;
+  dfNodeData[nodeId][field] = value;
+  const html = dfNodeHtml(dfNodeData[nodeId]);
+  dfEditor.drawflow.drawflow.Home.data[nodeId].html = html;
+  const nodeEl = document.querySelector(`#node-${nodeId} .drawflow_content_node`);
+  if (nodeEl) nodeEl.innerHTML = html;
+  if (dfSelectedNodeId === nodeId) dfRenderConfigPanel(nodeId);
+}
+
+function dfAddOutput(nodeId) {
+  const inp = document.getElementById(`df-new-output-${nodeId}`);
+  if (!inp || !inp.value.trim()) return;
+  dfNodeData[nodeId].outputs.push(inp.value.trim());
+  inp.value = '';
+  dfUpdateNodeData(nodeId, 'outputs', dfNodeData[nodeId].outputs);
+}
+
+function dfRemoveOutput(nodeId, idx) {
+  if (!dfNodeData[nodeId]) return;
+  dfNodeData[nodeId].outputs.splice(idx, 1);
+  dfUpdateNodeData(nodeId, 'outputs', dfNodeData[nodeId].outputs);
+}
+
+function dfAddGate(nodeId) {
+  if (!dfNodeData[nodeId]) return;
+  if (!dfNodeData[nodeId].quality_gates) dfNodeData[nodeId].quality_gates = [];
+  dfNodeData[nodeId].quality_gates.push({ field: '', operator: 'not_empty', value: '' });
+  dfRenderConfigPanel(nodeId);
+}
+
+function dfRemoveGate(nodeId, idx) {
+  if (!dfNodeData[nodeId] || !dfNodeData[nodeId].quality_gates) return;
+  dfNodeData[nodeId].quality_gates.splice(idx, 1);
+  dfRenderConfigPanel(nodeId);
+}
+
+function dfUpdateGate(nodeId, idx, field, value) {
+  if (!dfNodeData[nodeId] || !dfNodeData[nodeId].quality_gates) return;
+  dfNodeData[nodeId].quality_gates[idx][field] = value;
+}
+
+function dfDeleteNode(nodeId) {
+  if (!dfEditor) return;
+  dfEditor.removeNodeId('node-' + nodeId);
+}
+
+function dfOnConnectionCreated(conn) {
+  const fromId = parseInt(conn.output_id), toId = parseInt(conn.input_id);
+  const from = dfNodeData[fromId], to = dfNodeData[toId];
+  if (from && to) {
+    from.outputs.forEach(out => { const ref = `${from.id}.${out}`; if (!to.inputs.includes(ref)) to.inputs.push(ref); });
+    if (dfSelectedNodeId === toId) dfRenderConfigPanel(toId);
+  }
+}
+
+function dfOnConnectionRemoved(conn) {
+  const fromId = parseInt(conn.output_id), toId = parseInt(conn.input_id);
+  const from = dfNodeData[fromId], to = dfNodeData[toId];
+  if (from && to) {
+    to.inputs = to.inputs.filter(ref => !ref.startsWith(from.id + '.'));
+    if (dfSelectedNodeId === toId) dfRenderConfigPanel(toId);
+  }
+}
+
+function dfExportYaml() {
+  if (!dfEditor) return;
+  const exported = dfEditor.export();
+  const homeData = exported.drawflow.Home.data;
+  const nodeIds = Object.keys(homeData).map(Number);
+  const wfId   = document.getElementById('df-wf-id')?.value   || 'my-workflow';
+  const wfName = document.getElementById('df-wf-name')?.value || 'My Workflow';
+  const wfDesc = document.getElementById('df-wf-desc')?.value || '';
+  const wfRole = document.getElementById('df-wf-role')?.value || 'general';
+
+  let yaml = `id: ${wfId}\nname: "${wfName}"\nversion: "1.0"\n`;
+  if (wfDesc) yaml += `description: "${wfDesc}"\n`;
+  yaml += `\ndefaults:\n  role: ${wfRole}\n  temperature: 0.7\n  max_tokens: 4096\n  retries: 2\n  retry_delay: 5\n\nsteps:\n`;
+
+  nodeIds.forEach(nid => {
+    const data = dfNodeData[nid];
+    if (!data) return;
+    const nodeInfo = homeData[nid];
+    const deps = [];
+    if (nodeInfo.inputs) Object.values(nodeInfo.inputs).forEach(inp => (inp.connections||[]).forEach(conn => { const src = dfNodeData[parseInt(conn.node)]; if (src && !deps.includes(src.id)) deps.push(src.id); }));
+    yaml += `  - id: ${data.id}\n    name: "${data.name}"\n    role: ${data.role}\n    system_prompt: |\n`;
+    data.system_prompt.split('\n').forEach(line => { yaml += `      ${line}\n`; });
+    if (data.inputs.length) { yaml += `    inputs:\n`; data.inputs.forEach(i => { yaml += `      - ${i}\n`; }); }
+    yaml += `    outputs:\n`; data.outputs.forEach(o => { yaml += `      - ${o}\n`; });
+    if (deps.length) { yaml += `    depends_on:\n`; deps.forEach(d => { yaml += `      - ${d}\n`; }); }
+    if (data.output_format !== 'raw') yaml += `    output_parser:\n      format: ${data.output_format}\n`;
+    if (data.quality_gates && data.quality_gates.length) {
+      yaml += `    quality_gates:\n`;
+      data.quality_gates.forEach(g => { yaml += `      - field: ${g.field}\n        operator: ${g.operator}\n`; if (g.value) yaml += `        value: "${g.value}"\n`; });
+    }
+    yaml += `\n`;
+  });
+
+  document.getElementById('df-yaml-panel').style.display = 'block';
+  document.getElementById('df-yaml-output').textContent = yaml;
+  return yaml;
+}
+
+async function dfSave() {
+  const yamlText = dfExportYaml();
+  if (!yamlText) return;
+  let definition;
+  try { definition = jsyaml.load(yamlText); } catch (e) { alert('YAML error: ' + e.message); return; }
+  const overwrite = true;
+  try {
+    const resp = await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite }) });
+    if (resp.ok) {
+      const result = await resp.json();
+      alert('Saved: ' + result.path);
+      if (typeof refreshWorkflows === 'function') refreshWorkflows();
+    } else {
+      const err = await resp.json();
+      alert('Save failed: ' + (err.detail || JSON.stringify(err)));
+    }
+  } catch (e) { alert('Save error: ' + e.message); }
+}
+
+async function dfRunWorkflow() {
+  const yamlText = dfExportYaml();
+  if (!yamlText) return;
+  let definition;
+  try { definition = jsyaml.load(yamlText); } catch (e) { alert('YAML error: ' + e.message); return; }
+  try { await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite: true }) }); } catch (e) { /* ignore save errors for run */ }
+  setWfMode('run');
+  const id = document.getElementById('df-wf-id')?.value || 'my-workflow';
+  if (typeof refreshWorkflows === 'function') {
+    await refreshWorkflows();
+    const sel = document.getElementById('wf-select');
+    if (sel) { sel.value = id; if (typeof loadWorkflowDetail === 'function') loadWorkflowDetail(); }
+  }
+}
+
+function dfClearConfigPanel() {
+  const panel = document.getElementById('df-config-panel');
+  const title = document.getElementById('df-config-title');
+  if (panel) panel.innerHTML = '<div style="padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.64rem">Drag a step from the palette to begin. Click a node to configure it.</div>';
+  if (title) title.textContent = 'Config';
+}
+
+function dfAutoLayout() {
+  if (!dfEditor || typeof dagre === 'undefined') return;
+  const exported = dfEditor.export();
+  const nodes = exported.drawflow.Home.data;
+  const nodeIds = Object.keys(nodes);
+  if (!nodeIds.length) return;
+
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 });
+  g.setDefaultEdgeLabel(() => ({}));
+  nodeIds.forEach(id => g.setNode(id, { width: 170, height: 70 }));
+  nodeIds.forEach(id => {
+    const node = nodes[id];
+    if (node.outputs && node.outputs.output_1 && node.outputs.output_1.connections) {
+      node.outputs.output_1.connections.forEach(conn => g.setEdge(id, String(conn.node)));
+    }
+  });
+  dagre.layout(g);
+  nodeIds.forEach(id => {
+    const pos = g.node(id);
+    if (!pos) return;
+    nodes[id].pos_x = pos.x - 85;
+    nodes[id].pos_y = pos.y - 35;
+    const el = document.querySelector(`#node-${id}`);
+    if (el) { el.style.left = (pos.x - 85) + 'px'; el.style.top = (pos.y - 35) + 'px'; }
+  });
+  nodeIds.forEach(id => { try { dfEditor.updateConnectionNodes(`node-${id}`); } catch(e) {} });
+}
+
+function dfImportYaml() {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);padding:20px;width:600px;max-height:80vh;display:flex;flex-direction:column;gap:10px"><div style="font-size:0.8rem;color:var(--text);font-weight:600">Import Workflow YAML</div><div style="font-size:0.6rem;color:var(--text-dim)">Paste a workflow YAML definition. All current nodes will be replaced.</div><textarea id="df-import-textarea" style="width:100%;min-height:300px;background:var(--bg-deep);color:var(--text);border:1px solid var(--border);font-family:var(--mono);font-size:0.65rem;padding:10px;resize:vertical"></textarea><div style="display:flex;gap:8px;justify-content:flex-end"><button class="action-btn" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button><button class="action-btn" onclick="dfDoImport()" style="color:var(--cyan);border-color:var(--cyan-dim)">Import</button></div></div>`;
+  document.body.appendChild(modal);
+}
+
+function dfDoImport() {
+  const textarea = document.getElementById('df-import-textarea');
+  if (!textarea) return;
+  const yamlText = textarea.value;
+  textarea.closest('div[style*=fixed]').remove();
+  if (!yamlText.trim()) return;
+
+  let parsed;
+  try { parsed = jsyaml.load(yamlText); } catch (e) { alert('Invalid YAML: ' + e.message); return; }
+  if (!parsed || !parsed.steps || !Array.isArray(parsed.steps)) { alert('YAML must have a "steps" array'); return; }
+
+  dfEditor.clear();
+  dfNodeData = {};
+  if (parsed.id)   document.getElementById('df-wf-id').value   = parsed.id;
+  if (parsed.name) document.getElementById('df-wf-name').value  = parsed.name;
+  if (parsed.description) document.getElementById('df-wf-desc').value = typeof parsed.description === 'string' ? parsed.description.trim() : '';
+  if (parsed.defaults && parsed.defaults.role) document.getElementById('df-wf-role').value = parsed.defaults.role;
+
+  if (typeof dagre === 'undefined') {
+    parsed.steps.forEach((step, i) => { dfAddNodeFromImportedStep(step, 80 + i * 200, 80); });
+    return;
+  }
+
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 });
+  g.setDefaultEdgeLabel(() => ({}));
+  const stepIds = new Set(parsed.steps.map(s => s.id));
+  parsed.steps.forEach(step => g.setNode(step.id, { width: 170, height: 70 }));
+  parsed.steps.forEach(step => {
+    const deps = new Set();
+    if (step.depends_on) step.depends_on.forEach(d => deps.add(d));
+    if (step.inputs) step.inputs.forEach(inp => { const ns = inp.split('.')[0]; if (ns !== 'seed' && ns !== 'shared' && stepIds.has(ns)) deps.add(ns); });
+    deps.forEach(dep => { if (stepIds.has(dep)) g.setEdge(dep, step.id); });
+  });
+  dagre.layout(g);
+
+  const stepToNodeId = {};
+  parsed.steps.forEach(step => {
+    const pos = g.node(step.id);
+    const x = pos ? pos.x - 85 : 100, y = pos ? pos.y - 35 : 80;
+    const nodeId = dfAddNodeFromImportedStep(step, x, y);
+    stepToNodeId[step.id] = nodeId;
+  });
+
+  parsed.steps.forEach(step => {
+    if (!step.depends_on) return;
+    step.depends_on.forEach(dep => {
+      const fromId = stepToNodeId[dep], toId = stepToNodeId[step.id];
+      if (fromId && toId) try { dfEditor.addConnection(fromId, toId, 'output_1', 'input_1'); } catch(e) {}
+    });
+  });
+}
+
+function dfAddNodeFromImportedStep(step, x, y) {
+  const tmpl = dfStepTemplates.find(t => t.key === (step.role || 'custom')) || dfStepTemplates[dfStepTemplates.length - 1];
+  const data = {
+    id: step.id || (tmpl.key + '_' + (++dfNextId)),
+    name: step.name || step.id || tmpl.name,
+    role: step.role || 'general',
+    system_prompt: (step.system_prompt || tmpl.prompt || '').trim(),
+    outputs: step.outputs || [...tmpl.outputs],
+    output_format: (step.output_parser && step.output_parser.format) || tmpl.format,
+    quality_gates: step.quality_gates || [],
+    inputs: step.inputs || [],
+  };
+  const nodeId = dfEditor.addNode(data.id, 1, 1, x, y, data.id, {}, dfNodeHtml(data));
+  dfNodeData[nodeId] = data;
+  return nodeId;
+}
+
+/* ── AGENTS TAB ─────────────────────────────────────────────────── */
+let _activeAgentId = null;
+let _agentHistory = [];
+
+async function loadAgentsTab() {
+  const listEl = document.getElementById('agents-list');
+  const emptyEl = document.getElementById('agents-empty');
+  listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">Loading…</div>';
+  emptyEl.style.display = 'none';
+
+  let agents = [];
+  try {
+    const r = await fetch('/api/agents');
+    if (r.ok) agents = await r.json();
+  } catch (e) {
+    listEl.innerHTML = '<div style="color:var(--red,#f44);font-size:0.8rem;padding:8px;">Failed to load agents.</div>';
+    return;
+  }
+
+  const countEl = document.getElementById('agents-count');
+  if (countEl) countEl.textContent = agents.length || '';
+
+  if (!agents.length) {
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  listEl.innerHTML = agents.map(a => `
+    <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;transition:border-color 0.15s;"
+         onclick="openAgentChat('${esc(a.id)}')"
+         onmouseenter="this.style.borderColor='var(--cyan)'"
+         onmouseleave="this.style.borderColor='var(--border)'">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="font-size:1.2rem;">${a.icon || '🤖'}</span>
+        <strong style="color:var(--text);font-size:0.88rem;flex:1">${esc(a.name)}</strong>
+        <button onclick="event.stopPropagation();showEditAgentModal('${esc(a.id)}')"
+                style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.75rem;padding:2px 6px;"
+                title="Edit agent">✎</button>
+        <button onclick="event.stopPropagation();deleteAgent('${esc(a.id)}')"
+                style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.75rem;padding:2px 6px;"
+                title="Delete agent">✕</button>
+      </div>
+      ${a.description ? `<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">${esc(a.description)}</div>` : ''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${(a.tags||[]).map(t=>`<span style="font-size:0.65rem;background:var(--bg-deep);border:1px solid var(--border);color:var(--text-muted);padding:1px 6px;border-radius:3px;">${esc(t)}</span>`).join('')}
+        ${a.role ? `<span style="font-size:0.65rem;background:var(--bg-deep);border:1px solid var(--cyan-dim);color:var(--cyan-dim);padding:1px 6px;border-radius:3px;">${esc(a.role)}</span>` : ''}
+      </div>
+      ${a.starters && a.starters.length ? `
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+          ${a.starters.slice(0,2).map(s=>`
+            <div onclick="event.stopPropagation();openAgentChatWithStarter('${esc(a.id)}','${esc(s)}')"
+                 style="font-size:0.72rem;color:var(--text-dim);background:var(--bg-deep);border:1px solid var(--border);padding:4px 8px;border-radius:4px;cursor:pointer;"
+                 onmouseenter="this.style.borderColor='var(--cyan)'"
+                 onmouseleave="this.style.borderColor='var(--border)'">
+              ↗ ${esc(s)}
+            </div>`).join('')}
+        </div>` : ''}
+    </div>`).join('');
+}
+
+async function openAgentChat(agentId) {
+  _activeAgentId = agentId;
+  _agentHistory = [];
+  let agent;
+  try {
+    const r = await fetch(`/api/agents/${agentId}`);
+    if (!r.ok) throw new Error('not found');
+    agent = await r.json();
+  } catch(e) {
+    alert('Failed to load agent: ' + agentId);
+    return;
+  }
+  document.getElementById('agent-chat-icon').textContent = agent.icon || '🤖';
+  document.getElementById('agent-chat-name').textContent = agent.name;
+  document.getElementById('agent-chat-model').textContent = agent.role ? `role:${agent.role}` : (agent.model || '');
+  document.getElementById('agent-chat-messages').innerHTML = `
+    <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;">
+      Chat with <strong style="color:var(--cyan)">${esc(agent.name)}</strong> — type a message below
+    </div>`;
+  document.getElementById('agent-chat-panel').style.display = 'block';
+  document.getElementById('agent-chat-input').focus();
+}
+
+function openAgentChatWithStarter(agentId, starter) {
+  openAgentChat(agentId).then(() => {
+    document.getElementById('agent-chat-input').value = starter;
+    sendAgentMessage();
+  });
+}
+
+function closeAgentChat() {
+  _activeAgentId = null;
+  _agentHistory = [];
+  document.getElementById('agent-chat-panel').style.display = 'none';
+}
+
+async function sendAgentMessage() {
+  if (!_activeAgentId) return;
+  const input = document.getElementById('agent-chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  _agentHistory.push({ role: 'user', content: text });
+
+  const msgEl = document.getElementById('agent-chat-messages');
+  const userBubble = `<div style="align-self:flex-end;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:80%;font-size:0.82rem;white-space:pre-wrap;">${esc(text)}</div>`;
+  const thinkingBubble = `<div id="agent-thinking" style="align-self:flex-start;color:var(--text-muted);font-size:0.78rem;padding:4px 8px;">thinking…</div>`;
+  msgEl.insertAdjacentHTML('beforeend', userBubble + thinkingBubble);
+  msgEl.scrollTop = msgEl.scrollHeight;
+
+  let result;
+  try {
+    const r = await fetch(`/api/agents/${_activeAgentId}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: _agentHistory }),
+    });
+    result = await r.json();
+    if (!r.ok) throw new Error(result.detail || 'Chat failed');
+  } catch(e) {
+    document.getElementById('agent-thinking')?.remove();
+    msgEl.insertAdjacentHTML('beforeend',
+      `<div style="align-self:flex-start;color:var(--red,#f44);font-size:0.78rem;padding:4px 8px;">${esc(String(e))}</div>`);
+    msgEl.scrollTop = msgEl.scrollHeight;
+    return;
+  }
+
+  document.getElementById('agent-thinking')?.remove();
+  const content = result.content || '';
+  _agentHistory.push({ role: 'assistant', content });
+  msgEl.insertAdjacentHTML('beforeend',
+    `<div style="align-self:flex-start;background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:85%;font-size:0.82rem;white-space:pre-wrap;">${esc(content)}</div>`);
+  msgEl.scrollTop = msgEl.scrollHeight;
+}
+
+async function deleteAgent(agentId) {
+  if (!confirm(`Delete agent "${agentId}"?`)) return;
+  try {
+    const r = await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Delete failed');
+    loadAgentsTab();
+    if (_activeAgentId === agentId) closeAgentChat();
+  } catch(e) {
+    alert('Failed to delete agent: ' + e.message);
+  }
+}
+
+/* ── Agent Create / Edit Modal ──────────────────────────────────────── */
+
+function _agentModalHtml(mode, a) {
+  const isEdit = mode === 'edit';
+  const inputStyle = 'width:100%;background:var(--bg-deep);border:1px solid var(--border);color:var(--text);padding:6px 9px;border-radius:4px;font-family:var(--mono);font-size:0.78rem;box-sizing:border-box;';
+  const labelStyle = 'font-size:0.7rem;color:var(--text-muted);margin-bottom:3px;display:block;';
+  const roleOpts = ['','general','coding','reasoning','fast','uncensored']
+    .map(r => `<option value="${r}" ${(a&&a.role===r)||(!a&&r==='')?'selected':''}>${r||'— none —'}</option>`)
+    .join('');
+  const startersVal = a && a.starters && a.starters.length ? a.starters.join('\n') : '';
+  const tempVal = a && a.temperature !== undefined ? a.temperature : 0.7;
+  const modelVal = a && a.model ? esc(a.model) : '';
+  const contextJson = JSON.stringify(a && a.context ? a.context : []);
+  const toolsJson   = JSON.stringify(a && a.tools   ? a.tools   : []);
+  return `
+  <div style="font-size:0.82rem;color:var(--text);font-weight:600;margin-bottom:2px;">${isEdit ? 'Edit Agent' : 'New Agent'}</div>
+  <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:12px;">${isEdit ? `Editing <strong style="color:var(--cyan)">${esc(a.id)}</strong>` : 'Define a custom AI persona'}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+    <div>
+      <label style="${labelStyle}">ID (slug) *</label>
+      <input id="am-id" type="text" placeholder="my-assistant" value="${a?esc(a.id):''}" ${isEdit?'disabled':''} style="${inputStyle}${isEdit?'opacity:0.5;cursor:not-allowed;':''}">
+    </div>
+    <div>
+      <label style="${labelStyle}">Display name *</label>
+      <input id="am-name" type="text" placeholder="My Assistant" value="${a?esc(a.name):''}" style="${inputStyle}">
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 60px;gap:10px;margin-top:8px;">
+    <div>
+      <label style="${labelStyle}">Description</label>
+      <input id="am-desc" type="text" placeholder="What this agent does…" value="${a&&a.description?esc(a.description):''}" style="${inputStyle}">
+    </div>
+    <div>
+      <label style="${labelStyle}">Icon</label>
+      <input id="am-icon" type="text" placeholder="🤖" value="${a&&a.icon?esc(a.icon):''}" style="${inputStyle}text-align:center;">
+    </div>
+  </div>
+  <div style="margin-top:8px;">
+    <label style="${labelStyle}">System prompt *</label>
+    <textarea id="am-prompt" rows="5" placeholder="You are a helpful assistant…" style="${inputStyle}resize:vertical;">${a?esc(a.system_prompt):''}</textarea>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+    <div>
+      <label style="${labelStyle}">Role</label>
+      <select id="am-role" style="${inputStyle}">${roleOpts}</select>
+    </div>
+    <div>
+      <label style="${labelStyle}">Tags (comma-separated)</label>
+      <input id="am-tags" type="text" placeholder="coding, review" value="${a&&a.tags?esc(a.tags.join(', ')):''}" style="${inputStyle}">
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 90px 90px;gap:10px;margin-top:8px;">
+    <div>
+      <label style="${labelStyle}">Model override <span style="color:var(--text-dim)">(leave blank to use role)</span></label>
+      <input id="am-model" type="text" placeholder="llama3.2 or leave blank" value="${modelVal}" style="${inputStyle}">
+    </div>
+    <div>
+      <label style="${labelStyle}">Temperature</label>
+      <input id="am-temp" type="number" min="0" max="2" step="0.05" value="${tempVal}" style="${inputStyle}text-align:center;">
+    </div>
+    <div>
+      <label style="${labelStyle}">Max tokens</label>
+      <input id="am-max-tokens" type="number" min="256" max="32768" step="256" value="${a && a.max_tokens ? a.max_tokens : 4096}" style="${inputStyle}text-align:center;">
+    </div>
+  </div>
+  <div style="margin-top:8px;">
+    <label style="${labelStyle}">Conversation starters <span style="color:var(--text-dim)">(one per line, shown as quick-start chips)</span></label>
+    <textarea id="am-starters" rows="3" placeholder="Review this function for bugs&#10;What's the time complexity here?" style="${inputStyle}resize:vertical;">${esc(startersVal)}</textarea>
+  </div>
+  <input type="hidden" id="am-context-json" value="${esc(contextJson)}">
+  <input type="hidden" id="am-tools-json" value="${esc(toolsJson)}">
+  <div id="am-error" style="display:none;color:var(--red,#f44);font-size:0.72rem;margin-top:8px;padding:6px 8px;background:rgba(255,68,68,0.08);border-radius:4px;"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+    <button class="action-btn" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button>
+    <button class="action-btn" id="am-save-btn" onclick="_saveAgentModal('${isEdit?a.id:''}')"
+            style="color:var(--cyan);border-color:var(--cyan-dim);">${isEdit ? 'Save changes' : 'Create agent'}</button>
+  </div>`;
+}
+
+function showCreateAgentModal() {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:560px;max-height:90vh;overflow-y:auto;border-radius:6px;display:flex;flex-direction:column;gap:0;';
+  inner.innerHTML = _agentModalHtml('create', null);
+  modal.appendChild(inner);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  inner.querySelector('#am-id').focus();
+}
+
+async function showEditAgentModal(agentId) {
+  let agent;
+  try {
+    const r = await fetch(`/api/agents/${agentId}`);
+    if (!r.ok) throw new Error('not found');
+    agent = await r.json();
+  } catch(e) {
+    alert('Failed to load agent for editing: ' + agentId);
+    return;
+  }
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:560px;max-height:90vh;overflow-y:auto;border-radius:6px;display:flex;flex-direction:column;gap:0;';
+  inner.innerHTML = _agentModalHtml('edit', agent);
+  modal.appendChild(inner);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  inner.querySelector('#am-name').focus();
+}
+
+async function _saveAgentModal(existingId) {
+  const isEdit = !!existingId;
+  const idVal    = isEdit ? existingId : (document.getElementById('am-id')?.value.trim() || '');
+  const nameVal  = document.getElementById('am-name')?.value.trim() || '';
+  const descVal  = document.getElementById('am-desc')?.value.trim() || '';
+  const iconVal  = document.getElementById('am-icon')?.value.trim() || '';
+  const promptVal = document.getElementById('am-prompt')?.value.trim() || '';
+  const roleVal  = document.getElementById('am-role')?.value || '';
+  const tagsRaw  = document.getElementById('am-tags')?.value || '';
+  const tags     = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+
+  const errEl = document.getElementById('am-error');
+  const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+
+  if (!isEdit && !/^[a-z0-9-]+$/.test(idVal)) { showErr('ID must be lowercase letters, numbers, and hyphens only.'); return; }
+  if (!nameVal) { showErr('Display name is required.'); return; }
+  if (!promptVal) { showErr('System prompt is required.'); return; }
+
+  const modelField = document.getElementById('am-model')?.value.trim() || null;
+  const tempField  = parseFloat(document.getElementById('am-temp')?.value);
+  const temperature = isNaN(tempField) ? 0.7 : tempField;
+  const maxTokField = parseInt(document.getElementById('am-max-tokens')?.value, 10);
+  const max_tokens = isNaN(maxTokField) ? 4096 : maxTokField;
+  const startersRaw = document.getElementById('am-starters')?.value || '';
+  const starters = startersRaw.split('\n').map(s => s.trim()).filter(Boolean);
+  let context = [], tools = [];
+  try { context = JSON.parse(document.getElementById('am-context-json')?.value || '[]'); } catch(_) {}
+  try { tools   = JSON.parse(document.getElementById('am-tools-json')?.value   || '[]'); } catch(_) {}
+
+  const payload = {
+    id: idVal, name: nameVal, description: descVal || null,
+    icon: iconVal || null, system_prompt: promptVal,
+    role: roleVal || null, tags,
+    model: modelField, temperature, max_tokens, starters, context, tools,
+  };
+
+  const btn = document.getElementById('am-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    const url = isEdit ? `/api/agents/${existingId}` : '/api/agents';
+    const method = isEdit ? 'PUT' : 'POST';
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (!r.ok) { showErr(d.detail || JSON.stringify(d)); if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; } return; }
+    document.querySelector('div[style*=fixed]')?.remove();
+    loadAgentsTab();
+  } catch(e) {
+    showErr('Request failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; }
+  }
+}
+>>>>>>> Stashed changes
 </script>
 </body>
 </html>

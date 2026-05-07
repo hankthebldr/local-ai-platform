@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
   pull_request:
-    branches: [master, main]
+    branches: [master]
 
 jobs:
   test:
@@ -29,9 +29,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r setup/requirements-core.txt
           pip install -r setup/requirements-dev.txt
+          pip install pytest-cov
 
+      # Excluded suites:
+      #   Integration / TestAuthentication / TestMultiKeyAuth — require a live
+      #     Ollama instance and on-disk api_keys.yaml setup; run locally only.
+      #   -m "not rag" — RAG suite needs sentence-transformers + Chroma which
+      #     are heavy to install on every CI run.
+      # Coverage is reported but not yet enforced; the 2.0.0 bar is >=70%.
       - name: Run tests
-        run: pytest tests/ -v --tb=short -k "not Integration and not TestAuthentication and not TestMultiKeyAuth"
+        run: |
+          pytest tests/ -v --tb=short \
+            -k "not Integration and not TestAuthentication and not TestMultiKeyAuth" \
+            -m "not rag" \
+            --cov=api --cov-report=term --cov-report=xml
+
+      - name: Upload coverage artifact
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: warn
 
   lint:
     name: Lint
@@ -57,3 +76,80 @@ jobs:
       - name: Lint (flake8)
         run: flake8 api/ cli/ models/ --max-line-length=120 --extend-ignore=E501,W503 || echo "::warning::Flake8 issues (non-blocking)"
         continue-on-error: true
+
+  dmg-smoke:
+    # Build the .app bundle on every PR + master push and verify it boots.
+    # Skips final DMG packaging (saves ~1m); release.yml does the full DMG.
+    # Catches regressions in scripts/build_mac.sh, desktop/app.py, and
+    # api/main.py startup before they ship in a tagged release.
+    name: macOS .app smoke build
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install librsvg (for icon generation)
+        run: brew install librsvg
+
+      - name: Regenerate icon assets
+        run: |
+          ./scripts/generate-icons.sh
+          test -f assets/icons/icon.icns
+
+      - name: Build .app bundle (skip DMG packaging)
+        env:
+          ENCLAVE_VERSION: ci-${{ github.sha }}
+        run: |
+          # Run build_mac.sh up through bundle verification, then stop short
+          # of create-dmg/hdiutil to keep CI runtime tight.
+          ./scripts/build_mac.sh 2>&1 | tee build.log || {
+              echo "::error::build_mac.sh failed"; tail -50 build.log; exit 1;
+          }
+          test -d "dist/Enclave.app"
+          test -f "dist/Enclave.app/Contents/MacOS/Enclave"
+          test -f "dist/Enclave.app/Contents/Info.plist"
+
+      - name: Verify version was stamped (not the legacy 0.1.0 placeholder)
+        run: |
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+              "dist/Enclave.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" \
+              "dist/Enclave.app/Contents/Info.plist"
+
+      - name: Boot the bundled API and probe UX routes
+        run: |
+          set -e
+          BUNDLE="dist/Enclave.app/Contents/Resources"
+          export PYTHONPATH="$BUNDLE"
+          export ENABLE_API_AUTH=false
+          export API_HOST=127.0.0.1
+          export API_PORT=8765
+
+          "$BUNDLE/venv/bin/python" -m api.main >api.log 2>&1 &
+          API_PID=$!
+          trap "kill $API_PID 2>/dev/null || true" EXIT
+
+          for _ in $(seq 1 30); do
+              if curl -sf -m 2 http://127.0.0.1:8765/health >/dev/null; then
+                  break
+              fi
+              sleep 0.5
+          done
+
+          # Hard-fail if any of the user-facing surfaces 404 or refuse.
+          for path in /health / /static/index.html /setup /api/info; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' \
+                  -m 5 "http://127.0.0.1:8765${path}")
+              if [ "$code" != "200" ]; then
+                  echo "::error::UX route ${path} returned HTTP ${code}"
+                  echo "--- api log ---"; tail -80 api.log
+                  exit 1
+              fi
+              echo "  ok  ${path} -> ${code}"
+          done

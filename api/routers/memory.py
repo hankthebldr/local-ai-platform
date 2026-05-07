@@ -21,6 +21,13 @@ class AddFactRequest(BaseModel):
     source_conversation: Optional[str] = Field(None, description="Source conversation ID")
 
 
+class UpdateFactRequest(BaseModel):
+    """All fields optional — None means 'leave alone'."""
+    content: Optional[str] = None
+    tags: Optional[List[str]] = None
+    enabled: Optional[bool] = None
+
+
 class SearchRequest(BaseModel):
     query: str = Field(..., description="Search query")
 
@@ -63,11 +70,36 @@ async def add_fact(body: AddFactRequest):
     )
 
 
+@router.patch("/facts/{fact_id}")
+async def update_fact(fact_id: str, body: UpdateFactRequest):
+    """Patch a fact in place. Lets the ledger UI edit content/tags or
+    toggle a fact on/off without losing its id."""
+    updated = memory_service.update_fact(
+        fact_id,
+        content=body.content,
+        tags=body.tags,
+        enabled=body.enabled,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Fact not found")
+    return updated
+
+
 @router.delete("/facts/{fact_id}")
 async def delete_fact(fact_id: str):
     if not memory_service.delete_fact(fact_id):
         raise HTTPException(status_code=404, detail="Fact not found")
     return {"status": "deleted", "id": fact_id}
+
+
+@router.get("/injection-preview")
+async def injection_preview():
+    """
+    Return the literal system-message text injected into chat completions
+    plus a fact-by-fact breakdown of what contributes vs what's parked.
+    This is the "what gets sent to the model" panel in the memory ledger.
+    """
+    return memory_service.injection_preview()
 
 
 @router.get("/stats")

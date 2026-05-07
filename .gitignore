@@ -58,6 +58,9 @@ venv.bak/
 .env.local
 *.env
 
+# Stray logs at any depth (data/logs/* already covered)
+*.log
+
 # Models and data (large files)
 data/models/*.gguf
 data/models/*.bin
@@ -108,12 +111,17 @@ $RECYCLE.BIN/
 # Workflow run data (persisted locally)
 data/workflows/*/
 
+# A2A task state (persisted locally — same pattern as workflows)
+data/a2a/
+
 # Brainstorm session files
 .superpowers/
 
 # ── Runtime user data — never commit ────────────────────────────────
 # API key hashes and metadata (managed via /api/keys endpoints)
 data/config/api_keys.yaml
+# First-run master key sentinel (raw value, mode 0600)
+data/config/first-run-key.txt
 # User-pinned memories and session summaries
 data/memory/sessions/
 data/memory/facts.yaml
@@ -153,3 +161,13 @@ data/logs/*.jsonl
 
 # Claude Code user-specific overrides
 .claude/settings.local.json
+
+# Desktop app build artifacts (from magical-payne)
+desktop/dist/
+desktop/build/
+*.app
+
+# ── Claude Code worktrees (project-local isolation) ─────────────────
+.claude/worktrees/
+.worktrees/
+.superpowers/

@@ -1,0 +1,674 @@
+# ── XSIAM Normalization Pipeline ──────────────────────────────────────────
+#
+# Production-grade 10-step workflow implementing PANW's complete
+# data onboarding methodology:
+#
+#   Phase 1: Analysis         (steps 1-2, parallel)
+#   Phase 2: Parsing          (step 3)
+#   Phase 3: Normalization    (step 4)
+#   Phase 4: Validation       (steps 5-6, parallel)
+#   Phase 5: Detection        (steps 7-8, parallel)
+#   Phase 6: Quality Assurance (step 9)
+#   Phase 7: Documentation    (step 10)
+#
+# DAG shape:
+#   [1:analyze_source] ─┐
+#                        ├─→ [3:write_parsing_rule] → [4:write_model_rule] ─┐
+#   [2:classify_threats] ┘                                                   │
+#                                                                            ├─→ [5:validate_xdm_coverage]  ─┐
+#                                                                            │                                ├─→ [9:qa_review] → [10:generate_runbook]
+#                                                                            ├─→ [6:validate_enum_correctness]┘
+#                                                                            │
+#                                                                            ├─→ [7:write_correlation_rules] ─┤
+#                                                                            └─→ [8:write_stitching_spec]    ─┘
+
+id: xsiam-normalization-pipeline
+name: "XSIAM Full Normalization Pipeline"
+version: "3.0"
+description: |
+  Complete 10-step pipeline for onboarding a log source into Cortex XSIAM.
+  Produces parsing rules, XDM data model rules, correlation rules,
+  stitching specifications, validation queries, and a SOC runbook.
+
+metadata:
+  author: "Local AI Platform"
+  category: "security-engineering"
+  tags: ["xsiam", "xdr", "data-model", "normalization", "cortex", "soc", "detection"]
+  estimated_duration: 600
+
+defaults:
+  role: reasoning
+  temperature: 0.3
+  max_tokens: 8192
+  retries: 2
+  retry_delay: 5
+  timeout: 300
+
+max_parallel: 3
+
+steps:
+  # ══════════════════════════════════════════════════════════════════════
+  # PHASE 1: Analysis (parallel)
+  # ══════════════════════════════════════════════════════════════════════
+
+  - id: analyze_source
+    name: "1. Analyze Log Source Structure"
+    role: reasoning
+    description: "Parse raw log samples to extract field schema, delimiters, timestamp formats, and event types."
+    depends_on: []
+    system_prompt: |
+      You are a senior security data engineer at Palo Alto Networks specializing in
+      Cortex XSIAM data onboarding. Your task is to analyze raw log samples and produce
+      a complete field-level schema.
+
+      **Vendor**: {{seed.vendor_name}}
+      **Product**: {{seed.product_name}}
+      **Log Format**: {{seed.log_format}}
+      **Constraints**: {{seed.constraints}}
+
+      Analyze these raw log samples:
+
+      ```
+      {{seed.log_samples}}
+      ```
+
+      Produce a JSON object with these EXACT keys:
+
+      1. **log_format_details**: Object with keys:
+         - `format_type`: one of "csv", "json", "xml", "cef", "leef", "syslog_kv", "custom"
+         - `delimiter`: field separator (for CSV/KV formats)
+         - `record_delimiter`: line/record boundary
+         - `multiline`: boolean, whether events span multiple lines
+         - `encoding`: character encoding
+
+      2. **field_schema**: Array of objects, each with:
+         - `position`: 0-based index (for CSV) or JSON path (for JSON/XML)
+         - `field_name`: descriptive name for this field
+         - `data_type`: one of "string", "integer", "float", "timestamp", "ip_address", "boolean", "enum"
+         - `sample_values`: array of 2-3 example values from the logs
+         - `nullable`: boolean
+         - `cardinality`: "low" (<10 distinct), "medium" (10-100), "high" (>100)
+
+      3. **event_types**: Array of distinct event type/subtype combinations found, each with:
+         - `type`: primary event type (e.g., "TRAFFIC", "THREAT")
+         - `subtype`: secondary type if present (e.g., "end", "deny", "drop")
+         - `count`: how many sample events match
+         - `description`: what this event type represents
+
+      4. **timestamp_formats**: Array of objects:
+         - `field_name`: which field contains the timestamp
+         - `format`: strptime-compatible format string
+         - `timezone`: timezone of the timestamp (or "UTC" if embedded)
+         - `sample`: example timestamp value
+
+      5. **vendor_metadata**: Object:
+         - `vendor`: vendor name
+         - `product`: product name
+         - `version`: version if detectable from logs
+         - `serial_or_id`: device identifier if present
+    inputs:
+      - seed.log_samples
+      - seed.vendor_name
+      - seed.product_name
+      - seed.log_format
+      - seed.constraints
+    outputs:
+      - log_format_details
+      - field_schema
+      - event_types
+      - timestamp_formats
+      - vendor_metadata
+    output_parser:
+      format: json
+      strict: false
+    quality_gates:
+      - name: "has_fields"
+        field: "field_schema"
+        operator: not_empty
+        message: "No fields extracted — parsing failed"
+      - name: "has_events"
+        field: "event_types"
+        operator: not_empty
+        message: "No event types identified"
+      - name: "has_timestamps"
+        field: "timestamp_formats"
+        operator: not_empty
+        message: "No timestamp formats detected"
+    config:
+      temperature: 0.2
+      max_tokens: 12288
+
+  - id: classify_threats
+    name: "2. Classify Threat Coverage & Detection Needs"
+    role: reasoning
+    description: "Map log source to MITRE ATT&CK techniques and determine required detection analytics."
+    depends_on: []
+    system_prompt: |
+      You are a threat intelligence analyst specializing in detection engineering
+      for Cortex XSIAM/XDR. Given a log source description, determine:
+
+      **Source**: {{seed.vendor_name}} — {{seed.product_name}} ({{seed.log_type}})
+      **Known detection use cases**: {{seed.detection_use_cases | json}}
+      **MITRE techniques**: {{seed.mitre_techniques | json}}
+
+      Produce a JSON object with these EXACT keys:
+
+      1. **mitre_coverage**: Array of objects, each:
+         - `technique_id`: ATT&CK ID (e.g., "T1110.001")
+         - `technique_name`: human name
+         - `tactic`: ATT&CK tactic (e.g., "Credential Access")
+         - `detection_feasibility`: "high", "medium", "low"
+         - `required_xdm_fields`: array of XDM field paths needed for this detection
+         - `detection_logic_summary`: 1-2 sentence description of the detection approach
+
+      2. **xdm_coverage_requirements**: Object mapping XDM namespace to required fields:
+         - `xdm.event`: required event fields
+         - `xdm.source`: required source fields
+         - `xdm.target`: required target fields
+         - `xdm.network`: required network fields (if applicable)
+         - `xdm.auth`: required auth fields (if applicable)
+         - `xdm.observer`: required observer fields
+
+      3. **detection_priorities**: Array ranked by severity:
+         - `name`: detection rule name
+         - `priority`: "critical", "high", "medium"
+         - `technique_ids`: array of ATT&CK IDs
+         - `description`: what the rule detects
+         - `xql_hint`: rough XQL pseudocode for the detection
+
+      4. **stitching_requirements**: Array of cross-source correlation needs:
+         - `name`: correlation name
+         - `sources`: array of data source types involved
+         - `join_keys`: fields to correlate on
+         - `time_window`: correlation time window
+         - `description`: what the correlation detects
+    inputs:
+      - seed.vendor_name
+      - seed.product_name
+      - seed.log_type
+      - seed.detection_use_cases
+      - seed.mitre_techniques
+      - seed.expected_event_types
+    outputs:
+      - mitre_coverage
+      - xdm_coverage_requirements
+      - detection_priorities
+      - stitching_requirements
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "has_mitre"
+        field: "mitre_coverage"
+        operator: not_empty
+        message: "No MITRE ATT&CK techniques mapped"
+      - name: "has_detections"
+        field: "detection_priorities"
+        operator: not_empty
+        message: "No detection priorities identified"
+
+  # ══════════════════════════════════════════════════════════════════════
+  # PHASE 2: Parsing (sequential after Phase 1)
+  # ══════════════════════════════════════════════════════════════════════
+
+  - id: write_parsing_rule
+    name: "3. Write XSIAM Parsing Rule"
+    role: coding
+    description: "Generate the XQL [INGEST:...] parsing rule that extracts structured fields from raw logs."
+    depends_on:
+      - analyze_source
+    system_prompt: |
+      You are an XSIAM parsing rule engineer. Generate a production-ready
+      parsing rule in XQL syntax.
+
+      **Target dataset**: {{seed.xdm_dataset}}
+      **Vendor**: {{analyze_source.vendor_metadata | json}}
+      **Log format**: {{analyze_source.log_format_details | json}}
+      **Field schema**: {{analyze_source.field_schema | json}}
+      **Timestamp formats**: {{analyze_source.timestamp_formats | json}}
+
+      Generate a JSON object with these keys:
+
+      1. **parsing_rule**: The complete XQL [INGEST:...] rule as a string. Must include:
+         - Correct `[INGEST:vendor="...", product="...", target_dataset="..."]` header
+         - Field extraction using `split()` (CSV), `json_extract_scalar()` (JSON), or `regextract()` (other)
+         - All fields from the schema extracted into named variables
+         - Comments explaining non-obvious extraction logic
+
+      2. **field_list**: Array of extracted field names (used by downstream steps)
+
+      3. **extraction_method**: "split" | "json_extract" | "regex" | "kv_parse"
+
+      4. **validation_query**: An XQL query to verify parsing works correctly:
+         ```
+         dataset = "{{seed.xdm_dataset}}"
+         | filter _time >= now() - 1h
+         | comp count() as total,
+               count(field_a != null) as has_field_a, ...
+         ```
+    inputs:
+      - seed.xdm_dataset
+      - analyze_source.log_format_details
+      - analyze_source.field_schema
+      - analyze_source.timestamp_formats
+      - analyze_source.vendor_metadata
+    outputs:
+      - parsing_rule
+      - field_list
+      - extraction_method
+      - validation_query
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "has_rule"
+        field: "parsing_rule"
+        operator: not_empty
+      - name: "has_fields"
+        field: "field_list"
+        operator: not_empty
+    config:
+      temperature: 0.1
+      max_tokens: 12288
+
+  # ══════════════════════════════════════════════════════════════════════
+  # PHASE 3: Normalization (sequential after parsing)
+  # ══════════════════════════════════════════════════════════════════════
+
+  - id: write_model_rule
+    name: "4. Write XDM Data Model Rule"
+    role: coding
+    description: "Generate the XQL [MODEL:...] rule mapping parsed fields to XDM schema."
+    depends_on:
+      - write_parsing_rule
+      - classify_threats
+    system_prompt: |
+      You are an XSIAM data model rule engineer. Generate the complete XDM
+      normalization rule.
+
+      **Dataset**: {{seed.xdm_dataset}}
+      **Parsed fields**: {{write_parsing_rule.field_list | json}}
+      **Event types**: {{analyze_source.event_types | json}}
+      **Required XDM coverage**: {{classify_threats.xdm_coverage_requirements | json}}
+      **Known enum mappings**: {{seed.known_enum_mappings | json}}
+
+      Generate a JSON object with these keys:
+
+      1. **model_rule**: Complete XQL [MODEL:...] rule as a string. Must include:
+         - `[MODEL:dataset="{{seed.xdm_dataset}}", model="..."]` header
+         - Filter by event type if multiple types exist
+         - `alter` block with ALL field mappings
+         - Type conversions: `to_integer()`, `to_boolean()`
+         - Enum mappings: `if(field = "x", "XDM_VALUE", ...)` chains
+         - Null handling: `if(field != "", field, null)` or `if(field != "-", ...)`
+         - Conditional mappings for fields that differ by event type
+         - User domain/username splitting for `DOMAIN\user` format
+         - Comments documenting non-obvious transform logic
+
+      2. **field_mappings**: Array of objects:
+         - `source_field`: parsed field name
+         - `xdm_field`: target XDM path
+         - `transform`: "direct" | "to_integer" | "to_boolean" | "enum_map" | "split" | "regex" | "conditional" | "timestamp_parse"
+         - `transform_detail`: specifics of the transformation
+         - `event_type_filter`: which event types this mapping applies to (or "all")
+
+      3. **coverage_matrix**: Object mapping each XDM namespace to:
+         - `mapped_fields`: count of fields mapped
+         - `required_fields`: count required by detection priorities
+         - `coverage_pct`: percentage covered
+
+      4. **unmapped_fields**: Array of parsed fields NOT mapped to XDM, with rationale
+
+      5. **validation_query**: XQL query to verify XDM field population rates
+    inputs:
+      - seed.xdm_dataset
+      - seed.known_enum_mappings
+      - write_parsing_rule.field_list
+      - analyze_source.event_types
+      - classify_threats.xdm_coverage_requirements
+    outputs:
+      - model_rule
+      - field_mappings
+      - coverage_matrix
+      - unmapped_fields
+      - validation_query
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "has_model_rule"
+        field: "model_rule"
+        operator: not_empty
+      - name: "has_mappings"
+        field: "field_mappings"
+        operator: not_empty
+    config:
+      temperature: 0.1
+      max_tokens: 16384
+
+  # ══════════════════════════════════════════════════════════════════════
+  # PHASE 4: Validation (parallel after model rule)
+  # ══════════════════════════════════════════════════════════════════════
+
+  - id: validate_xdm_coverage
+    name: "5. Validate XDM Coverage"
+    role: reasoning
+    description: "Verify all required XDM fields for detections are populated."
+    depends_on:
+      - write_model_rule
+    system_prompt: |
+      You are a QA engineer validating XDM coverage for XSIAM detection rules.
+
+      **Coverage matrix**: {{write_model_rule.coverage_matrix | json}}
+      **Field mappings**: {{write_model_rule.field_mappings | json}}
+      **Required XDM fields**: {{seed.expected_xdm_fields | json}}
+      **Detection priorities**: {{classify_threats.detection_priorities | json}}
+
+      For each detection priority, verify ALL required XDM fields are mapped.
+      Identify gaps that would prevent detection rules from functioning.
+
+      Return JSON with:
+      1. **coverage_report**: Array per detection, each with:
+         - `detection_name`: name
+         - `required_fields`: array of XDM fields needed
+         - `mapped_fields`: array of those that ARE mapped
+         - `missing_fields`: array of those NOT mapped
+         - `coverage_pct`: percentage
+         - `status`: "pass" (100%), "partial" (50-99%), "fail" (<50%)
+
+      2. **critical_gaps**: Array of missing fields that block critical/high detections
+
+      3. **recommendations**: Array of suggested additions to the model rule
+
+      4. **overall_score**: Float 0-100 representing overall readiness
+    inputs:
+      - seed.expected_xdm_fields
+      - write_model_rule.coverage_matrix
+      - write_model_rule.field_mappings
+      - classify_threats.detection_priorities
+    outputs:
+      - coverage_report
+      - critical_gaps
+      - recommendations
+      - overall_score
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "score_threshold"
+        field: "overall_score"
+        operator: gte
+        value: 60
+        severity: warning
+        message: "XDM coverage below 60% — detections will have gaps"
+
+  - id: validate_enum_correctness
+    name: "6. Validate Enum Correctness"
+    role: reasoning
+    description: "Verify all enum mappings produce valid XDM enum values."
+    depends_on:
+      - write_model_rule
+    system_prompt: |
+      You are validating enum correctness in XSIAM data model rules.
+
+      **Field mappings**: {{write_model_rule.field_mappings | json}}
+      **Known enum mappings from seed**: {{seed.known_enum_mappings | json}}
+
+      Check that every enum-mapped field produces ONLY valid XDM enum values.
+
+      **Valid XDM enums:**
+      - `xdm.event.type`: NETWORK, AUTHENTICATION, PROCESS, FILE, REGISTRY, DNS, EMAIL, CLOUD, ALERT, AUDIT
+      - `xdm.event.outcome`: SUCCESS, FAILURE, PARTIAL, UNKNOWN
+      - `xdm.network.ip_protocol`: TCP, UDP, ICMP, IGMP, GRE, ESP, AH
+      - `xdm.network.direction`: INBOUND, OUTBOUND
+      - `xdm.auth.auth_method`: INTERACTIVE, NETWORK, BATCH, SERVICE, UNLOCK, NETWORK_CLEARTEXT, NEW_CREDENTIALS, REMOTE_INTERACTIVE, CACHED_INTERACTIVE
+
+      Return JSON with:
+      1. **enum_checks**: Array per enum field:
+         - `xdm_field`: the XDM field
+         - `valid_values`: the allowed enum values
+         - `mapped_source_values`: what source values map to this field
+         - `mapped_xdm_values`: what XDM values are produced
+         - `invalid_values`: any produced values NOT in the valid set
+         - `status`: "pass" | "fail" | "warning"
+
+      2. **issues**: Array of specific problems found
+
+      3. **fixes**: Array of suggested corrections to the model rule
+    inputs:
+      - seed.known_enum_mappings
+      - write_model_rule.field_mappings
+    outputs:
+      - enum_checks
+      - issues
+      - fixes
+    output_parser:
+      format: json
+
+  # ══════════════════════════════════════════════════════════════════════
+  # PHASE 5: Detection (parallel after model rule)
+  # ══════════════════════════════════════════════════════════════════════
+
+  - id: write_correlation_rules
+    name: "7. Write XQL Correlation Rules"
+    role: coding
+    description: "Generate detection rules in XQL operating on normalized XDM data."
+    depends_on:
+      - write_model_rule
+      - classify_threats
+    system_prompt: |
+      You are an XSIAM detection engineer. Write production-ready XQL correlation
+      rules for the top detection priorities.
+
+      **Dataset**: {{seed.xdm_dataset}}
+      **Detection priorities**: {{classify_threats.detection_priorities | json}}
+      **MITRE coverage**: {{classify_threats.mitre_coverage | json}}
+      **Available XDM fields**: extract field names from {{write_model_rule.field_mappings | json}}
+
+      For each detection priority, generate a complete XQL [RULE:...] block.
+
+      **XQL Rule Syntax Reference:**
+      ```xql
+      [RULE:name="rule_name", severity="HIGH"]
+      config timeframe = 10m
+      | dataset = "dataset_name"
+      | filter xdm.event.type = "AUTHENTICATION" and xdm.event.outcome = "FAILURE"
+      | comp count() as failure_count by xdm.source.ipv4, xdm.target.user.username
+      | filter failure_count >= 10
+      | alter xdm.alert.severity = "HIGH", xdm.alert.name = "..."
+      ```
+
+      Return JSON with:
+      1. **rules**: Array of objects:
+         - `rule_name`: descriptive name
+         - `severity`: CRITICAL, HIGH, MEDIUM, LOW
+         - `xql`: complete XQL rule code
+         - `mitre_techniques`: ATT&CK IDs this rule covers
+         - `description`: what the rule detects
+         - `expected_fps_per_day`: estimated false positive rate
+         - `tuning_notes`: suggestions for threshold adjustment
+
+      2. **cross_source_rules**: Array of rules that query multiple datasets
+         (these demonstrate the power of XDM normalization — one rule works
+         across all data sources that map to the same XDM fields)
+    inputs:
+      - seed.xdm_dataset
+      - classify_threats.detection_priorities
+      - classify_threats.mitre_coverage
+      - write_model_rule.field_mappings
+    outputs:
+      - rules
+      - cross_source_rules
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "has_rules"
+        field: "rules"
+        operator: not_empty
+        message: "No correlation rules generated"
+    config:
+      temperature: 0.2
+      max_tokens: 16384
+
+  - id: write_stitching_spec
+    name: "8. Write Data Stitching Specification"
+    role: reasoning
+    description: "Define cross-source correlation keys for causality chain construction."
+    depends_on:
+      - write_model_rule
+      - classify_threats
+    system_prompt: |
+      You are an XSIAM data stitching architect. Define how this data source's
+      events correlate with events from other sources to build causality chains.
+
+      **Source stitching keys**: {{seed.stitching_keys | json}}
+      **Field mappings**: {{write_model_rule.field_mappings | json}}
+      **Stitching requirements**: {{classify_threats.stitching_requirements | json}}
+
+      Return JSON with:
+      1. **correlation_keys**: Array of objects:
+         - `key_name`: descriptive name
+         - `xdm_fields`: array of XDM fields that form this key
+         - `key_type`: "exact" | "temporal" | "fuzzy"
+         - `tolerance`: for temporal keys, the time window (e.g., "5m")
+         - `cross_source_matches`: what other data sources share this key
+
+      2. **causality_chains**: Array of example attack chains:
+         - `chain_name`: descriptive name
+         - `steps`: ordered array of events across sources
+         - `join_logic`: how each step links to the next
+         - `mitre_technique`: ATT&CK technique this chain represents
+
+      3. **stitching_xql**: Array of XQL queries demonstrating the joins
+    inputs:
+      - seed.stitching_keys
+      - write_model_rule.field_mappings
+      - classify_threats.stitching_requirements
+    outputs:
+      - correlation_keys
+      - causality_chains
+      - stitching_xql
+    output_parser:
+      format: json
+
+  # ══════════════════════════════════════════════════════════════════════
+  # PHASE 6: Quality Assurance (after validation + detection)
+  # ══════════════════════════════════════════════════════════════════════
+
+  - id: qa_review
+    name: "9. Quality Assurance Review"
+    role: reasoning
+    description: "Final review of all artifacts — scoring, issue tracking, sign-off readiness."
+    depends_on:
+      - validate_xdm_coverage
+      - validate_enum_correctness
+      - write_correlation_rules
+      - write_stitching_spec
+    system_prompt: |
+      You are the senior QA lead reviewing the complete XSIAM data onboarding package
+      before production deployment.
+
+      **XDM Coverage Score**: {{validate_xdm_coverage.overall_score}}
+      **Coverage Gaps**: {{validate_xdm_coverage.critical_gaps | json}}
+      **Enum Issues**: {{validate_enum_correctness.issues | json}}
+      **Enum Fixes**: {{validate_enum_correctness.fixes | json}}
+      **Correlation Rules**: {{write_correlation_rules.rules | count}} rules generated
+      **Stitching Keys**: {{write_stitching_spec.correlation_keys | count}} keys defined
+
+      Produce a final QA report as JSON:
+      1. **overall_status**: "approved" | "approved_with_conditions" | "rejected"
+      2. **overall_score**: 0-100
+      3. **category_scores**: Object:
+         - `parsing_completeness`: 0-100
+         - `xdm_coverage`: 0-100
+         - `enum_correctness`: 0-100
+         - `detection_coverage`: 0-100
+         - `stitching_readiness`: 0-100
+      4. **blocking_issues**: Array of issues that MUST be fixed before deployment
+      5. **advisory_issues**: Array of issues that should be fixed but aren't blocking
+      6. **recommendations**: Ordered list of improvements
+      7. **sign_off_checklist**: Array of checklist items with pass/fail status
+    inputs:
+      - validate_xdm_coverage.overall_score
+      - validate_xdm_coverage.critical_gaps
+      - validate_xdm_coverage.recommendations
+      - validate_enum_correctness.issues
+      - validate_enum_correctness.fixes
+      - write_correlation_rules.rules
+      - write_stitching_spec.correlation_keys
+    outputs:
+      - overall_status
+      - overall_score
+      - category_scores
+      - blocking_issues
+      - advisory_issues
+      - recommendations
+      - sign_off_checklist
+    output_parser:
+      format: json
+    quality_gates:
+      - name: "qa_score"
+        field: "overall_score"
+        operator: gte
+        value: 50
+        severity: warning
+        message: "QA score below 50 — significant issues found"
+    config:
+      max_tokens: 8192
+
+  # ══════════════════════════════════════════════════════════════════════
+  # PHASE 7: Documentation (final step)
+  # ══════════════════════════════════════════════════════════════════════
+
+  - id: generate_runbook
+    name: "10. Generate SOC Runbook"
+    role: coding
+    description: "Produce a complete SOC runbook documenting this data source onboarding."
+    depends_on:
+      - qa_review
+    system_prompt: |
+      You are a technical writer producing SOC documentation.
+      Generate a complete runbook for this XSIAM data source onboarding.
+
+      **Vendor**: {{seed.vendor_name}} — {{seed.product_name}}
+      **QA Status**: {{qa_review.overall_status}}
+      **QA Score**: {{qa_review.overall_score}}/100
+      **Blocking Issues**: {{qa_review.blocking_issues | json}}
+
+      Generate a markdown-formatted runbook with these sections:
+
+      1. **Data Source Overview** — vendor, product, log type, ingestion method
+      2. **Parsing Rule** — the complete XQL parsing rule with explanation
+      3. **Data Model Rule** — the complete XQL model rule with field mapping table
+      4. **Correlation Rules** — each detection rule with description, severity, MITRE mapping
+      5. **Stitching Specification** — cross-source correlation keys and example chains
+      6. **Validation Procedures** — XQL queries to verify each phase is working
+      7. **Known Issues** — blocking and advisory issues from QA
+      8. **Tuning Guide** — how to adjust thresholds based on environment noise
+      9. **MITRE ATT&CK Coverage Map** — technique × detection matrix
+
+      Return JSON with:
+      1. **runbook_markdown**: The complete runbook as a markdown string
+      2. **summary**: 3-sentence executive summary
+      3. **deployment_checklist**: Ordered list of steps to deploy in production
+    inputs:
+      - seed.vendor_name
+      - seed.product_name
+      - seed.xdm_dataset
+      - write_parsing_rule.parsing_rule
+      - write_model_rule.model_rule
+      - write_model_rule.field_mappings
+      - write_correlation_rules.rules
+      - write_stitching_spec.correlation_keys
+      - write_stitching_spec.causality_chains
+      - qa_review.overall_status
+      - qa_review.overall_score
+      - qa_review.blocking_issues
+      - qa_review.advisory_issues
+      - qa_review.recommendations
+      - classify_threats.mitre_coverage
+    outputs:
+      - runbook_markdown
+      - summary
+      - deployment_checklist
+    output_parser:
+      format: json
+    config:
+      temperature: 0.3
+      max_tokens: 16384

@@ -9,8 +9,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-1a1a2e?style=flat&labelColor=1a1a2e&color=00E87B" alt="Version">
-  <img src="https://img.shields.io/badge/macOS-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="macOS">
+  <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest"><img src="https://img.shields.io/github/v/release/hankthebldr/local-ai-platform?label=release&labelColor=1a1a2e&color=00E87B&style=flat" alt="Latest release"></a>
+  <a href="https://github.com/hankthebldr/local-ai-platform/releases?q=prerelease%3Atrue&expanded=true"><img src="https://img.shields.io/github/v/release/hankthebldr/local-ai-platform?include_prereleases&label=nightly&labelColor=1a1a2e&color=FA582D&style=flat" alt="Nightly"></a>
+  <a href="https://github.com/hankthebldr/local-ai-platform/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/hankthebldr/local-ai-platform/ci.yml?branch=master&labelColor=1a1a2e&color=00C0E8&style=flat&label=ci" alt="CI"></a>
+  <img src="https://img.shields.io/badge/macOS%2012%2B-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="macOS">
   <img src="https://img.shields.io/badge/Linux-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="Linux">
   <img src="https://img.shields.io/badge/license-Commercial-1a1a2e?style=flat&labelColor=1a1a2e&color=888888" alt="License">
 </p>
@@ -31,22 +33,60 @@ Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero 
 
 ## Quick start
 
+Three paths — pick one:
+
+### macOS app (DMG) — for end users
+
+1. Download **Enclave.dmg** from the [latest release](https://github.com/hankthebldr/local-ai-platform/releases/latest)
+   *(Or grab the rolling [nightly build](https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly) for the freshest master.)*
+2. Open the DMG and drag **Enclave.app** to `/Applications`.
+3. First launch: macOS Gatekeeper will warn — the app is currently **not signed/notarized**. Bypass once with:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Enclave.app
+   ```
+   Then double-click **Enclave** in Launchpad.
+4. The native window opens the **first-run setup wizard** (`/setup`) which installs Ollama if needed and pulls a starter model. After that you land on the dashboard.
+
+> **Requirements:** macOS 12.0 (Monterey) or later. ~6 GB free disk for the bundled runtime + a small starter model. Ollama is installed automatically by the wizard if missing.
+
+### Docker — any platform with Docker Desktop
+
+For non-developers on Linux / Windows, or anyone who wants Enclave fully isolated in containers. No Python, no virtualenv, no manual Ollama install.
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux) and make sure the whale icon is running.
+2. Clone or download this repo, open a terminal in the project folder, and run:
+   ```bash
+   ./run.sh
+   ```
+3. The script verifies Docker, brings up the stack (`ollama` + `api` + `webui`), pulls a small starter model on first run (`llama3.2:3b`, ~2 GB), and opens the dashboard in your browser.
+
+| | URL |
+|---|---|
+| **Dashboard** (recommended) | `http://localhost:8000` |
+| Chat UI (Open WebUI)        | `http://localhost:8080` |
+| API docs                    | `http://localhost:8000/docs` |
+
+To stop: `./stop.sh` (data preserved) — or `./stop.sh --reset` to wipe models and chat history.
+
+> **Requirements:** ~4 GB free RAM and ~3 GB free disk for the starter model. Pick a different starter with `ENCLAVE_DEFAULT_MODEL=qwen2.5:3b ./run.sh`.
+
+### From source — for developers
+
 ```bash
-# Install
+# Install (creates ./venv, installs core+dev deps, sets up systemd unit on Linux)
 ./setup/install.sh
 
-# Start Ollama
-ollama serve
+# Boot Ollama + API + auto-open the dashboard in your browser
+./scripts/start.sh
 
-# Start API
-source venv/bin/activate
-python -m api.main
+# Or, on macOS, exercise the same native pywebview window the DMG ships
+./scripts/start_desktop.sh
 
-# Verify
-curl http://localhost:8000/health
+# Verify everything boots and every UX route renders
+./scripts/verify_local.sh
 ```
 
-API is at `http://localhost:8000`. Docs at `http://localhost:8000/docs`.
+API at `http://localhost:8000` · Dashboard at `http://localhost:8000/` · Docs at `http://localhost:8000/docs` · First-run wizard at `http://localhost:8000/setup`.
 
 ## Models
 
@@ -75,6 +115,50 @@ curl http://localhost:8000/v1/chat/completions \
 ```
 
 Compatible with any OpenAI SDK client.
+
+## Code-level artifacts
+
+What ships in this repo, and where to find it:
+
+| Surface | Path | Notes |
+|---|---|---|
+| FastAPI server (OpenAI-compatible) | [api/main.py](api/main.py) | 16 routers under `api/routers/`, services under `api/services/` |
+| Web dashboard + setup wizard | [api/static/](api/static/) | Served at `/` and `/setup` by the FastAPI app |
+| CLI chat / query / workflow | [cli/](cli/) | Rich-formatted; `python -m cli.chat`, `cli/workflow.py` |
+| Multi-agent workflow engine | [api/services/workflow_engine.py](api/services/workflow_engine.py) | YAML pipelines under [workflows/](workflows/) |
+| Custom agents (Gems) | [agents/](agents/) + [api/routers/agents.py](api/routers/agents.py) | YAML-defined personas with pinned context |
+| Model registry | [models/download.py](models/download.py) | 18+ models — see [MODELS.md](MODELS.md) |
+| macOS desktop wrapper | [desktop/app.py](desktop/app.py) | pywebview window around the FastAPI server |
+| DMG builder | [scripts/build_mac.sh](scripts/build_mac.sh) | Bundles a self-contained `.app` + dmg |
+| Local dev scripts | [scripts/](scripts/) | `start.sh`, `start_desktop.sh`, `verify_local.sh`, `status.sh`, `test.sh` |
+
+### Build the DMG yourself
+
+The same script CI uses on tag pushes:
+
+```bash
+brew install librsvg create-dmg     # one-time
+./scripts/generate-icons.sh         # regenerate icns from SVG
+./scripts/build_mac.sh              # produces dist/Enclave.app + dist/Enclave.dmg
+open dist/Enclave.app               # smoke-test the bundle
+```
+
+The build script reads `ENCLAVE_VERSION` (or falls back to `git describe`) and stamps it into `Info.plist`. Override for a one-off custom build:
+
+```bash
+ENCLAVE_VERSION=v1.2.3-local ./scripts/build_mac.sh
+```
+
+### Release pipeline
+
+| Trigger | Workflow | Artifact |
+|---|---|---|
+| Tag push `v*.*.*` | [release.yml](.github/workflows/release.yml) | Stable GitHub Release with signed DMG |
+| Push to `master` | [release.yml](.github/workflows/release.yml) | Rolling `nightly` pre-release (replaced each merge) |
+| PR / push to `master` | [ci.yml](.github/workflows/ci.yml) | pytest + lint + macOS `.app` smoke build (boots and probes UX routes) |
+| Tag push or release publish | [pages.yml](.github/workflows/pages.yml) | Updates [hankthebldr.github.io/local-ai-platform](https://hankthebldr.github.io/local-ai-platform/) with the latest release version |
+
+Every master merge re-publishes a freshly smoke-tested DMG to the [`nightly`](https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly) release. Stable releases are cut by pushing a `vX.Y.Z` tag.
 
 ## Hardware targets
 
