@@ -326,3 +326,27 @@ def test_header_uses_installer_enclave_mark(index_html_text):
     assert rect_count >= 4, (
         f"installer Enclave mark expects 4 nested <rect> elements; found {rect_count}"
     )
+
+
+def test_admin_dropdown_present(index_soup):
+    """An Admin dropdown trigger must exist in the tab strip."""
+    trigger = index_soup.find(id="admin-trigger")
+    assert trigger is not None, "#admin-trigger missing from tab strip"
+    assert trigger.get("aria-haspopup") == "menu"
+    assert trigger.get("aria-expanded") == "false"
+
+
+def test_admin_menu_has_three_items(index_soup):
+    """Admin menu must list API Keys, Plugins, Exports."""
+    menu = index_soup.find(id="admin-menu")
+    assert menu is not None
+    items = menu.find_all(attrs={"role": "menuitem"})
+    panels = {i.get("data-panel") for i in items}
+    assert {"admin-keys", "admin-plugins", "admin-exports"}.issubset(panels)
+
+
+def test_admin_panel_containers_exist(index_soup):
+    """Three .tab-content panels must exist (initially hidden)."""
+    for pid in ("tab-admin-keys", "tab-admin-plugins", "tab-admin-exports"):
+        el = index_soup.find(id=pid)
+        assert el is not None, f"#{pid} container missing"
