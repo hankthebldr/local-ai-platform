@@ -377,3 +377,16 @@ def test_render_markdown_helper_present(index_html_text):
         or "renderMarkdown =" in index_html_text
         or "window.renderMarkdown" in index_html_text
     ), "renderMarkdown helper missing"
+
+
+def test_api_keys_panel_has_list_container(index_html_text):
+    """The API Keys panel must include a list container and a refresh button."""
+    assert 'id="api-keys-list"' in index_html_text
+    assert "loadApiKeysPanel" in index_html_text or "ApiKeysPanel.load" in index_html_text
+
+
+def test_api_keys_panel_has_new_key_button(index_html_text):
+    assert "showCreateKeyModal" in index_html_text or \
+           "showNewKeyModal" in index_html_text or \
+           "ApiKeysPanel.showCreate" in index_html_text, \
+        "expected a 'New Key' trigger function"

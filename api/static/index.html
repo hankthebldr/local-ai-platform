@@ -416,6 +416,32 @@ body::before {
   cursor: pointer;
 }
 
+/* === API Keys table ============================================ */
+.api-keys-table {
+  width: 100%; border-collapse: collapse; font-size: 0.74rem;
+}
+.api-keys-table th {
+  text-align: left; color: var(--text-dim);
+  font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+  font-size: 0.6rem; padding: 6px 8px; border-bottom: 1px solid var(--border);
+}
+.api-keys-table td {
+  padding: 8px; border-bottom: 1px solid var(--border);
+  color: var(--text); vertical-align: top;
+}
+.api-keys-table tr.key-disabled td { opacity: 0.5; }
+.api-keys-table tr:hover td { background: rgba(255,255,255,0.02); }
+.api-keys-table .row-actions { white-space: nowrap; text-align: right; }
+.scope-chip {
+  display: inline-block; font-size: 0.62rem;
+  background: var(--accent-ghost, rgba(0,204,102,0.1));
+  color: var(--accent); padding: 1px 7px; border-radius: 999px;
+  margin-right: 2px;
+}
+.action-btn.small { padding: 3px 9px; font-size: 0.66rem; }
+.action-btn.danger { color: var(--danger, #e54b4b); border-color: rgba(229,75,75,0.4); }
+.action-btn.danger:hover { background: rgba(229,75,75,0.08); }
+
 /* === renderMarkdown output styling ============================== */
 .md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6 { color: var(--text); margin: 14px 0 6px; }
 .md-h1 { font-size: 1.1rem; }  .md-h2 { font-size: 1.0rem; }
@@ -2106,7 +2132,17 @@ body::before {
 
   <!-- ═══ ADMIN PANELS ═════════════════════════════════════════════ -->
   <div class="tab-content" id="tab-admin-keys" style="display:none">
-    <!-- populated by Task 9-11 -->
+    <div class="panel">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// API KEYS
+        <span style="float:right">
+          <button class="action-btn" onclick="ApiKeysPanel.showCreate()"
+            style="color:var(--accent);border-color:var(--accent-dim)">+ New Key</button>
+          <button class="action-btn" onclick="ApiKeysPanel.load()">Refresh</button>
+        </span>
+      </div>
+      <div id="api-keys-list" style="margin-top:12px;font-size:0.78rem"></div>
+    </div>
   </div>
 
   <div class="tab-content" id="tab-admin-plugins" style="display:none">
@@ -5320,6 +5356,94 @@ window.AdminAuth = (function () {
 
   return { isSignedIn, getKey, authHeaders, fetch, renderLock,
            signIn, signOut, _cancelSignIn, _submitSignIn };
+})();
+
+// ── ApiKeysPanel ──────────────────────────────────────────────────────────
+window.ApiKeysPanel = (function () {
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  async function load() {
+    if (!AdminAuth.isSignedIn()) {
+      AdminAuth.renderLock('admin-keys');
+      return;
+    }
+    const list = document.getElementById('api-keys-list');
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem">Loading…</div>';
+
+    const r = await AdminAuth.fetch('/api/keys', {}, 'admin-keys');
+    if (!r.ok) {
+      // 401 already handled by AdminAuth.fetch.
+      list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed to load keys (HTTP ${r.status})</div>`;
+      return;
+    }
+    const keys = await r.json();
+    if (!Array.isArray(keys) || keys.length === 0) {
+      list.innerHTML = '<div style="color:var(--text-muted);padding:10px 0">No keys yet. Click "+ New Key" to create one.</div>';
+      return;
+    }
+
+    // Header + rows.
+    list.innerHTML = `
+      <table class="api-keys-table" role="table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Key</th><th>Scopes</th>
+            <th>RPM</th><th>Last used</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${keys.map(rowHtml).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function rowHtml(k) {
+    const enabled = k.enabled !== false;
+    const last = k.last_used_at
+      ? new Date(k.last_used_at).toLocaleString()
+      : '<span style="color:var(--text-muted)">never</span>';
+    const scopes = (k.scopes || []).map(s =>
+      `<span class="scope-chip">${esc(s)}</span>`).join(' ');
+    const masked = `${esc(k.prefix || '')}…${esc(k.last_four || '')}`;
+    return `
+      <tr class="${enabled ? '' : 'key-disabled'}">
+        <td>${esc(k.name)}</td>
+        <td><code>${masked}</code></td>
+        <td>${scopes || '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td>${k.rate_limit_rpm ?? '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td>${last}</td>
+        <td>${enabled
+          ? '<span style="color:var(--accent)">enabled</span>'
+          : '<span style="color:var(--text-muted)">revoked</span>'}</td>
+        <td class="row-actions">
+          ${enabled ? `
+            <button class="action-btn small" onclick="ApiKeysPanel.rotate('${esc(k.id)}','${esc(k.name)}')">Rotate</button>
+            <button class="action-btn small danger" onclick="ApiKeysPanel.revoke('${esc(k.id)}','${esc(k.name)}')">Revoke</button>
+          ` : ''}
+        </td>
+      </tr>
+    `;
+  }
+
+  function refresh() { load(); }
+
+  // Stubs — implemented in Task 10/11.
+  function showCreate() { /* Task 10 */ }
+  function rotate(id, name) { /* Task 11 */ }
+  function revoke(id, name) { /* Task 11 */ }
+
+  // Auto-load when this admin panel is activated.
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-keys') load();
+  });
+
+  return { load, refresh, showCreate, rotate, revoke };
 })();
 </script>
 </body>
