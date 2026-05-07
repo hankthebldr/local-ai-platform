@@ -211,6 +211,322 @@ body::before {
 }
 .tab-btn.active .tab-count { color: var(--cyan-dim); }
 
+/* === Admin dropdown ============================================= */
+.tab-divider {
+  display: inline-block;
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 6px;
+  vertical-align: middle;
+}
+
+.tab-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.admin-trigger {
+  /* visually identical to .tab-btn when inactive; .active painted by JS */
+}
+
+.admin-trigger .caret {
+  margin-left: 4px;
+  font-size: 0.6rem;
+}
+
+.admin-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 200px;
+  background: var(--bg-panel, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+  padding: 6px 0;
+  z-index: 100;
+}
+
+.admin-menu[hidden] { display: none; }
+
+.admin-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 8px 14px;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.admin-menu-item:hover,
+.admin-menu-item:focus-visible {
+  background: var(--accent-ghost, rgba(0,204,102,0.08));
+  color: var(--accent);
+}
+
+.admin-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+
+.admin-menu-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  font-size: 0.66rem;
+  color: var(--text-dim);
+}
+
+.admin-menu-status .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-muted);
+  display: inline-block;
+}
+
+.admin-menu-status.unlocked .dot { background: var(--accent); }
+
+.admin-menu-signout {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.64rem;
+  cursor: pointer;
+}
+.admin-menu-signout:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+/* === Admin modal (shared by sign-in, create-key, etc.) ========== */
+.admin-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.admin-modal[hidden] { display: none; }
+
+.admin-modal-card {
+  background: var(--bg-panel, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 22px 24px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.55);
+}
+
+.admin-modal-card h3 {
+  margin: 0 0 6px 0;
+  color: var(--accent);
+  font-size: 0.95rem;
+}
+
+.admin-modal-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0 0 14px 0;
+}
+
+.admin-modal-card input[type="password"],
+.admin-modal-card input[type="text"],
+.admin-modal-card input[type="number"],
+.admin-modal-card input[type="date"],
+.admin-modal-card textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.admin-modal-error {
+  background: rgba(229,75,75,0.12);
+  border: 1px solid var(--danger, #e54b4b);
+  color: var(--danger, #e54b4b);
+  padding: 6px 10px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  margin-top: 8px;
+}
+
+.admin-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.admin-modal-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 14px;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.admin-modal-btn.primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.admin-modal-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+.admin-modal-btn.primary:hover { background: var(--accent); color: #000; opacity: 0.85; }
+
+/* ── Lock state (shown inside admin panels when not signed in) ── */
+.admin-lock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  gap: 12px;
+}
+.admin-lock .lock-icon { font-size: 2rem; opacity: 0.55; }
+.admin-lock .lock-msg { font-size: 0.82rem; }
+.admin-lock .lock-btn {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+/* === API Keys table ============================================ */
+.api-keys-table {
+  width: 100%; border-collapse: collapse; font-size: 0.74rem;
+}
+.api-keys-table th {
+  text-align: left; color: var(--text-dim);
+  font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+  font-size: 0.6rem; padding: 6px 8px; border-bottom: 1px solid var(--border);
+}
+.api-keys-table td {
+  padding: 8px; border-bottom: 1px solid var(--border);
+  color: var(--text); vertical-align: top;
+}
+.api-keys-table tr.key-disabled td { opacity: 0.5; }
+.api-keys-table tr:hover td { background: rgba(255,255,255,0.02); }
+.api-keys-table .row-actions { white-space: nowrap; text-align: right; }
+.scope-chip {
+  display: inline-block; font-size: 0.62rem;
+  background: var(--accent-ghost, rgba(0,204,102,0.1));
+  color: var(--accent); padding: 1px 7px; border-radius: 999px;
+  margin-right: 2px;
+}
+.admin-modal-label {
+  display: block; margin: 10px 0 4px;
+  font-size: 0.7rem; color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+.scope-picker {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 8px; min-height: 38px; background: var(--bg);
+}
+.scope-picker .scope-chip { cursor: pointer; opacity: 0.5; }
+.scope-picker .scope-chip.selected { opacity: 1; }
+.action-btn.small { padding: 3px 9px; font-size: 0.66rem; }
+.action-btn.danger { color: var(--danger, #e54b4b); border-color: rgba(229,75,75,0.4); }
+.action-btn.danger:hover { background: rgba(229,75,75,0.08); }
+
+/* === renderMarkdown output styling ============================== */
+.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6 { color: var(--text); margin: 14px 0 6px; }
+.md-h1 { font-size: 1.1rem; }  .md-h2 { font-size: 1.0rem; }
+.md-h3 { font-size: 0.92rem; } .md-h4 { font-size: 0.85rem; }
+.md-h5 { font-size: 0.78rem; } .md-h6 { font-size: 0.72rem; }
+.md-code {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px 12px; font-size: 0.74rem;
+  overflow-x: auto;
+}
+.md-code.error {
+  border-color: var(--danger, #e54b4b);
+  color: var(--danger, #e54b4b);
+}
+.md-inline-code {
+  background: var(--bg); border: 1px solid var(--border);
+  padding: 1px 5px; border-radius: 2px; font-size: 0.78em;
+}
+.md-ul, .md-ol { padding-left: 22px; margin: 6px 0; }
+.md-ul li, .md-ol li { margin-bottom: 2px; font-size: 0.78rem; line-height: 1.5; }
+
+/* === Plugins panel ============================================== */
+.plugins-layout {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 14px;
+  align-items: start;
+}
+.plugin-card {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  cursor: pointer;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.plugin-card:hover { border-color: var(--accent-dim); background: var(--accent-ghost, rgba(0,204,102,0.05)); }
+.plugin-card.selected { border-color: var(--accent); background: var(--accent-ghost, rgba(0,204,102,0.08)); }
+.plugin-card-title { font-size: 0.84rem; color: var(--text); font-weight: 500; }
+.plugin-card-meta { font-size: 0.66rem; color: var(--text-dim); margin-top: 2px; }
+.plugin-card-desc { font-size: 0.7rem; color: var(--text-dim); margin-top: 4px;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.plugin-status-pip {
+  display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--accent); margin-right: 6px;
+}
+.plugin-status-pip.error { background: var(--danger, #e54b4b); }
+.plugin-section-h {
+  color: var(--text); font-size: 0.78rem; margin: 14px 0 6px;
+  border-bottom: 1px solid var(--border); padding-bottom: 4px;
+}
+.skill-accordion, .tool-accordion {
+  border: 1px solid var(--border); border-radius: 4px;
+  margin-bottom: 6px; overflow: hidden;
+}
+.skill-accordion summary, .tool-accordion summary {
+  list-style: none; cursor: pointer; padding: 8px 12px;
+  font-size: 0.74rem; color: var(--text);
+  display: flex; gap: 10px; align-items: center;
+}
+.skill-accordion summary::-webkit-details-marker,
+.tool-accordion summary::-webkit-details-marker { display: none; }
+.skill-accordion summary::before, .tool-accordion summary::before {
+  content: '▸'; color: var(--text-muted); transition: transform 0.15s;
+}
+details[open] > summary::before { transform: rotate(90deg); }
+.skill-accordion .body, .tool-accordion .body { padding: 10px 14px;
+  border-top: 1px solid var(--border); }
+.inject-badge {
+  background: var(--accent-ghost, rgba(0,204,102,0.1));
+  color: var(--accent); font-size: 0.6rem; padding: 1px 6px; border-radius: 999px;
+}
+
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
@@ -1305,6 +1621,30 @@ body::before {
     <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">
       <span>Documents</span>
     </button>
+    <span class="tab-divider" aria-hidden="true"></span>
+    <div class="tab-dropdown" role="presentation">
+      <button class="tab-btn admin-trigger" id="admin-trigger"
+              type="button" aria-haspopup="menu" aria-expanded="false"
+              onclick="AdminMenu.toggle(this)">
+        <span class="admin-icon" aria-hidden="true">⚙</span> Admin
+        <span class="caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="admin-menu" id="admin-menu" role="menu" hidden>
+        <button class="admin-menu-item" role="menuitem" type="button"
+                data-panel="admin-keys" onclick="AdminMenu.select('admin-keys')">API Keys</button>
+        <button class="admin-menu-item" role="menuitem" type="button"
+                data-panel="admin-plugins" onclick="AdminMenu.select('admin-plugins')">Plugins</button>
+        <button class="admin-menu-item" role="menuitem" type="button"
+                data-panel="admin-exports" onclick="AdminMenu.select('admin-exports')">Exports</button>
+        <div class="admin-menu-divider" aria-hidden="true"></div>
+        <div class="admin-menu-status" id="admin-menu-status">
+          <span class="dot" id="admin-status-dot"></span>
+          <span id="admin-menu-status-text">Locked</span>
+          <button class="admin-menu-signout" id="admin-menu-signout" type="button"
+                  hidden onclick="AdminAuth.signOut()">Sign out</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ═══ TAB: DASHBOARD ═══════════════════════════════════════════ -->
@@ -1858,6 +2198,161 @@ body::before {
     </div>
   </div>
 
+  <!-- ═══ ADMIN PANELS ═════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-admin-keys" style="display:none">
+    <div class="panel">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// API KEYS
+        <span style="float:right">
+          <button class="action-btn" onclick="ApiKeysPanel.showCreate()"
+            style="color:var(--accent);border-color:var(--accent-dim)">+ New Key</button>
+          <button class="action-btn" onclick="ApiKeysPanel.load()">Refresh</button>
+        </span>
+      </div>
+      <div id="api-keys-list" style="margin-top:12px;font-size:0.78rem"></div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// AUDIT — last 20 admin actions
+        <span style="float:right">
+          <button class="action-btn" onclick="ApiKeysPanel.refreshAudit()">Refresh</button>
+        </span>
+      </div>
+      <div id="api-keys-audit" style="margin-top:10px;font-size:0.72rem"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-admin-plugins" style="display:none">
+    <div class="admin-modal-error" style="background:rgba(245,166,35,0.12);border-color:#F5A623;color:#F5A623;margin-bottom:14px">
+      ⚠ Tool invocations execute plugin code in-process with full filesystem
+      and environment access. Run only trusted plugins.
+    </div>
+
+    <div class="plugins-layout">
+      <div class="panel plugins-list-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// PLUGINS
+          <span style="float:right">
+            <button class="action-btn" onclick="PluginsPanel.refresh()">Refresh</button>
+          </span>
+        </div>
+        <div id="plugins-list" style="margin-top:10px"></div>
+      </div>
+
+      <div class="panel plugins-detail-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label" id="plugin-detail-label">// SELECT A PLUGIN</div>
+        <div id="plugin-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
+          Select a plugin from the left to see its skills and tools.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-admin-exports" style="display:none">
+    <div class="panel">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// EXPORTS
+        <span style="float:right">
+          <span id="exports-bulk-bar" hidden style="margin-right:14px;font-size:0.7rem;color:var(--text-dim)">
+            <span id="exports-selected-count">0</span> selected
+            <button class="action-btn small" onclick="ExportsPanel.downloadZip()">Download zip</button>
+            <button class="action-btn small danger" onclick="ExportsPanel.bulkDelete()">Delete</button>
+          </span>
+          <button class="action-btn" onclick="ExportsPanel.refresh()">Refresh</button>
+        </span>
+      </div>
+      <div id="exports-list" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- ── Admin sign-in modal ───────────────────────────────────────── -->
+  <div id="admin-signin-modal" class="admin-modal" hidden role="dialog"
+       aria-modal="true" aria-labelledby="admin-signin-title">
+    <div class="admin-modal-card">
+      <h3 id="admin-signin-title">Sign in as admin</h3>
+      <p class="admin-modal-sub">
+        Enter the <code>MASTER_API_KEY</code> set on the server. The key
+        is held in <code>sessionStorage</code> for this tab only and is
+        cleared when the tab closes.
+      </p>
+      <input id="admin-signin-input" type="password" autocomplete="off"
+             placeholder="MASTER_API_KEY" />
+      <div id="admin-signin-error" class="admin-modal-error" hidden>
+        Master key rejected.
+      </div>
+      <div class="admin-modal-actions">
+        <button type="button" class="admin-modal-btn"
+                onclick="AdminAuth._cancelSignIn()">Cancel</button>
+        <button type="button" class="admin-modal-btn primary"
+                onclick="AdminAuth._submitSignIn()">Sign in</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Create API key modal ──────────────────────────────────────── -->
+  <div id="create-key-modal" class="admin-modal" hidden role="dialog"
+       aria-modal="true" aria-labelledby="create-key-title">
+    <div class="admin-modal-card" style="width:480px">
+      <h3 id="create-key-title">Create API key</h3>
+      <div id="create-key-form">
+        <label class="admin-modal-label">Name</label>
+        <input id="new-key-name" type="text" placeholder="e.g. homelab-client" autocomplete="off">
+
+        <label class="admin-modal-label">Scopes</label>
+        <div id="new-key-scopes" class="scope-picker"></div>
+
+        <label class="admin-modal-label">Rate limit (requests / minute) — optional</label>
+        <input id="new-key-rpm" type="number" min="1" placeholder="leave blank for unlimited">
+
+        <label class="admin-modal-label">Expires — optional</label>
+        <input id="new-key-expires" type="date">
+
+        <div id="create-key-error" class="admin-modal-error" hidden></div>
+
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn"
+                  onclick="ApiKeysPanel._closeCreate()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" id="create-key-submit"
+                  onclick="ApiKeysPanel._submitCreate()">Create key</button>
+        </div>
+      </div>
+
+      <div id="create-key-reveal" hidden>
+        <div class="admin-modal-error" style="background:rgba(245,166,35,0.12);border-color:#F5A623;color:#F5A623;margin-bottom:12px">
+          This is the only time this key will be displayed. Copy it now.
+        </div>
+        <label class="admin-modal-label">Your new key</label>
+        <div style="display:flex;gap:8px">
+          <code id="new-key-value" style="flex:1;background:var(--bg);border:1px solid var(--accent);color:var(--accent);padding:8px 10px;border-radius:4px;font-size:0.78rem;word-break:break-all"></code>
+          <button class="admin-modal-btn primary" onclick="ApiKeysPanel._copyKey()">Copy</button>
+        </div>
+        <div id="copy-confirm" style="display:none;color:var(--accent);font-size:0.7rem;margin-top:6px">Copied to clipboard.</div>
+        <div class="admin-modal-actions" style="margin-top:18px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:var(--text-dim);cursor:pointer">
+            <input type="checkbox" id="new-key-confirm-copied"
+                   onchange="document.getElementById('create-key-close-btn').disabled = !this.checked">
+            I've copied this key
+          </label>
+          <button type="button" class="admin-modal-btn primary" id="create-key-close-btn"
+                  onclick="ApiKeysPanel._closeCreate()" disabled>Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Export view modal ───────────────────────────────────────── -->
+  <div id="export-view-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+    <div class="admin-modal-card" style="width:760px;max-width:92vw;max-height:80vh;overflow:auto">
+      <h3 id="export-view-title" style="margin-bottom:14px">Export</h3>
+      <div id="export-view-body" style="font-size:0.78rem"></div>
+      <div class="admin-modal-actions">
+        <button type="button" class="admin-modal-btn"
+                onclick="ExportsPanel._closeView()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <div class="footer">
     <div class="footer-links">
@@ -1873,6 +2368,69 @@ body::before {
 </div>
 
 <script>
+// ── renderMarkdown(text) — shared CommonMark subset renderer ─────────────
+//
+// Handles: H1–H6, paragraphs, fenced code blocks, inline code, ul/ol lists,
+// links (rel=noopener target=_blank), bold, italic. Anything else falls
+// through as escaped text.  Output is always HTML-escaped before substitution
+// so it cannot produce executable markup.
+//
+// Used by the Plugins panel (skill bodies) and the Exports panel (View modal).
+window.renderMarkdown = function renderMarkdown(text) {
+  if (text == null) return '';
+  const esc = s => String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  // Pull fenced code blocks out first so their contents aren't mangled.
+  const codeBlocks = [];
+  text = text.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, body) => {
+    codeBlocks.push(`<pre class="md-code"><code>${esc(body)}</code></pre>`);
+    return ` CODE${codeBlocks.length - 1} `;
+  });
+
+  // Escape the rest, then apply inline + block patterns.
+  let html = esc(text);
+
+  // Headings (H1..H6).
+  for (let n = 6; n >= 1; n--) {
+    const re = new RegExp('^#{' + n + '} +(.*)$', 'gm');
+    html = html.replace(re, (_, t) => `<h${n} class="md-h${n}">${t}</h${n}>`);
+  }
+
+  // Lists: collapse consecutive list lines into <ul>/<ol>.
+  html = html.replace(/(?:^|\n)((?:[*-] .+\n?)+)/g, (_, block) => {
+    const items = block.trim().split(/\n/).map(l => l.replace(/^[*-] /, '').trim());
+    return '\n<ul class="md-ul">' + items.map(i => `<li>${i}</li>`).join('') + '</ul>';
+  });
+  html = html.replace(/(?:^|\n)((?:\d+\. .+\n?)+)/g, (_, block) => {
+    const items = block.trim().split(/\n/).map(l => l.replace(/^\d+\. /, '').trim());
+    return '\n<ol class="md-ol">' + items.map(i => `<li>${i}</li>`).join('') + '</ol>';
+  });
+
+  // Inline: code, links, bold, italic.
+  html = html.replace(/`([^`\n]+)`/g, '<code class="md-inline-code">$1</code>');
+  html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, u) => {
+    if (!/^https?:\/\//.test(u) && !u.startsWith('/')) return m; // safety: only allow http(s) or root-relative
+    return `<a href="${esc(u)}" rel="noopener" target="_blank">${t}</a>`;
+  });
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+  // Paragraphs: split on blank lines, wrap non-block chunks.
+  html = html.split(/\n{2,}/).map(chunk => {
+    const t = chunk.trim();
+    if (!t) return '';
+    if (/^<(h[1-6]|ul|ol|pre|div)/.test(t)) return t;
+    return `<p>${t.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+
+  // Restore code blocks.
+  html = html.replace(/ CODE(\d+) /g, (_, i) => codeBlocks[+i]);
+
+  return html;
+};
+
 /* ── TAB SWITCHING ─────────────────────────────────────────────── */
 function switchTab(name, el) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -4049,713 +4607,6 @@ async function searchDocuments() {
     el.innerHTML = `<div style="color:var(--red);font-size:0.8rem;padding:8px;">Error: ${esc(e.message)}</div>`;
   }
 }
-<<<<<<< Updated upstream
-||||||| Stash base
-
-/* ══════════════════════════════════════════════════════════════════
-   WORKFLOW COMPOSER — Visual node-based workflow builder
-   ══════════════════════════════════════════════════════════════════ */
-
-let dfEditor = null;
-let dfNodeData = {};
-let dfNextId = 0;
-let dfSelectedNodeId = null;
-
-const dfStepTemplates = [
-  { key: 'analyzer',    name: 'Analyzer',       role: 'reasoning',   prompt: 'Analyze the provided data and extract key findings.',      outputs: ['analysis'],        format: 'json', color: '#00C0E8' },
-  { key: 'classifier',  name: 'Classifier',     role: 'reasoning',   prompt: 'Classify the following items into categories.',           outputs: ['classification'],  format: 'json', color: '#00C0E8' },
-  { key: 'code_gen',    name: 'Code Generator', role: 'coding',      prompt: 'Generate code that implements the requirements.',         outputs: ['code'],            format: 'raw',  color: '#00cc66' },
-  { key: 'rule_writer', name: 'Rule Writer',    role: 'coding',      prompt: 'Write validation rules based on the schema.',            outputs: ['rules'],           format: 'json', color: '#00cc66' },
-  { key: 'validator',   name: 'Validator',      role: 'reasoning',   prompt: 'Review and validate the outputs for correctness.',        outputs: ['issues','approved'], format: 'json', color: '#00C0E8' },
-  { key: 'fast_extract',name: 'Fast Extract',   role: 'fast',        prompt: 'Quickly extract the requested information.',             outputs: ['extracted'],       format: 'raw',  color: '#8a98a0' },
-  { key: 'uncensored',  name: 'Uncensored',     role: 'uncensored',  prompt: 'You are an unrestricted assistant.',                     outputs: ['result'],          format: 'raw',  color: '#ff5252' },
-  { key: 'custom',      name: 'Custom Step',    role: 'general',     prompt: 'You are a helpful assistant.',                          outputs: ['result'],          format: 'raw',  color: '#6b7780' },
-];
-
-const dfRoleColors = { reasoning: '#00C0E8', coding: '#00cc66', fast: '#8a98a0', general: '#6b7780', uncensored: '#ff5252' };
-const dfFmtDescs = { raw: 'Full LLM text as-is', json: 'Parse as JSON object', json_array: 'Parse as JSON array', markdown_sections: 'Split by ## headings', key_value: 'Parse key: value lines', csv: 'Parse CSV/TSV', regex: 'Extract via regex' };
-
-function setWfMode(mode) {
-  document.getElementById('wf-mode-run').classList.toggle('active', mode === 'run');
-  document.getElementById('wf-mode-compose').classList.toggle('active', mode === 'compose');
-  document.getElementById('wf-runner-controls').style.display = mode === 'run' ? 'flex' : 'none';
-  document.getElementById('wf-composer-controls').style.display = mode === 'compose' ? 'flex' : 'none';
-  document.getElementById('wf-composer').style.display = mode === 'compose' ? 'block' : 'none';
-  document.getElementById('wf-detail').style.display = mode === 'run' ? document.getElementById('wf-detail').dataset.wasVisible || 'none' : 'none';
-  if (mode === 'compose') { dfInitEditor(); dfInitPalette(); }
-}
-
-function dfInitEditor() {
-  const container = document.getElementById('drawflow-canvas');
-  if (!container || dfEditor) return;
-  dfEditor = new Drawflow(container);
-  dfEditor.reroute = true;
-  dfEditor.reroute_fix_curvature = true;
-  dfEditor.start();
-  dfEditor.on('nodeSelected', (id) => { dfSelectedNodeId = id; dfRenderConfigPanel(id); });
-  dfEditor.on('nodeUnselected', () => { dfSelectedNodeId = null; dfClearConfigPanel(); });
-  dfEditor.on('nodeRemoved', (id) => { delete dfNodeData[id]; if (dfSelectedNodeId === id) dfSelectedNodeId = null; dfClearConfigPanel(); });
-  dfEditor.on('connectionCreated', (conn) => dfOnConnectionCreated(conn));
-  dfEditor.on('connectionRemoved', (conn) => dfOnConnectionRemoved(conn));
-
-  container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
-  container.addEventListener('drop', (e) => {
-    e.preventDefault();
-    const key = e.dataTransfer.getData('application/df-template');
-    if (!key) return;
-    const rect = container.getBoundingClientRect();
-    const canvasX = (e.clientX - rect.left - dfEditor.precanvas.getBoundingClientRect().left + rect.left);
-    const canvasY = (e.clientY - rect.top  - dfEditor.precanvas.getBoundingClientRect().top  + rect.top);
-    dfAddNodeFromTemplate(key, canvasX, canvasY);
-  });
-}
-
-function dfInitPalette() {
-  const palette = document.getElementById('df-palette');
-  if (!palette || palette.dataset.initialized) return;
-  palette.dataset.initialized = '1';
-  palette.innerHTML = '';
-  dfStepTemplates.forEach(tmpl => {
-    const item = document.createElement('div');
-    item.className = 'df-palette-item';
-    item.draggable = true;
-    item.innerHTML = `<span class="df-palette-dot" style="background:${tmpl.color}"></span><span class="df-palette-label">${esc(tmpl.name)}</span><span class="df-palette-role">${esc(tmpl.role)}</span>`;
-    item.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/df-template', tmpl.key); e.dataTransfer.effectAllowed = 'move'; });
-    palette.appendChild(item);
-  });
-}
-
-function dfAddNodeFromTemplate(templateKey, x, y) {
-  const tmpl = dfStepTemplates.find(t => t.key === templateKey);
-  if (!tmpl) return;
-  const data = { id: templateKey + '_' + (++dfNextId), name: tmpl.name, role: tmpl.role, system_prompt: tmpl.prompt, outputs: [...tmpl.outputs], output_format: tmpl.format, quality_gates: [], inputs: [] };
-  const nodeId = dfEditor.addNode(data.id, 1, 1, x, y, data.id, {}, dfNodeHtml(data));
-  dfNodeData[nodeId] = data;
-  dfSelectedNodeId = nodeId;
-  dfRenderConfigPanel(nodeId);
-  return nodeId;
-}
-
-function dfNodeHtml(data) {
-  const color = dfRoleColors[data.role] || '#6b7780';
-  const outputTags = data.outputs.map(o => `<span style="color:var(--cyan);font-size:0.52rem;background:rgba(0,192,232,0.1);padding:1px 4px;border-radius:2px">${esc(o)}</span>`).join(' ');
-  const gateLabel = (data.quality_gates && data.quality_gates.length) ? `<span style="font-size:0.48rem;color:var(--amber);margin-left:4px">[${data.quality_gates.length}G]</span>` : '';
-  return `<div style="border-top:3px solid ${color};padding:0"><div style="padding:6px 10px 4px;font-size:0.68rem;font-weight:600;color:var(--text);display:flex;align-items:center;gap:4px"><span style="color:${color};font-size:0.5rem">&#9679;</span>${esc(data.name)}${gateLabel}</div><div style="padding:2px 10px 6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.5rem;text-transform:uppercase;letter-spacing:0.08em;color:${color}">${esc(data.role)}</span><span style="font-size:0.48rem;color:var(--text-muted)">${esc(data.output_format)}</span></div><div style="padding:0 10px 6px;display:flex;gap:3px;flex-wrap:wrap">${outputTags}</div></div>`;
-}
-
-function dfRenderConfigPanel(nodeId) {
-  const data = dfNodeData[nodeId];
-  const panel = document.getElementById('df-config-panel');
-  const title = document.getElementById('df-config-title');
-  if (!data || !panel) return;
-  title.textContent = data.id;
-  const gateOps = ['not_empty','contains','not_contains','matches','has_key','all_keys','gt','lt','gte','lte','equals','not_equals','length_gt','length_lt','is_type'];
-  let gatesHtml = (data.quality_gates || []).map((gate, idx) => `
-    <div class="df-gate-row">
-      <input type="text" value="${esc(gate.field||'')}" class="chat-input" placeholder="field" onchange="dfUpdateGate(${nodeId},${idx},'field',this.value)" />
-      <select class="model-select" onchange="dfUpdateGate(${nodeId},${idx},'operator',this.value)">${gateOps.map(op => `<option value="${op}"${gate.operator===op?' selected':''}>${op}</option>`).join('')}</select>
-      <input type="text" value="${esc(gate.value||'')}" class="chat-input" placeholder="value" onchange="dfUpdateGate(${nodeId},${idx},'value',this.value)" />
-      <button onclick="dfRemoveGate(${nodeId},${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;padding:2px 4px">✕</button>
-    </div>`).join('');
-  const fmtOptions = Object.keys(dfFmtDescs).map(f => `<option value="${f}"${data.output_format===f?' selected':''}>${f}</option>`).join('');
-  panel.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:0">
-      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
-        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Identity</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          <div><label class="df-config-label">Step ID</label><input type="text" value="${esc(data.id)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'id',this.value)" /></div>
-          <div><label class="df-config-label">Name</label><input type="text" value="${esc(data.name)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'name',this.value)" /></div>
-        </div>
-        <div style="margin-top:6px"><label class="df-config-label">Role</label>
-          <select class="model-select" style="font-size:0.66rem;padding:3px 6px" onchange="dfUpdateNodeData(${nodeId},'role',this.value)">
-            ${Object.keys(dfRoleColors).map(r=>`<option value="${r}"${data.role===r?' selected':''}>${r}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
-        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Prompt</div>
-        <textarea class="chat-input" style="min-height:80px;font-size:0.66rem;resize:vertical" onchange="dfUpdateNodeData(${nodeId},'system_prompt',this.value)">${esc(data.system_prompt)}</textarea>
-      </div>
-      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
-        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Outputs</div>
-        <div id="df-outputs-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${data.outputs.map((o,i)=>`<span class="df-tag">${esc(o)}<span class="df-tag-remove" onclick="dfRemoveOutput(${nodeId},${i})">✕</span></span>`).join('')}</div>
-        <div style="display:flex;gap:4px"><input type="text" id="df-new-output-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="output_key" onkeydown="if(event.key==='Enter'){dfAddOutput(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddOutput(${nodeId})">Add</button></div>
-        <div style="margin-top:6px"><label class="df-config-label">Output format</label><select class="model-select" style="font-size:0.64rem;padding:2px 4px" onchange="dfUpdateNodeData(${nodeId},'output_format',this.value)">${fmtOptions}</select></div>
-      </div>
-      <div style="padding:8px 0">
-        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Quality Gates</div>
-        <div id="df-gates-${nodeId}">${gatesHtml}</div>
-        <button class="action-btn" style="font-size:0.56rem;padding:2px 8px;margin-top:4px" onclick="dfAddGate(${nodeId})">+ Gate</button>
-        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
-          <button class="action-btn" style="font-size:0.56rem;padding:2px 10px;color:var(--red);border-color:var(--red)" onclick="dfDeleteNode(${nodeId})">Delete Node</button>
-        </div>
-      </div>
-    </div>`;
-}
-
-function dfUpdateNodeData(nodeId, field, value) {
-  if (!dfNodeData[nodeId]) return;
-  dfNodeData[nodeId][field] = value;
-  const html = dfNodeHtml(dfNodeData[nodeId]);
-  dfEditor.drawflow.drawflow.Home.data[nodeId].html = html;
-  const nodeEl = document.querySelector(`#node-${nodeId} .drawflow_content_node`);
-  if (nodeEl) nodeEl.innerHTML = html;
-  if (dfSelectedNodeId === nodeId) dfRenderConfigPanel(nodeId);
-}
-
-function dfAddOutput(nodeId) {
-  const inp = document.getElementById(`df-new-output-${nodeId}`);
-  if (!inp || !inp.value.trim()) return;
-  dfNodeData[nodeId].outputs.push(inp.value.trim());
-  inp.value = '';
-  dfUpdateNodeData(nodeId, 'outputs', dfNodeData[nodeId].outputs);
-}
-
-function dfRemoveOutput(nodeId, idx) {
-  if (!dfNodeData[nodeId]) return;
-  dfNodeData[nodeId].outputs.splice(idx, 1);
-  dfUpdateNodeData(nodeId, 'outputs', dfNodeData[nodeId].outputs);
-}
-
-function dfAddGate(nodeId) {
-  if (!dfNodeData[nodeId]) return;
-  if (!dfNodeData[nodeId].quality_gates) dfNodeData[nodeId].quality_gates = [];
-  dfNodeData[nodeId].quality_gates.push({ field: '', operator: 'not_empty', value: '' });
-  dfRenderConfigPanel(nodeId);
-}
-
-function dfRemoveGate(nodeId, idx) {
-  if (!dfNodeData[nodeId] || !dfNodeData[nodeId].quality_gates) return;
-  dfNodeData[nodeId].quality_gates.splice(idx, 1);
-  dfRenderConfigPanel(nodeId);
-}
-
-function dfUpdateGate(nodeId, idx, field, value) {
-  if (!dfNodeData[nodeId] || !dfNodeData[nodeId].quality_gates) return;
-  dfNodeData[nodeId].quality_gates[idx][field] = value;
-}
-
-function dfDeleteNode(nodeId) {
-  if (!dfEditor) return;
-  dfEditor.removeNodeId('node-' + nodeId);
-}
-
-function dfOnConnectionCreated(conn) {
-  const fromId = parseInt(conn.output_id), toId = parseInt(conn.input_id);
-  const from = dfNodeData[fromId], to = dfNodeData[toId];
-  if (from && to) {
-    from.outputs.forEach(out => { const ref = `${from.id}.${out}`; if (!to.inputs.includes(ref)) to.inputs.push(ref); });
-    if (dfSelectedNodeId === toId) dfRenderConfigPanel(toId);
-  }
-}
-
-function dfOnConnectionRemoved(conn) {
-  const fromId = parseInt(conn.output_id), toId = parseInt(conn.input_id);
-  const from = dfNodeData[fromId], to = dfNodeData[toId];
-  if (from && to) {
-    to.inputs = to.inputs.filter(ref => !ref.startsWith(from.id + '.'));
-    if (dfSelectedNodeId === toId) dfRenderConfigPanel(toId);
-  }
-}
-
-function dfExportYaml() {
-  if (!dfEditor) return;
-  const exported = dfEditor.export();
-  const homeData = exported.drawflow.Home.data;
-  const nodeIds = Object.keys(homeData).map(Number);
-  const wfId   = document.getElementById('df-wf-id')?.value   || 'my-workflow';
-  const wfName = document.getElementById('df-wf-name')?.value || 'My Workflow';
-  const wfDesc = document.getElementById('df-wf-desc')?.value || '';
-  const wfRole = document.getElementById('df-wf-role')?.value || 'general';
-
-  let yaml = `id: ${wfId}\nname: "${wfName}"\nversion: "1.0"\n`;
-  if (wfDesc) yaml += `description: "${wfDesc}"\n`;
-  yaml += `\ndefaults:\n  role: ${wfRole}\n  temperature: 0.7\n  max_tokens: 4096\n  retries: 2\n  retry_delay: 5\n\nsteps:\n`;
-
-  nodeIds.forEach(nid => {
-    const data = dfNodeData[nid];
-    if (!data) return;
-    const nodeInfo = homeData[nid];
-    const deps = [];
-    if (nodeInfo.inputs) Object.values(nodeInfo.inputs).forEach(inp => (inp.connections||[]).forEach(conn => { const src = dfNodeData[parseInt(conn.node)]; if (src && !deps.includes(src.id)) deps.push(src.id); }));
-    yaml += `  - id: ${data.id}\n    name: "${data.name}"\n    role: ${data.role}\n    system_prompt: |\n`;
-    data.system_prompt.split('\n').forEach(line => { yaml += `      ${line}\n`; });
-    if (data.inputs.length) { yaml += `    inputs:\n`; data.inputs.forEach(i => { yaml += `      - ${i}\n`; }); }
-    yaml += `    outputs:\n`; data.outputs.forEach(o => { yaml += `      - ${o}\n`; });
-    if (deps.length) { yaml += `    depends_on:\n`; deps.forEach(d => { yaml += `      - ${d}\n`; }); }
-    if (data.output_format !== 'raw') yaml += `    output_parser:\n      format: ${data.output_format}\n`;
-    if (data.quality_gates && data.quality_gates.length) {
-      yaml += `    quality_gates:\n`;
-      data.quality_gates.forEach(g => { yaml += `      - field: ${g.field}\n        operator: ${g.operator}\n`; if (g.value) yaml += `        value: "${g.value}"\n`; });
-    }
-    yaml += `\n`;
-  });
-
-  document.getElementById('df-yaml-panel').style.display = 'block';
-  document.getElementById('df-yaml-output').textContent = yaml;
-  return yaml;
-}
-
-async function dfSave() {
-  const yamlText = dfExportYaml();
-  if (!yamlText) return;
-  let definition;
-  try { definition = jsyaml.load(yamlText); } catch (e) { alert('YAML error: ' + e.message); return; }
-  const overwrite = true;
-  try {
-    const resp = await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite }) });
-    if (resp.ok) {
-      const result = await resp.json();
-      alert('Saved: ' + result.path);
-      if (typeof refreshWorkflows === 'function') refreshWorkflows();
-    } else {
-      const err = await resp.json();
-      alert('Save failed: ' + (err.detail || JSON.stringify(err)));
-    }
-  } catch (e) { alert('Save error: ' + e.message); }
-}
-
-async function dfRunWorkflow() {
-  const yamlText = dfExportYaml();
-  if (!yamlText) return;
-  let definition;
-  try { definition = jsyaml.load(yamlText); } catch (e) { alert('YAML error: ' + e.message); return; }
-  try { await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite: true }) }); } catch (e) { /* ignore save errors for run */ }
-  setWfMode('run');
-  const id = document.getElementById('df-wf-id')?.value || 'my-workflow';
-  if (typeof refreshWorkflows === 'function') {
-    await refreshWorkflows();
-    const sel = document.getElementById('wf-select');
-    if (sel) { sel.value = id; if (typeof loadWorkflowDetail === 'function') loadWorkflowDetail(); }
-  }
-}
-
-function dfClearConfigPanel() {
-  const panel = document.getElementById('df-config-panel');
-  const title = document.getElementById('df-config-title');
-  if (panel) panel.innerHTML = '<div style="padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.64rem">Drag a step from the palette to begin. Click a node to configure it.</div>';
-  if (title) title.textContent = 'Config';
-}
-
-function dfAutoLayout() {
-  if (!dfEditor || typeof dagre === 'undefined') return;
-  const exported = dfEditor.export();
-  const nodes = exported.drawflow.Home.data;
-  const nodeIds = Object.keys(nodes);
-  if (!nodeIds.length) return;
-
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 });
-  g.setDefaultEdgeLabel(() => ({}));
-  nodeIds.forEach(id => g.setNode(id, { width: 170, height: 70 }));
-  nodeIds.forEach(id => {
-    const node = nodes[id];
-    if (node.outputs && node.outputs.output_1 && node.outputs.output_1.connections) {
-      node.outputs.output_1.connections.forEach(conn => g.setEdge(id, String(conn.node)));
-    }
-  });
-  dagre.layout(g);
-  nodeIds.forEach(id => {
-    const pos = g.node(id);
-    if (!pos) return;
-    nodes[id].pos_x = pos.x - 85;
-    nodes[id].pos_y = pos.y - 35;
-    const el = document.querySelector(`#node-${id}`);
-    if (el) { el.style.left = (pos.x - 85) + 'px'; el.style.top = (pos.y - 35) + 'px'; }
-  });
-  nodeIds.forEach(id => { try { dfEditor.updateConnectionNodes(`node-${id}`); } catch(e) {} });
-}
-
-function dfImportYaml() {
-  const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
-  modal.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);padding:20px;width:600px;max-height:80vh;display:flex;flex-direction:column;gap:10px"><div style="font-size:0.8rem;color:var(--text);font-weight:600">Import Workflow YAML</div><div style="font-size:0.6rem;color:var(--text-dim)">Paste a workflow YAML definition. All current nodes will be replaced.</div><textarea id="df-import-textarea" style="width:100%;min-height:300px;background:var(--bg-deep);color:var(--text);border:1px solid var(--border);font-family:var(--mono);font-size:0.65rem;padding:10px;resize:vertical"></textarea><div style="display:flex;gap:8px;justify-content:flex-end"><button class="action-btn" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button><button class="action-btn" onclick="dfDoImport()" style="color:var(--cyan);border-color:var(--cyan-dim)">Import</button></div></div>`;
-  document.body.appendChild(modal);
-}
-
-function dfDoImport() {
-  const textarea = document.getElementById('df-import-textarea');
-  if (!textarea) return;
-  const yamlText = textarea.value;
-  textarea.closest('div[style*=fixed]').remove();
-  if (!yamlText.trim()) return;
-
-  let parsed;
-  try { parsed = jsyaml.load(yamlText); } catch (e) { alert('Invalid YAML: ' + e.message); return; }
-  if (!parsed || !parsed.steps || !Array.isArray(parsed.steps)) { alert('YAML must have a "steps" array'); return; }
-
-  dfEditor.clear();
-  dfNodeData = {};
-  if (parsed.id)   document.getElementById('df-wf-id').value   = parsed.id;
-  if (parsed.name) document.getElementById('df-wf-name').value  = parsed.name;
-  if (parsed.description) document.getElementById('df-wf-desc').value = typeof parsed.description === 'string' ? parsed.description.trim() : '';
-  if (parsed.defaults && parsed.defaults.role) document.getElementById('df-wf-role').value = parsed.defaults.role;
-
-  if (typeof dagre === 'undefined') {
-    parsed.steps.forEach((step, i) => { dfAddNodeFromImportedStep(step, 80 + i * 200, 80); });
-    return;
-  }
-
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 });
-  g.setDefaultEdgeLabel(() => ({}));
-  const stepIds = new Set(parsed.steps.map(s => s.id));
-  parsed.steps.forEach(step => g.setNode(step.id, { width: 170, height: 70 }));
-  parsed.steps.forEach(step => {
-    const deps = new Set();
-    if (step.depends_on) step.depends_on.forEach(d => deps.add(d));
-    if (step.inputs) step.inputs.forEach(inp => { const ns = inp.split('.')[0]; if (ns !== 'seed' && ns !== 'shared' && stepIds.has(ns)) deps.add(ns); });
-    deps.forEach(dep => { if (stepIds.has(dep)) g.setEdge(dep, step.id); });
-  });
-  dagre.layout(g);
-
-  const stepToNodeId = {};
-  parsed.steps.forEach(step => {
-    const pos = g.node(step.id);
-    const x = pos ? pos.x - 85 : 100, y = pos ? pos.y - 35 : 80;
-    const nodeId = dfAddNodeFromImportedStep(step, x, y);
-    stepToNodeId[step.id] = nodeId;
-  });
-
-  parsed.steps.forEach(step => {
-    if (!step.depends_on) return;
-    step.depends_on.forEach(dep => {
-      const fromId = stepToNodeId[dep], toId = stepToNodeId[step.id];
-      if (fromId && toId) try { dfEditor.addConnection(fromId, toId, 'output_1', 'input_1'); } catch(e) {}
-    });
-  });
-}
-
-function dfAddNodeFromImportedStep(step, x, y) {
-  const tmpl = dfStepTemplates.find(t => t.key === (step.role || 'custom')) || dfStepTemplates[dfStepTemplates.length - 1];
-  const data = {
-    id: step.id || (tmpl.key + '_' + (++dfNextId)),
-    name: step.name || step.id || tmpl.name,
-    role: step.role || 'general',
-    system_prompt: (step.system_prompt || tmpl.prompt || '').trim(),
-    outputs: step.outputs || [...tmpl.outputs],
-    output_format: (step.output_parser && step.output_parser.format) || tmpl.format,
-    quality_gates: step.quality_gates || [],
-    inputs: step.inputs || [],
-  };
-  const nodeId = dfEditor.addNode(data.id, 1, 1, x, y, data.id, {}, dfNodeHtml(data));
-  dfNodeData[nodeId] = data;
-  return nodeId;
-}
-
-/* ── AGENTS TAB ─────────────────────────────────────────────────── */
-let _activeAgentId = null;
-let _agentHistory = [];
-
-async function loadAgentsTab() {
-  const listEl = document.getElementById('agents-list');
-  const emptyEl = document.getElementById('agents-empty');
-  listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">Loading…</div>';
-  emptyEl.style.display = 'none';
-
-  let agents = [];
-  try {
-    const r = await fetch('/api/agents');
-    if (r.ok) agents = await r.json();
-  } catch (e) {
-    listEl.innerHTML = '<div style="color:var(--red,#f44);font-size:0.8rem;padding:8px;">Failed to load agents.</div>';
-    return;
-  }
-
-  const countEl = document.getElementById('agents-count');
-  if (countEl) countEl.textContent = agents.length || '';
-
-  if (!agents.length) {
-    listEl.innerHTML = '';
-    emptyEl.style.display = 'block';
-    return;
-  }
-  emptyEl.style.display = 'none';
-
-  listEl.innerHTML = agents.map(a => `
-    <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;transition:border-color 0.15s;"
-         onclick="openAgentChat('${esc(a.id)}')"
-         onmouseenter="this.style.borderColor='var(--cyan)'"
-         onmouseleave="this.style.borderColor='var(--border)'">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <span style="font-size:1.2rem;">${a.icon || '🤖'}</span>
-        <strong style="color:var(--text);font-size:0.88rem;flex:1">${esc(a.name)}</strong>
-        <button onclick="event.stopPropagation();showEditAgentModal('${esc(a.id)}')"
-                style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.75rem;padding:2px 6px;"
-                title="Edit agent">✎</button>
-        <button onclick="event.stopPropagation();deleteAgent('${esc(a.id)}')"
-                style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.75rem;padding:2px 6px;"
-                title="Delete agent">✕</button>
-      </div>
-      ${a.description ? `<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">${esc(a.description)}</div>` : ''}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${(a.tags||[]).map(t=>`<span style="font-size:0.65rem;background:var(--bg-deep);border:1px solid var(--border);color:var(--text-muted);padding:1px 6px;border-radius:3px;">${esc(t)}</span>`).join('')}
-        ${a.role ? `<span style="font-size:0.65rem;background:var(--bg-deep);border:1px solid var(--cyan-dim);color:var(--cyan-dim);padding:1px 6px;border-radius:3px;">${esc(a.role)}</span>` : ''}
-      </div>
-      ${a.starters && a.starters.length ? `
-        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
-          ${a.starters.slice(0,2).map(s=>`
-            <div onclick="event.stopPropagation();openAgentChatWithStarter('${esc(a.id)}','${esc(s)}')"
-                 style="font-size:0.72rem;color:var(--text-dim);background:var(--bg-deep);border:1px solid var(--border);padding:4px 8px;border-radius:4px;cursor:pointer;"
-                 onmouseenter="this.style.borderColor='var(--cyan)'"
-                 onmouseleave="this.style.borderColor='var(--border)'">
-              ↗ ${esc(s)}
-            </div>`).join('')}
-        </div>` : ''}
-    </div>`).join('');
-}
-
-async function openAgentChat(agentId) {
-  _activeAgentId = agentId;
-  _agentHistory = [];
-  let agent;
-  try {
-    const r = await fetch(`/api/agents/${agentId}`);
-    if (!r.ok) throw new Error('not found');
-    agent = await r.json();
-  } catch(e) {
-    alert('Failed to load agent: ' + agentId);
-    return;
-  }
-  document.getElementById('agent-chat-icon').textContent = agent.icon || '🤖';
-  document.getElementById('agent-chat-name').textContent = agent.name;
-  document.getElementById('agent-chat-model').textContent = agent.role ? `role:${agent.role}` : (agent.model || '');
-  document.getElementById('agent-chat-messages').innerHTML = `
-    <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;">
-      Chat with <strong style="color:var(--cyan)">${esc(agent.name)}</strong> — type a message below
-    </div>`;
-  document.getElementById('agent-chat-panel').style.display = 'block';
-  document.getElementById('agent-chat-input').focus();
-}
-
-function openAgentChatWithStarter(agentId, starter) {
-  openAgentChat(agentId).then(() => {
-    document.getElementById('agent-chat-input').value = starter;
-    sendAgentMessage();
-  });
-}
-
-function closeAgentChat() {
-  _activeAgentId = null;
-  _agentHistory = [];
-  document.getElementById('agent-chat-panel').style.display = 'none';
-}
-
-async function sendAgentMessage() {
-  if (!_activeAgentId) return;
-  const input = document.getElementById('agent-chat-input');
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-
-  _agentHistory.push({ role: 'user', content: text });
-
-  const msgEl = document.getElementById('agent-chat-messages');
-  const userBubble = `<div style="align-self:flex-end;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:80%;font-size:0.82rem;white-space:pre-wrap;">${esc(text)}</div>`;
-  const thinkingBubble = `<div id="agent-thinking" style="align-self:flex-start;color:var(--text-muted);font-size:0.78rem;padding:4px 8px;">thinking…</div>`;
-  msgEl.insertAdjacentHTML('beforeend', userBubble + thinkingBubble);
-  msgEl.scrollTop = msgEl.scrollHeight;
-
-  let result;
-  try {
-    const r = await fetch(`/api/agents/${_activeAgentId}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: _agentHistory }),
-    });
-    result = await r.json();
-    if (!r.ok) throw new Error(result.detail || 'Chat failed');
-  } catch(e) {
-    document.getElementById('agent-thinking')?.remove();
-    msgEl.insertAdjacentHTML('beforeend',
-      `<div style="align-self:flex-start;color:var(--red,#f44);font-size:0.78rem;padding:4px 8px;">${esc(String(e))}</div>`);
-    msgEl.scrollTop = msgEl.scrollHeight;
-    return;
-  }
-
-  document.getElementById('agent-thinking')?.remove();
-  const content = result.content || '';
-  _agentHistory.push({ role: 'assistant', content });
-  msgEl.insertAdjacentHTML('beforeend',
-    `<div style="align-self:flex-start;background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:85%;font-size:0.82rem;white-space:pre-wrap;">${esc(content)}</div>`);
-  msgEl.scrollTop = msgEl.scrollHeight;
-}
-
-async function deleteAgent(agentId) {
-  if (!confirm(`Delete agent "${agentId}"?`)) return;
-  try {
-    const r = await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
-    if (!r.ok) throw new Error((await r.json()).detail || 'Delete failed');
-    loadAgentsTab();
-    if (_activeAgentId === agentId) closeAgentChat();
-  } catch(e) {
-    alert('Failed to delete agent: ' + e.message);
-  }
-}
-
-/* ── Agent Create / Edit Modal ──────────────────────────────────────── */
-
-function _agentModalHtml(mode, a) {
-  const isEdit = mode === 'edit';
-  const inputStyle = 'width:100%;background:var(--bg-deep);border:1px solid var(--border);color:var(--text);padding:6px 9px;border-radius:4px;font-family:var(--mono);font-size:0.78rem;box-sizing:border-box;';
-  const labelStyle = 'font-size:0.7rem;color:var(--text-muted);margin-bottom:3px;display:block;';
-  const roleOpts = ['','general','coding','reasoning','fast','uncensored']
-    .map(r => `<option value="${r}" ${(a&&a.role===r)||(!a&&r==='')?'selected':''}>${r||'— none —'}</option>`)
-    .join('');
-  const startersVal = a && a.starters && a.starters.length ? a.starters.join('\n') : '';
-  const tempVal = a && a.temperature !== undefined ? a.temperature : 0.7;
-  const modelVal = a && a.model ? esc(a.model) : '';
-  const contextJson = JSON.stringify(a && a.context ? a.context : []);
-  const toolsJson   = JSON.stringify(a && a.tools   ? a.tools   : []);
-  return `
-  <div style="font-size:0.82rem;color:var(--text);font-weight:600;margin-bottom:2px;">${isEdit ? 'Edit Agent' : 'New Agent'}</div>
-  <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:12px;">${isEdit ? `Editing <strong style="color:var(--cyan)">${esc(a.id)}</strong>` : 'Define a custom AI persona'}</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-    <div>
-      <label style="${labelStyle}">ID (slug) *</label>
-      <input id="am-id" type="text" placeholder="my-assistant" value="${a?esc(a.id):''}" ${isEdit?'disabled':''} style="${inputStyle}${isEdit?'opacity:0.5;cursor:not-allowed;':''}">
-    </div>
-    <div>
-      <label style="${labelStyle}">Display name *</label>
-      <input id="am-name" type="text" placeholder="My Assistant" value="${a?esc(a.name):''}" style="${inputStyle}">
-    </div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 60px;gap:10px;margin-top:8px;">
-    <div>
-      <label style="${labelStyle}">Description</label>
-      <input id="am-desc" type="text" placeholder="What this agent does…" value="${a&&a.description?esc(a.description):''}" style="${inputStyle}">
-    </div>
-    <div>
-      <label style="${labelStyle}">Icon</label>
-      <input id="am-icon" type="text" placeholder="🤖" value="${a&&a.icon?esc(a.icon):''}" style="${inputStyle}text-align:center;">
-    </div>
-  </div>
-  <div style="margin-top:8px;">
-    <label style="${labelStyle}">System prompt *</label>
-    <textarea id="am-prompt" rows="5" placeholder="You are a helpful assistant…" style="${inputStyle}resize:vertical;">${a?esc(a.system_prompt):''}</textarea>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
-    <div>
-      <label style="${labelStyle}">Role</label>
-      <select id="am-role" style="${inputStyle}">${roleOpts}</select>
-    </div>
-    <div>
-      <label style="${labelStyle}">Tags (comma-separated)</label>
-      <input id="am-tags" type="text" placeholder="coding, review" value="${a&&a.tags?esc(a.tags.join(', ')):''}" style="${inputStyle}">
-    </div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 90px;gap:10px;margin-top:8px;">
-    <div>
-      <label style="${labelStyle}">Model override <span style="color:var(--text-dim)">(leave blank to use role)</span></label>
-      <input id="am-model" type="text" placeholder="llama3.2 or leave blank" value="${modelVal}" style="${inputStyle}">
-    </div>
-    <div>
-      <label style="${labelStyle}">Temperature</label>
-      <input id="am-temp" type="number" min="0" max="2" step="0.05" value="${tempVal}" style="${inputStyle}text-align:center;">
-    </div>
-  </div>
-  <div style="margin-top:8px;">
-    <label style="${labelStyle}">Conversation starters <span style="color:var(--text-dim)">(one per line, shown as quick-start chips)</span></label>
-    <textarea id="am-starters" rows="3" placeholder="Review this function for bugs&#10;What's the time complexity here?" style="${inputStyle}resize:vertical;">${esc(startersVal)}</textarea>
-  </div>
-  <input type="hidden" id="am-context-json" value="${esc(contextJson)}">
-  <input type="hidden" id="am-tools-json" value="${esc(toolsJson)}">
-  <div id="am-error" style="display:none;color:var(--red,#f44);font-size:0.72rem;margin-top:8px;padding:6px 8px;background:rgba(255,68,68,0.08);border-radius:4px;"></div>
-  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
-    <button class="action-btn" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button>
-    <button class="action-btn" id="am-save-btn" onclick="_saveAgentModal('${isEdit?a.id:''}')"
-            style="color:var(--cyan);border-color:var(--cyan-dim);">${isEdit ? 'Save changes' : 'Create agent'}</button>
-  </div>`;
-}
-
-function showCreateAgentModal() {
-  const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
-  const inner = document.createElement('div');
-  inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:560px;max-height:90vh;overflow-y:auto;border-radius:6px;display:flex;flex-direction:column;gap:0;';
-  inner.innerHTML = _agentModalHtml('create', null);
-  modal.appendChild(inner);
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  document.body.appendChild(modal);
-  inner.querySelector('#am-id').focus();
-}
-
-async function showEditAgentModal(agentId) {
-  let agent;
-  try {
-    const r = await fetch(`/api/agents/${agentId}`);
-    if (!r.ok) throw new Error('not found');
-    agent = await r.json();
-  } catch(e) {
-    alert('Failed to load agent for editing: ' + agentId);
-    return;
-  }
-  const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
-  const inner = document.createElement('div');
-  inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:560px;max-height:90vh;overflow-y:auto;border-radius:6px;display:flex;flex-direction:column;gap:0;';
-  inner.innerHTML = _agentModalHtml('edit', agent);
-  modal.appendChild(inner);
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  document.body.appendChild(modal);
-  inner.querySelector('#am-name').focus();
-}
-
-async function _saveAgentModal(existingId) {
-  const isEdit = !!existingId;
-  const idVal    = isEdit ? existingId : (document.getElementById('am-id')?.value.trim() || '');
-  const nameVal  = document.getElementById('am-name')?.value.trim() || '';
-  const descVal  = document.getElementById('am-desc')?.value.trim() || '';
-  const iconVal  = document.getElementById('am-icon')?.value.trim() || '';
-  const promptVal = document.getElementById('am-prompt')?.value.trim() || '';
-  const roleVal  = document.getElementById('am-role')?.value || '';
-  const tagsRaw  = document.getElementById('am-tags')?.value || '';
-  const tags     = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
-
-  const errEl = document.getElementById('am-error');
-  const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
-
-  if (!isEdit && !/^[a-z0-9-]+$/.test(idVal)) { showErr('ID must be lowercase letters, numbers, and hyphens only.'); return; }
-  if (!nameVal) { showErr('Display name is required.'); return; }
-  if (!promptVal) { showErr('System prompt is required.'); return; }
-
-  const modelField = document.getElementById('am-model')?.value.trim() || null;
-  const tempField  = parseFloat(document.getElementById('am-temp')?.value);
-  const temperature = isNaN(tempField) ? 0.7 : tempField;
-  const startersRaw = document.getElementById('am-starters')?.value || '';
-  const starters = startersRaw.split('\n').map(s => s.trim()).filter(Boolean);
-  let context = [], tools = [];
-  try { context = JSON.parse(document.getElementById('am-context-json')?.value || '[]'); } catch(_) {}
-  try { tools   = JSON.parse(document.getElementById('am-tools-json')?.value   || '[]'); } catch(_) {}
-
-  const payload = {
-    id: idVal, name: nameVal, description: descVal || null,
-    icon: iconVal || null, system_prompt: promptVal,
-    role: roleVal || null, tags,
-    model: modelField, temperature, starters, context, tools,
-  };
-
-  const btn = document.getElementById('am-save-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-
-  try {
-    const url = isEdit ? `/api/agents/${existingId}` : '/api/agents';
-    const method = isEdit ? 'PUT' : 'POST';
-    const r = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const d = await r.json();
-    if (!r.ok) { showErr(d.detail || JSON.stringify(d)); if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; } return; }
-    document.querySelector('div[style*=fixed]')?.remove();
-    loadAgentsTab();
-  } catch(e) {
-    showErr('Request failed: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; }
-  }
-}
-=======
 
 /* ══════════════════════════════════════════════════════════════════
    WORKFLOW COMPOSER — Visual node-based workflow builder
@@ -5466,7 +5317,900 @@ async function _saveAgentModal(existingId) {
     if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; }
   }
 }
->>>>>>> Stashed changes
+
+// ── AdminMenu ─────────────────────────────────────────────────────────────
+window.AdminMenu = (function () {
+  const trigger = () => document.getElementById('admin-trigger');
+  const menu = () => document.getElementById('admin-menu');
+
+  function open() {
+    menu().hidden = false;
+    trigger().setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onOutsideClick, true);
+    document.addEventListener('keydown', onKeydown);
+    // Focus first menu item for keyboard users.
+    const first = menu().querySelector('.admin-menu-item');
+    if (first) first.focus();
+  }
+
+  function close() {
+    menu().hidden = true;
+    trigger().setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onOutsideClick, true);
+    document.removeEventListener('keydown', onKeydown);
+  }
+
+  function toggle(_el) {
+    if (menu().hidden) open(); else close();
+  }
+
+  function onOutsideClick(e) {
+    if (!menu().contains(e.target) && !trigger().contains(e.target)) close();
+  }
+
+  function onKeydown(e) {
+    if (e.key === 'Escape') { close(); trigger().focus(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const items = Array.from(menu().querySelectorAll('.admin-menu-item'));
+      const i = items.indexOf(document.activeElement);
+      const next = e.key === 'ArrowDown'
+        ? items[(i + 1) % items.length]
+        : items[(i - 1 + items.length) % items.length];
+      next.focus();
+    }
+  }
+
+  function select(panelId) {
+    close();
+    showPanel(panelId);
+  }
+
+  function showPanel(panelId) {
+    // Hide every .tab-content (operational + admin).
+    document.querySelectorAll('.tab-content').forEach(t => {
+      t.classList.remove('active');
+      t.style.display = '';
+    });
+    // De-active every .tab-btn.
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+    const target = document.getElementById('tab-' + panelId);
+    if (target) {
+      target.classList.add('active');
+      target.style.display = 'block';
+    }
+    trigger().classList.add('active');
+
+    // Notify panels so they can lazy-load.
+    window.dispatchEvent(new CustomEvent('adminPanelActivated', {detail: {panel: panelId}}));
+  }
+
+  // Reset Admin trigger active state when an operational tab is chosen.
+  document.addEventListener('click', function (e) {
+    if (e.target.classList.contains('tab-btn') && e.target.id !== 'admin-trigger') {
+      trigger().classList.remove('active');
+    }
+  }, true);
+
+  return { toggle, select, open, close, showPanel };
+})();
+
+// ── AdminAuth ─────────────────────────────────────────────────────────────
+window.AdminAuth = (function () {
+  const STORAGE_KEY = 'enclave.admin.masterKey';
+  // After successful sign-in, the panel that triggered the modal gets reloaded.
+  let pendingPanel = null;
+
+  function getKey() {
+    return sessionStorage.getItem(STORAGE_KEY) || '';
+  }
+
+  function isSignedIn() {
+    return !!getKey();
+  }
+
+  function setKey(key) {
+    sessionStorage.setItem(STORAGE_KEY, key);
+    _refreshStatus();
+  }
+
+  function clearKey() {
+    sessionStorage.removeItem(STORAGE_KEY);
+    _refreshStatus();
+  }
+
+  function authHeaders() {
+    const key = getKey();
+    return key ? { 'Authorization': 'Bearer ' + key } : {};
+  }
+
+  /** Wrap a fetch with master-key handling. Returns fetch's Response promise.
+   *  If the response is 401, clears the key and re-renders the lock state for
+   *  the panel identified by panelId (so the user can re-auth). */
+  async function fetch(url, opts, panelId) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, authHeaders());
+    const r = await window.fetch(url, opts);
+    if (r.status === 401) {
+      clearKey();
+      if (panelId) renderLock(panelId, 'Master key rejected — sign in again.');
+    }
+    return r;
+  }
+
+  /** Render a lock state into the named panel container. */
+  function renderLock(panelId, banner) {
+    const host = document.getElementById('tab-' + panelId);
+    if (!host) return;
+    host.innerHTML = `
+      <div class="admin-lock">
+        <div class="lock-icon" aria-hidden="true">🔒</div>
+        <div class="lock-msg">Admin actions require the master key.</div>
+        ${banner ? `<div class="admin-modal-error" style="margin:0">${banner}</div>` : ''}
+        <button class="lock-btn" onclick="AdminAuth.signIn('${panelId}')">Sign in as admin</button>
+      </div>
+    `;
+  }
+
+  function signIn(panelId) {
+    pendingPanel = panelId;
+    document.getElementById('admin-signin-error').hidden = true;
+    document.getElementById('admin-signin-input').value = '';
+    document.getElementById('admin-signin-modal').hidden = false;
+    setTimeout(() => document.getElementById('admin-signin-input').focus(), 0);
+  }
+
+  function _cancelSignIn() {
+    document.getElementById('admin-signin-modal').hidden = true;
+    pendingPanel = null;
+  }
+
+  async function _submitSignIn() {
+    const input = document.getElementById('admin-signin-input');
+    const errBox = document.getElementById('admin-signin-error');
+    const candidate = input.value.trim();
+    if (!candidate) { errBox.hidden = false; errBox.textContent = 'Enter the master key.'; return; }
+
+    // Validate by hitting an endpoint we know is master-key gated.
+    const r = await window.fetch('/api/keys/scopes', {
+      headers: { 'Authorization': 'Bearer ' + candidate },
+    });
+    if (r.status !== 200) {
+      errBox.hidden = false;
+      errBox.textContent = 'Master key rejected.';
+      return;
+    }
+    setKey(candidate);
+    document.getElementById('admin-signin-modal').hidden = true;
+    if (pendingPanel) {
+      // Re-render the originating panel.
+      window.dispatchEvent(new CustomEvent('adminPanelActivated', {detail: {panel: pendingPanel}}));
+    }
+    pendingPanel = null;
+  }
+
+  function signOut() {
+    clearKey();
+    // Re-render any visible admin panel as locked.
+    document.querySelectorAll('.tab-content[id^="tab-admin-"]').forEach(el => {
+      const id = el.id.replace(/^tab-/, '');
+      if (el.classList.contains('active')) renderLock(id);
+    });
+  }
+
+  function _refreshStatus() {
+    const status = document.getElementById('admin-menu-status');
+    const text = document.getElementById('admin-menu-status-text');
+    const so = document.getElementById('admin-menu-signout');
+    if (!status || !text || !so) return;
+    if (isSignedIn()) {
+      status.classList.add('unlocked');
+      text.textContent = 'Signed in as admin';
+      so.hidden = false;
+    } else {
+      status.classList.remove('unlocked');
+      text.textContent = 'Locked';
+      so.hidden = true;
+    }
+  }
+
+  // Initial paint after DOM is ready.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _refreshStatus);
+  } else {
+    _refreshStatus();
+  }
+
+  // Listen for Enter in the sign-in input.
+  document.addEventListener('keydown', function (e) {
+    const modal = document.getElementById('admin-signin-modal');
+    if (!modal || modal.hidden) return;
+    if (e.key === 'Enter') { e.preventDefault(); _submitSignIn(); }
+    if (e.key === 'Escape') { e.preventDefault(); _cancelSignIn(); }
+  });
+
+  return { isSignedIn, getKey, authHeaders, fetch, renderLock,
+           signIn, signOut, _cancelSignIn, _submitSignIn };
+})();
+
+// ── ApiKeysPanel ──────────────────────────────────────────────────────────
+window.ApiKeysPanel = (function () {
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  let _knownScopes = null;     // cached list from /api/keys/scopes
+  let _selectedScopes = new Set();
+  let _newKeyValue = '';
+
+  async function load() {
+    if (!AdminAuth.isSignedIn()) {
+      AdminAuth.renderLock('admin-keys');
+      return;
+    }
+    const list = document.getElementById('api-keys-list');
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem">Loading…</div>';
+
+    const r = await AdminAuth.fetch('/api/keys', {}, 'admin-keys');
+    if (!r.ok) {
+      // 401 already handled by AdminAuth.fetch.
+      list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed to load keys (HTTP ${r.status})</div>`;
+      return;
+    }
+    const keys = await r.json();
+    if (!Array.isArray(keys) || keys.length === 0) {
+      list.innerHTML = '<div style="color:var(--text-muted);padding:10px 0">No keys yet. Click "+ New Key" to create one.</div>';
+      return;
+    }
+
+    // Header + rows.
+    list.innerHTML = `
+      <table class="api-keys-table" role="table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Key</th><th>Scopes</th>
+            <th>RPM</th><th>Last used</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${keys.map(rowHtml).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function rowHtml(k) {
+    const enabled = k.enabled !== false;
+    const last = k.last_used_at
+      ? new Date(k.last_used_at).toLocaleString()
+      : '<span style="color:var(--text-muted)">never</span>';
+    const scopes = (k.scopes || []).map(s =>
+      `<span class="scope-chip">${esc(s)}</span>`).join(' ');
+    const masked = `${esc(k.prefix || '')}…${esc(k.last_four || '')}`;
+    return `
+      <tr class="${enabled ? '' : 'key-disabled'}">
+        <td>${esc(k.name)}</td>
+        <td><code>${masked}</code></td>
+        <td>${scopes || '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td>${k.rate_limit_rpm ?? '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td>${last}</td>
+        <td>${enabled
+          ? '<span style="color:var(--accent)">enabled</span>'
+          : '<span style="color:var(--text-muted)">revoked</span>'}</td>
+        <td class="row-actions">
+          ${enabled ? `
+            <button class="action-btn small" onclick="ApiKeysPanel.rotate('${esc(k.id)}','${esc(k.name)}')">Rotate</button>
+            <button class="action-btn small danger" onclick="ApiKeysPanel.revoke('${esc(k.id)}','${esc(k.name)}')">Revoke</button>
+          ` : ''}
+        </td>
+      </tr>
+    `;
+  }
+
+  function refresh() { load(); }
+
+  async function _ensureScopes() {
+    if (_knownScopes) return _knownScopes;
+    const r = await AdminAuth.fetch('/api/keys/scopes', {}, 'admin-keys');
+    if (!r.ok) throw new Error('failed to load scopes');
+    _knownScopes = (await r.json()).scopes || [];
+    return _knownScopes;
+  }
+
+  async function showCreate() {
+    if (!AdminAuth.isSignedIn()) { AdminAuth.renderLock('admin-keys'); return; }
+    document.getElementById('create-key-form').hidden = false;
+    document.getElementById('create-key-reveal').hidden = true;
+    document.getElementById('create-key-error').hidden = true;
+    document.getElementById('new-key-name').value = '';
+    document.getElementById('new-key-rpm').value = '';
+    document.getElementById('new-key-expires').value = '';
+    document.getElementById('new-key-confirm-copied').checked = false;
+    document.getElementById('create-key-close-btn').disabled = true;
+
+    _selectedScopes = new Set();
+    const scopes = await _ensureScopes();
+    const picker = document.getElementById('new-key-scopes');
+    picker.innerHTML = scopes.map(s =>
+      `<span class="scope-chip" data-scope="${esc(s)}"
+        onclick="ApiKeysPanel._toggleScope('${esc(s)}', this)">${esc(s)}</span>`
+    ).join('');
+
+    document.getElementById('create-key-modal').hidden = false;
+    setTimeout(() => document.getElementById('new-key-name').focus(), 0);
+  }
+
+  function _toggleScope(s, el) {
+    if (_selectedScopes.has(s)) {
+      _selectedScopes.delete(s);
+      el.classList.remove('selected');
+    } else {
+      _selectedScopes.add(s);
+      el.classList.add('selected');
+    }
+  }
+
+  async function _submitCreate() {
+    const name = document.getElementById('new-key-name').value.trim();
+    const rpmRaw = document.getElementById('new-key-rpm').value.trim();
+    const expRaw = document.getElementById('new-key-expires').value.trim();
+    const errBox = document.getElementById('create-key-error');
+
+    if (!name) { errBox.hidden = false; errBox.textContent = 'Name is required.'; return; }
+    if (_selectedScopes.size === 0) {
+      errBox.hidden = false; errBox.textContent = 'Pick at least one scope.'; return;
+    }
+
+    const body = {
+      name,
+      scopes: Array.from(_selectedScopes),
+      rate_limit_rpm: rpmRaw ? Number(rpmRaw) : null,
+      expires_at: expRaw ? expRaw + 'T00:00:00Z' : null,
+    };
+
+    const r = await AdminAuth.fetch('/api/keys', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    }, 'admin-keys');
+
+    if (!r.ok) {
+      const detail = await r.json().catch(() => ({}));
+      errBox.hidden = false;
+      errBox.textContent = detail.detail || `Failed (HTTP ${r.status})`;
+      return;
+    }
+
+    const result = await r.json();
+    _newKeyValue = result.key || '';
+    document.getElementById('new-key-value').textContent = _newKeyValue;
+    document.getElementById('create-key-form').hidden = true;
+    document.getElementById('create-key-reveal').hidden = false;
+    document.getElementById('copy-confirm').style.display = 'none';
+    load(); // refresh the table behind the modal
+  }
+
+  function _copyKey() {
+    if (!_newKeyValue || !navigator.clipboard) return;
+    navigator.clipboard.writeText(_newKeyValue).then(() => {
+      const c = document.getElementById('copy-confirm');
+      c.style.display = 'block';
+      setTimeout(() => { c.style.display = 'none'; }, 1500);
+    });
+  }
+
+  function _closeCreate() {
+    _newKeyValue = '';
+    document.getElementById('new-key-value').textContent = '';
+    document.getElementById('create-key-modal').hidden = true;
+  }
+
+  async function rotate(id, name) {
+    if (!confirm(`Rotate key "${name}"?\n\nThe old key will stop working immediately.`)) return;
+    const r = await AdminAuth.fetch(`/api/keys/${encodeURIComponent(id)}/rotate`, {
+      method: 'POST',
+    }, 'admin-keys');
+    if (!r.ok) {
+      alert(`Rotate failed (HTTP ${r.status})`);
+      return;
+    }
+    const result = await r.json();
+    _newKeyValue = result.key || '';
+    document.getElementById('new-key-value').textContent = _newKeyValue;
+    document.getElementById('create-key-form').hidden = true;
+    document.getElementById('create-key-reveal').hidden = false;
+    document.getElementById('new-key-confirm-copied').checked = false;
+    document.getElementById('create-key-close-btn').disabled = true;
+    document.getElementById('copy-confirm').style.display = 'none';
+    document.getElementById('create-key-modal').hidden = false;
+    load();
+    refreshAudit();
+  }
+
+  async function revoke(id, name) {
+    if (!confirm(`Revoke key "${name}"?\n\nThis cannot be undone via the UI.`)) return;
+    const r = await AdminAuth.fetch(`/api/keys/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }, 'admin-keys');
+    if (!r.ok) {
+      alert(`Revoke failed (HTTP ${r.status})`);
+      return;
+    }
+    load();
+    refreshAudit();
+  }
+
+  async function refreshAudit() {
+    const host = document.getElementById('api-keys-audit');
+    if (!host) return;
+    const r = await AdminAuth.fetch('/api/keys/audit', {}, 'admin-keys');
+    if (!r.ok) {
+      host.innerHTML = `<div class="admin-modal-error" style="margin:0">Audit unavailable (HTTP ${r.status})</div>`;
+      return;
+    }
+    const events = await r.json();
+    if (!Array.isArray(events) || events.length === 0) {
+      host.innerHTML = '<div style="color:var(--text-muted)">No admin actions recorded yet.</div>';
+      return;
+    }
+    // Last 20, newest first.
+    const recent = events.slice(-20).reverse();
+    host.innerHTML = recent.map(e => `
+      <div style="display:flex;gap:14px;padding:4px 0;border-bottom:1px dashed var(--border)">
+        <span style="color:var(--text-muted);min-width:170px">${esc(new Date(e.ts).toLocaleString())}</span>
+        <span style="color:var(--accent);min-width:90px">${esc(e.action)}</span>
+        <span style="color:var(--text-dim)">${esc(e.name || '')}</span>
+        <span style="color:var(--text-muted);font-family:var(--mono)">${esc(e.key_id)}</span>
+      </div>
+    `).join('');
+  }
+
+  // Auto-load when this admin panel is activated.
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-keys') {
+      load();
+      refreshAudit();
+    }
+  });
+
+  return { load, refresh, showCreate, rotate, revoke, refreshAudit,
+           _toggleScope, _submitCreate, _copyKey, _closeCreate };
+})();
+
+// ── PluginsPanel ──────────────────────────────────────────────────────────
+window.PluginsPanel = (function () {
+  let _selectedId = null;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  async function load() {
+    if (!AdminAuth.isSignedIn()) {
+      AdminAuth.renderLock('admin-plugins');
+      return;
+    }
+    const list = document.getElementById('plugins-list');
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem">Loading…</div>';
+
+    const r = await AdminAuth.fetch('/api/plugins', {}, 'admin-plugins');
+    if (!r.ok) {
+      list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
+      return;
+    }
+    const plugins = await r.json();
+    if (!Array.isArray(plugins) || plugins.length === 0) {
+      list.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem">No plugins found in plugins/ directory.</div>';
+      return;
+    }
+
+    list.innerHTML = plugins.map(p => `
+      <div class="plugin-card ${p.id === _selectedId ? 'selected' : ''}"
+           onclick="PluginsPanel.select('${esc(p.id)}')">
+        <div class="plugin-card-title">
+          <span class="plugin-status-pip ${p.error ? 'error' : ''}"></span>${esc(p.name || p.id)}
+          <span style="color:var(--text-muted);font-size:0.66rem;margin-left:6px">${esc(p.version || '')}</span>
+        </div>
+        <div class="plugin-card-meta">
+          ${(p.skills || []).length} skill${(p.skills || []).length === 1 ? '' : 's'}
+          · ${(p.tools || []).length} tool${(p.tools || []).length === 1 ? '' : 's'}
+        </div>
+        <div class="plugin-card-desc">${esc(p.description || '')}</div>
+      </div>
+    `).join('');
+
+    // Auto-select first if none selected.
+    if (!_selectedId && plugins.length) select(plugins[0].id);
+  }
+
+  async function select(id) {
+    _selectedId = id;
+    document.querySelectorAll('.plugin-card').forEach(c => c.classList.remove('selected'));
+    const cards = document.querySelectorAll('.plugin-card');
+    const r = await AdminAuth.fetch(`/api/plugins/${encodeURIComponent(id)}`, {}, 'admin-plugins');
+    if (!r.ok) {
+      document.getElementById('plugin-detail').innerHTML =
+        `<div class="admin-modal-error" style="margin:0">Failed to load plugin (HTTP ${r.status})</div>`;
+      return;
+    }
+    const p = await r.json();
+    renderDetail(p);
+    // mark the matching card.
+    cards.forEach(c => {
+      if (c.querySelector('.plugin-card-title').textContent.includes(p.name || p.id)) {
+        c.classList.add('selected');
+      }
+    });
+  }
+
+  function renderDetail(p) {
+    document.getElementById('plugin-detail-label').innerHTML =
+      `// ${esc((p.name || p.id).toUpperCase())}`;
+    const skillsHtml = (p.skills || []).map(s => `
+      <details class="skill-accordion">
+        <summary>
+          <span style="flex:1">${esc(s.id)}</span>
+          ${s.inject ? `<span class="inject-badge">${esc(s.inject)}</span>` : ''}
+        </summary>
+        <div class="body">${renderMarkdown(s.body || '*(no body)*')}</div>
+      </details>
+    `).join('');
+
+    const toolsHtml = (p.tools || []).map(t => renderToolAccordion(p.id, t)).join('');
+
+    document.getElementById('plugin-detail').innerHTML = `
+      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px">
+        <code>${esc(p.path || '')}</code> · ${esc(p.author || 'unknown author')}
+      </div>
+      <div style="font-size:0.78rem;color:var(--text);margin-bottom:8px">
+        ${esc(p.description || '')}
+      </div>
+      ${(p.skills || []).length ? `<div class="plugin-section-h">Skills</div>${skillsHtml}` : ''}
+      ${(p.tools || []).length ? `<div class="plugin-section-h">Tools</div>${toolsHtml}` : ''}
+    `;
+  }
+
+  // Per-tool last-5 invocations kept in memory for this panel session.
+  const _runHistory = new Map(); // key: `${pluginId}:${toolId}` → array of {ts, ms, status, body}
+
+  function renderToolAccordion(pluginId, tool) {
+    const key = `${pluginId}:${tool.id}`;
+    return `
+      <details class="tool-accordion">
+        <summary>
+          <span style="flex:1">${esc(tool.id)}</span>
+          <span style="color:var(--text-muted);font-size:0.66rem">${esc(tool.description || '')}</span>
+        </summary>
+        <div class="body">
+          <form id="tool-form-${esc(key)}" onsubmit="event.preventDefault(); PluginsPanel.runTool('${esc(pluginId)}','${esc(tool.id)}')">
+            ${renderToolForm(tool)}
+            <div style="display:flex;justify-content:flex-end;margin-top:10px">
+              <button type="submit" id="tool-tester-run-${esc(key)}"
+                class="admin-modal-btn primary" style="padding:6px 18px">Run</button>
+            </div>
+          </form>
+          <div id="tool-result-${esc(key)}" style="margin-top:10px"></div>
+          <div id="tool-history-${esc(key)}" style="margin-top:10px"></div>
+        </div>
+      </details>
+    `;
+  }
+
+  function renderToolForm(tool) {
+    const params = tool.parameters || {};
+    if (typeof params !== 'object' || Array.isArray(params)) {
+      return '<div style="color:var(--text-muted);font-size:0.7rem">No parameter schema declared.</div>';
+    }
+    return Object.entries(params).map(([name, spec]) => {
+      const required = spec && spec.required === true;
+      const type = (spec && spec.type) || 'string';
+      const def = spec && spec.default;
+      const id = `tool-param-${name}`;
+      const label = `<label class="admin-modal-label">${esc(name)}${required ? ' *' : ''}
+        <span style="color:var(--text-muted);font-size:0.62rem">(${esc(type)})</span></label>`;
+      let input;
+      if (type === 'boolean') {
+        input = `<input type="checkbox" id="${id}" ${def === true ? 'checked' : ''}>`;
+      } else if (type === 'integer' || type === 'number') {
+        input = `<input type="number" id="${id}" value="${esc(def ?? '')}" ${type === 'integer' ? 'step="1"' : ''}>`;
+      } else if (Array.isArray(spec.enum)) {
+        input = `<select id="${id}">${spec.enum.map(o =>
+          `<option value="${esc(o)}" ${o === def ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+      } else if (type === 'array' || type === 'object') {
+        input = `<textarea id="${id}" rows="3" placeholder="JSON or one item per line"></textarea>`;
+      } else {
+        input = `<input type="text" id="${id}" value="${esc(def ?? '')}">`;
+      }
+      return label + input;
+    }).join('');
+  }
+
+  function _collectParams(tool) {
+    const out = {};
+    const params = tool.parameters || {};
+    for (const [name, spec] of Object.entries(params)) {
+      const el = document.getElementById('tool-param-' + name);
+      if (!el) continue;
+      const type = (spec && spec.type) || 'string';
+      let v;
+      if (type === 'boolean') v = el.checked;
+      else if (type === 'integer') v = el.value === '' ? null : parseInt(el.value, 10);
+      else if (type === 'number') v = el.value === '' ? null : parseFloat(el.value);
+      else if (type === 'array' || type === 'object') {
+        const raw = el.value.trim();
+        if (!raw) { v = type === 'array' ? [] : {}; }
+        else if (raw[0] === '[' || raw[0] === '{') {
+          try { v = JSON.parse(raw); } catch (e) { throw new Error(`${name}: invalid JSON`); }
+        } else {
+          v = raw.split(/\n/).map(s => s.trim()).filter(Boolean);
+        }
+      } else {
+        v = el.value;
+      }
+      if (spec && spec.required && (v === null || v === undefined || v === '')) {
+        throw new Error(`${name} is required`);
+      }
+      if (v !== null && v !== undefined && v !== '') out[name] = v;
+    }
+    return out;
+  }
+
+  async function runTool(pluginId, toolId) {
+    const key = `${pluginId}:${toolId}`;
+    const resultBox = document.getElementById('tool-result-' + key);
+    const runBtn = document.getElementById('tool-tester-run-' + key);
+
+    // Re-fetch the tool spec to pick up any param schema we cached.
+    const detailR = await AdminAuth.fetch(`/api/plugins/${encodeURIComponent(pluginId)}`, {}, 'admin-plugins');
+    if (!detailR.ok) { resultBox.innerHTML = `<div class="admin-modal-error" style="margin:0">Cannot load plugin (HTTP ${detailR.status})</div>`; return; }
+    const plugin = await detailR.json();
+    const tool = (plugin.tools || []).find(t => t.id === toolId);
+    if (!tool) { resultBox.innerHTML = '<div class="admin-modal-error" style="margin:0">Tool not found.</div>'; return; }
+
+    let params;
+    try { params = _collectParams(tool); }
+    catch (e) { resultBox.innerHTML = `<div class="admin-modal-error" style="margin:0">${esc(e.message)}</div>`; return; }
+
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running…';
+    const t0 = performance.now();
+    let r, body, status;
+    try {
+      r = await AdminAuth.fetch(`/api/plugins/${encodeURIComponent(pluginId)}/tools/${encodeURIComponent(toolId)}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(params),
+      }, 'admin-plugins');
+      const ms = Math.round(performance.now() - t0);
+      status = r.status;
+      const ct = r.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        body = await r.json();
+        resultBox.innerHTML = `
+          <div style="font-size:0.66rem;color:var(--text-dim);margin-bottom:4px">
+            ${ms} ms · status ${status}
+          </div>
+          <pre class="md-code" style="font-size:0.72rem;max-height:280px;overflow:auto">${esc(JSON.stringify(body, null, 2))}</pre>
+        `;
+      } else {
+        body = await r.text();
+        resultBox.innerHTML = `
+          <div style="font-size:0.66rem;color:var(--text-dim);margin-bottom:4px">${ms} ms · status ${status}</div>
+          <pre class="md-code">${esc(body)}</pre>
+        `;
+      }
+      if (!r.ok) {
+        resultBox.querySelector('pre').classList.add('error');
+      }
+
+      const hist = _runHistory.get(key) || [];
+      hist.push({ts: Date.now(), ms, status, summary: typeof body === 'object' ? JSON.stringify(body).slice(0,80) : String(body).slice(0,80)});
+      while (hist.length > 5) hist.shift();
+      _runHistory.set(key, hist);
+      _renderHistory(key);
+    } catch (e) {
+      resultBox.innerHTML = `<div class="admin-modal-error" style="margin:0">${esc(e.message)}</div>`;
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run';
+    }
+  }
+
+  function _renderHistory(key) {
+    const host = document.getElementById('tool-history-' + key);
+    if (!host) return;
+    const hist = _runHistory.get(key) || [];
+    if (!hist.length) { host.innerHTML = ''; return; }
+    host.innerHTML = `
+      <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:8px">Last invocations</div>
+      ${hist.slice().reverse().map(h => `
+        <div style="display:flex;gap:10px;font-size:0.66rem;color:var(--text-dim);padding:2px 0">
+          <span style="color:var(--text-muted);min-width:130px">${new Date(h.ts).toLocaleTimeString()}</span>
+          <span style="color:${h.status >= 200 && h.status < 300 ? 'var(--accent)' : 'var(--danger,#e54b4b)'};min-width:40px">${h.status}</span>
+          <span style="min-width:50px">${h.ms} ms</span>
+          <span style="opacity:0.85">${esc(h.summary)}…</span>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  function refresh() { load(); }
+
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-plugins') load();
+  });
+
+  return { load, refresh, select, renderDetail, renderToolAccordion,
+           runTool, renderToolForm, _collectParams };
+})();
+
+// ── ExportsPanel ──────────────────────────────────────────────────────────
+window.ExportsPanel = (function () {
+  let _selected = new Set();
+  let _items = [];
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  async function load() {
+    const list = document.getElementById('exports-list');
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem">Loading…</div>';
+    // Exports endpoint is not master-key gated today, but we still attach the
+    // header for future-proofing (cheap, harmless, consistent with other admin panels).
+    const r = await fetch('/api/exports', {headers: AdminAuth.authHeaders()});
+    if (!r.ok) {
+      list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
+      return;
+    }
+    const data = await r.json();
+    _items = data.exports || [];
+    if (!_items.length) {
+      list.innerHTML = '<div style="color:var(--text-muted);padding:14px 0">No exports yet — use "Export session" from the Chat tab.</div>';
+      _refreshBulkBar();
+      return;
+    }
+    list.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;font-size:0.66rem;color:var(--text-dim);margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+        <input type="checkbox" id="exports-select-all" onchange="ExportsPanel._toggleSelectAll(this.checked)">
+        <span>Select all</span>
+      </div>
+      ${_items.map(rowHtml).join('')}
+    `;
+    _refreshBulkBar();
+  }
+
+  function rowHtml(e) {
+    const kb = (e.size / 1024).toFixed(1);
+    const date = new Date(e.modified * 1000).toLocaleString();
+    const checked = _selected.has(e.filename) ? 'checked' : '';
+    return `
+      <div class="export-row" id="export-row-${esc(e.filename)}" style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <input type="checkbox" data-filename="${esc(e.filename)}" ${checked}
+               onchange="ExportsPanel._toggle('${esc(e.filename)}', this.checked)" style="margin-top:3px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.8rem;color:var(--text);font-weight:500">${esc(e.filename)}</div>
+          <div style="font-size:0.66rem;color:var(--text-dim);margin-top:2px">${date} · ${kb} KB</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;white-space:pre-wrap;max-height:48px;overflow:hidden">${esc((e.preview || '').trim())}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;align-self:flex-start">
+          <button class="action-btn small" onclick="ExportsPanel.view('${esc(e.filename)}')">View</button>
+          <button class="action-btn small" onclick="ExportsPanel.download('${esc(e.filename)}')">Download</button>
+          <button class="action-btn small danger" onclick="ExportsPanel.deleteOne('${esc(e.filename)}')">Delete</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function _toggle(name, on) {
+    if (on) _selected.add(name); else _selected.delete(name);
+    _refreshBulkBar();
+  }
+
+  function _toggleSelectAll(on) {
+    _selected = on ? new Set(_items.map(e => e.filename)) : new Set();
+    document.querySelectorAll('#exports-list input[type=checkbox][data-filename]')
+      .forEach(c => { c.checked = on; });
+    _refreshBulkBar();
+  }
+
+  function _refreshBulkBar() {
+    const bar = document.getElementById('exports-bulk-bar');
+    if (!bar) return;
+    const count = _selected.size;
+    bar.hidden = count === 0;
+    document.getElementById('exports-selected-count').textContent = count;
+  }
+
+  async function view(filename) {
+    const r = await fetch('/api/exports/' + encodeURIComponent(filename), {headers: AdminAuth.authHeaders()});
+    if (!r.ok) { alert('Export not found.'); return; }
+    const text = await r.text();
+    document.getElementById('export-view-title').textContent = filename;
+    document.getElementById('export-view-body').innerHTML = renderMarkdown(text);
+    document.getElementById('export-view-modal').hidden = false;
+  }
+
+  function _closeView() {
+    document.getElementById('export-view-modal').hidden = true;
+  }
+
+  function download(filename) {
+    const url = '/api/exports/' + encodeURIComponent(filename);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  async function deleteOne(filename) {
+    if (!confirm(`Delete "${filename}"?`)) return;
+    const r = await fetch('/api/exports/' + encodeURIComponent(filename), {
+      method: 'DELETE',
+      headers: AdminAuth.authHeaders(),
+    });
+    if (!r.ok) { alert(`Delete failed (HTTP ${r.status})`); return; }
+    _selected.delete(filename);
+    load();
+  }
+
+  function downloadZip() {
+    if (_selected.size === 0) return;
+    const names = Array.from(_selected).join(',');
+    const url = '/api/exports/zip?names=' + encodeURIComponent(names);
+    // We can't easily set Authorization on a window navigation, but the
+    // exports zip endpoint is not master-key gated. Use anchor click.
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'enclave-exports.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  async function bulkDelete() {
+    const count = _selected.size;
+    if (count === 0) return;
+    if (!confirm(`Delete ${count} export${count === 1 ? '' : 's'}?`)) return;
+    // Fire deletes in parallel.
+    const names = Array.from(_selected);
+    const results = await Promise.all(names.map(n =>
+      fetch('/api/exports/' + encodeURIComponent(n), {
+        method: 'DELETE',
+        headers: AdminAuth.authHeaders(),
+      })
+    ));
+    const failed = names.filter((_, i) => !results[i].ok);
+    if (failed.length) alert(`Delete failed for: ${failed.join(', ')}`);
+    _selected.clear();
+    load();
+  }
+
+  function refresh() { load(); }
+
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-exports') load();
+  });
+
+  // Esc closes the view modal.
+  document.addEventListener('keydown', e => {
+    const m = document.getElementById('export-view-modal');
+    if (m && !m.hidden && e.key === 'Escape') _closeView();
+  });
+
+  return { load, refresh, view, download, deleteOne, downloadZip, bulkDelete,
+           _toggle, _toggleSelectAll, _closeView };
+})();
 </script>
 </body>
 </html>

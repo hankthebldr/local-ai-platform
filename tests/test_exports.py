@@ -178,5 +178,42 @@ class TestDeleteExport:
         assert resp.json()["status"] == "not_found"
 
 
+import io, zipfile
+
+
+class TestZipEndpoint:
+    def test_zip_streams_selected_files(self, client, tmp_path, monkeypatch):
+        # Point EXPORTS_DIR at a fresh temp dir.
+        from api.routers import exports as exports_router
+        monkeypatch.setattr(exports_router, "EXPORTS_DIR", tmp_path)
+        (tmp_path / "a.md").write_text("# A\nhello")
+        (tmp_path / "b.md").write_text("# B\nworld")
+
+        resp = client.get("/api/exports/zip?names=a.md,b.md")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/zip"
+        z = zipfile.ZipFile(io.BytesIO(resp.content))
+        assert set(z.namelist()) == {"a.md", "b.md"}
+        assert z.read("a.md").decode() == "# A\nhello"
+
+    def test_zip_rejects_path_traversal(self, client, tmp_path, monkeypatch):
+        from api.routers import exports as exports_router
+        monkeypatch.setattr(exports_router, "EXPORTS_DIR", tmp_path)
+        (tmp_path / "real.md").write_text("ok")
+        # The ../etc/passwd attempt should be sanitized to a safe filename
+        # which then doesn't match any real file → request silently drops it.
+        resp = client.get("/api/exports/zip?names=../../../etc/passwd,real.md")
+        assert resp.status_code == 200
+        z = zipfile.ZipFile(io.BytesIO(resp.content))
+        assert "real.md" in z.namelist()
+        assert all("passwd" not in n for n in z.namelist())
+
+    def test_zip_404_when_no_matches(self, client, tmp_path, monkeypatch):
+        from api.routers import exports as exports_router
+        monkeypatch.setattr(exports_router, "EXPORTS_DIR", tmp_path)
+        resp = client.get("/api/exports/zip?names=does-not-exist.md")
+        assert resp.status_code == 404
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

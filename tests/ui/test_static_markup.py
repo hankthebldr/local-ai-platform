@@ -30,9 +30,7 @@ def test_index_header_says_enclave_not_cortex(index_html_text):
 def test_index_footer_version_matches_api(index_html_text):
     """Footer version must match the 0.1.0 release declared in api/main.py."""
     assert "v1.0.0" not in index_html_text, "stale v1.0.0 footer still present"
-    assert (
-        "Enclave v0.1.0" in index_html_text
-    ), "footer must read 'Enclave v0.1.0'"
+    assert "Enclave v0.1.0" in index_html_text, "footer must read 'Enclave v0.1.0'"
 
 
 def test_mobile_media_query_contains_all_responsive_rules(index_html_text):
@@ -61,18 +59,14 @@ def test_mobile_media_query_contains_all_responsive_rules(index_html_text):
         ".mem-grid",
         ".tab-btn",
     ]:
-        assert selector in block, (
-            f"{selector} is not inside the mobile media query"
-        )
+        assert selector in block, f"{selector} is not inside the mobile media query"
 
 
 def test_chat_input_is_textarea(index_soup):
     """Chat prompt must be a <textarea> so Shift+Enter can insert newlines."""
     el = index_soup.find(id="prompt")
     assert el is not None, "#prompt element missing"
-    assert el.name == "textarea", (
-        f"#prompt is <{el.name}>, must be <textarea>"
-    )
+    assert el.name == "textarea", f"#prompt is <{el.name}>, must be <textarea>"
 
 
 def test_chat_input_has_shift_enter_handler(index_html_text):
@@ -89,9 +83,9 @@ def test_switchtab_does_not_rely_on_bare_event_global(index_html_text):
     assert m is not None, "switchTab function not found"
     params = [p.strip() for p in m.group(1).split(",") if p.strip()]
     # Signature must include an element param alongside name.
-    assert len(params) >= 2, (
-        f"switchTab signature is {params!r}; must accept (name, el)"
-    )
+    assert (
+        len(params) >= 2
+    ), f"switchTab signature is {params!r}; must accept (name, el)"
     # And no caller may still rely on the implicit `event` global:
     # find function body bounds.
     start = m.end()
@@ -105,9 +99,9 @@ def test_switchtab_does_not_rely_on_bare_event_global(index_html_text):
             depth -= 1
         i += 1
     body = index_html_text[start : i - 1]
-    assert "event.currentTarget" not in body, (
-        "switchTab still references event.currentTarget — use the el parameter"
-    )
+    assert (
+        "event.currentTarget" not in body
+    ), "switchTab still references event.currentTarget — use the el parameter"
 
 
 def test_index_does_not_load_external_cdns(index_html_text):
@@ -119,9 +113,9 @@ def test_index_does_not_load_external_cdns(index_html_text):
         "cdn.jsdelivr.net",
         "unpkg.com",
     ]:
-        assert needle not in index_html_text, (
-            f"external CDN reference remains: {needle}"
-        )
+        assert (
+            needle not in index_html_text
+        ), f"external CDN reference remains: {needle}"
 
 
 def test_setup_does_not_load_external_cdns(setup_html_text):
@@ -133,9 +127,9 @@ def test_setup_does_not_load_external_cdns(setup_html_text):
         "cdn.jsdelivr.net",
         "unpkg.com",
     ]:
-        assert needle not in setup_html_text, (
-            f"setup.html external CDN reference remains: {needle}"
-        )
+        assert (
+            needle not in setup_html_text
+        ), f"setup.html external CDN reference remains: {needle}"
 
 
 def test_color_tokens_are_honest(index_html_text):
@@ -159,18 +153,18 @@ def test_color_tokens_are_honest(index_html_text):
     # If --warn is defined, its base hex (not an alias) must actually be
     # amber/orange — i.e. NOT green-dominant.
     warn = re.search(r"--warn:\s*#([0-9A-Fa-f]{6})\b", root)
-    assert warn is not None, "--warn token missing — introduce a real amber for warnings"
-    assert not is_green(warn.group(1)), (
-        f"--warn resolves to green #{warn.group(1)} — must be amber/orange"
-    )
+    assert (
+        warn is not None
+    ), "--warn token missing — introduce a real amber for warnings"
+    assert not is_green(
+        warn.group(1)
+    ), f"--warn resolves to green #{warn.group(1)} — must be amber/orange"
 
     # --danger must also exist as a real red.
     danger = re.search(r"--danger:\s*#([0-9A-Fa-f]{6})\b", root)
     assert danger is not None, "--danger token missing"
     dr, dg, db = hex_to_rgb(danger.group(1))
-    assert dr > dg and dr > db, (
-        f"--danger #{danger.group(1)} is not red-dominant"
-    )
+    assert dr > dg and dr > db, f"--danger #{danger.group(1)} is not red-dominant"
 
 
 def test_no_sci_fi_caps_verbs_in_button_text(index_html_text):
@@ -181,9 +175,9 @@ def test_no_sci_fi_caps_verbs_in_button_text(index_html_text):
         # Exclude occurrences inside element-content like >TRANSMIT< or 'TRANSMIT'
         pattern = r">\s*" + verb + r"\s*<|textContent\s*=\s*['\"]" + verb + r"['\"]"
         m = re.search(pattern, index_html_text)
-        assert m is None, (
-            f"'{verb}' still appears in button text or JS — use sentence case"
-        )
+        assert (
+            m is None
+        ), f"'{verb}' still appears in button text or JS — use sentence case"
 
 
 def test_focus_visible_outline_exists(index_html_text):
@@ -204,15 +198,15 @@ def test_api_mounts_static_directory():
     """
     from pathlib import Path
 
-    main_py = (
-        Path(__file__).resolve().parents[2] / "api" / "main.py"
-    ).read_text(encoding="utf-8")
-    assert 'app.mount("/static"' in main_py, (
-        "api/main.py must mount /static — vendor/ and favicon depend on it"
+    main_py = (Path(__file__).resolve().parents[2] / "api" / "main.py").read_text(
+        encoding="utf-8"
     )
-    assert "StaticFiles(directory=STATIC_DIR)" in main_py, (
-        "mount must use StaticFiles(directory=STATIC_DIR)"
-    )
+    assert (
+        'app.mount("/static"' in main_py
+    ), "api/main.py must mount /static — vendor/ and favicon depend on it"
+    assert (
+        "StaticFiles(directory=STATIC_DIR)" in main_py
+    ), "mount must use StaticFiles(directory=STATIC_DIR)"
 
 
 def test_vendor_css_references_only_local_paths(index_html_text):
@@ -228,9 +222,9 @@ def test_vendor_css_references_only_local_paths(index_html_text):
             hrefs.append(m.group(1))
     assert hrefs, "no stylesheet <link> tags found"
     for href in hrefs:
-        assert href.startswith("/") or href.startswith("./"), (
-            f"stylesheet href '{href}' is not a relative/root-relative path"
-        )
+        assert href.startswith("/") or href.startswith(
+            "./"
+        ), f"stylesheet href '{href}' is not a relative/root-relative path"
         assert "//" not in href.replace("http://", "").replace(
             "https://", ""
         ), f"stylesheet href '{href}' looks external"
@@ -238,32 +232,30 @@ def test_vendor_css_references_only_local_paths(index_html_text):
 
 def test_workflows_tab_has_roles_subsection(index_html_text):
     """Workflows tab must expose a Roles subsection so role_ref is browseable."""
-    assert 'id="wf-roles-list"' in index_html_text, (
-        "roles list container missing from Workflows tab"
-    )
-    assert "/api/roles" in index_html_text, (
-        "frontend does not call /api/roles"
-    )
+    assert (
+        'id="wf-roles-list"' in index_html_text
+    ), "roles list container missing from Workflows tab"
+    assert "/api/roles" in index_html_text, "frontend does not call /api/roles"
 
 
 def test_pipeline_renderer_references_hooks(index_html_text):
     """Pipeline renderer must reference step.hooks and prompt.role_ref."""
-    assert "step.hooks" in index_html_text or 'step["hooks"]' in index_html_text, (
-        "pipeline renderer does not reference step.hooks — hooks will not render"
-    )
-    assert "role_ref" in index_html_text, (
-        "pipeline renderer does not reference prompt.role_ref"
-    )
+    assert (
+        "step.hooks" in index_html_text or 'step["hooks"]' in index_html_text
+    ), "pipeline renderer does not reference step.hooks — hooks will not render"
+    assert (
+        "role_ref" in index_html_text
+    ), "pipeline renderer does not reference prompt.role_ref"
 
 
 def test_results_renderer_shows_retries_and_model(index_html_text):
     """Results renderer must surface retries count and model_used."""
-    assert "retries" in index_html_text, (
-        "results renderer does not reference StepResult.retries"
-    )
-    assert "model_used" in index_html_text, (
-        "results renderer does not reference StepResult.model_used"
-    )
+    assert (
+        "retries" in index_html_text
+    ), "results renderer does not reference StepResult.retries"
+    assert (
+        "model_used" in index_html_text
+    ), "results renderer does not reference StepResult.model_used"
 
 
 def test_chat_panel_sits_on_first_dashboard_row(index_html_text):
@@ -274,55 +266,214 @@ def test_chat_panel_sits_on_first_dashboard_row(index_html_text):
     )
     assert m is not None, ".panel-chat grid rule not found"
     body = m.group(1)
-    assert "grid-row: 1" in body, (
-        "panel-chat is not on grid-row 1 — chat should sit above the metrics row"
-    )
-    assert "grid-column: 1 / -1" in body, (
-        "panel-chat must span all dashboard columns"
-    )
+    assert (
+        "grid-row: 1" in body
+    ), "panel-chat is not on grid-row 1 — chat should sit above the metrics row"
+    assert "grid-column: 1 / -1" in body, "panel-chat must span all dashboard columns"
 
 
 def test_results_have_context_inspector(index_html_text):
     """Workflow results must render the three-layer context (seed/workspace/shared)."""
-    assert "renderContextInspector" in index_html_text, (
-        "renderContextInspector function missing — context-store has no UI"
-    )
+    assert (
+        "renderContextInspector" in index_html_text
+    ), "renderContextInspector function missing — context-store has no UI"
     # The inspector must pull all three layers, not just one.
     for layer in ("seed", "workspace", "shared"):
-        assert f"ctx.{layer}" in index_html_text, (
-            f"context inspector never reads ctx.{layer}"
-        )
+        assert (
+            f"ctx.{layer}" in index_html_text
+        ), f"context inspector never reads ctx.{layer}"
 
 
 def test_chat_has_system_prompt_row(index_html_text):
     """Chat must expose a system-prompt row wired to the role library."""
-    assert 'id="system-prompt"' in index_html_text, (
-        "system-prompt <textarea> missing from chat panel"
-    )
-    assert 'id="sysprompt-role-select"' in index_html_text, (
-        "role dropdown for system prompt missing"
-    )
+    assert (
+        'id="system-prompt"' in index_html_text
+    ), "system-prompt <textarea> missing from chat panel"
+    assert (
+        'id="sysprompt-role-select"' in index_html_text
+    ), "role dropdown for system prompt missing"
     # sendMessage must actually prepend the system message when present.
-    assert "getSystemPromptMessage" in index_html_text, (
-        "sendMessage must prepend the saved system prompt"
-    )
-    assert "role: 'system'" in index_html_text, (
-        "no role=system turn is ever emitted — system prompt wiring broken"
-    )
+    assert (
+        "getSystemPromptMessage" in index_html_text
+    ), "sendMessage must prepend the saved system prompt"
+    assert (
+        "role: 'system'" in index_html_text
+    ), "no role=system turn is ever emitted — system prompt wiring broken"
 
 
 def test_header_uses_installer_enclave_mark(index_html_text):
     """Header logo must match the canonical Enclave mark used by the installer."""
     # Reject the legacy hexagon + 'EN/CL' typographic placeholder
-    assert 'class="logo-hex"' not in index_html_text, (
-        "legacy .logo-hex still in header — swap to .logo-mark"
-    )
+    assert (
+        'class="logo-hex"' not in index_html_text
+    ), "legacy .logo-hex still in header — swap to .logo-mark"
     # Assert the canonical mark is present (nested rects)
-    assert 'class="logo-mark"' in index_html_text, (
-        ".logo-mark container missing from header"
-    )
+    assert (
+        'class="logo-mark"' in index_html_text
+    ), ".logo-mark container missing from header"
     # And the 4 nested rects — signature of the installer Enclave mark
-    rect_count = index_html_text.count('<rect ')
-    assert rect_count >= 4, (
-        f"installer Enclave mark expects 4 nested <rect> elements; found {rect_count}"
+    rect_count = index_html_text.count("<rect ")
+    assert (
+        rect_count >= 4
+    ), f"installer Enclave mark expects 4 nested <rect> elements; found {rect_count}"
+
+
+def test_admin_dropdown_present(index_soup):
+    """An Admin dropdown trigger must exist in the tab strip."""
+    trigger = index_soup.find(id="admin-trigger")
+    assert trigger is not None, "#admin-trigger missing from tab strip"
+    assert trigger.get("aria-haspopup") == "menu"
+    assert trigger.get("aria-expanded") == "false"
+
+
+def test_admin_menu_has_three_items(index_soup):
+    """Admin menu must list API Keys, Plugins, Exports."""
+    menu = index_soup.find(id="admin-menu")
+    assert menu is not None
+    items = menu.find_all(attrs={"role": "menuitem"})
+    panels = {i.get("data-panel") for i in items}
+    assert {"admin-keys", "admin-plugins", "admin-exports"}.issubset(panels)
+
+
+def test_admin_panel_containers_exist(index_soup):
+    """Three .tab-content panels must exist (initially hidden)."""
+    for pid in ("tab-admin-keys", "tab-admin-plugins", "tab-admin-exports"):
+        el = index_soup.find(id=pid)
+        assert el is not None, f"#{pid} container missing"
+
+
+def test_admin_auth_uses_session_storage(index_html_text):
+    """Auth state must be in sessionStorage, never localStorage."""
+    assert "sessionStorage" in index_html_text, "AdminAuth missing"
+    assert (
+        "enclave.admin.masterKey" in index_html_text
+    ), "expected sessionStorage key 'enclave.admin.masterKey'"
+
+
+def test_admin_auth_does_not_persist_in_local_storage(index_html_text):
+    """Master key must never be written to localStorage."""
+    # Crude but effective: there should be NO 'localStorage.setItem' anywhere
+    # near the master-key wiring. Refine if false positives appear.
+    import re
+
+    matches = re.findall(
+        r"localStorage\.setItem\([^)]*master[^)]*\)", index_html_text, re.I
+    )
+    assert not matches, f"master key written to localStorage: {matches}"
+
+
+def test_admin_signin_modal_present(index_soup):
+    """A modal for entering the master key must exist."""
+    modal = index_soup.find(id="admin-signin-modal")
+    assert modal is not None
+    pwd = modal.find("input", attrs={"type": "password"})
+    assert pwd is not None, "modal must include a <input type=password>"
+
+
+def test_render_markdown_helper_present(index_html_text):
+    """A renderMarkdown helper must be defined in the script block."""
+    assert (
+        "function renderMarkdown" in index_html_text
+        or "renderMarkdown =" in index_html_text
+        or "window.renderMarkdown" in index_html_text
+    ), "renderMarkdown helper missing"
+
+
+def test_api_keys_panel_has_list_container(index_html_text):
+    """The API Keys panel must include a list container and a refresh button."""
+    assert 'id="api-keys-list"' in index_html_text
+    assert "loadApiKeysPanel" in index_html_text or "ApiKeysPanel.load" in index_html_text
+
+
+def test_api_keys_panel_has_new_key_button(index_html_text):
+    assert "showCreateKeyModal" in index_html_text or \
+           "showNewKeyModal" in index_html_text or \
+           "ApiKeysPanel.showCreate" in index_html_text, \
+        "expected a 'New Key' trigger function"
+
+
+def test_create_key_modal_present(index_soup):
+    modal = index_soup.find(id="create-key-modal")
+    assert modal is not None
+    name = modal.find(id="new-key-name")
+    scopes_field = modal.find(id="new-key-scopes")
+    assert name is not None and scopes_field is not None
+
+
+def test_create_key_modal_has_one_time_reveal_warning(index_html_text):
+    """The reveal area must say the key is shown once."""
+    needle = "only time"
+    assert needle in index_html_text.lower(), (
+        "expected one-time-reveal warning copy in create-key modal"
+    )
+
+
+def test_create_key_modal_has_copy_button(index_html_text):
+    assert "navigator.clipboard.writeText" in index_html_text or \
+           "copyKey" in index_html_text, \
+        "expected a clipboard copy mechanism"
+
+
+def test_api_keys_panel_has_audit_strip(index_html_text):
+    """Audit log strip must be present and call /api/keys/audit."""
+    assert 'id="api-keys-audit"' in index_html_text
+    assert "/api/keys/audit" in index_html_text
+
+
+def test_api_keys_panel_has_rotate_and_revoke_handlers(index_html_text):
+    assert "ApiKeysPanel.rotate" in index_html_text
+    assert "ApiKeysPanel.revoke" in index_html_text
+
+
+def test_plugins_panel_has_warning_banner(index_html_text):
+    """Plugins panel must show a non-dismissable warning about in-process exec."""
+    assert "execute plugin code" in index_html_text.lower(), (
+        "expected warning copy about in-process plugin execution"
+    )
+
+
+def test_plugins_panel_has_two_pane_layout(index_html_text):
+    assert 'id="plugins-list"' in index_html_text
+    assert 'id="plugin-detail"' in index_html_text
+
+
+def test_plugins_panel_has_tool_tester(index_html_text):
+    """Each tool accordion must contain a Run button + result container."""
+    assert "tool-tester-run" in index_html_text or \
+           "PluginsPanel.runTool" in index_html_text, (
+        "expected a tool-tester run handler"
+    )
+
+
+def test_plugins_panel_has_param_form_renderer(index_html_text):
+    assert "renderToolForm" in index_html_text or \
+           "buildToolForm" in index_html_text, (
+        "expected a tool-form renderer"
+    )
+
+
+def test_exports_panel_has_list(index_html_text):
+    assert 'id="exports-list"' in index_html_text
+    assert "ExportsPanel.refresh" in index_html_text
+
+
+def test_exports_panel_has_view_modal(index_html_text):
+    assert 'id="export-view-modal"' in index_html_text
+
+
+def test_exports_panel_has_zip_action(index_html_text):
+    assert "/api/exports/zip" in index_html_text
+    assert "ExportsPanel.downloadZip" in index_html_text
+
+
+def test_exports_panel_has_bulk_delete(index_html_text):
+    assert "ExportsPanel.bulkDelete" in index_html_text
+
+
+def test_exports_zip_uses_get_with_names_param(index_html_text):
+    """Zip endpoint takes a comma-separated names param via GET."""
+    import re
+    # Look for fetch('/api/exports/zip?names=...') or similar.
+    assert re.search(r"/api/exports/zip\?names=", index_html_text), (
+        "expected zip request to use ?names= query"
     )

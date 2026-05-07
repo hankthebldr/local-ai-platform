@@ -215,3 +215,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Limit"] = str(self.rpm)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response
+
+
+def require_master_key(request: Request) -> None:
+    """Validate that the request carries the master API key.
+
+    Raises HTTPException(401) if the key is missing or doesn't match.
+    Use as a FastAPI dependency:
+
+        @router.get("", dependencies=[Depends(require_master_key)])
+    """
+    master_key = os.getenv("MASTER_API_KEY", "")
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    if not token or not master_key or not hmac.compare_digest(token, master_key):
+        raise HTTPException(status_code=401, detail="Master API key required")
