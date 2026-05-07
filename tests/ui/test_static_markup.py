@@ -423,3 +423,15 @@ def test_api_keys_panel_has_audit_strip(index_html_text):
 def test_api_keys_panel_has_rotate_and_revoke_handlers(index_html_text):
     assert "ApiKeysPanel.rotate" in index_html_text
     assert "ApiKeysPanel.revoke" in index_html_text
+
+
+def test_plugins_panel_has_warning_banner(index_html_text):
+    """Plugins panel must show a non-dismissable warning about in-process exec."""
+    assert "execute plugin code" in index_html_text.lower(), (
+        "expected warning copy about in-process plugin execution"
+    )
+
+
+def test_plugins_panel_has_two_pane_layout(index_html_text):
+    assert 'id="plugins-list"' in index_html_text
+    assert 'id="plugin-detail"' in index_html_text
