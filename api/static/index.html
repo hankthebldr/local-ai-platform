@@ -2250,7 +2250,20 @@ details[open] > summary::before { transform: rotate(90deg); }
   </div>
 
   <div class="tab-content" id="tab-admin-exports" style="display:none">
-    <!-- populated by Task 14-15 -->
+    <div class="panel">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// EXPORTS
+        <span style="float:right">
+          <span id="exports-bulk-bar" hidden style="margin-right:14px;font-size:0.7rem;color:var(--text-dim)">
+            <span id="exports-selected-count">0</span> selected
+            <button class="action-btn small" onclick="ExportsPanel.downloadZip()">Download zip</button>
+            <button class="action-btn small danger" onclick="ExportsPanel.bulkDelete()">Delete</button>
+          </span>
+          <button class="action-btn" onclick="ExportsPanel.refresh()">Refresh</button>
+        </span>
+      </div>
+      <div id="exports-list" style="margin-top:10px"></div>
+    </div>
   </div>
 
   <!-- ── Admin sign-in modal ───────────────────────────────────────── -->
@@ -2324,6 +2337,18 @@ details[open] > summary::before { transform: rotate(90deg); }
           <button type="button" class="admin-modal-btn primary" id="create-key-close-btn"
                   onclick="ApiKeysPanel._closeCreate()" disabled>Close</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Export view modal ───────────────────────────────────────── -->
+  <div id="export-view-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+    <div class="admin-modal-card" style="width:760px;max-width:92vw;max-height:80vh;overflow:auto">
+      <h3 id="export-view-title" style="margin-bottom:14px">Export</h3>
+      <div id="export-view-body" style="font-size:0.78rem"></div>
+      <div class="admin-modal-actions">
+        <button type="button" class="admin-modal-btn"
+                onclick="ExportsPanel._closeView()">Close</button>
       </div>
     </div>
   </div>
@@ -6023,6 +6048,140 @@ window.PluginsPanel = (function () {
 
   return { load, refresh, select, renderDetail, renderToolAccordion,
            runTool, renderToolForm, _collectParams };
+})();
+
+// ── ExportsPanel ──────────────────────────────────────────────────────────
+window.ExportsPanel = (function () {
+  let _selected = new Set();
+  let _items = [];
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  async function load() {
+    const list = document.getElementById('exports-list');
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem">Loading…</div>';
+    // Exports endpoint is not master-key gated today, but we still attach the
+    // header for future-proofing (cheap, harmless, consistent with other admin panels).
+    const r = await fetch('/api/exports', {headers: AdminAuth.authHeaders()});
+    if (!r.ok) {
+      list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
+      return;
+    }
+    const data = await r.json();
+    _items = data.exports || [];
+    if (!_items.length) {
+      list.innerHTML = '<div style="color:var(--text-muted);padding:14px 0">No exports yet — use "Export session" from the Chat tab.</div>';
+      _refreshBulkBar();
+      return;
+    }
+    list.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;font-size:0.66rem;color:var(--text-dim);margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+        <input type="checkbox" id="exports-select-all" onchange="ExportsPanel._toggleSelectAll(this.checked)">
+        <span>Select all</span>
+      </div>
+      ${_items.map(rowHtml).join('')}
+    `;
+    _refreshBulkBar();
+  }
+
+  function rowHtml(e) {
+    const kb = (e.size / 1024).toFixed(1);
+    const date = new Date(e.modified * 1000).toLocaleString();
+    const checked = _selected.has(e.filename) ? 'checked' : '';
+    return `
+      <div class="export-row" id="export-row-${esc(e.filename)}" style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <input type="checkbox" data-filename="${esc(e.filename)}" ${checked}
+               onchange="ExportsPanel._toggle('${esc(e.filename)}', this.checked)" style="margin-top:3px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.8rem;color:var(--text);font-weight:500">${esc(e.filename)}</div>
+          <div style="font-size:0.66rem;color:var(--text-dim);margin-top:2px">${date} · ${kb} KB</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;white-space:pre-wrap;max-height:48px;overflow:hidden">${esc((e.preview || '').trim())}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;align-self:flex-start">
+          <button class="action-btn small" onclick="ExportsPanel.view('${esc(e.filename)}')">View</button>
+          <button class="action-btn small" onclick="ExportsPanel.download('${esc(e.filename)}')">Download</button>
+          <button class="action-btn small danger" onclick="ExportsPanel.deleteOne('${esc(e.filename)}')">Delete</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function _toggle(name, on) {
+    if (on) _selected.add(name); else _selected.delete(name);
+    _refreshBulkBar();
+  }
+
+  function _toggleSelectAll(on) {
+    _selected = on ? new Set(_items.map(e => e.filename)) : new Set();
+    document.querySelectorAll('#exports-list input[type=checkbox][data-filename]')
+      .forEach(c => { c.checked = on; });
+    _refreshBulkBar();
+  }
+
+  function _refreshBulkBar() {
+    const bar = document.getElementById('exports-bulk-bar');
+    if (!bar) return;
+    const count = _selected.size;
+    bar.hidden = count === 0;
+    document.getElementById('exports-selected-count').textContent = count;
+  }
+
+  async function view(filename) {
+    const r = await fetch('/api/exports/' + encodeURIComponent(filename), {headers: AdminAuth.authHeaders()});
+    if (!r.ok) { alert('Export not found.'); return; }
+    const text = await r.text();
+    document.getElementById('export-view-title').textContent = filename;
+    document.getElementById('export-view-body').innerHTML = renderMarkdown(text);
+    document.getElementById('export-view-modal').hidden = false;
+  }
+
+  function _closeView() {
+    document.getElementById('export-view-modal').hidden = true;
+  }
+
+  function download(filename) {
+    const url = '/api/exports/' + encodeURIComponent(filename);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  async function deleteOne(filename) {
+    if (!confirm(`Delete "${filename}"?`)) return;
+    const r = await fetch('/api/exports/' + encodeURIComponent(filename), {
+      method: 'DELETE',
+      headers: AdminAuth.authHeaders(),
+    });
+    if (!r.ok) { alert(`Delete failed (HTTP ${r.status})`); return; }
+    _selected.delete(filename);
+    load();
+  }
+
+  // Stubs for Task 15.
+  function downloadZip() { /* Task 15 */ }
+  function bulkDelete() { /* Task 15 */ }
+
+  function refresh() { load(); }
+
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-exports') load();
+  });
+
+  // Esc closes the view modal.
+  document.addEventListener('keydown', e => {
+    const m = document.getElementById('export-view-modal');
+    if (m && !m.hidden && e.key === 'Escape') _closeView();
+  });
+
+  return { load, refresh, view, download, deleteOne, downloadZip, bulkDelete,
+           _toggle, _toggleSelectAll, _closeView };
 })();
 </script>
 </body>

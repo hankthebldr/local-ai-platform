@@ -450,3 +450,12 @@ def test_plugins_panel_has_param_form_renderer(index_html_text):
            "buildToolForm" in index_html_text, (
         "expected a tool-form renderer"
     )
+
+
+def test_exports_panel_has_list(index_html_text):
+    assert 'id="exports-list"' in index_html_text
+    assert "ExportsPanel.refresh" in index_html_text
+
+
+def test_exports_panel_has_view_modal(index_html_text):
+    assert 'id="export-view-modal"' in index_html_text
