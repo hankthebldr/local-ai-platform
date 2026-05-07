@@ -150,3 +150,6 @@ data/graph/
 *.dmg
 *.icns.backup
 data/logs/*.jsonl
+
+# Claude Code user-specific overrides
+.claude/settings.local.json
