@@ -459,3 +459,21 @@ def test_exports_panel_has_list(index_html_text):
 
 def test_exports_panel_has_view_modal(index_html_text):
     assert 'id="export-view-modal"' in index_html_text
+
+
+def test_exports_panel_has_zip_action(index_html_text):
+    assert "/api/exports/zip" in index_html_text
+    assert "ExportsPanel.downloadZip" in index_html_text
+
+
+def test_exports_panel_has_bulk_delete(index_html_text):
+    assert "ExportsPanel.bulkDelete" in index_html_text
+
+
+def test_exports_zip_uses_get_with_names_param(index_html_text):
+    """Zip endpoint takes a comma-separated names param via GET."""
+    import re
+    # Look for fetch('/api/exports/zip?names=...') or similar.
+    assert re.search(r"/api/exports/zip\?names=", index_html_text), (
+        "expected zip request to use ?names= query"
+    )

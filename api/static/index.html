@@ -6164,9 +6164,37 @@ window.ExportsPanel = (function () {
     load();
   }
 
-  // Stubs for Task 15.
-  function downloadZip() { /* Task 15 */ }
-  function bulkDelete() { /* Task 15 */ }
+  function downloadZip() {
+    if (_selected.size === 0) return;
+    const names = Array.from(_selected).join(',');
+    const url = '/api/exports/zip?names=' + encodeURIComponent(names);
+    // We can't easily set Authorization on a window navigation, but the
+    // exports zip endpoint is not master-key gated. Use anchor click.
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'enclave-exports.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  async function bulkDelete() {
+    const count = _selected.size;
+    if (count === 0) return;
+    if (!confirm(`Delete ${count} export${count === 1 ? '' : 's'}?`)) return;
+    // Fire deletes in parallel.
+    const names = Array.from(_selected);
+    const results = await Promise.all(names.map(n =>
+      fetch('/api/exports/' + encodeURIComponent(n), {
+        method: 'DELETE',
+        headers: AdminAuth.authHeaders(),
+      })
+    ));
+    const failed = names.filter((_, i) => !results[i].ok);
+    if (failed.length) alert(`Delete failed for: ${failed.join(', ')}`);
+    _selected.clear();
+    load();
+  }
 
   function refresh() { load(); }
 
