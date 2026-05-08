@@ -3,6 +3,7 @@
 API Key Service — CRUD, hashing, validation, YAML persistence
 """
 
+import collections
 import hashlib
 import os
 import secrets
@@ -37,6 +38,9 @@ class APIKeyService:
         # In-memory cache invalidated by file mtime to avoid repeated disk I/O.
         self._cache: Optional[list] = None
         self._cache_mtime: Optional[float] = None
+        # Audit ring buffer — capacity 200, lost on restart. Persistent storage
+        # is intentionally out of scope (see ENTERPRISE_DEPLOYMENT_GAPS.md).
+        self._audit: collections.deque = collections.deque(maxlen=200)
 
     def _load(self) -> list:
         if not self._file.exists():
@@ -58,6 +62,15 @@ class APIKeyService:
         self._cache = keys
         self._cache_mtime = self._file.stat().st_mtime
 
+    def _log(self, action: str, key_id: str, name: Optional[str] = None) -> None:
+        """Append an admin-action event to the in-memory audit ring buffer."""
+        self._audit.append({
+            "ts": _now_iso(),
+            "action": action,
+            "key_id": key_id,
+            "name": name,
+        })
+
     def create_key(self, name: str, scopes: list, rate_limit_rpm: Optional[int] = None, expires_at: Optional[str] = None) -> dict:
         slug = _slug(name)
         random_part = secrets.token_hex(16)
@@ -77,6 +90,7 @@ class APIKeyService:
         keys = self._load()
         keys.append(entry)
         self._save(keys)
+        self._log("created", key_id, name)
         return {"id": key_id, "name": name, "key": raw_key, "scopes": scopes}
 
     def validate_key(self, raw_key: str) -> Optional[dict]:
@@ -101,6 +115,7 @@ class APIKeyService:
             if k["id"] == key_id:
                 k["enabled"] = False
                 self._save(keys)
+                self._log("revoked", key_id, k.get("name"))
                 return True
         return False
 
@@ -114,6 +129,7 @@ class APIKeyService:
         if not old:
             raise ValueError(f"Key not found: {key_id}")
         self.revoke_key(key_id)
+        self._log("rotated", key_id, old.get("name"))
         return self.create_key(name=old["name"], scopes=old["scopes"], rate_limit_rpm=old.get("rate_limit_rpm"), expires_at=old.get("expires_at"))
 
     def list_keys(self) -> list:

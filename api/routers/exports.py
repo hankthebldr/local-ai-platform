@@ -6,13 +6,15 @@ Exports are stored as .md files in data/exports/ on the server.
 The frontend generates the Markdown and POSTs it here.
 """
 
+import io
 import os
 import re
+import zipfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..logging_config import logger
@@ -78,6 +80,31 @@ async def list_exports():
         })
 
     return {"exports": exports, "count": len(exports)}
+
+
+@router.get("/zip")
+async def zip_exports(names: str):
+    """Stream a zip of the named exports. Path traversal is blocked per name.
+
+    Files that fail validation or don't exist are silently dropped — only
+    return 404 when zero files match.
+    """
+    requested = [_safe_filename(n) for n in names.split(",") if n.strip()]
+    paths = [EXPORTS_DIR / n for n in requested if (EXPORTS_DIR / n).is_file()]
+    if not paths:
+        raise HTTPException(status_code=404, detail="no matching exports")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in paths:
+            zf.write(p, arcname=p.name)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=enclave-exports.zip"},
+    )
 
 
 @router.get("/{filename}")

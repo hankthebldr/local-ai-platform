@@ -3,25 +3,16 @@
 API Keys Router — Key management endpoints (master key protected)
 """
 
-import hmac
-import os
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ..middleware import require_master_key as _require_master
 from ..services.api_key_service import APIKeyService
 
 router = APIRouter(prefix="/api/keys", tags=["api-keys"])
 _service = APIKeyService()
-
-def _require_master(request: Request):
-    """Check that the request carries the master API key."""
-    master_key = os.getenv("MASTER_API_KEY", "")
-    auth = request.headers.get("Authorization", "")
-    token = auth[7:] if auth.startswith("Bearer ") else ""
-    if not token or not master_key or not hmac.compare_digest(token, master_key):
-        raise HTTPException(status_code=401, detail="Master API key required")
 
 
 class CreateKeyRequest(BaseModel):
@@ -45,6 +36,26 @@ async def create_key(body: CreateKeyRequest, request: Request):
 async def list_keys(request: Request):
     _require_master(request)
     return _service.list_keys()
+
+
+@router.get("/scopes")
+async def list_scopes(request: Request):
+    """Return the scope identifiers known to the middleware.
+
+    Master-key gated for consistency with the rest of /api/keys/*.
+    """
+    _require_master(request)
+    from ..middleware import SCOPE_MAP
+    # SCOPE_MAP values are scope names; deduplicate while preserving insertion order.
+    scopes = list(dict.fromkeys(SCOPE_MAP.values()))
+    return {"scopes": scopes}
+
+
+@router.get("/audit")
+async def get_audit(request: Request):
+    """Return the in-memory audit log (last 200 events). Master-key gated."""
+    _require_master(request)
+    return list(_service._audit)
 
 
 @router.delete("/{key_id}")
