@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Enclave — Self-hosted AI inference</title>
+  <title>Enclave — local sovereign AI</title>
   <meta name="description" content="Self-hosted LLM infrastructure with OpenAI-compatible API. CPU-optimized. Buy once, run forever.">
 
-  <meta property="og:title" content="Enclave">
+  <meta property="og:title" content="Enclave — local sovereign AI">
   <meta property="og:description" content="Self-hosted AI inference. CPU-optimized. One price. Forever.">
   <meta property="og:image" content="https://hankthebldr.github.io/local-ai-platform/social-preview.png">
   <meta property="og:url" content="https://hankthebldr.github.io/local-ai-platform/">
@@ -14,24 +14,25 @@
 
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:ital,wght@0,300;0,400;0,500;0,700;1,400;1,500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <div class="container">
-      <div class="logo">
-        <svg width="32" height="32" viewBox="0 0 80 80">
-          <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="#00E87B" stroke-width="2.5"/>
-          <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="#00E87B" stroke-width="1.5" opacity="0.5"/>
-          <rect x="28" y="28" width="24" height="24" rx="2" fill="#00E87B" opacity="0.2"/>
-          <rect x="34" y="34" width="12" height="12" rx="1" fill="#00E87B" opacity="0.6"/>
+      <a href="/" class="logo" aria-label="Enclave home">
+        <svg width="30" height="30" viewBox="0 0 80 80" aria-hidden="true">
+          <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="#00CC66" stroke-width="2.5"/>
+          <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="#00CC66" stroke-width="1.5" opacity="0.5"/>
+          <rect x="28" y="28" width="24" height="24" rx="2" fill="#00CC66" opacity="0.2"/>
+          <rect x="34" y="34" width="12" height="12" rx="1" fill="#00CC66" opacity="0.85"/>
         </svg>
-        <span class="wordmark">ENCLAVE</span>
-      </div>
+        <span class="wordmark">EN<em>CLAVE</em></span>
+      </a>
       <nav>
         <a href="#features">Features</a>
         <a href="#download">Download</a>
@@ -41,72 +42,213 @@
   </header>
 
   <main>
+    <!-- HERO -->
     <section class="hero">
       <div class="container">
-        <h1>Self-hosted AI inference.<br>CPU-optimized. One price. Forever.</h1>
-        <p class="subtitle">Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero cloud dependencies.</p>
+
+        <div class="boot" aria-hidden="true">
+          <span class="dot"></span>
+          <span><span class="dim">&gt;</span> enclave.local <span class="dim">—</span> kernel ready <span class="ok">[ OK ]</span></span>
+          <span class="caret"></span>
+        </div>
+
+        <span class="tag">local sovereign ai &middot; by ohno llc</span>
+
+        <h1>
+          Run your own LLMs.<br>
+          <em>Privately</em><span class="slash">/</span>cheaply<span class="slash">/</span><em>forever</em>.
+        </h1>
+
+        <p class="subtitle">
+          Enclave is a self-hosted inference stack for the boxes you already own.
+          <strong>OpenAI-compatible API</strong>, GGUF backend, multi-agent workflows,
+          retrieval pipeline. <strong>No telemetry. No cloud. No subscription.</strong>
+        </p>
+
         <div class="cta">
           <a href="#download" class="btn-primary">Download __ENCLAVE_VERSION__</a>
-          <a href="https://github.com/hankthebldr/local-ai-platform" class="btn-secondary">View on GitHub</a>
+          <a href="https://github.com/hankthebldr/local-ai-platform" class="btn-secondary">Read the source</a>
         </div>
+
+        <div class="specs">
+          <div class="spec">
+            <div class="k">7B inference</div>
+            <div class="v"><em>40&ndash;50</em> t/s</div>
+          </div>
+          <div class="spec">
+            <div class="k">Models catalogued</div>
+            <div class="v"><em>18+</em></div>
+          </div>
+          <div class="spec">
+            <div class="k">API surface</div>
+            <div class="v"><em>16</em> routers</div>
+          </div>
+          <div class="spec">
+            <div class="k">Bytes leaving the host</div>
+            <div class="v"><em>0</em></div>
+          </div>
+        </div>
+
       </div>
     </section>
 
+    <!-- FEATURES -->
     <section id="features" class="features">
       <div class="container">
-        <h2>What it does</h2>
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">man.7 enclave</div>
+            <h2>What it <em>actually</em> does, with no marketing fog.</h2>
+          </div>
+          <div class="index">SECTIONS 01&mdash;06</div>
+        </div>
+
         <div class="grid">
-          <div class="card">
-            <h3>OpenAI-compatible API</h3>
-            <p>Drop-in replacement. Point your existing code at localhost:8000.</p>
-          </div>
-          <div class="card">
-            <h3>CPU-optimized</h3>
-            <p>GGUF quantized models via Ollama. 7B at 40-50 tok/s, 13B at 25-30 tok/s.</p>
-          </div>
-          <div class="card">
-            <h3>Zero telemetry</h3>
-            <p>No data leaves your machine. No internet required for inference.</p>
-          </div>
-          <div class="card">
-            <h3>Model registry</h3>
-            <p>18+ models pre-catalogued. Download, configure, and switch with one command.</p>
-          </div>
-          <div class="card">
-            <h3>Multi-agent workflows</h3>
-            <p>YAML-defined step pipelines with role-based model selection.</p>
-          </div>
-          <div class="card">
-            <h3>Native macOS app</h3>
-            <p>Desktop wrapper with setup wizard. Linux support via direct install.</p>
-          </div>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">01</span>
+              <h3>OpenAI-compatible</h3>
+            </div>
+            <dl>
+              <dt>Synopsis</dt>
+              <dd><code>POST /v1/chat/completions</code></dd>
+              <dt>Description</dt>
+              <dd>Drop-in replacement. Point existing SDKs at <code>localhost:8000</code>; streaming, function-calling, and embeddings all wire through the same surface.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">02</span>
+              <h3>CPU-first inference</h3>
+            </div>
+            <dl>
+              <dt>Backend</dt>
+              <dd>Ollama + GGUF (Q4_K_M default, Q5_K_M for quality, Q3_K_M for 70B+).</dd>
+              <dt>Throughput</dt>
+              <dd>7B&nbsp;<code>≈40-50 t/s</code> · 13B&nbsp;<code>≈25-30 t/s</code> · 34B&nbsp;<code>≈10-15 t/s</code> on commodity x86.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">03</span>
+              <h3>Zero telemetry</h3>
+            </div>
+            <dl>
+              <dt>Network</dt>
+              <dd>No outbound calls except model pulls you initiate. No analytics, no crash reports, no phone-home.</dd>
+              <dt>Audit</dt>
+              <dd>Source-available. Read the egress paths yourself.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">04</span>
+              <h3>Multi-agent workflows</h3>
+            </div>
+            <dl>
+              <dt>Format</dt>
+              <dd>Declarative <code>.yaml</code> DAG with role-based model selection.</dd>
+              <dt>Engine</dt>
+              <dd>Jinja2 prompts, output parsers, quality gates, checkpoint/resume, six-phase hook lifecycle.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">05</span>
+              <h3>Retrieval pipeline</h3>
+            </div>
+            <dl>
+              <dt>Stack</dt>
+              <dd>Chroma vector store, semantic chunker, document service.</dd>
+              <dt>Storage</dt>
+              <dd>Local. Embeddings never leave the box.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">06</span>
+              <h3>Native macOS app</h3>
+            </div>
+            <dl>
+              <dt>Build</dt>
+              <dd>py2app + pywebview, signed-DMG pipeline ready.</dd>
+              <dt>First run</dt>
+              <dd>Setup wizard installs Ollama and pulls a starter model. Linux supported via direct install.</dd>
+            </dl>
+          </article>
+
         </div>
       </div>
     </section>
 
+    <!-- DOWNLOAD / LICENSE -->
     <section id="download" class="download">
       <div class="container">
-        <h2>Get Enclave</h2>
-        <p class="subtitle">Commercial software. Not open source. Source-available with commercial license.</p>
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">licensing</div>
+            <h2>Source-available. <em>Pay once.</em> Run forever.</h2>
+          </div>
+          <div class="index">v __ENCLAVE_VERSION__</div>
+        </div>
+
+        <pre class="toml-block" aria-hidden="true"><code><span class="c"># Commercial software. Source-available. No subscription.</span>
+<span class="h">[individual]</span>
+<span class="k">price</span>   <span class="eq">=</span> <span class="s">"one-time"</span>
+<span class="k">seats</span>   <span class="eq">=</span> <span class="n">1</span>
+<span class="k">use</span>     <span class="eq">=</span> [<span class="s">"personal"</span>, <span class="s">"commercial"</span>]
+<span class="k">updates</span> <span class="eq">=</span> <span class="s">"all included"</span>
+
+<span class="h">[teams]</span>
+<span class="k">price</span>   <span class="eq">=</span> <span class="s">"per seat, volume tiers"</span>
+<span class="k">support</span> <span class="eq">=</span> <span class="s">"priority channel"</span>
+<span class="k">extras</span>  <span class="eq">=</span> [<span class="s">"sla"</span>, <span class="s">"deployment"</span>, <span class="s">"private model channels"</span>]</code></pre>
+
         <div class="license-grid">
+
           <div class="license">
             <h3>Individual</h3>
-            <p>One seat. One-time purchase.<br>All updates included.<br>Personal and commercial use.</p>
-            <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest" class="btn-primary">Download DMG</a>
-            <p class="micro">macOS 12+ &middot; <a href="https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly">nightly build</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/README.md#quick-start">install guide</a></p>
+            <div class="price">One seat &middot; <em>one-time</em></div>
+            <ul>
+              <li>Personal and commercial use</li>
+              <li>All updates included</li>
+              <li>No subscription, no expiry</li>
+              <li>Local-only — no account required</li>
+            </ul>
+            <div class="cta-row">
+              <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest" class="btn-primary">Download DMG</a>
+              <p class="micro">macOS&nbsp;12+ &middot; <a href="https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly">nightly build</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/README.md#quick-start">install guide</a></p>
+            </div>
           </div>
+
           <div class="license">
             <h3>Teams</h3>
-            <p>Volume discount per seat.<br>Shared infrastructure.<br>Priority support channel.</p>
-            <a href="mailto:contact@ohno.llc?subject=Enclave%20Teams%20License" class="btn-secondary">Contact for pricing</a>
-            <p class="micro">SLA &middot; deployment support &middot; private model channels</p>
+            <div class="price">Volume &middot; <em>per seat</em></div>
+            <ul>
+              <li>Shared infrastructure deployment</li>
+              <li>Priority support channel</li>
+              <li>SLA and deployment assistance</li>
+              <li>Private model channels</li>
+            </ul>
+            <div class="cta-row">
+              <a href="mailto:contact@ohno.llc?subject=Enclave%20Teams%20License" class="btn-secondary">Contact for pricing</a>
+              <p class="micro">Reply within 1 business day &middot; <a href="https://github.com/hankthebldr/local-ai-platform/discussions">discussions</a></p>
+            </div>
           </div>
+
         </div>
+
         <div class="install-note">
-          <h4>First launch</h4>
-          <p>The DMG ships unsigned today. After dragging to <code>/Applications</code>, run once in Terminal to clear the Gatekeeper quarantine flag:</p>
+          <h4>First launch &mdash; gatekeeper note</h4>
+          <p>The DMG ships unsigned today. After dragging to <code>/Applications</code>, run once to clear the quarantine flag:</p>
           <pre><code>xattr -dr com.apple.quarantine /Applications/Enclave.app</code></pre>
-          <p>Then double-click <strong>Enclave</strong> &mdash; the native window opens the first-run setup wizard, which installs Ollama and pulls a starter model.</p>
+          <p>Then launch <strong>Enclave</strong> &mdash; the native window opens the first-run wizard, which installs Ollama and pulls a starter model.</p>
         </div>
       </div>
     </section>
@@ -114,8 +256,12 @@
 
   <footer>
     <div class="container">
-      <p>Enclave __ENCLAVE_VERSION__ — by ohno llc</p>
-      <p><a href="https://github.com/hankthebldr/local-ai-platform">GitHub</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/LICENSE">License</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/discussions">Discussions</a></p>
+      <div class="col-l">enclave __ENCLAVE_VERSION__ &middot; built by <em>ohno llc</em> &middot; ny / sf</div>
+      <div class="col-r">
+        <a href="https://github.com/hankthebldr/local-ai-platform">github</a>
+        <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/LICENSE">license</a>
+        <a href="https://github.com/hankthebldr/local-ai-platform/discussions">discussions</a>
+      </div>
     </div>
   </footer>
 </body>
