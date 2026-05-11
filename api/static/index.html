@@ -1621,6 +1621,7 @@ details[open] > summary::before { transform: rotate(90deg); }
     <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">
       <span>Documents</span>
     </button>
+    <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <span class="tab-divider" aria-hidden="true"></span>
     <div class="tab-dropdown" role="presentation">
       <button class="tab-btn admin-trigger" id="admin-trigger"
@@ -2198,6 +2199,38 @@ details[open] > summary::before { transform: rotate(90deg); }
     </div>
   </div>
 
+  <!-- ═══ AGENTS TAB ═══════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-agents" style="display:none">
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+      <h3 style="color:var(--cyan);font-size:0.9rem;margin:0;flex:1">Custom Agents</h3>
+      <button class="action-btn" onclick="showCreateAgentModal()" style="background:var(--cyan);color:#000;border-color:var(--cyan);font-weight:600;">+ New Agent</button>
+      <button class="action-btn" onclick="loadAgentsTab()" title="Refresh">&#x21bb;</button>
+    </div>
+
+    <!-- Agent list -->
+    <div id="agents-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px;"></div>
+    <div id="agents-empty" style="display:none;text-align:center;padding:40px;color:var(--text-muted);font-size:0.85rem;">
+      No agents yet. Create one to get started.
+    </div>
+
+    <!-- Agent chat panel (shown when an agent is selected) -->
+    <div id="agent-chat-panel" style="display:none;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div style="background:var(--bg-panel);padding:10px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);">
+        <span id="agent-chat-icon" style="font-size:1.2rem;"></span>
+        <strong id="agent-chat-name" style="color:var(--text);font-size:0.9rem;flex:1"></strong>
+        <span id="agent-chat-model" style="font-size:0.72rem;color:var(--text-muted);"></span>
+        <button onclick="closeAgentChat()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;">&times;</button>
+      </div>
+      <div id="agent-chat-messages" style="padding:14px;min-height:200px;max-height:400px;overflow-y:auto;font-size:0.82rem;display:flex;flex-direction:column;gap:10px;"></div>
+      <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:8px;">
+        <input type="text" id="agent-chat-input" placeholder="Message the agent…"
+          style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:4px;font-family:var(--mono);font-size:0.82rem;"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentMessage();}">
+        <button onclick="sendAgentMessage()" style="background:var(--cyan);color:#000;border:none;padding:7px 16px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Send</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ ADMIN PANELS ═════════════════════════════════════════════ -->
   <div class="tab-content" id="tab-admin-keys" style="display:none">
     <div class="panel">
@@ -2450,6 +2483,7 @@ function switchTab(name, el) {
   if (name === 'research') initResearch();
   if (name === 'workflows') loadWorkflowsTab();
   if (name === 'documents') loadDocumentsTab();
+  if (name === 'agents') loadAgentsTab();
 }
 
 /* ── CLOCK ──────────────────────────────────────────────────────── */
