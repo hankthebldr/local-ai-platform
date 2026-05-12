@@ -1886,6 +1886,21 @@ details[open] > summary::before { transform: rotate(90deg); }
       </div>
     </div>
 
+    <!-- Live Sessions Section -->
+    <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="color:var(--cyan);font-size:0.9rem;">Live Sessions</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:0.65rem;color:var(--text-muted);">Active conversations with tool call traces</span>
+          <button onclick="loadActiveSessions()" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:0.65rem;padding:2px 8px;border-radius:3px;">&#x21bb; Refresh</button>
+          <button onclick="cleanupStaleSessions()" style="background:none;border:1px solid var(--amber);color:var(--amber);cursor:pointer;font-size:0.65rem;padding:2px 8px;border-radius:3px;">Cleanup Stale</button>
+        </div>
+      </div>
+      <div id="live-sessions-list" style="max-height:320px;overflow-y:auto;">
+        <div style="color:var(--text-muted);font-size:0.75rem;text-align:center;padding:20px;">Loading…</div>
+      </div>
+    </div>
+
     <!-- Profiles Section -->
     <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:16px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -4277,6 +4292,81 @@ async function loadMemoryTab() {
   loadInjectionPreview();
   loadMemoryStats();
   loadProfiles();
+  loadActiveSessions();
+}
+
+async function loadActiveSessions() {
+  const el = document.getElementById('live-sessions-list');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/context');
+    if (!r.ok) throw new Error(r.statusText);
+    const sessions = await r.json();
+    if (!sessions.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.75rem;text-align:center;padding:20px;">No active sessions</div>';
+      return;
+    }
+    el.innerHTML = sessions.map(s => {
+      const started = new Date(s.started_at).toLocaleTimeString();
+      const active  = new Date(s.last_activity).toLocaleTimeString();
+      const skills  = s.skills_injected && s.skills_injected.length ? s.skills_injected.join(', ') : '—';
+      const toolsHtml = s.tool_calls && s.tool_calls.length
+        ? s.tool_calls.map(tc => `
+            <div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.62rem;">
+              <span style="color:var(--cyan);min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tc.tool_name)}</span>
+              <span style="color:var(--text-muted)">${tc.duration_ms}ms</span>
+              <span style="color:var(--text-dim)">${esc(new Date(tc.timestamp).toLocaleTimeString())}</span>
+            </div>`).join('')
+        : '<div style="color:var(--text-muted);font-size:0.62rem;padding:4px 0">No tool calls this session</div>';
+      return `
+        <div style="border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div>
+              <span style="font-family:var(--mono);font-size:0.7rem;color:var(--amber)">${esc(s.model)}</span>
+              <span style="font-size:0.62rem;color:var(--text-muted);margin-left:8px">${esc((s.conversation_id||'').slice(0,12))}…</span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <span style="font-size:0.62rem;color:var(--text-dim)">${s.message_count||0} msgs · ${(s.tool_calls||[]).length} tools</span>
+              <button onclick="closeSession('${esc(s.conversation_id)}')"
+                style="background:none;border:1px solid var(--red);color:var(--red);cursor:pointer;font-size:0.6rem;padding:1px 6px;border-radius:3px">close</button>
+            </div>
+          </div>
+          <div style="font-size:0.62rem;color:var(--text-muted);margin-bottom:6px">
+            started ${started} · active ${active} · skills: ${esc(skills)}
+          </div>
+          <details style="font-size:0.62rem">
+            <summary style="color:var(--text-dim);cursor:pointer;user-select:none">Tool calls (${(s.tool_calls||[]).length})</summary>
+            <div style="margin-top:4px;padding:4px;background:var(--bg-deep);border-radius:3px;max-height:120px;overflow-y:auto">
+              ${toolsHtml}
+            </div>
+          </details>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red);font-size:0.75rem;padding:10px">Error loading sessions: ${esc(String(e))}</div>`;
+  }
+}
+
+async function closeSession(convId) {
+  try {
+    const r = await fetch('/api/context/' + encodeURIComponent(convId) + '/close', { method: 'POST' });
+    if (!r.ok) throw new Error(r.statusText);
+    loadActiveSessions();
+  } catch (e) {
+    alert('Failed to close session: ' + e);
+  }
+}
+
+async function cleanupStaleSessions() {
+  try {
+    const r = await fetch('/api/context/cleanup', { method: 'POST' });
+    if (!r.ok) throw new Error(r.statusText);
+    const d = await r.json();
+    await loadActiveSessions();
+    if (typeof showToast === 'function') showToast('Cleaned up ' + (d.closed || 0) + ' stale session(s)');
+  } catch (e) {
+    alert('Cleanup failed: ' + e);
+  }
 }
 
 async function loadInjectionPreview() {
