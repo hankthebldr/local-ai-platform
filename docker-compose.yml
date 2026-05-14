@@ -47,6 +47,16 @@ services:
       - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-300}
       - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:8080","http://localhost:3000"]}
     volumes:
+      # All API state lives under /app/data. Persisting the whole dir
+      # survives container rebuild — keystore (data/config/),
+      # workflow runs (data/workflows/), Chroma RAG store (data/rag/),
+      # and uploaded documents. Without this, a `docker compose build`
+      # wipes issued keys, completed workflow runs, and ingested docs.
+      - api_data:/app/data
+      # Logs keep their own named volume for log-rotation-friendly
+      # backup workflows. Nested mount: more-specific path wins, so
+      # /app/data/logs lives in api_logs while everything else under
+      # /app/data lives in api_data.
       - api_logs:/app/data/logs
     depends_on:
       ollama:
@@ -83,6 +93,8 @@ services:
 volumes:
   ollama_data:
     name: local-ai-ollama-data
+  api_data:
+    name: local-ai-api-data
   api_logs:
     name: local-ai-api-logs
   webui_data:

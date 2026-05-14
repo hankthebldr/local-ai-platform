@@ -5,6 +5,74 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer: [sem
 
 ## [Unreleased]
 
+### Fixed — Docker first-boot (PR #42)
+- Ollama healthcheck used `curl`, which isn't in the `ollama/ollama` image,
+  so the check failed forever and blocked `depends_on: service_healthy` for
+  `api` and `webui`. Replaced with `ollama list`.
+- `/static/*` 401'd under default docker auth because `PUBLIC_PATHS` was
+  exact-match. Added `PUBLIC_PREFIXES` for `/static/` plus exact entries
+  for `/setup.html` and `/favicon.ico`.
+- JS escape `won\\'t` inside a template-literal single-quoted string aborted
+  parsing of the entire dashboard inline `<script>` block, leaving
+  `switchTab` and every handler undefined. Fixed to `won\'t`.
+
+### Fixed — Docker runtime data + RAG + admin gate (PR #43)
+- Dockerfile only COPY'd `api/`. The `models/`, `agents/`, `workflows/`, and
+  `prompts/` dirs are read at runtime; without them the Models tab 500'd
+  (`ModuleNotFoundError`), Agents/Workflows tabs returned empty arrays, and
+  the roles router served no templates.
+- The image installed `requirements-core.txt` only, leaving `chromadb` and
+  `sentence-transformers` absent and the Documents tab returning 503
+  (`RAG pipeline unavailable`). Install `requirements-rag.txt` instead.
+- `run.sh` now pulls `nomic-embed-text` on first boot alongside the chat
+  starter, so the RAG pipeline binds Ollama embeddings on startup instead
+  of falling back to the heavy sentence-transformers path at request time.
+- `require_master_key` is now a no-op when `ENABLE_API_AUTH=false` (the
+  admin gate respects the global auth flag for consistency) and accepts
+  keystore keys holding the `keys` scope (the auto-provisioned first-run
+  master qualifies — was previously rejected because the function only
+  consulted the legacy `MASTER_API_KEY` env var).
+
+### Added — Light theme + UI cleanup (PR #44)
+- `:root[data-theme="light"]` token block, header toggle button (☀/☾),
+  `Theme` controller persisting choice to `localStorage`, and a synchronous
+  `<head>` bootstrap to resolve theme before paint (no flash of wrong
+  theme). Initial precedence: localStorage > `prefers-color-scheme` > dark.
+- Header subtitle no longer duplicates the footer attribution. The footer
+  retains `Enclave vX.Y.Z — by ohno llc`.
+- Latent state bug fixed: `AdminMenu.showPanel()` set inline `display:block`
+  on admin subtab panels, but `switchTab()` never reset the inline display.
+  Once you opened an admin subtab, that panel bled through under every
+  operational tab. `switchTab` now mirrors `AdminMenu.showPanel`'s
+  symmetric reset.
+
+### Added — Packaging parity (PR #45)
+- `scripts/build_mac.sh` now COPYs `agents/`, `workflows/`, `prompts/` into
+  the bundled `.app` and installs `requirements-rag.txt` in the bundled
+  venv. Without this the shipped DMG had the same broken Documents/Agents/
+  Workflows tabs the docker image had pre-#43.
+- New `scripts/setup_linux.sh` — distro-detecting bootstrap (Debian /
+  Ubuntu / Parrot / Fedora / Arch) for native dev on a Linux host. Picks
+  Python ≥3.12, creates `./venv`, installs `requirements-rag.txt`, pulls
+  `llama3.2:3b` + `nomic-embed-text` via Ollama if available, smoke-imports
+  `api.main` as the final gate. Flags: `--venv-only`, `--no-models`.
+
+### Fixed — v1.1.x hotfix bundle (this PR)
+- **Version unification.** Introduced `api/__init__.py:__version__` as the
+  single source of truth, wired `api/main.py` to import it (was hardcoded
+  to `0.1.0` in four places), and bumped the dashboard footer string from
+  `v0.1.0` to `v1.1.0`. `/health`, `/api/info`, `/`, and the OpenAPI
+  metadata now all surface the same version that the CHANGELOG and git
+  tag record.
+- **Keystore + workflow runs persisted.** `docker-compose.yml` now mounts
+  the whole `/app/data` dir as a named volume (`local-ai-api-data`), with
+  `/app/data/logs` keeping its dedicated log volume via nested-mount
+  precedence. Issued API keys, completed workflow runs, and the RAG
+  Chroma store all survive `docker compose build` / `--force-recreate`.
+- **`/api/documents/query` route alias.** Added a `POST /api/documents/query`
+  endpoint that proxies to `/search`. Both spellings now work; `/search`
+  remains canonical.
+
 ## [1.1.0] — 2026-04-22
 
 ### Added — Workflow prompt framework (PR #11)
