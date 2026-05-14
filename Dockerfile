@@ -8,12 +8,21 @@ RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
 
 WORKDIR /app
 
-# Install core dependencies only
-COPY setup/requirements-core.txt setup/requirements-core.txt
-RUN pip install --no-cache-dir -r setup/requirements-core.txt
+# Install core + RAG dependencies (chromadb + langchain + sentence-transformers).
+# requirements-rag.txt extends requirements-core.txt via `-r`, so installing rag
+# gives us both. Needed for the Documents tab and any embedding-backed feature.
+COPY setup/requirements-core.txt setup/requirements-rag.txt setup/
+RUN pip install --no-cache-dir -r setup/requirements-rag.txt
 
-# Copy application code
+# Copy application code + runtime data (workflows, agents, prompts, model
+# registry). These directories are read at runtime — workflows.py reads YAML
+# from ./workflows, AgentService scans ./agents, roles router serves
+# ./prompts/roles, and inventory.py imports MODEL_REGISTRY from ./models.
 COPY api/ api/
+COPY models/ models/
+COPY agents/ agents/
+COPY workflows/ workflows/
+COPY prompts/ prompts/
 COPY .env.example .env
 
 # Create data directories

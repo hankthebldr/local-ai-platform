@@ -16,6 +16,10 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
 DEFAULT_MODEL="${ENCLAVE_DEFAULT_MODEL:-llama3.2:3b}"
+# Embedding model for the RAG pipeline (Documents tab + memory).
+# Small (~280MB) and uses the same Ollama service — keeps the API container
+# slim by avoiding the sentence-transformers + torch fallback path.
+DEFAULT_EMBED_MODEL="${ENCLAVE_DEFAULT_EMBED_MODEL:-nomic-embed-text}"
 FIRST_RUN_MARKER="$PROJECT_ROOT/data/.docker-first-run-complete"
 DASHBOARD_URL="http://localhost:8000"
 WEBUI_URL="http://localhost:8080"
@@ -89,18 +93,34 @@ if [ "$HEALTHY" -ne 1 ]; then
 fi
 ok "API is healthy"
 
-# ── 4. First-run starter model ───────────────────────────────────────
+# ── 4. First-run starter models ──────────────────────────────────────
+# Pull a chat model (for the dashboard chat box and OpenAI-compat API)
+# and an embedding model (for the Documents tab + memory RAG pipeline).
 if [ ! -f "$FIRST_RUN_MARKER" ]; then
-    step "First run — pulling starter model: $DEFAULT_MODEL (~2 GB, one time)"
+    step "First run — pulling chat starter: $DEFAULT_MODEL (~2 GB, one time)"
+    CHAT_OK=0
     if "${DC[@]}" exec -T ollama ollama pull "$DEFAULT_MODEL"; then
-        ok "Model ready: $DEFAULT_MODEL"
+        ok "Chat model ready: $DEFAULT_MODEL"
+        CHAT_OK=1
+    else
+        warn "Chat model pull failed — you can retry from the dashboard."
+    fi
+
+    step "First run — pulling embed model: $DEFAULT_EMBED_MODEL (~280 MB, one time)"
+    EMBED_OK=0
+    if "${DC[@]}" exec -T ollama ollama pull "$DEFAULT_EMBED_MODEL"; then
+        ok "Embed model ready: $DEFAULT_EMBED_MODEL"
+        EMBED_OK=1
+    else
+        warn "Embed model pull failed — Documents tab and memory RAG will be unavailable."
+    fi
+
+    if [ "$CHAT_OK$EMBED_OK" = "11" ]; then
         mkdir -p "$(dirname "$FIRST_RUN_MARKER")"
         date -u +"%Y-%m-%dT%H:%M:%SZ" > "$FIRST_RUN_MARKER"
-    else
-        warn "Starter model pull failed — you can retry from the dashboard."
     fi
 else
-    ok "Starter model already initialized (delete $FIRST_RUN_MARKER to re-pull)"
+    ok "Starter models already initialized (delete $FIRST_RUN_MARKER to re-pull)"
 fi
 
 # ── 5. Status block ──────────────────────────────────────────────────
