@@ -2713,6 +2713,24 @@ async function loadStatus() {
 }
 
 /* ── MODELS LOADER (dashboard panel) ───────────────────────────── */
+// Embedding-only model families that don't implement Ollama's /api/chat.
+// Selecting one for chat causes Ollama to return 400 ("does not support chat"),
+// which the API surfaces as InvalidRequestError. Filter them from the chat
+// picker so users can't pick one by accident; they still appear in the
+// system-status "Loaded Models" list since they ARE valid embedding models.
+const EMBED_MODEL_PATTERNS = [
+  /^nomic-embed/i,
+  /^all-minilm/i,
+  /^mxbai-embed/i,
+  /^bge-/i,
+  /^e5-/i,
+  /-embed(-|$|:)/i,
+  /^snowflake-arctic-embed/i,
+];
+function isEmbeddingOnlyModel(modelId) {
+  return EMBED_MODEL_PATTERNS.some(re => re.test(modelId));
+}
+
 async function loadModels() {
   try {
     const r = await fetch('/v1/models');
@@ -2728,12 +2746,31 @@ async function loadModels() {
     container.innerHTML = models.map(m => `
       <div class="model-item">
         <span class="model-name">${m.id}</span>
-        <span class="model-size"><span class="status-pip online" style="animation-duration:3s"></span>ready</span>
+        <span class="model-size"><span class="status-pip online" style="animation-duration:3s"></span>${isEmbeddingOnlyModel(m.id) ? 'embed' : 'ready'}</span>
       </div>
     `).join('');
 
+    // Only chat-capable models in the chat picker. Construct <option>s via
+    // DOM API rather than innerHTML so model IDs (which originate from
+    // Ollama and could theoretically contain HTML-active chars) can't
+    // bleed into the document tree.
+    const chatModels = models.filter(m => !isEmbeddingOnlyModel(m.id));
     const sel = document.getElementById('model-select');
-    sel.innerHTML = models.map(m => `<option value="${m.id}">${m.id}</option>`).join('');
+    sel.replaceChildren();
+    if (chatModels.length === 0) {
+      const opt = document.createElement('option');
+      opt.disabled = true;
+      opt.selected = true;
+      opt.textContent = 'No chat models — pull one (e.g. llama3.2:3b)';
+      sel.appendChild(opt);
+    } else {
+      for (const m of chatModels) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.id;
+        sel.appendChild(opt);
+      }
+    }
   } catch(e) {
     document.getElementById('models-content').innerHTML =
       '<div class="model-empty" style="color:var(--red)">Failed to reach API</div>';

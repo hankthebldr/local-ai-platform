@@ -33,7 +33,9 @@ _memory_service = MemoryService()
 class Message(BaseModel):
     """Chat message"""
 
-    role: str = Field(..., description="Role of the message sender (system, user, assistant)")
+    role: str = Field(
+        ..., description="Role of the message sender (system, user, assistant)"
+    )
     content: str = Field(..., description="Content of the message")
 
 
@@ -42,13 +44,21 @@ class ChatCompletionRequest(BaseModel):
 
     model: str = Field(..., description="Model to use for completion")
     messages: List[Message] = Field(..., description="List of messages")
-    temperature: Optional[float] = Field(0.7, description="Sampling temperature (0.0-2.0)")
+    temperature: Optional[float] = Field(
+        0.7, description="Sampling temperature (0.0-2.0)"
+    )
     max_tokens: Optional[int] = Field(2048, description="Maximum tokens to generate")
     stream: Optional[bool] = Field(False, description="Stream the response")
-    web_search: Optional[bool] = Field(False, description="Enable web search augmentation")
+    web_search: Optional[bool] = Field(
+        False, description="Enable web search augmentation"
+    )
     tools: Optional[bool] = Field(True, description="Enable plugin tool calling")
-    max_tool_iterations: Optional[int] = Field(10, description="Max tool-call iterations")
-    rag: Optional[bool] = Field(False, description="Enable RAG retrieval for this request")
+    max_tool_iterations: Optional[int] = Field(
+        10, description="Max tool-call iterations"
+    )
+    rag: Optional[bool] = Field(
+        False, description="Enable RAG retrieval for this request"
+    )
     rag_top_k: Optional[int] = Field(5, description="Number of chunks to retrieve")
 
 
@@ -129,7 +139,9 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         if last_user_msg:
             results = _rag_service.search(last_user_msg, top_k=request.rag_top_k)
             if results["total"] > 0:
-                messages = [{"role": "system", "content": _rag_service.format_context(results)}] + messages
+                messages = [
+                    {"role": "system", "content": _rag_service.format_context(results)}
+                ] + messages
                 rag_sources = results["results"]
                 logger.info(f"Injected {results['total']} RAG chunks")
 
@@ -162,33 +174,55 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
                     f"from {search_result.backend}"
                 )
             else:
-                logger.warning(f"Web search returned no results for: '{last_user_msg[:50]}'")
+                logger.warning(
+                    f"Web search returned no results for: '{last_user_msg[:50]}'"
+                )
 
     # ── Streaming ──────────────────────────────────────────────────────
     if request.stream:
 
         async def generate():
             """Generate streaming response in OpenAI SSE format"""
-            async for chunk_text in ollama_service.chat_stream(
-                model=request.model,
-                messages=messages,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-            ):
-                chunk = {
-                    "id": "chatcmpl-local",
-                    "object": "chat.completion.chunk",
-                    "created": 0,
-                    "model": request.model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {"content": chunk_text},
-                            "finish_reason": None,
-                        }
-                    ],
+            from ..exceptions import APIError
+
+            try:
+                async for chunk_text in ollama_service.chat_stream(
+                    model=request.model,
+                    messages=messages,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                ):
+                    chunk = {
+                        "id": "chatcmpl-local",
+                        "object": "chat.completion.chunk",
+                        "created": 0,
+                        "model": request.model,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": chunk_text},
+                                "finish_reason": None,
+                            }
+                        ],
+                    }
+                    yield f"data: {json.dumps(chunk)}\n\n"
+            except APIError as e:
+                # Once we've returned StreamingResponse, FastAPI has already
+                # sent 200 headers — we can't re-issue a 4xx. Best we can
+                # do is emit an OpenAI-shaped error event in the SSE stream
+                # so the client surfaces the actual cause (e.g. embedding
+                # model selected for chat) instead of silently truncating.
+                logger.warning(f"Chat stream aborted: {e.message}")
+                err_payload = {
+                    "error": {
+                        "message": e.message,
+                        "type": e.error_type,
+                        "code": e.code,
+                    }
                 }
-                yield f"data: {json.dumps(chunk)}\n\n"
+                yield f"data: {json.dumps(err_payload)}\n\n"
+                yield "data: [DONE]\n\n"
+                return
 
             # Emit sources as a custom event before DONE (if search was used)
             if sources:
@@ -228,13 +262,16 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
                 {
                     "index": 0,
                     "message": {"role": "assistant", "content": result["content"]},
-                    "finish_reason": "stop" if result["stopped_reason"] == "complete" else "length",
+                    "finish_reason": (
+                        "stop" if result["stopped_reason"] == "complete" else "length"
+                    ),
                 }
             ],
             "usage": {
                 "prompt_tokens": result.get("prompt_eval_count", 0),
                 "completion_tokens": result.get("eval_count", 0),
-                "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0),
+                "total_tokens": result.get("prompt_eval_count", 0)
+                + result.get("eval_count", 0),
             },
         }
         if result["tool_calls_made"]:
@@ -270,7 +307,8 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         "usage": {
             "prompt_tokens": result.get("prompt_eval_count", 0),
             "completion_tokens": result.get("eval_count", 0),
-            "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0),
+            "total_tokens": result.get("prompt_eval_count", 0)
+            + result.get("eval_count", 0),
         },
     }
     if sources:
