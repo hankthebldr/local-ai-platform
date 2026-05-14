@@ -55,11 +55,17 @@ RESOURCES="${CONTENTS}/Resources"
 mkdir -p "${MACOS}"
 mkdir -p "${RESOURCES}"
 
-# Copy platform code
+# Copy platform code + runtime data dirs. These mirror the Dockerfile
+# COPY set (post-PR #43) so the .app surfaces every tab the same way the
+# docker stack does. Without agents/, workflows/, prompts/ the matching
+# tabs render empty even though the API serves correctly.
 cp -R api "${RESOURCES}/api"
 cp -R plugins "${RESOURCES}/plugins"
 cp -R cli "${RESOURCES}/cli"
 cp -R models "${RESOURCES}/models"
+cp -R agents "${RESOURCES}/agents"
+cp -R workflows "${RESOURCES}/workflows"
+cp -R prompts "${RESOURCES}/prompts"
 [ -d data/profiles ] && cp -R data "${RESOURCES}/data" 2>/dev/null || true
 [ -f .env ] && cp .env "${RESOURCES}/.env"
 [ -f .env.example ] && cp .env.example "${RESOURCES}/.env.example"
@@ -94,12 +100,12 @@ echo "  Creating bundled Python environment (${PYTHON_BIN})..."
 "${PYTHON_BIN}" -m venv "${RESOURCES}/venv"
 "${RESOURCES}/venv/bin/pip" install --quiet --upgrade pip
 
-# Install runtime deps from the canonical requirements file.
-# This keeps the bundled venv in sync with what api/main.py actually imports —
-# previous hardcoded lists drifted and caused silent boot failures (missing
-# jinja2, aiohttp, etc.).
-"${RESOURCES}/venv/bin/pip" install --quiet -r setup/requirements-core.txt
-# pywebview is a desktop-only dep; not in requirements-core.txt
+# Install runtime deps. Use requirements-rag.txt (which extends -core via -r)
+# so the bundled venv carries chromadb + sentence-transformers — needed for
+# the Documents tab and memory RAG. Previous core-only installs left the
+# Documents tab returning 503 in the shipped .app.
+"${RESOURCES}/venv/bin/pip" install --quiet -r setup/requirements-rag.txt
+# pywebview is a desktop-only dep; not in either requirements file.
 "${RESOURCES}/venv/bin/pip" install --quiet pywebview
 
 echo "  Python environment ready"
