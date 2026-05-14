@@ -15,7 +15,26 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
-from .routers import chat, completions, models, inventory, exports, graph, workflows, api_keys, plugins, setup, context, memory, profiles, documents, roles, a2a, agents
+from . import __version__
+from .routers import (
+    chat,
+    completions,
+    models,
+    inventory,
+    exports,
+    graph,
+    workflows,
+    api_keys,
+    plugins,
+    setup,
+    context,
+    memory,
+    profiles,
+    documents,
+    roles,
+    a2a,
+    agents,
+)
 from .services.ollama_service import OllamaService
 from .services.workflow_engine import WorkflowEngine
 from .services.a2a_service import A2AService
@@ -127,7 +146,9 @@ def _bootstrap_auth_if_needed() -> None:
         return
 
     raw_key = provisioned["key"]
-    marker_path = Path(os.getenv("DATA_CONFIG_DIR", "data/config")) / "first-run-key.txt"
+    marker_path = (
+        Path(os.getenv("DATA_CONFIG_DIR", "data/config")) / "first-run-key.txt"
+    )
     try:
         marker_path.parent.mkdir(parents=True, exist_ok=True)
         marker_path.write_text(f"{raw_key}\n")
@@ -150,7 +171,7 @@ def _bootstrap_auth_if_needed() -> None:
 app = FastAPI(
     title="Enclave API",
     description="OpenAI-compatible API for local LLM inference with streaming support",
-    version="0.1.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -195,6 +216,7 @@ app.include_router(agents.router)
 
 # ── Public Endpoints ───────────────────────────────────────────────────────
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint with system metrics"""
@@ -215,7 +237,7 @@ async def health_check():
 
     return {
         "status": "healthy" if ollama_healthy else "degraded",
-        "version": "0.1.0",
+        "version": __version__,
         "ollama": {
             "host": OLLAMA_HOST,
             "status": "healthy" if ollama_healthy else "unhealthy",
@@ -253,7 +275,7 @@ async def root():
     # Fallback to JSON if static files missing
     return {
         "message": "Enclave API",
-        "version": "0.1.0",
+        "version": __version__,
         "docs": "/docs",
         "health": "/health",
     }
@@ -264,7 +286,7 @@ async def api_info():
     """JSON API information endpoint"""
     return {
         "message": "Enclave API",
-        "version": "0.1.0",
+        "version": __version__,
         "docs": "/docs",
         "health": "/health",
         "endpoints": {

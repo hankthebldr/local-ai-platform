@@ -77,6 +77,15 @@ async def search_docs(body: SearchRequest):
     return rag_service.search(query=body.query, top_k=body.top_k)
 
 
+# Alias: /query → /search. The dashboard and external scripts historically
+# tried both spellings; /search is canonical, but /query is a natural-feeling
+# verb for retrieval and was returning 405. Keep both routes wired to the
+# same handler so external callers don't need to know the canonical name.
+@router.post("/query")
+async def query_docs(body: SearchRequest):
+    return await search_docs(body)
+
+
 @router.get("/{doc_id}")
 async def get_doc(doc_id: str):
     _require_rag()
@@ -99,5 +108,7 @@ async def reindex_doc(doc_id: str):
     _require_rag()
     rec = document_service.reindex(doc_id)
     if rec is None:
-        raise HTTPException(status_code=404, detail="Document not found or raw file missing")
+        raise HTTPException(
+            status_code=404, detail="Document not found or raw file missing"
+        )
     return rec
