@@ -2595,7 +2595,13 @@ window.Theme = (function () {
 
 /* ── TAB SWITCHING ─────────────────────────────────────────────── */
 function switchTab(name, el) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  // Reset both the .active class AND any inline display left over by
+  // AdminMenu.showPanel — without this, the last-opened admin subtab
+  // bleeds through under every operational tab.
+  document.querySelectorAll('.tab-content').forEach(t => {
+    t.classList.remove('active');
+    t.style.display = '';
+  });
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   // Prefer explicitly-passed element; fall back to data-tab, then to onclick-string match.
