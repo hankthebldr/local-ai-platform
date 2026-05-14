@@ -33,10 +33,16 @@ PUBLIC_PATHS = {
     "/docs",
     "/openapi.json",
     "/redoc",
+    "/setup.html",
+    "/favicon.ico",
     # A2A discovery — the Agent Card is intentionally public per spec.
     # The JSON-RPC method endpoint at /a2a is still scope-gated below.
     "/.well-known/agent.json",
 }
+
+# Prefixes that skip authentication (assets the dashboard needs before the
+# user can possibly enter an API key — vendor CSS/JS, favicon, fonts).
+PUBLIC_PREFIXES = ("/static/",)
 
 
 # ── Scope enforcement ──────────────────────────────────────────────────────
@@ -67,6 +73,7 @@ def _required_scope(path: str) -> Optional[str]:
 
 # ── API Key Authentication Middleware ──────────────────────────────────────
 
+
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     """
     Validates API key from Authorization header or query parameter.
@@ -86,8 +93,9 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         if os.getenv("ENABLE_API_AUTH", "true").lower() != "true":
             return await call_next(request)
 
-        # Skip public paths
-        if request.url.path in PUBLIC_PATHS:
+        # Skip public paths (exact match + prefix allowlist for static assets)
+        path = request.url.path
+        if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
             return await call_next(request)
 
         # Extract key from header or query param
@@ -123,6 +131,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
 
         # Try multi-key validation
         from api.services.api_key_service import APIKeyService
+
         svc = APIKeyService()
         meta = svc.validate_key(provided_key)
         if meta:
@@ -160,6 +169,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
 
 # ── Rate Limiting Middleware ───────────────────────────────────────────────
 
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Simple in-memory sliding-window rate limiter keyed by client IP.
@@ -187,9 +197,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         cutoff = now - self.window
 
         # Prune old entries
-        self._requests[client_ip] = [
-            t for t in self._requests[client_ip] if t > cutoff
-        ]
+        self._requests[client_ip] = [t for t in self._requests[client_ip] if t > cutoff]
 
         if len(self._requests[client_ip]) >= self.rpm:
             return JSONResponse(
