@@ -12,6 +12,19 @@
 <script src="/static/vendor/dagre.min.js"></script>
 <script src="/static/vendor/drawflow.min.js"></script>
 <script src="/static/vendor/js-yaml.min.js"></script>
+<script>
+// Theme bootstrap — runs synchronously in <head> before <body> paints to
+// avoid a flash-of-wrong-theme. Precedence: explicit user choice in
+// localStorage > prefers-color-scheme > dark (the brand default).
+(function () {
+  try {
+    var stored = localStorage.getItem('enclave.theme');
+    var theme = stored
+      || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  } catch (e) { /* private mode or storage disabled — fall through to dark */ }
+})();
+</script>
 <style>
 /* ── DESIGN TOKENS ──────────────────────────────────────────────── */
 :root {
@@ -64,6 +77,46 @@
   --glow-red: 0 0 12px #FA582D30, 0 0 4px #FA582D20;
   --glow-amber: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
   --glow-warn: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
+}
+
+/* ── LIGHT MODE PALETTE ─────────────────────────────────────────── */
+/* Activated when <html data-theme="light"> is set (via the header toggle
+   or the prefers-color-scheme initialization below). Re-maps only the
+   surface and text tokens — brand accents stay green for continuity. */
+:root[data-theme="light"] {
+  --bg-deep: #f4f4f4;
+  --bg: #ffffff;
+  --bg-panel: rgba(255, 255, 255, 0.95);
+  --border: #d8d8d8;
+  --border-glow: #00A35218;
+
+  --accent: #00A352;
+  --accent-dim: #00A35260;
+  --accent-ghost: #00A35215;
+  --accent-2: #19884f;
+  --accent-2-dim: #19884f60;
+
+  --success: #00A352;
+  --success-dim: #00A35260;
+
+  --text: #1a1a1a;
+  --text-dim: #4a4a4a;
+  --text-muted: #777777;
+
+  --cyan: var(--accent);
+  --cyan-dim: var(--accent-dim);
+  --cyan-ghost: var(--accent-ghost);
+  --amber: var(--accent-2);
+  --amber-dim: var(--accent-2-dim);
+  --green: var(--success);
+  --green-dim: var(--success-dim);
+
+  /* Glows are noisy on white surfaces — tone them down. */
+  --glow-cyan: 0 0 6px #00A35218;
+  --glow-green: 0 0 6px #00A35218;
+  --glow-red: 0 0 6px #FA582D18;
+  --glow-amber: 0 0 6px #F5A62318;
+  --glow-warn: 0 0 6px #F5A62318;
 }
 
 /* ── RESET & BASE ───────────────────────────────────────────────── */
@@ -176,6 +229,32 @@ body::before {
   color: var(--text-dim);
 }
 .header-status .uptime { color: var(--text-muted); }
+
+/* ── THEME TOGGLE ──────────────────────────────────────────────── */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.theme-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: var(--accent-ghost);
+}
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* ── TAB NAV ───────────────────────────────────────────────────── */
 .tab-nav {
@@ -1601,10 +1680,17 @@ details[open] > summary::before { transform: rotate(90deg); }
       </div>
       <div class="logo-text">
         <div class="logo-title">EN<span>CLAVE</span></div>
-        <div class="logo-sub">Local sovereign AI &mdash; by ohno llc</div>
+        <div class="logo-sub">Local sovereign AI</div>
       </div>
     </div>
     <div class="header-status">
+      <button id="theme-toggle" class="theme-toggle"
+              type="button"
+              onclick="Theme.toggle()"
+              aria-label="Toggle light / dark theme"
+              title="Toggle theme (light / dark)">
+        <span id="theme-toggle-icon" aria-hidden="true">☾</span>
+      </button>
       <span id="clock">--:--:--</span>
       <span class="uptime" id="uptime">uptime: --</span>
     </div>
@@ -2463,6 +2549,49 @@ window.renderMarkdown = function renderMarkdown(text) {
 
   return html;
 };
+
+/* ── THEME CONTROLLER ──────────────────────────────────────────── */
+// Pairs with the early-bootstrap script in <head> that sets data-theme
+// before paint. This handles the runtime toggle, persists the choice,
+// and keeps the toggle's icon in sync.
+window.Theme = (function () {
+  var STORAGE_KEY = 'enclave.theme';
+
+  function current() {
+    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+
+  function apply(theme) {
+    if (theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    _syncIcon();
+  }
+
+  function toggle() {
+    var next = current() === 'light' ? 'dark' : 'light';
+    apply(next);
+    try { localStorage.setItem(STORAGE_KEY, next); } catch (e) { /* private mode */ }
+  }
+
+  function _syncIcon() {
+    var icon = document.getElementById('theme-toggle-icon');
+    if (!icon) return;
+    // Sun when current is light (clicking → goes dark); moon when current is dark.
+    icon.textContent = current() === 'light' ? '☀' : '☾';
+  }
+
+  // Initial sync on DOM ready.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _syncIcon);
+  } else {
+    _syncIcon();
+  }
+
+  return { toggle: toggle, apply: apply, current: current };
+})();
 
 /* ── TAB SWITCHING ─────────────────────────────────────────────── */
 function switchTab(name, el) {
