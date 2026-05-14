@@ -41,12 +41,26 @@ class ModelResolver:
         Resolve a model reference to a concrete model name.
 
         Priority:
-        1. Explicit model name — validate it exists
-        2. Role-based resolution — find best matching available model
-        3. Default role — fallback
+        1. Explicit model name — validate it exists; on miss, fall through
+           to role-based resolution if a role is provided. Without this
+           fallback, an agent that pins a model the operator doesn't
+           have installed (e.g. xsiam-analyst pins deepseek-r1:32b @ 19GB)
+           is unusable until that model is pulled. With the fallback,
+           the agent runs against the best available match for its role.
+        2. Role-based resolution — find best matching available model.
+        3. Default role — fallback ("general" matches almost anything).
         """
         if model:
-            return self._resolve_explicit(model)
+            try:
+                return self._resolve_explicit(model)
+            except ModelNotFoundError:
+                if role:
+                    logger.warning(
+                        f"Pinned model '{model}' not installed; falling back to "
+                        f"role '{role}'. Pull '{model}' for the agent's preferred model."
+                    )
+                    return self._resolve_role(role)
+                raise
 
         effective_role = role or default_role
         return self._resolve_role(effective_role)
@@ -98,5 +112,7 @@ class ModelResolver:
         # Sort: lowest pattern index first, then largest size
         candidates.sort(key=lambda c: (c[1], -c[2]))
         chosen = candidates[0][0]
-        logger.info(f"Role '{role}' resolved to '{chosen}' (from {len(candidates)} candidates)")
+        logger.info(
+            f"Role '{role}' resolved to '{chosen}' (from {len(candidates)} candidates)"
+        )
         return chosen
