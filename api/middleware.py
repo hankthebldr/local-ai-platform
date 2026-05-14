@@ -226,15 +226,42 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 def require_master_key(request: Request) -> None:
-    """Validate that the request carries the master API key.
+    """Validate that the request carries a master-tier API key.
 
-    Raises HTTPException(401) if the key is missing or doesn't match.
+    When global auth is disabled (ENABLE_API_AUTH=false), this is a no-op —
+    the operator has chosen to run the service without authentication, so
+    the admin gate is also lifted for consistency.
+
+    When global auth is enabled, a key qualifies as "master-tier" when EITHER:
+      - it matches the legacy MASTER_API_KEY env var (single-key mode), OR
+      - it exists in the keystore with the "keys" scope (covers the
+        auto-provisioned first-run-master and any operator-issued keys
+        granted that scope explicitly).
+
+    Raises HTTPException(401) if neither path succeeds.
     Use as a FastAPI dependency:
 
         @router.get("", dependencies=[Depends(require_master_key)])
     """
-    master_key = os.getenv("MASTER_API_KEY", "")
+    # Global auth disabled → no admin gate either.
+    if os.getenv("ENABLE_API_AUTH", "true").lower() != "true":
+        return
+
     auth = request.headers.get("Authorization", "")
     token = auth[7:] if auth.startswith("Bearer ") else ""
-    if not token or not master_key or not hmac.compare_digest(token, master_key):
+    if not token:
         raise HTTPException(status_code=401, detail="Master API key required")
+
+    # Path 1: legacy env-var match.
+    env_master = os.getenv("MASTER_API_KEY", "")
+    if env_master and hmac.compare_digest(token, env_master):
+        return
+
+    # Path 2: keystore match with the "keys" scope.
+    from api.services.api_key_service import APIKeyService
+
+    meta = APIKeyService().validate_key(token)
+    if meta and "keys" in meta.get("scopes", []):
+        return
+
+    raise HTTPException(status_code=401, detail="Master API key required")
