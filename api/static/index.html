@@ -5705,6 +5705,20 @@ async function sendAgentMessage() {
   document.getElementById('agent-thinking')?.remove();
   const content = result.content || '';
   _agentHistory.push({ role: 'assistant', content });
+
+  // Show fallback banner when the agent's pinned model wasn't available.
+  if (result.model_fallback) {
+    const fb = result.model_fallback;
+    const pullHint = fb.requested
+      ? ` <span style="opacity:.7;cursor:pointer;text-decoration:underline" title="Copy pull command" onclick="navigator.clipboard.writeText('ollama pull ${esc(fb.requested)}')">ollama pull ${esc(fb.requested)}</span>`
+      : '';
+    msgEl.insertAdjacentHTML('beforeend',
+      `<div style="align-self:stretch;background:rgba(255,200,0,.07);border:1px solid rgba(255,200,0,.35);border-radius:4px;padding:5px 9px;font-size:0.7rem;color:var(--text-muted);display:flex;gap:6px;align-items:center;">` +
+      `<span style="color:#fc0;font-size:0.9rem;">⚠</span>` +
+      `<span>Pinned model <strong>${esc(fb.requested || '?')}</strong> not installed — running on <strong>${esc(fb.resolved || result.model || '?')}</strong>.${pullHint}</span>` +
+      `</div>`);
+  }
+
   msgEl.insertAdjacentHTML('beforeend',
     `<div style="align-self:flex-start;background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:85%;font-size:0.82rem;white-space:pre-wrap;">${esc(content)}</div>`);
   msgEl.scrollTop = msgEl.scrollHeight;
