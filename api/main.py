@@ -24,8 +24,10 @@ from .routers import (
     exports,
     graph,
     workflows,
+    workflow_index,
     api_keys,
     plugins,
+    mcp,
     setup,
     context,
     memory,
@@ -202,8 +204,10 @@ app.include_router(inventory.router)
 app.include_router(exports.router)
 app.include_router(graph.router)
 app.include_router(workflows.router)
+app.include_router(workflow_index.router)
 app.include_router(api_keys.router)
 app.include_router(plugins.router)
+app.include_router(mcp.router)
 app.include_router(setup.router)
 app.include_router(context.router)
 app.include_router(memory.router)
@@ -212,6 +216,9 @@ app.include_router(documents.router)
 app.include_router(roles.router)
 app.include_router(a2a.router)
 app.include_router(agents.router)
+from .routers import projects as _projects_router  # noqa: E402
+
+app.include_router(_projects_router.router)
 
 
 # ── Public Endpoints ───────────────────────────────────────────────────────
