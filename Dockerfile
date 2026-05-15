@@ -23,6 +23,7 @@ COPY models/ models/
 COPY agents/ agents/
 COPY workflows/ workflows/
 COPY prompts/ prompts/
+COPY plugins/ plugins/
 COPY .env.example .env
 
 # Create data directories

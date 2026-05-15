@@ -1671,6 +1671,66 @@ details[open] > summary::before { transform: rotate(90deg); }
 .composer-left, .composer-center, .composer-right { display: flex; flex-direction: column; gap: 10px; }
 .composer-left-panel { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .composer-canvas-panel { flex: 1; min-height: 480px; position: relative; padding: 0; overflow: hidden; }
+
+/* Floating canvas controls (zoom + fullscreen). Top-right, over the canvas. */
+.composer-canvas-controls {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 4px;
+  backdrop-filter: blur(4px);
+}
+.canvas-ctrl {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.canvas-ctrl:hover { color: var(--accent); background: var(--accent-ghost); }
+.canvas-ctrl:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.canvas-ctrl-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+/* Fullscreen mode: lifts the canvas panel out of the page layout so it
+   fills the viewport. Class is toggled on the panel itself; the chrome
+   (controls, drawflow node, header overlay) stays inside it. */
+.composer-canvas-panel.is-fullscreen {
+  position: fixed !important;
+  inset: 0;
+  z-index: 200;
+  min-height: 0;
+  border-radius: 0;
+  border-color: var(--accent-dim);
+  box-shadow: var(--glow-cyan);
+}
+.composer-canvas-panel.is-fullscreen #drawflow-canvas {
+  height: 100vh !important;
+}
+.composer-canvas-panel.is-fullscreen .composer-canvas-controls {
+  top: 14px;
+  right: 16px;
+}
 .composer-right-panel { padding: 10px 12px; }
 .composer-right .composer-right-panel:first-child { max-height: 280px; overflow: auto; }
 
@@ -1832,6 +1892,8 @@ details[open] > summary::before { transform: rotate(90deg); }
         <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-plugins" onclick="AdminMenu.select('admin-plugins')">Plugins</button>
         <button class="admin-menu-item" role="menuitem" type="button"
+                data-panel="admin-skills" onclick="AdminMenu.select('admin-skills')">Skills</button>
+        <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-mcp" onclick="AdminMenu.select('admin-mcp')">MCP Servers</button>
         <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-exports" onclick="AdminMenu.select('admin-exports')">Exports</button>
@@ -1966,8 +2028,17 @@ details[open] > summary::before { transform: rotate(90deg); }
 
       <!-- CENTER: Drawflow canvas -->
       <div class="composer-center">
-        <div class="panel composer-canvas-panel">
+        <div class="panel composer-canvas-panel" id="composer-canvas-panel">
           <span class="corner-tr"></span><span class="corner-bl"></span>
+          <!-- Floating zoom + maximize controls. Positioned absolute over
+               the canvas so they don't reflow when the panel fullscreens. -->
+          <div class="composer-canvas-controls" role="toolbar" aria-label="Canvas controls">
+            <button type="button" class="canvas-ctrl" onclick="dfZoomOut()" title="Zoom out (or scroll down on canvas)" aria-label="Zoom out">−</button>
+            <button type="button" class="canvas-ctrl" onclick="dfZoomReset()" title="Reset zoom (100%)" aria-label="Reset zoom">⟲</button>
+            <button type="button" class="canvas-ctrl" onclick="dfZoomIn()" title="Zoom in (or scroll up on canvas)" aria-label="Zoom in">+</button>
+            <span class="canvas-ctrl-divider" aria-hidden="true"></span>
+            <button type="button" class="canvas-ctrl" id="canvas-fullscreen-btn" onclick="dfToggleFullscreen()" title="Maximize the composer to fill the viewport (Esc to exit)" aria-label="Toggle fullscreen">⛶</button>
+          </div>
           <div id="drawflow-canvas"></div>
           <div class="composer-canvas-empty" id="composer-canvas-empty">
             <div class="composer-canvas-empty-inner">
@@ -2567,6 +2638,53 @@ details[open] > summary::before { transform: rotate(90deg); }
         <div class="panel-label" id="plugin-detail-label">// SELECT A PLUGIN</div>
         <div id="plugin-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
           Select a plugin from the left to see its skills and tools.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Skills admin panel — manage skills across all installed plugins.
+       A skill is a markdown body + trigger keywords that gets injected
+       into a chat session when one of its triggers matches the user's
+       message. Skills live inside plugins (plugins/<id>/skills/*.md);
+       this panel surfaces them in one flat browseable + filterable
+       list so the admin doesn't have to dig per-plugin. -->
+  <div class="tab-content" id="tab-admin-skills" style="display:none">
+    <div class="admin-modal-error" style="background:rgba(0,192,232,0.10);border-color:#00C0E8;color:#00C0E8;margin-bottom:14px;font-size:0.7rem">
+      ℹ Skills are markdown bodies attached to plugins. They auto-inject into chats when their trigger keywords match. Skill files live in <code>plugins/&lt;plugin&gt;/skills/</code>.
+    </div>
+
+    <div class="plugins-layout">
+      <div class="panel plugins-list-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// SKILLS
+          <span style="float:right">
+            <select id="skills-filter-plugin" class="model-select" style="font-size:0.62rem;padding:2px 6px;min-width:140px"
+                    onchange="SkillsPanel.refresh()" title="Filter by plugin">
+              <option value="">— all plugins —</option>
+            </select>
+            <select id="skills-filter-role" class="model-select" style="font-size:0.62rem;padding:2px 6px;min-width:120px;margin-left:4px"
+                    onchange="SkillsPanel.refresh()" title="Filter by role (matches the workflow step role each skill applies to)">
+              <option value="">— all roles —</option>
+              <option value="general">general</option>
+              <option value="reasoning">reasoning</option>
+              <option value="coding">coding</option>
+              <option value="fast">fast</option>
+              <option value="uncensored">uncensored</option>
+            </select>
+            <button class="action-btn" onclick="SkillsPanel.refresh()" style="margin-left:4px">Refresh</button>
+          </span>
+        </div>
+        <div id="skills-list" style="margin-top:10px;font-size:0.78rem"></div>
+      </div>
+
+      <div class="panel plugins-detail-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label" id="skill-detail-label">// SELECT A SKILL</div>
+        <div id="skill-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
+          Select a skill from the left to read its body, triggers, and
+          assigned roles. Skills marked "all" are eligible to be
+          auto-injected into any chat / step regardless of role.
         </div>
       </div>
     </div>
@@ -5466,6 +5584,49 @@ function dfClearConfigPanel() {
   if (title) title.textContent = 'Config';
 }
 
+/* ── Canvas controls: zoom + fullscreen ─────────────────────────── */
+// Drawflow ships native zoom_in/zoom_out/zoom_reset that already track
+// the precanvas transform — we just expose them to the toolbar.
+function dfZoomIn()    { if (window.dfEditor) dfEditor.zoom_in(); }
+function dfZoomOut()   { if (window.dfEditor) dfEditor.zoom_out(); }
+function dfZoomReset() { if (window.dfEditor) dfEditor.zoom_reset(); }
+
+// Fullscreen toggles a class on the canvas PANEL (not the body) so the
+// rest of the dashboard chrome stays mounted; Esc exits. Using a class
+// instead of the Fullscreen API keeps the in-page chat input usable
+// from within the maximized canvas (Fullscreen API would steal focus
+// and inhibit text entry in some browsers).
+function dfToggleFullscreen() {
+  const panel = document.getElementById('composer-canvas-panel');
+  const btn   = document.getElementById('canvas-fullscreen-btn');
+  if (!panel) return;
+  const entering = !panel.classList.contains('is-fullscreen');
+  panel.classList.toggle('is-fullscreen', entering);
+  if (btn) {
+    btn.textContent = entering ? '⤓' : '⛶';
+    btn.title = entering
+      ? 'Exit fullscreen (Esc)'
+      : 'Maximize the composer to fill the viewport (Esc to exit)';
+  }
+  // Force Drawflow to recompute its canvas size after the dimensions
+  // change — its precanvas math is based on the panel rect.
+  if (window.dfEditor) {
+    try { dfEditor.zoom_reset(); } catch (e) {}
+  }
+}
+// Bind Esc to exit fullscreen — one-time listener.
+if (!window._dfFullscreenEscBound) {
+  window._dfFullscreenEscBound = true;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const panel = document.getElementById('composer-canvas-panel');
+      if (panel && panel.classList.contains('is-fullscreen')) {
+        dfToggleFullscreen();
+      }
+    }
+  });
+}
+
 function dfAutoLayout() {
   if (!dfEditor || typeof dagre === 'undefined') return;
   const exported = dfEditor.export();
@@ -6621,6 +6782,181 @@ window.PluginsPanel = (function () {
 
   return { load, refresh, select, renderDetail, renderToolAccordion,
            runTool, renderToolForm, _collectParams };
+})();
+
+// ── SkillsPanel ───────────────────────────────────────────────────────────
+// Flat view of every skill across every installed plugin. Lets the admin
+// browse + filter (by plugin, by role) + inspect the markdown body, without
+// needing to dig per-plugin. Auth-mirrors the Plugins panel: list view uses
+// the anonymous /api/plugins GET (open since PR #43); no write actions yet.
+window.SkillsPanel = (function () {
+  let _items = [];           // flattened [{ plugin, skill }]
+  let _selectedId = null;    // composite "plugin_id::skill_id"
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function _matchesRole(skill, role) {
+    if (!role) return true;
+    // Forward-compat: skills may declare roles[] in their manifest. Until
+    // that ships, treat unspecified roles[] as "applies to all roles" so
+    // the filter doesn't hide anything pre-tagging.
+    const roles = skill.roles;
+    if (!Array.isArray(roles) || roles.length === 0) return true;
+    return roles.includes(role) || roles.includes('*');
+  }
+
+  async function load() {
+    const list = document.getElementById('skills-list');
+    if (list) list.innerHTML = '<div style="color:var(--text-muted);font-size:0.7rem">Loading…</div>';
+    try {
+      const r = await fetch('/api/plugins');
+      if (!r.ok) {
+        list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
+        return;
+      }
+      const plugins = await r.json();
+      _items = [];
+      (plugins || []).forEach(p => {
+        (p.skills || []).forEach(s => {
+          _items.push({
+            plugin_id: p.id,
+            plugin_name: p.name || p.id,
+            skill_id: s.id,
+            name: s.name || s.id,
+            description: s.description || '',
+            inject: s.inject || 'none',
+            content: s.content || '',
+            triggers: s.triggers || [],
+            roles: s.roles || [],
+          });
+        });
+      });
+
+      // Populate the plugin filter dropdown — once, keep selection if any.
+      const pluginSel = document.getElementById('skills-filter-plugin');
+      if (pluginSel) {
+        const cur = pluginSel.value;
+        const ids = Array.from(new Set((plugins || []).map(p => p.id))).sort();
+        const opts = ['<option value="">— all plugins —</option>']
+          .concat(ids.map(id => `<option value="${esc(id)}"${cur === id ? ' selected' : ''}>${esc(id)}</option>`));
+        pluginSel.innerHTML = opts.join('');
+      }
+
+      refresh();
+    } catch (e) {
+      if (list) list.innerHTML = `<div class="admin-modal-error" style="margin:0">${esc(e.message)}</div>`;
+    }
+  }
+
+  function refresh() {
+    const list = document.getElementById('skills-list');
+    if (!list) return;
+    const pluginFilter = (document.getElementById('skills-filter-plugin') || {}).value || '';
+    const roleFilter   = (document.getElementById('skills-filter-role')   || {}).value || '';
+
+    const filtered = _items.filter(it => {
+      if (pluginFilter && it.plugin_id !== pluginFilter) return false;
+      if (!_matchesRole(it, roleFilter)) return false;
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      const reason = (pluginFilter || roleFilter)
+        ? 'No skills match these filters.'
+        : 'No skills installed. Add one under plugins/&lt;plugin&gt;/skills/.';
+      list.innerHTML = `<div style="color:var(--text-muted);font-size:0.7rem">${reason}</div>`;
+      return;
+    }
+
+    list.innerHTML = filtered.map(it => {
+      const compositeId = `${it.plugin_id}::${it.skill_id}`;
+      const triggers = (it.triggers || [])
+        .map(t => t.keyword || (t.manual ? 'manual' : ''))
+        .filter(Boolean)
+        .slice(0, 4)
+        .join(', ');
+      const roleBadges = (it.roles && it.roles.length > 0)
+        ? it.roles.map(r => `<span class="role-pill">${esc(r)}</span>`).join(' ')
+        : '<span class="role-pill role-pill-all">all</span>';
+      return `<div class="plugin-card ${compositeId === _selectedId ? 'selected' : ''}"
+                   onclick="SkillsPanel.select('${esc(compositeId)}')">
+        <div class="plugin-card-title">
+          <span class="plugin-status-pip"></span>${esc(it.name)}
+          <span style="color:var(--text-muted);font-size:0.66rem;margin-left:6px">${esc(it.plugin_id)}</span>
+        </div>
+        <div class="plugin-card-meta">
+          ${(it.triggers || []).length} trigger${(it.triggers || []).length === 1 ? '' : 's'}${triggers ? ' · ' + esc(triggers) : ''}
+        </div>
+        <div class="plugin-card-meta" style="margin-top:3px">${roleBadges}</div>
+        <div class="plugin-card-desc">${esc((it.description || '').slice(0, 140))}</div>
+      </div>`;
+    }).join('');
+
+    // Auto-select first match if nothing is currently selected.
+    if (!_selectedId && filtered.length) select(`${filtered[0].plugin_id}::${filtered[0].skill_id}`);
+  }
+
+  function select(compositeId) {
+    _selectedId = compositeId;
+    document.querySelectorAll('#skills-list .plugin-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll(`#skills-list .plugin-card[onclick*="${compositeId.replace(/'/g, "\\'")}"]`)
+      .forEach(c => c.classList.add('selected'));
+
+    const detail = document.getElementById('skill-detail');
+    const label  = document.getElementById('skill-detail-label');
+    const it = _items.find(x => `${x.plugin_id}::${x.skill_id}` === compositeId);
+    if (!detail || !it) return;
+
+    if (label) label.textContent = `// ${it.skill_id.toUpperCase()}`;
+    const triggerRows = (it.triggers || []).map(t => {
+      if (t.manual) return '<li><code>manual</code> (only on direct invocation)</li>';
+      if (t.keyword) return `<li>keyword <code>${esc(t.keyword)}</code></li>`;
+      return `<li>${esc(JSON.stringify(t))}</li>`;
+    }).join('') || '<li style="color:var(--text-muted)">(none — manual-only)</li>';
+
+    const rolesLine = (it.roles && it.roles.length > 0)
+      ? it.roles.map(r => `<span class="role-pill">${esc(r)}</span>`).join(' ')
+      : '<span class="role-pill role-pill-all">all</span> <span style="color:var(--text-muted);font-size:0.62rem">(no roles[] field in manifest — defaults to all)</span>';
+
+    detail.innerHTML = `
+      <div style="font-size:0.72rem">
+        <div style="display:grid;grid-template-columns:90px 1fr;gap:6px 12px;margin-bottom:10px">
+          <div style="color:var(--text-muted)">Plugin</div><div><code>${esc(it.plugin_id)}</code> · ${esc(it.plugin_name)}</div>
+          <div style="color:var(--text-muted)">Skill ID</div><div><code>${esc(it.skill_id)}</code></div>
+          <div style="color:var(--text-muted)">Description</div><div>${esc(it.description || '(none)')}</div>
+          <div style="color:var(--text-muted)">Inject</div><div><code>${esc(it.inject)}</code></div>
+          <div style="color:var(--text-muted)">Roles</div><div>${rolesLine}</div>
+          <div style="color:var(--text-muted)">Triggers</div><div><ul style="margin:0;padding-left:14px">${triggerRows}</ul></div>
+        </div>
+        <div style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Skill body (rendered when injected)</div>
+        <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:4px;padding:10px 12px;font-size:0.66rem;max-height:380px;overflow:auto;white-space:pre-wrap;color:var(--text-dim)">${esc(it.content || '(empty)')}</pre>
+      </div>`;
+  }
+
+  // Reload whenever the admin Skills panel is activated — keeps the list
+  // fresh as plugins are added/removed under plugins/.
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-skills') load();
+  });
+
+  return { load, refresh, select };
+})();
+
+// Tiny styles for the role pills, scoped to the skills admin panel.
+(function () {
+  const style = document.createElement('style');
+  style.textContent = `
+    .role-pill { display:inline-block; padding:1px 6px; margin-right:3px;
+                 font-size:0.55rem; font-family:var(--mono);
+                 border:1px solid var(--accent-dim); color:var(--accent);
+                 border-radius:2px; letter-spacing:0.06em; text-transform:uppercase; }
+    .role-pill-all { border-color:var(--text-muted); color:var(--text-muted); }
+  `;
+  document.head.appendChild(style);
 })();
 
 // ── ExportsPanel ──────────────────────────────────────────────────────────
