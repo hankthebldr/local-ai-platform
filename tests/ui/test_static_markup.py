@@ -17,9 +17,30 @@ def test_index_html_loads(index_soup):
     assert title.text.strip() != ""
 
 
-def test_index_header_says_enclave_not_cortex(index_html_text):
-    """Header branding must read 'Enclave', not 'CORTEX' or 'LOCAL AI PLATFORM'."""
-    assert "CORTEX" not in index_html_text, "legacy CORTEX branding still present"
+def test_index_header_brand_is_enclave_with_cortex_cobrand(index_html_text):
+    """Primary wordmark must remain ENCLAVE. CORTEX may appear ONLY as the
+    deliberate co-brand chip (.brand-cobrand) — never as the primary wordmark
+    or page title. The legacy 'LOCAL AI PLATFORM' / 'Mission Control'
+    placeholders must still be absent.
+    """
+    # ENCLAVE wordmark is still the primary brand.
+    assert "EN<span>CLAVE</span>" in index_html_text, "primary ENCLAVE wordmark missing"
+
+    # If CORTEX appears, every occurrence must be contained inside the
+    # co-brand chip — not in the wordmark, page <title>, or anywhere else.
+    if "CORTEX" in index_html_text:
+        assert (
+            'class="brand-cobrand"' in index_html_text
+        ), "CORTEX is present but not wrapped in the .brand-cobrand chip"
+        # Defence against future regressions: CORTEX must not appear inside
+        # the .logo-title text or the <title> tag.
+        title_match = re.search(r"<title>(.*?)</title>", index_html_text, re.I | re.S)
+        if title_match:
+            assert (
+                "CORTEX" not in title_match.group(1).upper()
+            ), "CORTEX leaked into <title>; primary brand must read ENCLAVE"
+
+    # Legacy placeholder guards (unchanged).
     assert (
         "LOCAL AI PLATFORM" not in index_html_text
     ), "legacy LOCAL AI PLATFORM still present"
