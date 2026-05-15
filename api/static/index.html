@@ -256,6 +256,44 @@ body::before {
   outline-offset: 2px;
 }
 
+/* ── DOC DROP ZONE ─────────────────────────────────────────────── */
+.doc-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 22px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  text-align: center;
+}
+.doc-drop-zone:hover,
+.doc-drop-zone:focus-visible {
+  border-color: var(--accent-dim);
+  background: var(--accent-ghost);
+  color: var(--text);
+  outline: none;
+}
+.doc-drop-zone.is-dragging {
+  border-color: var(--accent);
+  background: var(--accent-ghost);
+  color: var(--accent);
+  border-style: solid;
+}
+.doc-drop-zone-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0.7;
+}
+.doc-drop-zone-title { font-size: 0.78rem; letter-spacing: 0.02em; }
+.doc-drop-zone-sub { font-size: 0.62rem; color: var(--text-muted); font-family: var(--mono); }
+
 /* ── TAB NAV ───────────────────────────────────────────────────── */
 .tab-nav {
   display: flex;
@@ -1874,7 +1912,6 @@ details[open] > summary::before { transform: rotate(90deg); }
     <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows', this)">Runs</button>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
-    <button class="tab-btn" data-tab="discover" onclick="switchTab('discover', this)">Discover<span class="tab-count" id="disc-count"></span></button>
     <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">Context</button>
     <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Skill Lab<span class="tab-count" id="res-count"></span></button>
     <button class="tab-btn" data-tab="memory" onclick="switchTab('memory', this)">Memory<span class="tab-count" id="mem-count"></span></button>
@@ -1895,6 +1932,8 @@ details[open] > summary::before { transform: rotate(90deg); }
                 data-panel="admin-skills" onclick="AdminMenu.select('admin-skills')">Skills</button>
         <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-mcp" onclick="AdminMenu.select('admin-mcp')">MCP Servers</button>
+        <button class="admin-menu-item" role="menuitem" type="button"
+                data-panel="admin-cloud" onclick="AdminMenu.select('admin-cloud')">Cloud Models</button>
         <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-exports" onclick="AdminMenu.select('admin-exports')">Exports</button>
         <div class="admin-menu-divider" aria-hidden="true"></div>
@@ -1927,10 +1966,34 @@ details[open] > summary::before { transform: rotate(90deg); }
       <span style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Active</span>
       <code id="project-badge" style="color:var(--accent);font-size:0.7rem">—</code>
       <span style="flex:1"></span>
-      <button class="action-btn" onclick="Projects.create()">+ New Project</button>
+      <button class="action-btn" onclick="Projects.showCreate()">+ New Project</button>
       <button class="action-btn" onclick="Projects.attachCurrentWorkflow()" title="Attach the current workflow to the active project">Attach Workflow</button>
       <button class="action-btn" onclick="Projects.importBundle()">Import Project</button>
       <button class="action-btn" onclick="Projects.exportBundle()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export Project</button>
+    </div>
+
+    <!-- Project create modal — replaces the prior prompt() flow with a
+         proper form so users can supply name, description, category, tags
+         without thinking about how to type a valid slug ID. -->
+    <div id="project-create-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="width:520px">
+        <h3>New Project</h3>
+        <label class="admin-modal-label">Name</label>
+        <input id="project-create-name" type="text" placeholder="e.g. Q4 Detection Playbooks" autocomplete="off">
+        <label class="admin-modal-label">ID <span style="color:var(--text-muted);font-weight:normal">(auto-derived; alphanum/_/- only)</span></label>
+        <input id="project-create-id" type="text" placeholder="auto from name" autocomplete="off">
+        <label class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <textarea id="project-create-desc" rows="2" placeholder="What this project organizes."></textarea>
+        <label class="admin-modal-label">Category <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <input id="project-create-category" type="text" placeholder="e.g. security, research, ops" autocomplete="off">
+        <label class="admin-modal-label">Tags <span style="color:var(--text-muted);font-weight:normal">(comma-separated, optional)</span></label>
+        <input id="project-create-tags" type="text" placeholder="xsiam, normalization" autocomplete="off">
+        <div id="project-create-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="Projects._closeCreate()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="Projects._submitCreate()">Create</button>
+        </div>
+      </div>
     </div>
 
     <!-- Composer top toolbar: metadata + import/export/save/run -->
@@ -1999,6 +2062,7 @@ details[open] > summary::before { transform: rotate(90deg); }
           <span class="corner-tr"></span><span class="corner-bl"></span>
           <div class="workbench-tabs" role="tablist">
             <button type="button" class="workbench-tab active" data-bench="steps"   onclick="composerSwitchBench('steps', this)">Steps</button>
+            <button type="button" class="workbench-tab"        data-bench="agents"  onclick="composerSwitchBench('agents', this)">Agents</button>
             <button type="button" class="workbench-tab"        data-bench="skills"  onclick="composerSwitchBench('skills', this)">Skills</button>
             <button type="button" class="workbench-tab"        data-bench="plugins" onclick="composerSwitchBench('plugins', this)">Plugins</button>
             <button type="button" class="workbench-tab"        data-bench="mcps"    onclick="composerSwitchBench('mcps', this)">MCPs</button>
@@ -2007,6 +2071,10 @@ details[open] > summary::before { transform: rotate(90deg); }
             <div class="workbench-pane" id="bench-steps">
               <div class="workbench-hint">Drag a step onto the canvas.</div>
               <div class="df-palette" id="df-palette"></div>
+            </div>
+            <div class="workbench-pane" id="bench-agents" hidden>
+              <div class="workbench-hint">Drag an agent to spawn a step pre-configured with its role, model, and system prompt.</div>
+              <div id="bench-agents-list"><div class="model-empty">Loading…</div></div>
             </div>
             <div class="workbench-pane" id="bench-skills" hidden>
               <div class="workbench-hint">Skills are auto-attached to steps when their triggers match. Drag onto a step to pin manually.</div>
@@ -2167,6 +2235,12 @@ details[open] > summary::before { transform: rotate(90deg); }
         </div>
       </div>
 
+      <div id="step-engage-badge" hidden
+           style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:rgba(0,204,102,0.08);border:1px solid var(--accent-dim);border-radius:4px 4px 0 0;border-bottom:0;font-size:0.65rem;color:var(--text-muted);font-family:var(--mono);">
+        <span style="color:var(--accent);font-size:0.85rem;line-height:1">⚡</span>
+        <span>Engaging step <code id="step-engage-id" style="color:var(--accent)">—</code> · the chat below runs this step against your message</span>
+        <button type="button" class="action-btn" style="margin-left:auto;font-size:0.55rem;padding:1px 6px" onclick="composerExitStepEngage()" title="Exit step engagement and return to general chat">exit</button>
+      </div>
       <div class="chat-input-row">
         <button class="search-toggle" id="search-toggle" onclick="toggleSearch()" title="Toggle web search">
           <span class="toggle-label" id="search-label">Search: OFF</span>
@@ -2325,36 +2399,47 @@ details[open] > summary::before { transform: rotate(90deg); }
         Profiles are edited in <code style="color:var(--cyan);">data/profiles/*.yaml</code>. Click Reload after changes.
       </div>
     </div>
-  </div>
 
-  <!-- ═══ TAB: DISCOVER ═════════════════════════════════════════════ -->
-  <div class="tab-content" id="tab-discover">
-    <div class="panel" style="margin-bottom:16px">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">HuggingFace Discovery</div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:0.72rem;color:var(--text-dim)" id="disc-status">
-          Auto-discovers abliterated, uncensored &amp; unsensored models from trusted authors on HuggingFace.
+    <!-- ── Discover: HuggingFace catalog, embedded in the Models tab as a
+         collapsible section so local + discoverable models share one
+         surface. Was a top-level tab pre-PR; promoted/demoted as a
+         sub-section keeps the IA tighter without losing capability. -->
+    <details class="panel" style="margin-top:16px;padding:14px 16px" id="discover-section">
+      <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--cyan);font-family:var(--mono);letter-spacing:0.04em;">
+        <span>// Discover — HuggingFace catalog</span>
+        <span class="tab-count" id="disc-count" style="color:var(--text-muted);font-size:0.7rem"></span>
+        <span style="flex:1"></span>
+        <span style="font-size:0.62rem;color:var(--text-muted);font-weight:normal">click to expand</span>
+      </summary>
+      <div style="margin-top:14px">
+        <div class="panel" style="margin-bottom:16px;border-color:var(--border)">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">HuggingFace Discovery</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:0.72rem;color:var(--text-dim)" id="disc-status">
+              Auto-discovers abliterated, uncensored &amp; unsensored models from trusted authors on HuggingFace.
+            </div>
+            <button class="action-btn pull" id="disc-refresh-btn" onclick="refreshDiscovery()" style="white-space:nowrap">
+              Scan Now
+            </button>
+          </div>
+          <div id="disc-authors" style="margin-top:10px;font-size:0.65rem;color:var(--text-muted)"></div>
         </div>
-        <button class="action-btn pull" id="disc-refresh-btn" onclick="refreshDiscovery()" style="white-space:nowrap">
-          Scan Now
-        </button>
+
+        <div class="inv-toolbar">
+          <input class="search-input" type="text" placeholder="Search discovered models..." id="disc-search" oninput="renderDiscovery()" />
+          <button class="filter-btn active" onclick="setDiscFilter('all', this)">All</button>
+          <button class="filter-btn" onclick="setDiscFilter('trusted', this)">Trusted Authors</button>
+          <button class="filter-btn" onclick="setDiscFilter('gguf', this)">GGUF Ready</button>
+          <button class="filter-btn" onclick="setDiscFilter('large-ctx', this)">128K+ Context</button>
+        </div>
+
+        <div class="inv-stats" id="disc-stats"></div>
+        <div class="inv-grid" id="disc-grid">
+          <div class="model-empty">Click "Scan Now" to discover models from HuggingFace...</div>
+        </div>
       </div>
-      <div id="disc-authors" style="margin-top:10px;font-size:0.65rem;color:var(--text-muted)"></div>
-    </div>
-
-    <div class="inv-toolbar">
-      <input class="search-input" type="text" placeholder="Search discovered models..." id="disc-search" oninput="renderDiscovery()" />
-      <button class="filter-btn active" onclick="setDiscFilter('all', this)">All</button>
-      <button class="filter-btn" onclick="setDiscFilter('trusted', this)">Trusted Authors</button>
-      <button class="filter-btn" onclick="setDiscFilter('gguf', this)">GGUF Ready</button>
-      <button class="filter-btn" onclick="setDiscFilter('large-ctx', this)">128K+ Context</button>
-    </div>
-
-    <div class="inv-stats" id="disc-stats"></div>
-    <div class="inv-grid" id="disc-grid">
-      <div class="model-empty">Click "Scan Now" to discover models from HuggingFace...</div>
-    </div>
+    </details>
   </div>
 
   <!-- ═══ TAB: RESEARCH ════════════════════════════════════════════ -->
@@ -2527,13 +2612,25 @@ details[open] > summary::before { transform: rotate(90deg); }
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
         <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Documents</h3>
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" style="flex:1;color:var(--text);font-family:var(--mono);font-size:0.8rem;">
-          <button onclick="uploadDocument()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Upload</button>
-          <button onclick="AgentGen.openFromText()" style="background:transparent;color:var(--accent);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Paste → Agent</button>
+        <!-- Drop zone: click to open the file picker, or drag a file onto it.
+             Upload fires automatically on selection — no second click. The
+             hidden <input> still backs it so accept=".txt,.md,.pdf" works. -->
+        <div id="doc-drop-zone" class="doc-drop-zone"
+             onclick="document.getElementById('doc-file-input').click()"
+             role="button" tabindex="0"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('doc-file-input').click()}"
+             aria-label="Choose a document, or drag one here">
+          <div class="doc-drop-zone-icon" aria-hidden="true">⤓</div>
+          <div class="doc-drop-zone-title">Drag a file here or click to browse</div>
+          <div class="doc-drop-zone-sub">Accepted: .txt, .md, .pdf</div>
         </div>
-        <div id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;"></div>
-        <div id="documents-list" style="max-height:400px;overflow-y:auto;"></div>
+        <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" hidden
+               onchange="uploadDocument()">
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <span id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);flex:1;"></span>
+          <button onclick="AgentGen.openFromText()" style="background:transparent;color:var(--accent);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.75rem;">Paste → Agent</button>
+        </div>
+        <div id="documents-list" style="max-height:400px;overflow-y:auto;margin-top:12px;"></div>
       </div>
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
         <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Search Preview</h3>
@@ -2757,6 +2854,76 @@ details[open] > summary::before { transform: rotate(90deg); }
         <div class="admin-modal-actions">
           <button type="button" class="admin-modal-btn" onclick="MCPPanel._closeModal()">Cancel</button>
           <button type="button" class="admin-modal-btn primary" onclick="MCPPanel._submit()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cloud Models admin panel — external/frontier LLM provider registry.
+       Local-first stays the project's posture; this is the in-app
+       management surface for operators who opt into OpenAI / Anthropic /
+       Together / OpenRouter / etc. The shell here lists configured
+       providers, opens a register/edit modal, and tracks api_key
+       presence as a boolean — keys never round-trip on the wire after
+       create. Proxy-through to /v1/chat/completions for cloud models
+       is deferred to a follow-up PR. -->
+  <div class="tab-content" id="tab-admin-cloud" style="display:none">
+    <div class="admin-modal-error" style="background:rgba(0,192,232,0.10);border-color:#00C0E8;color:#00C0E8;margin-bottom:14px;font-size:0.7rem">
+      ℹ Configure external LLM providers (OpenAI, Anthropic, Together, OpenRouter, custom OpenAI-compatible). API keys are stored on the host in <code>data/config/cloud_providers.json</code> (chmod 0600); the dashboard never echoes them back.
+    </div>
+
+    <div class="plugins-layout">
+      <div class="panel plugins-list-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// CLOUD PROVIDERS
+          <span style="float:right">
+            <button class="action-btn" onclick="CloudPanel.showCreate()" style="color:var(--accent);border-color:var(--accent-dim)">+ Add Provider</button>
+            <button class="action-btn" onclick="CloudPanel.refresh()">Refresh</button>
+          </span>
+        </div>
+        <div id="cloud-list" style="margin-top:10px;font-size:0.78rem"></div>
+      </div>
+
+      <div class="panel plugins-detail-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label" id="cloud-detail-label">// SELECT A PROVIDER</div>
+        <div id="cloud-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
+          Select a provider to inspect its config or rotate its API key. Use <strong>+ Add Provider</strong> to register a new one.
+        </div>
+      </div>
+    </div>
+
+    <!-- Register / edit modal -->
+    <div id="cloud-edit-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="width:600px">
+        <h3 id="cloud-edit-title">Add cloud provider</h3>
+        <label class="admin-modal-label">ID <span style="color:var(--text-muted);font-weight:normal">(used in URLs; alphanum/_/- only)</span></label>
+        <input id="cloud-edit-id" type="text" placeholder="e.g. openai-prod" autocomplete="off">
+        <label class="admin-modal-label">Display name</label>
+        <input id="cloud-edit-name" type="text" placeholder="e.g. OpenAI · production" autocomplete="off">
+        <label class="admin-modal-label">Kind</label>
+        <select id="cloud-edit-kind" class="model-select" style="font-size:0.8rem">
+          <option value="openai">openai (and OpenAI-compatible: Together, Groq, OpenRouter, vLLM-OpenAI)</option>
+          <option value="anthropic">anthropic (Claude Messages API)</option>
+          <option value="custom">custom (other / experimental)</option>
+        </select>
+        <label class="admin-modal-label">Base URL</label>
+        <input id="cloud-edit-base-url" type="text" placeholder="https://api.openai.com" autocomplete="off">
+        <label class="admin-modal-label">API key <span style="color:var(--text-muted);font-weight:normal">(rotates when you save; leave empty on edit to keep the current key)</span></label>
+        <input id="cloud-edit-api-key" type="password" placeholder="sk-…" autocomplete="off">
+        <label class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <input id="cloud-edit-desc" type="text" placeholder="What this provider is for" autocomplete="off">
+        <label class="admin-modal-label">Curated model IDs <span style="color:var(--text-muted);font-weight:normal">(comma-separated; empty = fetch from /v1/models on first use)</span></label>
+        <input id="cloud-edit-models" type="text" placeholder="gpt-4o, gpt-4o-mini" autocomplete="off">
+        <label class="admin-modal-label">Tags <span style="color:var(--text-muted);font-weight:normal">(comma-separated)</span></label>
+        <input id="cloud-edit-tags" type="text" placeholder="frontier, paid" autocomplete="off">
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.74rem;color:var(--text-dim)">
+          <input id="cloud-edit-enabled" type="checkbox" checked> Enabled (surface in selection menus)
+        </label>
+        <div id="cloud-edit-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="CloudPanel._closeModal()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="CloudPanel._submit()">Save</button>
         </div>
       </div>
     </div>
@@ -3010,7 +3177,16 @@ function switchTab(name, el) {
   if (name === 'workflow-index') WorkflowIndex.load();
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
   if (name === 'memory') { loadMemory(); loadMemoryTab(); }
-  if (name === 'discover' && !discoverLoaded) loadDiscovery();
+  // Discover was promoted-then-demoted into Models tab as a collapsible
+  // sub-section. Legacy switchTab('discover', ...) calls (from old links
+  // or external bookmarks) redirect to inventory and pop the Discover
+  // section open so the user lands on the right content.
+  if (name === 'discover') {
+    if (!catalogLoaded) loadCatalog();
+    const sect = document.getElementById('discover-section');
+    if (sect) sect.open = true;
+    if (!discoverLoaded) loadDiscovery();
+  }
   if (name === 'research') initResearch();
   if (name === 'workflows') loadWorkflowsTab();
   if (name === 'documents') loadDocumentsTab();
@@ -3136,6 +3312,13 @@ async function loadModels() {
     // Ollama and could theoretically contain HTML-active chars) can't
     // bleed into the document tree.
     const chatModels = models.filter(m => !isEmbeddingOnlyModel(m.id));
+    // Cache for reuse by the composer's node config Model dropdown —
+    // avoids a re-fetch on every node click and keeps the picker in
+    // sync with what's actually loaded in Ollama.
+    window._chatModels = chatModels.map(m => m.id);
+    if (window.dfSelectedNodeId != null && typeof dfRenderConfigPanel === 'function') {
+      try { dfRenderConfigPanel(window.dfSelectedNodeId); } catch (e) {}
+    }
     const sel = document.getElementById('model-select');
     sel.replaceChildren();
     if (chatModels.length === 0) {
@@ -3365,10 +3548,103 @@ document.addEventListener('DOMContentLoaded', () => {
   if (ta) ta.addEventListener('input', updateSystemPromptStatus);
 });
 
+// When a composer node is selected, the dashboard chat input engages
+// THAT step instead of the general chat — useful for iterating on a
+// single step's prompt + model before saving the workflow. Wired via
+// the #step-engage-badge above the input.
+function composerExitStepEngage() {
+  // Clear the engage badge — leaves the canvas + selection intact so
+  // the operator can re-engage by re-clicking the node. The badge is
+  // purely a chat-input mode signal.
+  const badge = document.getElementById('step-engage-badge');
+  if (badge) badge.hidden = true;
+  window._composerEngagedNodeId = null;
+}
+
+async function _sendStepMessage(text, stepData) {
+  const messages = document.getElementById('messages');
+  const btn = document.getElementById('send-btn');
+  const input = document.getElementById('prompt');
+  const now = new Date();
+  // Badge inline with the user message so the operator can see which
+  // step was engaged for each turn in the chat history.
+  const stepBadge = `<span style="color:var(--accent);font-size:0.6rem;vertical-align:middle;font-family:var(--mono)">⚡ ${esc(stepData.id || 'step')}</span>`;
+  messages.innerHTML += `<div class="msg user">${esc(text)} ${stepBadge}</div>`;
+  input.value = '';
+  input.style.height = 'auto';
+  btn.disabled = true;
+  btn.textContent = 'Testing step…';
+  const typingId = 'typing-' + Date.now();
+  messages.innerHTML += `<div class="typing-indicator" id="${typingId}"><span class="dot"></span><span class="dot"></span><span class="dot"></span> running step</div>`;
+  messages.scrollTop = messages.scrollHeight;
+
+  try {
+    // Send the live step definition — not a saved id — so unsaved
+    // canvas edits flow through unchanged.
+    const r = await fetch('/api/workflows/test-step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        step: {
+          id: stepData.id,
+          name: stepData.name,
+          model: stepData.model || null,
+          role: stepData.role || null,
+          system_prompt: stepData.system_prompt || '',
+        },
+        user_message: text,
+      }),
+    });
+    const d = await r.json();
+    document.getElementById(typingId)?.remove();
+    if (!r.ok) {
+      const errMsg = (d && d.error && d.error.message) || (d && d.detail) || `HTTP ${r.status}`;
+      messages.innerHTML += `<div class="msg system-msg" style="color:var(--red)">${esc(errMsg)}</div>`;
+    } else {
+      const content = d.content || '(empty response)';
+      const modelLabel = d.model ? `<span style="color:var(--text-muted);font-size:0.55rem;margin-left:6px;font-family:var(--mono)">${esc(d.model)}</span>` : '';
+      let banner = '';
+      if (d.model_fallback) {
+        banner = `<div style="background:rgba(255,200,0,0.07);border:1px solid rgba(255,200,0,0.35);border-radius:4px;padding:4px 8px;font-size:0.62rem;color:var(--text-muted);margin-bottom:4px">⚠ Pinned <strong>${esc(d.model_fallback.requested)}</strong> not installed — ran on <strong>${esc(d.model_fallback.resolved)}</strong>.</div>`;
+      }
+      messages.innerHTML += `<div class="msg assistant">${banner}${esc(content)}${modelLabel}</div>`;
+    }
+  } catch (e) {
+    document.getElementById(typingId)?.remove();
+    messages.innerHTML += `<div class="msg system-msg" style="color:var(--red)">Connection error: ${esc(e.message)}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Send';
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function composerEnterStepEngage(nodeId) {
+  // dfNodeData is module-scoped; reference it lexically rather than via
+  // window so this helper works from anywhere in the same script block.
+  if (nodeId == null || typeof dfNodeData === 'undefined' || !dfNodeData[nodeId]) return;
+  window._composerEngagedNodeId = nodeId;
+  const badge = document.getElementById('step-engage-badge');
+  const idEl  = document.getElementById('step-engage-id');
+  if (badge && idEl) {
+    idEl.textContent = dfNodeData[nodeId].id || ('node ' + nodeId);
+    badge.hidden = false;
+  }
+}
+
 async function sendMessage() {
   const input = document.getElementById('prompt');
   const text = input.value.trim();
   if (!text) return;
+
+  // ── Step-engage branch ────────────────────────────────────────────
+  // If the composer has a selected node, route this turn to the
+  // single-step test endpoint instead of /v1/chat/completions. Keeps
+  // the iteration loop short: edit prompt → type message → see this
+  // step's reply without saving + running the whole workflow.
+  // dfNodeData is module-scoped — reference it lexically, not via window.
+  if (window._composerEngagedNodeId != null && typeof dfNodeData !== 'undefined' && dfNodeData[window._composerEngagedNodeId]) {
+    return _sendStepMessage(text, dfNodeData[window._composerEngagedNodeId]);
+  }
 
   const model = document.getElementById('model-select').value;
   const messages = document.getElementById('messages');
@@ -3838,6 +4114,17 @@ async function unloadModel(name) {
 let discoverData = [];
 let discoverLoaded = false;
 let discFilter = 'all';
+
+// Lazy-load the HuggingFace discovery the first time the Discover
+// sub-section is expanded inside the Models tab. Saves the network
+// scan on Models-tab visits when the user doesn't need it.
+document.addEventListener('DOMContentLoaded', () => {
+  const sect = document.getElementById('discover-section');
+  if (!sect) return;
+  sect.addEventListener('toggle', () => {
+    if (sect.open && !discoverLoaded) loadDiscovery();
+  });
+});
 
 async function loadDiscovery(force = false) {
   const url = '/api/inventory/discover' + (force ? '?force=true' : '');
@@ -5234,24 +5521,57 @@ async function loadDocStats() {
   } catch(e) {}
 }
 
-async function uploadDocument() {
-  const input = document.getElementById('doc-file-input');
+// Internal: post a single File to /api/documents and refresh the list.
+// Called both from the <input onchange> auto-upload AND the drag-drop
+// handler, so file-selection and drag-drop share the same code path.
+async function _uploadDocumentFile(file) {
   const status = document.getElementById('doc-upload-status');
-  if (!input.files.length) { status.textContent = 'Pick a file first.'; return; }
-  const file = input.files[0];
+  status.textContent = `Uploading ${file.name}…`;
   const form = new FormData();
   form.append('file', file);
-  status.textContent = `Uploading ${file.name}...`;
   try {
     const r = await fetch('/api/documents', { method: 'POST', body: form });
     const data = await r.json();
     if (!r.ok) { status.textContent = `Error: ${data.detail || 'upload failed'}`; return; }
-    status.textContent = `Indexed: ${data.filename} (${data.chunk_count} chunks)`;
-    input.value = '';
+    status.textContent = `✓ Indexed ${data.filename} (${data.chunk_count} chunks)`;
     loadDocumentsList();
     loadDocStats();
   } catch(e) { status.textContent = `Error: ${e.message}`; }
 }
+
+async function uploadDocument() {
+  const input = document.getElementById('doc-file-input');
+  if (!input.files.length) {
+    const status = document.getElementById('doc-upload-status');
+    if (status) status.textContent = 'Pick a file first.';
+    return;
+  }
+  await _uploadDocumentFile(input.files[0]);
+  input.value = '';   // reset so picking the same file again re-fires onchange
+}
+
+// Drag-and-drop wiring for the Documents drop zone. Mirrors the visual
+// state class `.is-dragging` so the zone highlights under the cursor.
+document.addEventListener('DOMContentLoaded', () => {
+  const zone = document.getElementById('doc-drop-zone');
+  if (!zone) return;
+  ['dragenter','dragover'].forEach(evt =>
+    zone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      zone.classList.add('is-dragging');
+    })
+  );
+  ['dragleave','dragend','drop'].forEach(evt =>
+    zone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      zone.classList.remove('is-dragging');
+    })
+  );
+  zone.addEventListener('drop', async (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) await _uploadDocumentFile(f);
+  });
+});
 
 async function deleteDocument(id) {
   await fetch('/api/documents/' + id, { method: 'DELETE' });
@@ -5339,22 +5659,81 @@ function dfInitEditor() {
   dfEditor.reroute = true;
   dfEditor.reroute_fix_curvature = true;
   dfEditor.start();
-  dfEditor.on('nodeSelected', (id) => { dfSelectedNodeId = id; dfRenderConfigPanel(id); });
-  dfEditor.on('nodeUnselected', () => { dfSelectedNodeId = null; dfClearConfigPanel(); });
-  dfEditor.on('nodeRemoved', (id) => { delete dfNodeData[id]; if (dfSelectedNodeId === id) dfSelectedNodeId = null; dfClearConfigPanel(); });
+  dfEditor.on('nodeSelected', (id) => {
+    dfSelectedNodeId = id;
+    dfRenderConfigPanel(id);
+    // Engage the dashboard chat input against this step so the
+    // operator can iterate by typing without leaving the canvas.
+    if (typeof composerEnterStepEngage === 'function') composerEnterStepEngage(id);
+  });
+  dfEditor.on('nodeUnselected', () => {
+    dfSelectedNodeId = null;
+    dfClearConfigPanel();
+    if (typeof composerExitStepEngage === 'function') composerExitStepEngage();
+  });
+  dfEditor.on('nodeRemoved', (id) => {
+    delete dfNodeData[id];
+    if (dfSelectedNodeId === id) dfSelectedNodeId = null;
+    dfClearConfigPanel();
+    if (typeof composerExitStepEngage === 'function') composerExitStepEngage();
+  });
   dfEditor.on('connectionCreated', (conn) => dfOnConnectionCreated(conn));
   dfEditor.on('connectionRemoved', (conn) => dfOnConnectionRemoved(conn));
 
   container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
   container.addEventListener('drop', (e) => {
     e.preventDefault();
-    const key = e.dataTransfer.getData('application/df-template');
-    if (!key) return;
     const rect = container.getBoundingClientRect();
     const canvasX = (e.clientX - rect.left - dfEditor.precanvas.getBoundingClientRect().left + rect.left);
     const canvasY = (e.clientY - rect.top  - dfEditor.precanvas.getBoundingClientRect().top  + rect.top);
-    dfAddNodeFromTemplate(key, canvasX, canvasY);
+    // Templates take priority — they're the cheapest spawn.
+    const tmplKey = e.dataTransfer.getData('application/df-template');
+    if (tmplKey) {
+      dfAddNodeFromTemplate(tmplKey, canvasX, canvasY);
+      return;
+    }
+    // Agent drop: fetch the agent's full definition, then spawn a step
+    // pre-filled with its role, model, system_prompt, name. The user
+    // can edit any field afterwards just like any other step.
+    const agentId = e.dataTransfer.getData('application/df-agent');
+    if (agentId) {
+      dfAddNodeFromAgent(agentId, canvasX, canvasY);
+      return;
+    }
+    // Skills / plugin tools / MCP tools attach to the SELECTED step
+    // rather than spawning a new node — they're per-step equipment.
+    // (Existing flow elsewhere in the file handles this; left intact.)
   });
+}
+
+async function dfAddNodeFromAgent(agentId, x, y) {
+  // Fetch agent definition; spawn an AgentStep clone.
+  try {
+    const r = await fetch(`/api/agents/${encodeURIComponent(agentId)}`);
+    if (!r.ok) { alert(`Could not load agent '${agentId}': HTTP ${r.status}`); return; }
+    const a = await r.json();
+    const data = {
+      id: agentId + '_' + (++dfNextId),
+      name: a.name || agentId,
+      role: a.role || 'general',
+      model: a.model || '',
+      system_prompt: a.system_prompt || `You are ${a.name || agentId}.`,
+      outputs: ['result'],
+      output_format: 'text',
+      quality_gates: [],
+      inputs: [],
+      // Provenance — surfaced in the node config panel so the operator
+      // remembers which agent this step was forked from.
+      _from_agent: agentId,
+    };
+    const nodeId = dfEditor.addNode(data.id, 1, 1, x, y, data.id, {}, dfNodeHtml(data));
+    dfNodeData[nodeId] = data;
+    dfSelectedNodeId = nodeId;
+    dfRenderConfigPanel(nodeId);
+    return nodeId;
+  } catch (e) {
+    alert(`Drop failed: ${e.message}`);
+  }
 }
 
 function dfInitPalette() {
@@ -5413,11 +5792,22 @@ function dfRenderConfigPanel(nodeId) {
           <div><label class="df-config-label">Step ID</label><input type="text" value="${esc(data.id)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'id',this.value)" /></div>
           <div><label class="df-config-label">Name</label><input type="text" value="${esc(data.name)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'name',this.value)" /></div>
         </div>
-        <div style="margin-top:6px"><label class="df-config-label">Role</label>
-          <select class="model-select" style="font-size:0.66rem;padding:3px 6px" onchange="dfUpdateNodeData(${nodeId},'role',this.value)">
-            ${Object.keys(dfRoleColors).map(r=>`<option value="${r}"${data.role===r?' selected':''}>${r}</option>`).join('')}
-          </select>
+        <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div><label class="df-config-label">Role</label>
+            <select class="model-select" style="font-size:0.66rem;padding:3px 6px;width:100%" onchange="dfUpdateNodeData(${nodeId},'role',this.value)">
+              ${Object.keys(dfRoleColors).map(r=>`<option value="${r}"${data.role===r?' selected':''}>${r}</option>`).join('')}
+            </select>
+          </div>
+          <div><label class="df-config-label">Model</label>
+            <select class="model-select" style="font-size:0.66rem;padding:3px 6px;width:100%" onchange="dfUpdateNodeData(${nodeId},'model',this.value)"
+                    title="Pin a specific model. Leave on '(role-based)' to let the resolver pick the best match for the role.">
+              <option value=""${!data.model?' selected':''}>(role-based)</option>
+              ${(window._chatModels || []).map(m=>`<option value="${esc(m)}"${data.model===m?' selected':''}>${esc(m)}</option>`).join('')}
+              ${data.model && !(window._chatModels||[]).includes(data.model) ? `<option value="${esc(data.model)}" selected>${esc(data.model)} (not loaded)</option>` : ''}
+            </select>
+          </div>
         </div>
+        ${data._from_agent ? `<div style="margin-top:6px;font-size:0.56rem;color:var(--text-muted);letter-spacing:0.04em">forked from agent <code style="color:var(--accent)">${esc(data._from_agent)}</code></div>` : ''}
       </div>
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Prompt</div>
@@ -5866,6 +6256,20 @@ async function sendAgentMessage() {
   document.getElementById('agent-thinking')?.remove();
   const content = result.content || '';
   _agentHistory.push({ role: 'assistant', content });
+
+  // Show fallback banner when the agent's pinned model wasn't available.
+  if (result.model_fallback) {
+    const fb = result.model_fallback;
+    const pullHint = fb.requested
+      ? ` <span style="opacity:.7;cursor:pointer;text-decoration:underline" title="Copy pull command" onclick="navigator.clipboard.writeText('ollama pull ${esc(fb.requested)}')">ollama pull ${esc(fb.requested)}</span>`
+      : '';
+    msgEl.insertAdjacentHTML('beforeend',
+      `<div style="align-self:stretch;background:rgba(255,200,0,.07);border:1px solid rgba(255,200,0,.35);border-radius:4px;padding:5px 9px;font-size:0.7rem;color:var(--text-muted);display:flex;gap:6px;align-items:center;">` +
+      `<span style="color:#fc0;font-size:0.9rem;">⚠</span>` +
+      `<span>Pinned model <strong>${esc(fb.requested || '?')}</strong> not installed — running on <strong>${esc(fb.resolved || result.model || '?')}</strong>.${pullHint}</span>` +
+      `</div>`);
+  }
+
   msgEl.insertAdjacentHTML('beforeend',
     `<div style="align-self:flex-start;background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:85%;font-size:0.82rem;white-space:pre-wrap;">${esc(content)}</div>`);
   msgEl.scrollTop = msgEl.scrollHeight;
@@ -6959,6 +7363,230 @@ window.SkillsPanel = (function () {
   document.head.appendChild(style);
 })();
 
+// ── CloudPanel ────────────────────────────────────────────────────────────
+// Admin panel for external/frontier LLM provider configs. Mirrors the
+// MCPPanel pattern: list + detail + register/edit modal. Writes hit
+// /api/cloud-providers which require the master key; the GET list is
+// open (returns redacted records — api_key never appears on the wire,
+// just an `api_key_set` boolean).
+window.CloudPanel = (function () {
+  let _items = [];
+  let _selectedId = null;
+  let _editId = null;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  async function load() {
+    const list = document.getElementById('cloud-list');
+    if (!list) return;
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.7rem">Loading…</div>';
+    try {
+      const r = await fetch('/api/cloud-providers');
+      if (!r.ok) {
+        list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
+        return;
+      }
+      _items = await r.json();
+      _render();
+    } catch (e) {
+      list.innerHTML = `<div class="admin-modal-error" style="margin:0">${esc(e.message)}</div>`;
+    }
+  }
+
+  function refresh() { load(); }
+
+  function _render() {
+    const list = document.getElementById('cloud-list');
+    if (!list) return;
+    if (!Array.isArray(_items) || _items.length === 0) {
+      list.innerHTML = '<div style="color:var(--text-muted);font-size:0.7rem">No cloud providers configured. Click <strong>+ Add Provider</strong> to register one.</div>';
+      _renderDetailPlaceholder();
+      return;
+    }
+    list.innerHTML = _items.map(p => `
+      <div class="plugin-card ${p.id === _selectedId ? 'selected' : ''}"
+           onclick="CloudPanel.select('${esc(p.id)}')">
+        <div class="plugin-card-title">
+          <span class="plugin-status-pip ${p.enabled ? '' : 'error'}"></span>${esc(p.name || p.id)}
+          <span style="color:var(--text-muted);font-size:0.66rem;margin-left:6px">${esc(p.kind || 'custom')}</span>
+        </div>
+        <div class="plugin-card-meta">
+          ${p.api_key_set ? '<span style="color:var(--accent)">⚿ key set</span>' : '<span style="color:var(--warn)">no key</span>'}
+          · ${(p.models || []).length} curated model${(p.models || []).length === 1 ? '' : 's'}
+        </div>
+        <div class="plugin-card-desc"><code style="color:var(--text-muted)">${esc(p.base_url || '')}</code></div>
+      </div>
+    `).join('');
+    if (!_selectedId && _items.length) select(_items[0].id);
+  }
+
+  function _renderDetailPlaceholder() {
+    const detail = document.getElementById('cloud-detail');
+    const label = document.getElementById('cloud-detail-label');
+    if (label) label.textContent = '// SELECT A PROVIDER';
+    if (detail) detail.innerHTML = 'Select a provider to inspect its config or rotate its API key. Use <strong>+ Add Provider</strong> to register a new one.';
+  }
+
+  function select(id) {
+    _selectedId = id;
+    document.querySelectorAll('#cloud-list .plugin-card').forEach(c => c.classList.remove('selected'));
+    const card = document.querySelector(`#cloud-list .plugin-card[onclick*="'${id.replace(/'/g, "\\'")}'"]`);
+    if (card) card.classList.add('selected');
+
+    const p = _items.find(x => x.id === id);
+    const detail = document.getElementById('cloud-detail');
+    const label = document.getElementById('cloud-detail-label');
+    if (!p || !detail) return;
+    if (label) label.textContent = `// ${esc(p.id.toUpperCase())}`;
+
+    const tagList = (p.tags || []).map(t => `<span class="role-pill">${esc(t)}</span>`).join(' ') || '<span style="color:var(--text-muted)">none</span>';
+    const modelList = (p.models || []).map(m => `<code>${esc(m)}</code>`).join(', ') || '<span style="color:var(--text-muted)">(empty — will list from provider /v1/models on first use)</span>';
+    detail.innerHTML = `
+      <div style="font-size:0.74rem;display:grid;grid-template-columns:120px 1fr;gap:6px 14px;margin-bottom:14px">
+        <div style="color:var(--text-muted)">Name</div><div>${esc(p.name)}</div>
+        <div style="color:var(--text-muted)">Kind</div><div><code>${esc(p.kind)}</code></div>
+        <div style="color:var(--text-muted)">Base URL</div><div><code>${esc(p.base_url)}</code></div>
+        <div style="color:var(--text-muted)">API key</div><div>${p.api_key_set ? '<span style="color:var(--accent)">set ✓</span> (re-save with a new value to rotate)' : '<span style="color:var(--warn)">not set</span>'}</div>
+        <div style="color:var(--text-muted)">Enabled</div><div>${p.enabled ? '<span style="color:var(--accent)">yes</span>' : '<span style="color:var(--warn)">no</span>'}</div>
+        <div style="color:var(--text-muted)">Curated models</div><div>${modelList}</div>
+        <div style="color:var(--text-muted)">Tags</div><div>${tagList}</div>
+        <div style="color:var(--text-muted)">Description</div><div>${esc(p.description || '(none)')}</div>
+      </div>
+      <div class="admin-modal-actions" style="justify-content:flex-end">
+        <button type="button" class="admin-modal-btn" onclick="CloudPanel.showEdit('${esc(p.id)}')">Edit</button>
+        <button type="button" class="admin-modal-btn" style="color:var(--danger);border-color:var(--danger-dim)" onclick="CloudPanel.del('${esc(p.id)}')">Delete</button>
+      </div>
+    `;
+  }
+
+  function showCreate() {
+    _editId = null;
+    _resetModal();
+    document.getElementById('cloud-edit-title').textContent = 'Add cloud provider';
+    document.getElementById('cloud-edit-modal').hidden = false;
+    setTimeout(() => document.getElementById('cloud-edit-id').focus(), 0);
+  }
+
+  function showEdit(id) {
+    const p = _items.find(x => x.id === id);
+    if (!p) return;
+    _editId = id;
+    _resetModal();
+    document.getElementById('cloud-edit-title').textContent = `Edit ${p.id}`;
+    document.getElementById('cloud-edit-id').value = p.id;
+    document.getElementById('cloud-edit-id').disabled = true; // ID is immutable
+    document.getElementById('cloud-edit-name').value = p.name || '';
+    document.getElementById('cloud-edit-kind').value = p.kind || 'custom';
+    document.getElementById('cloud-edit-base-url').value = p.base_url || '';
+    document.getElementById('cloud-edit-desc').value = p.description || '';
+    document.getElementById('cloud-edit-models').value = (p.models || []).join(', ');
+    document.getElementById('cloud-edit-tags').value = (p.tags || []).join(', ');
+    document.getElementById('cloud-edit-enabled').checked = p.enabled !== false;
+    document.getElementById('cloud-edit-modal').hidden = false;
+    setTimeout(() => document.getElementById('cloud-edit-api-key').focus(), 0);
+  }
+
+  function _resetModal() {
+    ['cloud-edit-id','cloud-edit-name','cloud-edit-base-url','cloud-edit-api-key',
+     'cloud-edit-desc','cloud-edit-models','cloud-edit-tags']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('cloud-edit-id').disabled = false;
+    document.getElementById('cloud-edit-kind').value = 'openai';
+    document.getElementById('cloud-edit-enabled').checked = true;
+    document.getElementById('cloud-edit-error').hidden = true;
+  }
+
+  function _closeModal() {
+    document.getElementById('cloud-edit-modal').hidden = true;
+    _editId = null;
+  }
+
+  async function _submit() {
+    const errBox = document.getElementById('cloud-edit-error');
+    errBox.hidden = true;
+    const id = document.getElementById('cloud-edit-id').value.trim();
+    const name = document.getElementById('cloud-edit-name').value.trim();
+    const kind = document.getElementById('cloud-edit-kind').value;
+    const baseUrl = document.getElementById('cloud-edit-base-url').value.trim();
+    const apiKey = document.getElementById('cloud-edit-api-key').value;
+    const description = document.getElementById('cloud-edit-desc').value.trim();
+    const modelsRaw = document.getElementById('cloud-edit-models').value.trim();
+    const tagsRaw = document.getElementById('cloud-edit-tags').value.trim();
+    const enabled = document.getElementById('cloud-edit-enabled').checked;
+
+    if (!id) { errBox.hidden = false; errBox.textContent = 'ID is required.'; return; }
+    if (!name) { errBox.hidden = false; errBox.textContent = 'Display name is required.'; return; }
+    if (!baseUrl) { errBox.hidden = false; errBox.textContent = 'Base URL is required.'; return; }
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      errBox.hidden = false;
+      errBox.textContent = "ID can only contain letters, digits, '_' and '-'.";
+      return;
+    }
+
+    const body = {
+      name, kind, base_url: baseUrl, description, enabled,
+      models: modelsRaw ? modelsRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
+      tags: tagsRaw ? tagsRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
+    };
+    if (apiKey) body.api_key = apiKey;
+
+    try {
+      let r;
+      if (_editId) {
+        r = await AdminAuth.fetch(`/api/cloud-providers/${encodeURIComponent(_editId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }, 'admin-cloud');
+      } else {
+        body.id = id;
+        r = await AdminAuth.fetch('/api/cloud-providers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }, 'admin-cloud');
+      }
+      if (!r.ok) {
+        let detail = `HTTP ${r.status}`;
+        try { const j = await r.json(); detail = j.detail || detail; } catch (e) {}
+        errBox.hidden = false;
+        errBox.textContent = detail;
+        return;
+      }
+      _closeModal();
+      _selectedId = id;
+      await load();
+    } catch (e) {
+      errBox.hidden = false;
+      errBox.textContent = e.message;
+    }
+  }
+
+  async function del(id) {
+    if (!confirm(`Delete cloud provider '${id}'?`)) return;
+    const r = await AdminAuth.fetch(`/api/cloud-providers/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }, 'admin-cloud');
+    if (!r.ok) {
+      alert(`Delete failed (HTTP ${r.status})`);
+      return;
+    }
+    if (_selectedId === id) _selectedId = null;
+    await load();
+  }
+
+  // Hot-load whenever the Cloud Models admin panel becomes active.
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-cloud') load();
+  });
+
+  return { load, refresh, select, showCreate, showEdit, del, _closeModal, _submit };
+})();
+
 // ── ExportsPanel ──────────────────────────────────────────────────────────
 window.ExportsPanel = (function () {
   let _selected = new Set();
@@ -7201,6 +7829,60 @@ async function loadWorkbenches() {
   } catch (e) {
     renderWorkbenchError('bench-mcps-list', e.message);
   }
+
+  // Agents — the agent library. Drag-into-canvas spawns an AgentStep
+  // pre-filled with the agent's role + model + system_prompt so the
+  // step starts as a faithful clone of the agent.
+  try {
+    const r = await fetch('/api/agents');
+    if (r.ok) {
+      const agents = await r.json();
+      renderAgentsWorkbench(agents);
+    } else {
+      renderWorkbenchError('bench-agents-list', `HTTP ${r.status}`);
+    }
+  } catch (e) {
+    renderWorkbenchError('bench-agents-list', e.message);
+  }
+}
+
+function renderAgentsWorkbench(agents) {
+  const el = document.getElementById('bench-agents-list');
+  if (!el) return;
+  if (!agents || !agents.length) {
+    el.innerHTML = '<div class="model-empty" style="font-size:0.62rem">No agents yet. Drop a YAML into agents/&lt;id&gt;.yaml.</div>';
+    return;
+  }
+  // Icon glyph defaults to a shield (matches xsiam-analyst's icon: shield).
+  // Real icons in YAML are short keywords ("shield", "search", etc) — we
+  // map a handful to glyphs and fall back to a robot for unknowns.
+  const iconMap = {
+    shield: '🛡',
+    search: '🔎',
+    brain: '🧠',
+    code: '💻',
+    chart: '📊',
+    data: '🗄',
+    pen: '✎',
+  };
+  el.innerHTML = agents.map(a => {
+    const glyph = iconMap[a.icon] || (a.icon ? a.icon : '🤖');
+    const role = a.role || 'general';
+    return `<div class="workbench-item" draggable="true"
+       ondragstart="event.dataTransfer.setData('application/df-agent', '${esc(a.id)}')"
+       title="Drag onto the canvas to spawn a step from this agent">
+      <div class="workbench-item-head">
+        <span class="workbench-item-title">${glyph} ${esc(a.name || a.id)}</span>
+        <span class="workbench-item-pill">${esc(role)}</span>
+      </div>
+      <div class="workbench-item-desc">${esc((a.description || '').slice(0, 140))}</div>
+      <div class="workbench-tool-row">
+        <span class="workbench-tool-dot"></span>
+        <code style="color:var(--accent)">${esc(a.id)}</code>
+        ${a.model ? `<span style="color:var(--text-muted);flex:1;text-align:right">${esc(a.model)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderWorkbenchAuthHint(id) {
@@ -8187,20 +8869,87 @@ const Projects = (function () {
     document.getElementById('project-badge').textContent = id || '—';
   }
 
-  async function create() {
-    const id = prompt('Project ID (alphanum/_/-, max 64 chars):');
-    if (!id) return;
-    const name = prompt('Project name:') || id;
+  // Slugify a free-form name → safe project ID. Server enforces the
+  // same alphanum/_/- shape, this is just a convenience so the user
+  // doesn't have to type a slug manually.
+  function _slugify(s) {
+    return (s || '')
+      .toLowerCase()
+      .trim()
+      .replace(/['"]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64);
+  }
+
+  function showCreate() {
+    const modal = document.getElementById('project-create-modal');
+    if (!modal) return;
+    // Reset fields each open so we don't leak previous attempts.
+    ['project-create-name','project-create-id','project-create-desc','project-create-category','project-create-tags'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('project-create-error').hidden = true;
+    // Auto-derive ID from the name as the user types, but only while
+    // the ID field is empty / has the previous auto-value.
+    const nameEl = document.getElementById('project-create-name');
+    const idEl = document.getElementById('project-create-id');
+    nameEl.oninput = () => {
+      if (!idEl.dataset.userEdited) idEl.value = _slugify(nameEl.value);
+    };
+    idEl.oninput = () => { idEl.dataset.userEdited = '1'; };
+    modal.hidden = false;
+    setTimeout(() => nameEl.focus(), 0);
+  }
+
+  function _closeCreate() {
+    const modal = document.getElementById('project-create-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  async function _submitCreate() {
+    const errBox = document.getElementById('project-create-error');
+    const name = document.getElementById('project-create-name').value.trim();
+    let id = document.getElementById('project-create-id').value.trim() || _slugify(name);
+    const description = document.getElementById('project-create-desc').value.trim();
+    const category = document.getElementById('project-create-category').value.trim();
+    const tagsRaw = document.getElementById('project-create-tags').value.trim();
+    const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+    if (!name) { errBox.hidden = false; errBox.textContent = 'Name is required.'; return; }
+    if (!id) { errBox.hidden = false; errBox.textContent = 'ID could not be derived from the name — set one explicitly.'; return; }
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      errBox.hidden = false;
+      errBox.textContent = "ID can only contain letters, digits, '_' and '-'.";
+      return;
+    }
     try {
+      const body = { id, name };
+      if (description) body.description = description;
+      if (category) body.category = category;
+      if (tags.length) body.tags = tags;
       const r = await fetch('/api/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, name }),
+        body: JSON.stringify(body),
       });
-      if (!r.ok) { alert('Create failed: ' + (await r.text())); return; }
+      if (!r.ok) {
+        const detail = await r.text();
+        errBox.hidden = false;
+        errBox.textContent = `Create failed: ${detail}`;
+        return;
+      }
+      _closeCreate();
       await load();
       setActive(id);
-    } catch (e) { alert('Create error: ' + e.message); }
+    } catch (e) {
+      errBox.hidden = false;
+      errBox.textContent = `Create error: ${e.message}`;
+    }
   }
+
+  // Legacy alias: any old call site still hitting `Projects.create()`
+  // now opens the modal instead of the old prompt() flow.
+  async function create() { showCreate(); }
 
   async function attachCurrentWorkflow() {
     if (!_active) { alert('Pick a project first.'); return; }
@@ -8252,7 +9001,10 @@ const Projects = (function () {
     inp.click();
   }
 
-  return { load, setActive, create, attachCurrentWorkflow, exportBundle, importBundle };
+  return {
+    load, setActive, create, attachCurrentWorkflow, exportBundle, importBundle,
+    showCreate, _closeCreate, _submitCreate,
+  };
 })();
 
 </script>

@@ -485,3 +485,34 @@ def test_exports_zip_uses_get_with_names_param(index_html_text):
     assert re.search(
         r"/api/exports/zip\?names=", index_html_text
     ), "expected zip request to use ?names= query"
+
+
+def test_composer_canvas_and_palette_present(index_html_text):
+    """Composer dashboard must have its Drawflow canvas, palette, and config panel."""
+    for element_id in ("drawflow-canvas", "df-palette", "df-config-panel"):
+        assert (
+            f'id="{element_id}"' in index_html_text
+        ), f"composer element '{element_id}' missing"
+
+
+def test_composer_exposes_save_export_import_autolayout(index_html_text):
+    """Composer toolbar must wire save / export / import / auto-layout functions."""
+    for fn in ("dfSave", "dfExportYaml", "dfImportYaml", "dfAutoLayout"):
+        assert fn in index_html_text, f"composer function '{fn}' missing"
+
+
+def test_composer_uses_self_hosted_vendor_libs_no_cdn(index_html_text):
+    """Composer must load Drawflow / Dagre / js-yaml from /static/vendor — no CDN.
+
+    Self-hosting matters for the privacy-first / no-telemetry posture: a CDN
+    fetch is an outbound network call on every dashboard load.
+    """
+    for asset in (
+        "/static/vendor/drawflow.min.css",
+        "/static/vendor/drawflow.min.js",
+        "/static/vendor/dagre.min.js",
+        "/static/vendor/js-yaml.min.js",
+    ):
+        assert asset in index_html_text, f"local {asset} not referenced"
+    for cdn in ("cdn.jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com"):
+        assert cdn not in index_html_text, f"composer leaked CDN URL: {cdn}"

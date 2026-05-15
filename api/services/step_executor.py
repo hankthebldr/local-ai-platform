@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict
 
 from ..logging_config import logger
-from ..exceptions import GenerationError
 from ..models.workflow_models import (
     AgentStep,
     StepResult,
@@ -51,24 +49,35 @@ class StepExecutor:
         defaults: WorkflowDefaults,
         workflow_run=None,
     ) -> StepResult:
-        result = StepResult(step_id=step.id, status="running", started_at=datetime.utcnow())
+        result = StepResult(
+            step_id=step.id, status="running", started_at=datetime.utcnow()
+        )
         result.model_used = resolved_model
 
         temperature = step.config.temperature or defaults.temperature
         max_tokens = step.config.max_tokens or defaults.max_tokens
-        max_retries = step.config.retries if step.config.retries is not None else defaults.retries
-        retry_delay = step.config.retry_delay if step.config.retry_delay is not None else defaults.retry_delay
+        max_retries = (
+            step.config.retries if step.config.retries is not None else defaults.retries
+        )
+        retry_delay = (
+            step.config.retry_delay
+            if step.config.retry_delay is not None
+            else defaults.retry_delay
+        )
 
         # --- Compose prompt ---------------------------------------------------
-        resolved_inputs = {
-            ref: context.resolve_input(ref) for ref in step.inputs
-        }
+        resolved_inputs = {ref: context.resolve_input(ref) for ref in step.inputs}
         resolved_inputs = {k: v for k, v in resolved_inputs.items() if v is not None}
 
-        composed = self._compose(step, workflow, resolved_inputs, {
-            "temperature": temperature,
-            "num_predict": max_tokens,
-        })
+        composed = self._compose(
+            step,
+            workflow,
+            resolved_inputs,
+            {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        )
 
         # --- Adapt for model family ------------------------------------------
         adapter = resolve_adapter(resolved_model)
@@ -115,7 +124,9 @@ class StepExecutor:
                 ctx.output = ""
                 ctx.error = e
                 last_error = str(e)
-                logger.warning(f"Step '{step.id}' attempt {attempt + 1} model call raised: {e}")
+                logger.warning(
+                    f"Step '{step.id}' attempt {attempt + 1} model call raised: {e}"
+                )
 
             # after_step
             self.hook_bus.dispatch("after_step", ctx)
@@ -142,6 +153,7 @@ class StepExecutor:
                 last_error or "unknown validation failure",
             )
             from api.hooks.builtins.retry_with_feedback import ValidationFailure
+
             ctx.error = ValidationFailure(feedback=str(failure_feedback))
 
             # Reset the prompt to its composed baseline before on_failure hooks
@@ -155,7 +167,9 @@ class StepExecutor:
             decision = failure_results[-1].action if failure_results else "fail"
 
             if decision == "retry" and attempt < max_retries:
-                last_mutations = failure_results[-1].mutations if failure_results else {}
+                last_mutations = (
+                    failure_results[-1].mutations if failure_results else {}
+                )
                 escalate_to = last_mutations.get("escalate_to")
                 if escalate_to:
                     context.set_shared(f"_escalated_{step.id}", escalate_to)
@@ -186,8 +200,12 @@ class StepExecutor:
         result.error = str(last_error)
         result.retries = max_retries
         result.completed_at = datetime.utcnow()
-        result.duration_seconds = (result.completed_at - result.started_at).total_seconds()
-        logger.error(f"Step '{step.id}' failed after {max_retries + 1} attempts: {last_error}")
+        result.duration_seconds = (
+            result.completed_at - result.started_at
+        ).total_seconds()
+        logger.error(
+            f"Step '{step.id}' failed after {max_retries + 1} attempts: {last_error}"
+        )
         return result
 
     # ── helpers ────────────────────────────────────────────────────────────
@@ -220,7 +238,10 @@ class StepExecutor:
             context=workflow_context_str,
             task="(See role description above.)",
             constraints=[],
-            output_schema={"type": "object", "properties": {k: {} for k in step.outputs}},
+            output_schema={
+                "type": "object",
+                "properties": {k: {} for k in step.outputs},
+            },
             resolved_inputs=resolved_inputs,
             params=dict(default_params),
         )
@@ -245,7 +266,9 @@ class StepExecutor:
             "total_tokens": prompt_tokens + completion_tokens,
         }
 
-    def _write_outputs(self, step: AgentStep, ctx: HookContext, context: WorkflowContext):
+    def _write_outputs(
+        self, step: AgentStep, ctx: HookContext, context: WorkflowContext
+    ):
         # Prefer parsed (from json_schema hook) over raw text
         parsed = ctx.parsed
         if isinstance(parsed, dict):
