@@ -15,7 +15,12 @@ import requests
 from dotenv import load_dotenv
 
 from ..logging_config import logger
-from ..exceptions import OllamaConnectionError, GenerationError, ModelNotFoundError
+from ..exceptions import (
+    GenerationError,
+    InvalidRequestError,
+    ModelNotFoundError,
+    OllamaConnectionError,
+)
 
 load_dotenv()
 
@@ -114,7 +119,9 @@ class OllamaService:
         if tools:
             request_data["tools"] = tools
 
-        logger.info(f"Chat request: model={model}, messages={len(messages)}, temp={temperature}")
+        logger.info(
+            f"Chat request: model={model}, messages={len(messages)}, temp={temperature}"
+        )
 
         try:
             response = requests.post(
@@ -133,9 +140,16 @@ class OllamaService:
             # (empty content with tool_calls is valid — the model is requesting a tool)
             has_tool_calls = bool(result.get("message", {}).get("tool_calls"))
             if not content.strip() and not has_tool_calls:
-                logger.info(f"Chat returned empty for {model}, falling back to /api/generate")
+                logger.info(
+                    f"Chat returned empty for {model}, falling back to /api/generate"
+                )
                 prompt = _format_chat_prompt(messages)
-                gen_result = self.generate(model=model, prompt=prompt, temperature=temperature, max_tokens=max_tokens)
+                gen_result = self.generate(
+                    model=model,
+                    prompt=prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
                 content = gen_result.get("response", "")
                 result["prompt_eval_count"] = gen_result.get("prompt_eval_count", 0)
                 result["eval_count"] = gen_result.get("eval_count", 0)
@@ -158,10 +172,32 @@ class OllamaService:
         except requests.ConnectionError:
             raise OllamaConnectionError(f"Cannot connect to {self.host}")
         except requests.HTTPError as e:
-            if e.response is not None and e.response.status_code == 404:
-                raise ModelNotFoundError(model)
+            # Propagate Ollama's 4xx responses as InvalidRequestError so the
+            # client gets a useful, OpenAI-shaped error body (e.g. selecting
+            # an embedding-only model for chat returns "<model> does not
+            # support chat") instead of a generic 500.
+            if e.response is not None:
+                status = e.response.status_code
+                if status == 404:
+                    raise ModelNotFoundError(model)
+                if 400 <= status < 500:
+                    try:
+                        body = e.response.json()
+                        detail = (
+                            body.get("error") or body.get("message") or e.response.text
+                        )
+                    except ValueError:
+                        detail = e.response.text or str(e)
+                    raise InvalidRequestError(
+                        f"Ollama rejected the request (model={model}): {detail}"
+                    )
             raise GenerationError(str(e))
-        except (OllamaConnectionError, ModelNotFoundError, GenerationError):
+        except (
+            OllamaConnectionError,
+            ModelNotFoundError,
+            GenerationError,
+            InvalidRequestError,
+        ):
             raise
         except Exception as e:
             logger.error(f"Chat failed: {e}")
@@ -229,6 +265,33 @@ class OllamaService:
                         break
         except requests.ConnectionError:
             raise OllamaConnectionError(f"Cannot connect to {self.host}")
+        except requests.HTTPError as e:
+            # Mirror non-streaming path: surface Ollama 4xx as a clean
+            # InvalidRequestError so the client sees the actual reason
+            # (e.g. embedding-only model rejected for chat).
+            if e.response is not None:
+                status = e.response.status_code
+                if status == 404:
+                    raise ModelNotFoundError(model)
+                if 400 <= status < 500:
+                    try:
+                        body = e.response.json()
+                        detail = (
+                            body.get("error") or body.get("message") or e.response.text
+                        )
+                    except ValueError:
+                        detail = e.response.text or str(e)
+                    raise InvalidRequestError(
+                        f"Ollama rejected the request (model={model}): {detail}"
+                    )
+            raise GenerationError(str(e))
+        except (
+            OllamaConnectionError,
+            ModelNotFoundError,
+            GenerationError,
+            InvalidRequestError,
+        ):
+            raise
         except Exception as e:
             logger.error(f"Chat stream failed: {e}")
             raise GenerationError(str(e))
