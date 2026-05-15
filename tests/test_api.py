@@ -15,7 +15,6 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch
 
-
 # ── Fixtures ───────────────────────────────────────────────────────────────
 
 
@@ -57,10 +56,12 @@ class TestPublicEndpoints:
         assert "text/html" in content_type or "application/json" in content_type
 
     def test_api_info(self, client):
+        from api import __version__ as _api_version
+
         resp = client.get("/api/info")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["version"] == "0.1.0"
+        assert data["version"] == _api_version
         assert "endpoints" in data
 
     def test_health(self, client):
@@ -221,7 +222,9 @@ class TestIntegrationChat:
         )
         usage = resp.json()["usage"]
         assert usage["prompt_tokens"] > 0
-        assert usage["total_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"]
+        assert (
+            usage["total_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"]
+        )
 
     @pytest.mark.integration
     def test_chat_invalid_model(self, client):
@@ -311,10 +314,13 @@ class TestAuthentication:
         os.environ["RATE_LIMIT_RPM"] = "0"
         import importlib
         import api.middleware
+
         importlib.reload(api.middleware)
         import api.main
+
         importlib.reload(api.main)
         from api.main import app
+
         self.client = TestClient(app)
         yield
         # Restore defaults
