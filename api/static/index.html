@@ -1865,10 +1865,34 @@ details[open] > summary::before { transform: rotate(90deg); }
       <span style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Active</span>
       <code id="project-badge" style="color:var(--accent);font-size:0.7rem">—</code>
       <span style="flex:1"></span>
-      <button class="action-btn" onclick="Projects.create()">+ New Project</button>
+      <button class="action-btn" onclick="Projects.showCreate()">+ New Project</button>
       <button class="action-btn" onclick="Projects.attachCurrentWorkflow()" title="Attach the current workflow to the active project">Attach Workflow</button>
       <button class="action-btn" onclick="Projects.importBundle()">Import Project</button>
       <button class="action-btn" onclick="Projects.exportBundle()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export Project</button>
+    </div>
+
+    <!-- Project create modal — replaces the prior prompt() flow with a
+         proper form so users can supply name, description, category, tags
+         without thinking about how to type a valid slug ID. -->
+    <div id="project-create-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="width:520px">
+        <h3>New Project</h3>
+        <label class="admin-modal-label">Name</label>
+        <input id="project-create-name" type="text" placeholder="e.g. Q4 Detection Playbooks" autocomplete="off">
+        <label class="admin-modal-label">ID <span style="color:var(--text-muted);font-weight:normal">(auto-derived; alphanum/_/- only)</span></label>
+        <input id="project-create-id" type="text" placeholder="auto from name" autocomplete="off">
+        <label class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <textarea id="project-create-desc" rows="2" placeholder="What this project organizes."></textarea>
+        <label class="admin-modal-label">Category <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <input id="project-create-category" type="text" placeholder="e.g. security, research, ops" autocomplete="off">
+        <label class="admin-modal-label">Tags <span style="color:var(--text-muted);font-weight:normal">(comma-separated, optional)</span></label>
+        <input id="project-create-tags" type="text" placeholder="xsiam, normalization" autocomplete="off">
+        <div id="project-create-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="Projects._closeCreate()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="Projects._submitCreate()">Create</button>
+        </div>
+      </div>
     </div>
 
     <!-- Composer top toolbar: metadata + import/export/save/run -->
@@ -1937,6 +1961,7 @@ details[open] > summary::before { transform: rotate(90deg); }
           <span class="corner-tr"></span><span class="corner-bl"></span>
           <div class="workbench-tabs" role="tablist">
             <button type="button" class="workbench-tab active" data-bench="steps"   onclick="composerSwitchBench('steps', this)">Steps</button>
+            <button type="button" class="workbench-tab"        data-bench="agents"  onclick="composerSwitchBench('agents', this)">Agents</button>
             <button type="button" class="workbench-tab"        data-bench="skills"  onclick="composerSwitchBench('skills', this)">Skills</button>
             <button type="button" class="workbench-tab"        data-bench="plugins" onclick="composerSwitchBench('plugins', this)">Plugins</button>
             <button type="button" class="workbench-tab"        data-bench="mcps"    onclick="composerSwitchBench('mcps', this)">MCPs</button>
@@ -1945,6 +1970,10 @@ details[open] > summary::before { transform: rotate(90deg); }
             <div class="workbench-pane" id="bench-steps">
               <div class="workbench-hint">Drag a step onto the canvas.</div>
               <div class="df-palette" id="df-palette"></div>
+            </div>
+            <div class="workbench-pane" id="bench-agents" hidden>
+              <div class="workbench-hint">Drag an agent to spawn a step pre-configured with its role, model, and system prompt.</div>
+              <div id="bench-agents-list"><div class="model-empty">Loading…</div></div>
             </div>
             <div class="workbench-pane" id="bench-skills" hidden>
               <div class="workbench-hint">Skills are auto-attached to steps when their triggers match. Drag onto a step to pin manually.</div>
@@ -2096,6 +2125,12 @@ details[open] > summary::before { transform: rotate(90deg); }
         </div>
       </div>
 
+      <div id="step-engage-badge" hidden
+           style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:rgba(0,204,102,0.08);border:1px solid var(--accent-dim);border-radius:4px 4px 0 0;border-bottom:0;font-size:0.65rem;color:var(--text-muted);font-family:var(--mono);">
+        <span style="color:var(--accent);font-size:0.85rem;line-height:1">⚡</span>
+        <span>Engaging step <code id="step-engage-id" style="color:var(--accent)">—</code> · the chat below runs this step against your message</span>
+        <button type="button" class="action-btn" style="margin-left:auto;font-size:0.55rem;padding:1px 6px" onclick="composerExitStepEngage()" title="Exit step engagement and return to general chat">exit</button>
+      </div>
       <div class="chat-input-row">
         <button class="search-toggle" id="search-toggle" onclick="toggleSearch()" title="Toggle web search">
           <span class="toggle-label" id="search-label">Search: OFF</span>
@@ -3018,6 +3053,13 @@ async function loadModels() {
     // Ollama and could theoretically contain HTML-active chars) can't
     // bleed into the document tree.
     const chatModels = models.filter(m => !isEmbeddingOnlyModel(m.id));
+    // Cache for reuse by the composer's node config Model dropdown —
+    // avoids a re-fetch on every node click and keeps the picker in
+    // sync with what's actually loaded in Ollama.
+    window._chatModels = chatModels.map(m => m.id);
+    if (window.dfSelectedNodeId != null && typeof dfRenderConfigPanel === 'function') {
+      try { dfRenderConfigPanel(window.dfSelectedNodeId); } catch (e) {}
+    }
     const sel = document.getElementById('model-select');
     sel.replaceChildren();
     if (chatModels.length === 0) {
@@ -3247,10 +3289,103 @@ document.addEventListener('DOMContentLoaded', () => {
   if (ta) ta.addEventListener('input', updateSystemPromptStatus);
 });
 
+// When a composer node is selected, the dashboard chat input engages
+// THAT step instead of the general chat — useful for iterating on a
+// single step's prompt + model before saving the workflow. Wired via
+// the #step-engage-badge above the input.
+function composerExitStepEngage() {
+  // Clear the engage badge — leaves the canvas + selection intact so
+  // the operator can re-engage by re-clicking the node. The badge is
+  // purely a chat-input mode signal.
+  const badge = document.getElementById('step-engage-badge');
+  if (badge) badge.hidden = true;
+  window._composerEngagedNodeId = null;
+}
+
+async function _sendStepMessage(text, stepData) {
+  const messages = document.getElementById('messages');
+  const btn = document.getElementById('send-btn');
+  const input = document.getElementById('prompt');
+  const now = new Date();
+  // Badge inline with the user message so the operator can see which
+  // step was engaged for each turn in the chat history.
+  const stepBadge = `<span style="color:var(--accent);font-size:0.6rem;vertical-align:middle;font-family:var(--mono)">⚡ ${esc(stepData.id || 'step')}</span>`;
+  messages.innerHTML += `<div class="msg user">${esc(text)} ${stepBadge}</div>`;
+  input.value = '';
+  input.style.height = 'auto';
+  btn.disabled = true;
+  btn.textContent = 'Testing step…';
+  const typingId = 'typing-' + Date.now();
+  messages.innerHTML += `<div class="typing-indicator" id="${typingId}"><span class="dot"></span><span class="dot"></span><span class="dot"></span> running step</div>`;
+  messages.scrollTop = messages.scrollHeight;
+
+  try {
+    // Send the live step definition — not a saved id — so unsaved
+    // canvas edits flow through unchanged.
+    const r = await fetch('/api/workflows/test-step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        step: {
+          id: stepData.id,
+          name: stepData.name,
+          model: stepData.model || null,
+          role: stepData.role || null,
+          system_prompt: stepData.system_prompt || '',
+        },
+        user_message: text,
+      }),
+    });
+    const d = await r.json();
+    document.getElementById(typingId)?.remove();
+    if (!r.ok) {
+      const errMsg = (d && d.error && d.error.message) || (d && d.detail) || `HTTP ${r.status}`;
+      messages.innerHTML += `<div class="msg system-msg" style="color:var(--red)">${esc(errMsg)}</div>`;
+    } else {
+      const content = d.content || '(empty response)';
+      const modelLabel = d.model ? `<span style="color:var(--text-muted);font-size:0.55rem;margin-left:6px;font-family:var(--mono)">${esc(d.model)}</span>` : '';
+      let banner = '';
+      if (d.model_fallback) {
+        banner = `<div style="background:rgba(255,200,0,0.07);border:1px solid rgba(255,200,0,0.35);border-radius:4px;padding:4px 8px;font-size:0.62rem;color:var(--text-muted);margin-bottom:4px">⚠ Pinned <strong>${esc(d.model_fallback.requested)}</strong> not installed — ran on <strong>${esc(d.model_fallback.resolved)}</strong>.</div>`;
+      }
+      messages.innerHTML += `<div class="msg assistant">${banner}${esc(content)}${modelLabel}</div>`;
+    }
+  } catch (e) {
+    document.getElementById(typingId)?.remove();
+    messages.innerHTML += `<div class="msg system-msg" style="color:var(--red)">Connection error: ${esc(e.message)}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Send';
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function composerEnterStepEngage(nodeId) {
+  // dfNodeData is module-scoped; reference it lexically rather than via
+  // window so this helper works from anywhere in the same script block.
+  if (nodeId == null || typeof dfNodeData === 'undefined' || !dfNodeData[nodeId]) return;
+  window._composerEngagedNodeId = nodeId;
+  const badge = document.getElementById('step-engage-badge');
+  const idEl  = document.getElementById('step-engage-id');
+  if (badge && idEl) {
+    idEl.textContent = dfNodeData[nodeId].id || ('node ' + nodeId);
+    badge.hidden = false;
+  }
+}
+
 async function sendMessage() {
   const input = document.getElementById('prompt');
   const text = input.value.trim();
   if (!text) return;
+
+  // ── Step-engage branch ────────────────────────────────────────────
+  // If the composer has a selected node, route this turn to the
+  // single-step test endpoint instead of /v1/chat/completions. Keeps
+  // the iteration loop short: edit prompt → type message → see this
+  // step's reply without saving + running the whole workflow.
+  // dfNodeData is module-scoped — reference it lexically, not via window.
+  if (window._composerEngagedNodeId != null && typeof dfNodeData !== 'undefined' && dfNodeData[window._composerEngagedNodeId]) {
+    return _sendStepMessage(text, dfNodeData[window._composerEngagedNodeId]);
+  }
 
   const model = document.getElementById('model-select').value;
   const messages = document.getElementById('messages');
@@ -5221,22 +5356,81 @@ function dfInitEditor() {
   dfEditor.reroute = true;
   dfEditor.reroute_fix_curvature = true;
   dfEditor.start();
-  dfEditor.on('nodeSelected', (id) => { dfSelectedNodeId = id; dfRenderConfigPanel(id); });
-  dfEditor.on('nodeUnselected', () => { dfSelectedNodeId = null; dfClearConfigPanel(); });
-  dfEditor.on('nodeRemoved', (id) => { delete dfNodeData[id]; if (dfSelectedNodeId === id) dfSelectedNodeId = null; dfClearConfigPanel(); });
+  dfEditor.on('nodeSelected', (id) => {
+    dfSelectedNodeId = id;
+    dfRenderConfigPanel(id);
+    // Engage the dashboard chat input against this step so the
+    // operator can iterate by typing without leaving the canvas.
+    if (typeof composerEnterStepEngage === 'function') composerEnterStepEngage(id);
+  });
+  dfEditor.on('nodeUnselected', () => {
+    dfSelectedNodeId = null;
+    dfClearConfigPanel();
+    if (typeof composerExitStepEngage === 'function') composerExitStepEngage();
+  });
+  dfEditor.on('nodeRemoved', (id) => {
+    delete dfNodeData[id];
+    if (dfSelectedNodeId === id) dfSelectedNodeId = null;
+    dfClearConfigPanel();
+    if (typeof composerExitStepEngage === 'function') composerExitStepEngage();
+  });
   dfEditor.on('connectionCreated', (conn) => dfOnConnectionCreated(conn));
   dfEditor.on('connectionRemoved', (conn) => dfOnConnectionRemoved(conn));
 
   container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
   container.addEventListener('drop', (e) => {
     e.preventDefault();
-    const key = e.dataTransfer.getData('application/df-template');
-    if (!key) return;
     const rect = container.getBoundingClientRect();
     const canvasX = (e.clientX - rect.left - dfEditor.precanvas.getBoundingClientRect().left + rect.left);
     const canvasY = (e.clientY - rect.top  - dfEditor.precanvas.getBoundingClientRect().top  + rect.top);
-    dfAddNodeFromTemplate(key, canvasX, canvasY);
+    // Templates take priority — they're the cheapest spawn.
+    const tmplKey = e.dataTransfer.getData('application/df-template');
+    if (tmplKey) {
+      dfAddNodeFromTemplate(tmplKey, canvasX, canvasY);
+      return;
+    }
+    // Agent drop: fetch the agent's full definition, then spawn a step
+    // pre-filled with its role, model, system_prompt, name. The user
+    // can edit any field afterwards just like any other step.
+    const agentId = e.dataTransfer.getData('application/df-agent');
+    if (agentId) {
+      dfAddNodeFromAgent(agentId, canvasX, canvasY);
+      return;
+    }
+    // Skills / plugin tools / MCP tools attach to the SELECTED step
+    // rather than spawning a new node — they're per-step equipment.
+    // (Existing flow elsewhere in the file handles this; left intact.)
   });
+}
+
+async function dfAddNodeFromAgent(agentId, x, y) {
+  // Fetch agent definition; spawn an AgentStep clone.
+  try {
+    const r = await fetch(`/api/agents/${encodeURIComponent(agentId)}`);
+    if (!r.ok) { alert(`Could not load agent '${agentId}': HTTP ${r.status}`); return; }
+    const a = await r.json();
+    const data = {
+      id: agentId + '_' + (++dfNextId),
+      name: a.name || agentId,
+      role: a.role || 'general',
+      model: a.model || '',
+      system_prompt: a.system_prompt || `You are ${a.name || agentId}.`,
+      outputs: ['result'],
+      output_format: 'text',
+      quality_gates: [],
+      inputs: [],
+      // Provenance — surfaced in the node config panel so the operator
+      // remembers which agent this step was forked from.
+      _from_agent: agentId,
+    };
+    const nodeId = dfEditor.addNode(data.id, 1, 1, x, y, data.id, {}, dfNodeHtml(data));
+    dfNodeData[nodeId] = data;
+    dfSelectedNodeId = nodeId;
+    dfRenderConfigPanel(nodeId);
+    return nodeId;
+  } catch (e) {
+    alert(`Drop failed: ${e.message}`);
+  }
 }
 
 function dfInitPalette() {
@@ -5295,11 +5489,22 @@ function dfRenderConfigPanel(nodeId) {
           <div><label class="df-config-label">Step ID</label><input type="text" value="${esc(data.id)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'id',this.value)" /></div>
           <div><label class="df-config-label">Name</label><input type="text" value="${esc(data.name)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px" onchange="dfUpdateNodeData(${nodeId},'name',this.value)" /></div>
         </div>
-        <div style="margin-top:6px"><label class="df-config-label">Role</label>
-          <select class="model-select" style="font-size:0.66rem;padding:3px 6px" onchange="dfUpdateNodeData(${nodeId},'role',this.value)">
-            ${Object.keys(dfRoleColors).map(r=>`<option value="${r}"${data.role===r?' selected':''}>${r}</option>`).join('')}
-          </select>
+        <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div><label class="df-config-label">Role</label>
+            <select class="model-select" style="font-size:0.66rem;padding:3px 6px;width:100%" onchange="dfUpdateNodeData(${nodeId},'role',this.value)">
+              ${Object.keys(dfRoleColors).map(r=>`<option value="${r}"${data.role===r?' selected':''}>${r}</option>`).join('')}
+            </select>
+          </div>
+          <div><label class="df-config-label">Model</label>
+            <select class="model-select" style="font-size:0.66rem;padding:3px 6px;width:100%" onchange="dfUpdateNodeData(${nodeId},'model',this.value)"
+                    title="Pin a specific model. Leave on '(role-based)' to let the resolver pick the best match for the role.">
+              <option value=""${!data.model?' selected':''}>(role-based)</option>
+              ${(window._chatModels || []).map(m=>`<option value="${esc(m)}"${data.model===m?' selected':''}>${esc(m)}</option>`).join('')}
+              ${data.model && !(window._chatModels||[]).includes(data.model) ? `<option value="${esc(data.model)}" selected>${esc(data.model)} (not loaded)</option>` : ''}
+            </select>
+          </div>
         </div>
+        ${data._from_agent ? `<div style="margin-top:6px;font-size:0.56rem;color:var(--text-muted);letter-spacing:0.04em">forked from agent <code style="color:var(--accent)">${esc(data._from_agent)}</code></div>` : ''}
       </div>
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Prompt</div>
@@ -6865,6 +7070,60 @@ async function loadWorkbenches() {
   } catch (e) {
     renderWorkbenchError('bench-mcps-list', e.message);
   }
+
+  // Agents — the agent library. Drag-into-canvas spawns an AgentStep
+  // pre-filled with the agent's role + model + system_prompt so the
+  // step starts as a faithful clone of the agent.
+  try {
+    const r = await fetch('/api/agents');
+    if (r.ok) {
+      const agents = await r.json();
+      renderAgentsWorkbench(agents);
+    } else {
+      renderWorkbenchError('bench-agents-list', `HTTP ${r.status}`);
+    }
+  } catch (e) {
+    renderWorkbenchError('bench-agents-list', e.message);
+  }
+}
+
+function renderAgentsWorkbench(agents) {
+  const el = document.getElementById('bench-agents-list');
+  if (!el) return;
+  if (!agents || !agents.length) {
+    el.innerHTML = '<div class="model-empty" style="font-size:0.62rem">No agents yet. Drop a YAML into agents/&lt;id&gt;.yaml.</div>';
+    return;
+  }
+  // Icon glyph defaults to a shield (matches xsiam-analyst's icon: shield).
+  // Real icons in YAML are short keywords ("shield", "search", etc) — we
+  // map a handful to glyphs and fall back to a robot for unknowns.
+  const iconMap = {
+    shield: '🛡',
+    search: '🔎',
+    brain: '🧠',
+    code: '💻',
+    chart: '📊',
+    data: '🗄',
+    pen: '✎',
+  };
+  el.innerHTML = agents.map(a => {
+    const glyph = iconMap[a.icon] || (a.icon ? a.icon : '🤖');
+    const role = a.role || 'general';
+    return `<div class="workbench-item" draggable="true"
+       ondragstart="event.dataTransfer.setData('application/df-agent', '${esc(a.id)}')"
+       title="Drag onto the canvas to spawn a step from this agent">
+      <div class="workbench-item-head">
+        <span class="workbench-item-title">${glyph} ${esc(a.name || a.id)}</span>
+        <span class="workbench-item-pill">${esc(role)}</span>
+      </div>
+      <div class="workbench-item-desc">${esc((a.description || '').slice(0, 140))}</div>
+      <div class="workbench-tool-row">
+        <span class="workbench-tool-dot"></span>
+        <code style="color:var(--accent)">${esc(a.id)}</code>
+        ${a.model ? `<span style="color:var(--text-muted);flex:1;text-align:right">${esc(a.model)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderWorkbenchAuthHint(id) {
@@ -7851,20 +8110,87 @@ const Projects = (function () {
     document.getElementById('project-badge').textContent = id || '—';
   }
 
-  async function create() {
-    const id = prompt('Project ID (alphanum/_/-, max 64 chars):');
-    if (!id) return;
-    const name = prompt('Project name:') || id;
+  // Slugify a free-form name → safe project ID. Server enforces the
+  // same alphanum/_/- shape, this is just a convenience so the user
+  // doesn't have to type a slug manually.
+  function _slugify(s) {
+    return (s || '')
+      .toLowerCase()
+      .trim()
+      .replace(/['"]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64);
+  }
+
+  function showCreate() {
+    const modal = document.getElementById('project-create-modal');
+    if (!modal) return;
+    // Reset fields each open so we don't leak previous attempts.
+    ['project-create-name','project-create-id','project-create-desc','project-create-category','project-create-tags'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('project-create-error').hidden = true;
+    // Auto-derive ID from the name as the user types, but only while
+    // the ID field is empty / has the previous auto-value.
+    const nameEl = document.getElementById('project-create-name');
+    const idEl = document.getElementById('project-create-id');
+    nameEl.oninput = () => {
+      if (!idEl.dataset.userEdited) idEl.value = _slugify(nameEl.value);
+    };
+    idEl.oninput = () => { idEl.dataset.userEdited = '1'; };
+    modal.hidden = false;
+    setTimeout(() => nameEl.focus(), 0);
+  }
+
+  function _closeCreate() {
+    const modal = document.getElementById('project-create-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  async function _submitCreate() {
+    const errBox = document.getElementById('project-create-error');
+    const name = document.getElementById('project-create-name').value.trim();
+    let id = document.getElementById('project-create-id').value.trim() || _slugify(name);
+    const description = document.getElementById('project-create-desc').value.trim();
+    const category = document.getElementById('project-create-category').value.trim();
+    const tagsRaw = document.getElementById('project-create-tags').value.trim();
+    const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+    if (!name) { errBox.hidden = false; errBox.textContent = 'Name is required.'; return; }
+    if (!id) { errBox.hidden = false; errBox.textContent = 'ID could not be derived from the name — set one explicitly.'; return; }
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      errBox.hidden = false;
+      errBox.textContent = "ID can only contain letters, digits, '_' and '-'.";
+      return;
+    }
     try {
+      const body = { id, name };
+      if (description) body.description = description;
+      if (category) body.category = category;
+      if (tags.length) body.tags = tags;
       const r = await fetch('/api/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, name }),
+        body: JSON.stringify(body),
       });
-      if (!r.ok) { alert('Create failed: ' + (await r.text())); return; }
+      if (!r.ok) {
+        const detail = await r.text();
+        errBox.hidden = false;
+        errBox.textContent = `Create failed: ${detail}`;
+        return;
+      }
+      _closeCreate();
       await load();
       setActive(id);
-    } catch (e) { alert('Create error: ' + e.message); }
+    } catch (e) {
+      errBox.hidden = false;
+      errBox.textContent = `Create error: ${e.message}`;
+    }
   }
+
+  // Legacy alias: any old call site still hitting `Projects.create()`
+  // now opens the modal instead of the old prompt() flow.
+  async function create() { showCreate(); }
 
   async function attachCurrentWorkflow() {
     if (!_active) { alert('Pick a project first.'); return; }
@@ -7916,7 +8242,10 @@ const Projects = (function () {
     inp.click();
   }
 
-  return { load, setActive, create, attachCurrentWorkflow, exportBundle, importBundle };
+  return {
+    load, setActive, create, attachCurrentWorkflow, exportBundle, importBundle,
+    showCreate, _closeCreate, _submitCreate,
+  };
 })();
 
 </script>

@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from ..logging_config import logger
 from ..services.ollama_service import OllamaService
 from ..services.workflow_engine import WorkflowEngine
-from ..exceptions import WorkflowValidationError, WorkflowExecutionError
+from ..exceptions import WorkflowValidationError
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -46,6 +46,7 @@ def get_engine() -> WorkflowEngine:
 
 class WorkflowRunRequest(BaseModel):
     """Request to execute a workflow"""
+
     workflow_id: Optional[str] = None  # ID to load from workflows/ dir
     definition: Optional[Dict[str, Any]] = None  # inline definition
     seed: Dict[str, Any] = Field(default_factory=dict)
@@ -53,12 +54,14 @@ class WorkflowRunRequest(BaseModel):
 
 class WorkflowValidateRequest(BaseModel):
     """Request to validate a workflow definition"""
+
     definition: Dict[str, Any]
     seed_keys: Optional[List[str]] = None
 
 
 class WorkflowSaveRequest(BaseModel):
     """Request to persist a workflow definition as YAML."""
+
     definition: Dict[str, Any]
     overwrite: bool = False  # explicit consent to clobber an existing file
 
@@ -106,7 +109,9 @@ async def save_workflow(req: WorkflowSaveRequest):
     # though Pydantic already enforced its shape.
     wf_id = defn.id
     if not wf_id or not all(c.isalnum() or c in "_-" for c in wf_id):
-        raise HTTPException(status_code=400, detail="invalid workflow id (alphanum/_/- only)")
+        raise HTTPException(
+            status_code=400, detail="invalid workflow id (alphanum/_/- only)"
+        )
 
     workflows_root = Path(WORKFLOWS_DIR).resolve()
     workflows_root.mkdir(parents=True, exist_ok=True)
@@ -135,9 +140,101 @@ async def save_workflow(req: WorkflowSaveRequest):
     return {
         "saved": True,
         "workflow_id": wf_id,
-        "path": str(target.relative_to(Path.cwd())) if target.is_relative_to(Path.cwd()) else str(target),
+        "path": (
+            str(target.relative_to(Path.cwd()))
+            if target.is_relative_to(Path.cwd())
+            else str(target)
+        ),
         "bytes": len(yaml_text),
     }
+
+
+# ── Single-step ad-hoc test ──────────────────────────────────────────────
+
+
+class StepTestRequest(BaseModel):
+    """Run a single composer step against a free-form user prompt.
+
+    The composer wires the dashboard chat input to this endpoint when a
+    node is selected, so the operator can iterate on one step's
+    `system_prompt` + `model`/`role` without saving + running the whole
+    workflow. The request carries a step *definition* (not a step id) so
+    unsaved canvas edits flow through unmodified.
+    """
+
+    step: Dict[str, Any]
+    user_message: str
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+
+
+@router.post("/test-step")
+async def test_step(req: StepTestRequest):
+    from ..services.model_resolver import ModelResolver
+    from ..exceptions import APIError
+
+    step = req.step or {}
+    system_prompt = (step.get("system_prompt") or "").strip()
+    if not system_prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="step.system_prompt is required for test-step",
+        )
+
+    ollama = get_ollama_service()
+    resolver = ModelResolver(ollama)
+    try:
+        resolved_model = resolver.resolve(
+            model=step.get("model") or None,
+            role=step.get("role") or None,
+            default_role="general",
+        )
+    except APIError:
+        raise
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": req.user_message},
+    ]
+    temperature = req.temperature if req.temperature is not None else 0.7
+    max_tokens = req.max_tokens if req.max_tokens is not None else 2048
+
+    try:
+        result = ollama.chat(
+            model=resolved_model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    except APIError:
+        raise
+
+    response = {
+        "step_id": step.get("id"),
+        "model": resolved_model,
+        "content": result.get("content", ""),
+        "usage": {
+            "prompt_tokens": result.get("prompt_eval_count", 0),
+            "completion_tokens": result.get("eval_count", 0),
+            "total_tokens": (
+                result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
+            ),
+        },
+    }
+    # Surface model_fallback when the pinned model wasn't found (mirrors
+    # /api/agents/{id}/chat shape so the dashboard can reuse its banner).
+    pinned = step.get("model") or None
+    if pinned and resolved_model != pinned:
+        response["model_fallback"] = {
+            "requested": pinned,
+            "resolved": resolved_model,
+            "reason": (
+                f"Step's pinned model '{pinned}' is not installed. "
+                f"Resolved to '{resolved_model}'. "
+                f"Pull '{pinned}' for the step's preferred model."
+            ),
+        }
+    return response
 
 
 @router.post("/run")
@@ -296,7 +393,9 @@ async def get_workflow(workflow_id: str):
     try:
         defn = engine.load(yaml_path)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"workflow '{workflow_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"workflow '{workflow_id}' not found"
+        )
     except WorkflowValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return defn.model_dump(mode="json")
