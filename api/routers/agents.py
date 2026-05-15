@@ -128,7 +128,11 @@ async def chat_with_agent(agent_id: str, req: AgentChatRequest):
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
 
-    # Resolve model
+    # Resolve model. APIError subclasses (ModelNotFoundError,
+    # ModelResolutionError, InvalidRequestError, OllamaConnectionError)
+    # already carry the correct status code + OpenAI-shaped body, so let
+    # them bubble through the api_error_handler instead of swallowing
+    # them as generic 500s.
     resolver = get_resolver()
     try:
         resolved_model = resolver.resolve(
@@ -136,11 +140,17 @@ async def chat_with_agent(agent_id: str, req: AgentChatRequest):
             role=agent.role,
             default_role="general",
         )
+    except APIError:
+        raise
     except Exception as e:
+        logger.error(f"Unexpected model-resolution error for agent {agent_id}: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Model resolution failed: {e}",
         )
+
+    # Whether we fell back from the agent's pinned model.
+    fell_back = bool(agent.model and resolved_model != agent.model)
 
     # Build messages with system prompt + context
     messages = service.build_messages(agent, req.messages)
@@ -158,10 +168,13 @@ async def chat_with_agent(agent_id: str, req: AgentChatRequest):
             temperature=temperature,
             max_tokens=max_tokens,
         )
+    except APIError:
+        raise
     except Exception as e:
+        logger.error(f"Unexpected chat error for agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Chat failed: {e}")
 
-    return {
+    response = {
         "agent_id": agent_id,
         "model": resolved_model,
         "content": result.get("content", ""),
@@ -173,6 +186,17 @@ async def chat_with_agent(agent_id: str, req: AgentChatRequest):
             ),
         },
     }
+    if fell_back:
+        response["model_fallback"] = {
+            "requested": agent.model,
+            "resolved": resolved_model,
+            "reason": (
+                f"Agent's pinned model '{agent.model}' is not installed. "
+                f"Resolved via role '{agent.role}' to '{resolved_model}'. "
+                f"Pull '{agent.model}' for the agent's preferred model."
+            ),
+        }
+    return response
 
 
 @router.get("/{agent_id}/context")
