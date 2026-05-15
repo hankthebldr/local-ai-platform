@@ -1734,6 +1734,27 @@ details[open] > summary::before { transform: rotate(90deg); }
 .wfi-card-actions { display: flex; gap: 4px; margin-top: 6px; }
 .wfi-card-actions .action-btn { padding: 3px 8px; font-size: 0.6rem; flex: 1; }
 
+/* ── PROJECT BAR ─────────────────────────────────────────────────── */
+.composer-project-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.composer-project-bar code { background: var(--bg-deep); padding: 2px 6px; border-radius: 3px; font-family: var(--mono); }
+
+/* ── AGENT GENERATOR MODAL ───────────────────────────────────────── */
+.ag-steps { display: flex; gap: 8px; margin: 10px 0 14px; font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.ag-step { padding: 4px 10px; border: 1px solid var(--border); border-radius: 2px; }
+.ag-step.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-ghost); }
+.ag-pane[hidden] { display: none; }
+.ag-pane label.admin-modal-label { margin-top: 8px; }
+.ag-pane input[type="text"], .ag-pane input[type="number"], .ag-pane textarea, .ag-pane select {
+  width: 100%; padding: 6px 10px; background: var(--bg-panel); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 0.74rem; border-radius: 3px;
+  margin-bottom: 4px;
+}
+.ag-case-row { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 6px; align-items: center; }
+.ag-case-result { padding: 8px; border: 1px solid var(--border); border-radius: 3px; margin-bottom: 6px; }
+.ag-case-pill { font-size: 0.56rem; padding: 2px 8px; border-radius: 2px; letter-spacing: 0.08em; font-weight: 600; }
+.ag-case-pill.pass { color: var(--success); border: 1px solid var(--success-dim); background: var(--accent-ghost); }
+.ag-case-pill.fail { color: var(--danger); border: 1px solid var(--danger-dim); background: rgba(229,75,75,0.1); }
+
 /* ── MCP admin ───────────────────────────────────────────────────── */
 .mcp-row { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 6px; cursor: pointer; background: var(--bg); }
 .mcp-row.selected { border-color: var(--accent-dim); background: var(--accent-ghost); }
@@ -1832,6 +1853,23 @@ details[open] > summary::before { transform: rotate(90deg); }
        agent-chat dock anchored at the bottom. The legacy "Dashboard"
        tab id is preserved for routing back-compat. -->
   <div class="tab-content active" id="tab-dashboard">
+
+    <!-- Project context bar — pin the composer to a project so saves /
+         exports include the right workflows, agents, MCP refs, and chats. -->
+    <div class="composer-project-bar panel">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Project</label>
+      <select id="project-select" class="model-select" style="min-width:240px" onchange="Projects.setActive(this.value)">
+        <option value="">— no project context —</option>
+      </select>
+      <span style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Active</span>
+      <code id="project-badge" style="color:var(--accent);font-size:0.7rem">—</code>
+      <span style="flex:1"></span>
+      <button class="action-btn" onclick="Projects.create()">+ New Project</button>
+      <button class="action-btn" onclick="Projects.attachCurrentWorkflow()" title="Attach the current workflow to the active project">Attach Workflow</button>
+      <button class="action-btn" onclick="Projects.importBundle()">Import Project</button>
+      <button class="action-btn" onclick="Projects.exportBundle()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export Project</button>
+    </div>
 
     <!-- Composer top toolbar: metadata + import/export/save/run -->
     <div class="composer-toolbar panel">
@@ -2408,12 +2446,20 @@ details[open] > summary::before { transform: rotate(90deg); }
 
   <!-- ── DOCUMENTS TAB ───────────────────────────────────────────── -->
   <div class="tab-content" id="tab-documents" style="display:none">
+    <div style="margin-bottom:14px;padding:10px 12px;background:var(--accent-ghost);border:1px solid var(--accent-dim);border-radius:4px;font-size:0.72rem;color:var(--text-dim);line-height:1.5">
+      <strong style="color:var(--accent)">Context Manager.</strong>
+      Documents here are RAG sources <em>and</em> reference architecture for new agents. Use
+      <strong>Convert to Agent</strong> on any document to launch the doc → agent generator —
+      the LLM drafts a system prompt grounded in the document, you review it, run validation cases,
+      and save it as a reusable agent.
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
         <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Documents</h3>
         <div style="display:flex;gap:8px;margin-bottom:12px;">
           <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" style="flex:1;color:var(--text);font-family:var(--mono);font-size:0.8rem;">
           <button onclick="uploadDocument()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Upload</button>
+          <button onclick="AgentGen.openFromText()" style="background:transparent;color:var(--accent);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Paste → Agent</button>
         </div>
         <div id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;"></div>
         <div id="documents-list" style="max-height:400px;overflow-y:auto;"></div>
@@ -5006,8 +5052,9 @@ async function loadDocumentsList() {
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="font-size:0.85rem;color:var(--text);max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.filename)}</div>
             <div>
-              <button onclick="reindexDocument('${d.id}')" style="background:none;border:none;color:var(--cyan);cursor:pointer;font-size:0.75rem;margin-right:8px;">reindex</button>
-              <button onclick="deleteDocument('${d.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+              <button onclick="AgentGen.openFromDocument('${esc(d.id)}', '${esc(d.filename||'')}')" title="Generate an agent from this document" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;margin-right:8px;font-weight:600;">→ Agent</button>
+              <button onclick="reindexDocument('${esc(d.id)}')" style="background:none;border:none;color:var(--cyan);cursor:pointer;font-size:0.75rem;margin-right:8px;">reindex</button>
+              <button onclick="deleteDocument('${esc(d.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
             </div>
           </div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
@@ -6724,6 +6771,7 @@ const ComposerView = (function () {
     loadAgentsForSelector();
     loadWorkbenches();
     composerSwitchBench('steps');
+    if (typeof Projects !== 'undefined') Projects.load();
   }
 
   function updateCanvasEmptyState() {
@@ -7445,6 +7493,393 @@ const MCPPanel = (function () {
   });
   const root = document.querySelector('.shell');
   if (root) observer.observe(root, { attributes: true, subtree: true, attributeFilter: ['class'] });
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   AGENT GENERATOR — modal that converts a document or pasted text
+   into a draft agent, lets the user edit it, run validation cases,
+   and save. Backed by /api/agents/generate + /api/agents/{id}/evaluate.
+   ══════════════════════════════════════════════════════════════════ */
+const AgentGen = (function () {
+  let _draft = null;
+  let _modal = null;
+
+  function openFromDocument(docId, filename) {
+    _ensureModal();
+    document.getElementById('ag-mode').value = 'document';
+    document.getElementById('ag-document-id').value = docId;
+    document.getElementById('ag-filename-readonly').textContent = filename || docId;
+    document.getElementById('ag-text-row').style.display = 'none';
+    document.getElementById('ag-doc-row').style.display = '';
+    _showStep('input');
+    _modal.hidden = false;
+  }
+
+  function openFromText() {
+    _ensureModal();
+    document.getElementById('ag-mode').value = 'text';
+    document.getElementById('ag-document-id').value = '';
+    document.getElementById('ag-text-row').style.display = '';
+    document.getElementById('ag-doc-row').style.display = 'none';
+    _showStep('input');
+    _modal.hidden = false;
+  }
+
+  function _ensureModal() {
+    if (_modal) return;
+    _modal = document.createElement('div');
+    _modal.className = 'admin-modal';
+    _modal.id = 'agent-gen-modal';
+    _modal.hidden = true;
+    _modal.innerHTML = `
+      <div class="admin-modal-card" style="width:760px;max-width:94vw;max-height:88vh;overflow:auto">
+        <h3>Convert document to agent</h3>
+        <div class="ag-steps">
+          <span class="ag-step" data-ag-step="input">1. Input</span>
+          <span class="ag-step" data-ag-step="draft">2. Draft</span>
+          <span class="ag-step" data-ag-step="eval">3. Validate</span>
+        </div>
+
+        <!-- Step 1: input -->
+        <div class="ag-pane" data-ag-pane="input">
+          <input type="hidden" id="ag-mode" value="text">
+          <div id="ag-doc-row" style="margin:8px 0">
+            <label class="admin-modal-label">Source document</label>
+            <div style="padding:6px 10px;border:1px solid var(--border);border-radius:3px;font-size:0.75rem;color:var(--text-dim)" id="ag-filename-readonly">—</div>
+            <input type="hidden" id="ag-document-id" value="">
+          </div>
+          <div id="ag-text-row" style="margin:8px 0;display:none">
+            <label class="admin-modal-label">Source text (or paste reference content here)</label>
+            <textarea id="ag-text-input" rows="8" placeholder="Paste a spec, runbook, or other reference material…"></textarea>
+          </div>
+          <label class="admin-modal-label">Name hint (optional)</label>
+          <input type="text" id="ag-name-hint" placeholder="e.g. XSIAM Rule Reviewer">
+          <label class="admin-modal-label">Role hint (optional)</label>
+          <select id="ag-role-hint">
+            <option value="">— let the LLM decide —</option>
+            <option value="reasoning">reasoning</option>
+            <option value="coding">coding</option>
+            <option value="fast">fast</option>
+            <option value="general">general</option>
+            <option value="uncensored">uncensored</option>
+          </select>
+          <div id="ag-error" class="admin-modal-error" hidden></div>
+          <div class="admin-modal-actions">
+            <button type="button" class="admin-modal-btn" onclick="AgentGen.close()">Cancel</button>
+            <button type="button" class="admin-modal-btn primary" id="ag-generate-btn" onclick="AgentGen.generate()">Generate draft</button>
+          </div>
+        </div>
+
+        <!-- Step 2: draft review -->
+        <div class="ag-pane" data-ag-pane="draft" hidden>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div><label class="admin-modal-label">Agent ID</label><input type="text" id="ag-draft-id"></div>
+            <div><label class="admin-modal-label">Name</label><input type="text" id="ag-draft-name"></div>
+            <div><label class="admin-modal-label">Role</label><select id="ag-draft-role">
+              <option value="reasoning">reasoning</option>
+              <option value="coding">coding</option>
+              <option value="fast">fast</option>
+              <option value="general">general</option>
+              <option value="uncensored">uncensored</option>
+            </select></div>
+            <div><label class="admin-modal-label">Model (optional)</label><input type="text" id="ag-draft-model" placeholder="deepseek-r1:32b"></div>
+          </div>
+          <label class="admin-modal-label">Description</label>
+          <input type="text" id="ag-draft-desc">
+          <label class="admin-modal-label">System prompt</label>
+          <textarea id="ag-draft-prompt" rows="10"></textarea>
+          <label class="admin-modal-label">Starter prompts (one per line)</label>
+          <textarea id="ag-draft-starters" rows="4"></textarea>
+          <label class="admin-modal-label">Tags (comma-separated)</label>
+          <input type="text" id="ag-draft-tags">
+          <div id="ag-draft-error" class="admin-modal-error" hidden></div>
+          <div class="admin-modal-actions">
+            <button type="button" class="admin-modal-btn" onclick="AgentGen._showStep('input')">← Back</button>
+            <button type="button" class="admin-modal-btn" onclick="AgentGen.save(false)">Save (no eval)</button>
+            <button type="button" class="admin-modal-btn primary" onclick="AgentGen._showStep('eval')">Continue → Validate</button>
+          </div>
+        </div>
+
+        <!-- Step 3: validation -->
+        <div class="ag-pane" data-ag-pane="eval" hidden>
+          <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5">
+            Define a few quick acceptance cases — prompt + expected substring. The draft will be saved
+            and then evaluated; results show pass/fail per case.
+          </div>
+          <div id="ag-cases" style="display:flex;flex-direction:column;gap:6px"></div>
+          <button class="action-btn" onclick="AgentGen.addCase()" style="margin-top:6px">+ Add case</button>
+          <div id="ag-eval-results" style="margin-top:14px"></div>
+          <div id="ag-eval-error" class="admin-modal-error" hidden></div>
+          <div class="admin-modal-actions">
+            <button type="button" class="admin-modal-btn" onclick="AgentGen._showStep('draft')">← Back</button>
+            <button type="button" class="admin-modal-btn primary" onclick="AgentGen.saveAndEvaluate()">Save + Run cases</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(_modal);
+  }
+
+  function _showStep(name) {
+    _ensureModal();
+    _modal.querySelectorAll('.ag-step').forEach(s => s.classList.toggle('active', s.dataset.agStep === name));
+    _modal.querySelectorAll('.ag-pane').forEach(p => p.hidden = (p.dataset.agPane !== name));
+    if (name === 'eval') AgentGen.addCase(); // seed with one row
+  }
+
+  function _hideError(id) { const e = document.getElementById(id); if (e) { e.hidden = true; e.textContent = ''; } }
+  function _showError(id, msg) { const e = document.getElementById(id); if (e) { e.textContent = msg; e.hidden = false; } }
+
+  async function generate() {
+    _hideError('ag-error');
+    const mode = document.getElementById('ag-mode').value;
+    const nameHint = document.getElementById('ag-name-hint').value.trim();
+    const roleHint = document.getElementById('ag-role-hint').value;
+    const body = { name_hint: nameHint || null, role_hint: roleHint || null };
+    if (mode === 'document') {
+      body.document_id = document.getElementById('ag-document-id').value;
+    } else {
+      const text = document.getElementById('ag-text-input').value.trim();
+      if (!text) { _showError('ag-error', 'Paste some text first.'); return; }
+      body.text = text;
+    }
+    const btn = document.getElementById('ag-generate-btn');
+    btn.disabled = true; btn.textContent = 'Generating…';
+    try {
+      const r = await fetch('/api/agents/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        _showError('ag-error', err.detail || r.statusText);
+        return;
+      }
+      const result = await r.json();
+      _draft = result.draft;
+      _hydrateDraft(_draft);
+      _showStep('draft');
+    } catch (e) { _showError('ag-error', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Generate draft'; }
+  }
+
+  function _hydrateDraft(d) {
+    document.getElementById('ag-draft-id').value = d.id || '';
+    document.getElementById('ag-draft-name').value = d.name || '';
+    document.getElementById('ag-draft-role').value = d.role || 'reasoning';
+    document.getElementById('ag-draft-model').value = d.model || '';
+    document.getElementById('ag-draft-desc').value = d.description || '';
+    document.getElementById('ag-draft-prompt').value = d.system_prompt || '';
+    document.getElementById('ag-draft-starters').value = (d.starters || []).join('\n');
+    document.getElementById('ag-draft-tags').value = (d.tags || []).join(', ');
+  }
+
+  function _readDraft() {
+    if (!_draft) _draft = {};
+    _draft.id = document.getElementById('ag-draft-id').value.trim();
+    _draft.name = document.getElementById('ag-draft-name').value.trim();
+    _draft.role = document.getElementById('ag-draft-role').value;
+    _draft.model = document.getElementById('ag-draft-model').value.trim() || null;
+    _draft.description = document.getElementById('ag-draft-desc').value.trim();
+    _draft.system_prompt = document.getElementById('ag-draft-prompt').value;
+    _draft.starters = document.getElementById('ag-draft-starters').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    _draft.tags = document.getElementById('ag-draft-tags').value.split(',').map(s => s.trim()).filter(Boolean);
+    // Preserve any context the generator attached.
+    if (!_draft.context) _draft.context = [];
+    return _draft;
+  }
+
+  async function save(closeAfter = true) {
+    _hideError('ag-draft-error');
+    const draft = _readDraft();
+    if (!draft.id || !draft.name || !draft.system_prompt) {
+      _showError('ag-draft-error', 'id, name, and system_prompt are required.');
+      return false;
+    }
+    try {
+      const r = await fetch('/api/agents/generate/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draft, overwrite: true }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        _showError('ag-draft-error', err.detail || r.statusText);
+        return false;
+      }
+      if (closeAfter) {
+        close();
+        if (typeof loadAgentsTab === 'function') loadAgentsTab();
+        if (typeof loadAgentsForSelector === 'function') loadAgentsForSelector();
+        alert(`Agent '${draft.id}' saved.`);
+      }
+      return true;
+    } catch (e) { _showError('ag-draft-error', e.message); return false; }
+  }
+
+  function addCase() {
+    const el = document.getElementById('ag-cases');
+    if (!el) return;
+    const row = document.createElement('div');
+    row.className = 'ag-case-row';
+    row.innerHTML = `
+      <input type="text" class="ag-case-prompt" placeholder="Prompt to send the agent">
+      <input type="text" class="ag-case-expected" placeholder="Expected substring (optional)">
+      <button class="action-btn" onclick="this.parentElement.remove()" style="padding:3px 8px;color:var(--danger);border-color:var(--danger-dim)">✕</button>
+    `;
+    el.appendChild(row);
+  }
+
+  async function saveAndEvaluate() {
+    _hideError('ag-eval-error');
+    const draft = _readDraft();
+    const cases = Array.from(document.querySelectorAll('#ag-cases .ag-case-row'))
+      .map(r => ({
+        prompt: r.querySelector('.ag-case-prompt').value.trim(),
+        expected_contains: r.querySelector('.ag-case-expected').value.trim() || null,
+      }))
+      .filter(c => c.prompt);
+    if (!cases.length) {
+      _showError('ag-eval-error', 'Add at least one case.');
+      return;
+    }
+    const ok = await save(false);
+    if (!ok) return;
+    document.getElementById('ag-eval-results').innerHTML = '<div style="color:var(--text-dim);font-size:0.72rem">Running cases…</div>';
+    try {
+      const r = await fetch(`/api/agents/${encodeURIComponent(draft.id)}/evaluate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cases }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        _showError('ag-eval-error', err.detail || r.statusText);
+        return;
+      }
+      const report = await r.json();
+      document.getElementById('ag-eval-results').innerHTML = `
+        <div style="font-size:0.72rem;margin-bottom:8px">
+          <strong>${report.passed} passed</strong> · <span style="color:var(--danger)">${report.failed} failed</span>
+        </div>
+        ${(report.cases || []).map(c => `
+          <div class="ag-case-result">
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+              <span class="ag-case-pill ${c.passed ? 'pass' : 'fail'}">${c.passed ? 'PASS' : 'FAIL'}</span>
+              <span style="font-family:var(--mono);font-size:0.66rem;color:var(--text-dim)">${c.duration_seconds}s</span>
+              <span style="font-size:0.7rem;flex:1">${esc(c.prompt)}</span>
+            </div>
+            <pre style="margin:0;font-size:0.66rem;background:var(--bg-deep);padding:6px 8px;border-radius:3px;white-space:pre-wrap;max-height:120px;overflow:auto">${esc(c.response)}</pre>
+          </div>
+        `).join('')}
+      `;
+    } catch (e) { _showError('ag-eval-error', e.message); }
+  }
+
+  function close() {
+    if (_modal) _modal.hidden = true;
+  }
+
+  return { openFromDocument, openFromText, generate, save, saveAndEvaluate, addCase, close, _showStep };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   PROJECT BAR — projects are persistent groupings of workflows,
+   agents, MCPs, plugins, documents, and chats. The bar appears at the
+   top of the composer and lets you switch context + bundle export.
+   ══════════════════════════════════════════════════════════════════ */
+const Projects = (function () {
+  let _projects = [];
+  let _active = null;
+
+  async function load() {
+    try {
+      const r = await fetch('/api/projects');
+      if (!r.ok) return;
+      _projects = await r.json();
+      _renderBar();
+    } catch (e) { /* offline-tolerant */ }
+  }
+
+  function _renderBar() {
+    const sel = document.getElementById('project-select');
+    if (!sel) return;
+    sel.innerHTML = ['<option value="">— no project context —</option>']
+      .concat(_projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (${(p.counts.workflows||0)+(p.counts.agents||0)+(p.counts.mcp_servers||0)+(p.counts.documents||0)})</option>`))
+      .join('');
+    if (_active) sel.value = _active;
+  }
+
+  function setActive(id) {
+    _active = id;
+    window._activeProject = id;
+    document.getElementById('project-badge').textContent = id || '—';
+  }
+
+  async function create() {
+    const id = prompt('Project ID (alphanum/_/-, max 64 chars):');
+    if (!id) return;
+    const name = prompt('Project name:') || id;
+    try {
+      const r = await fetch('/api/projects', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name }),
+      });
+      if (!r.ok) { alert('Create failed: ' + (await r.text())); return; }
+      await load();
+      setActive(id);
+    } catch (e) { alert('Create error: ' + e.message); }
+  }
+
+  async function attachCurrentWorkflow() {
+    if (!_active) { alert('Pick a project first.'); return; }
+    const wfId = (document.getElementById('df-wf-id') || {}).value;
+    if (!wfId) { alert('Set a workflow ID first.'); return; }
+    try {
+      const r = await fetch(`/api/projects/${encodeURIComponent(_active)}/artifacts/workflows/${encodeURIComponent(wfId)}`, { method: 'POST' });
+      if (!r.ok) { alert('Attach failed: ' + (await r.text())); return; }
+      alert(`Workflow '${wfId}' attached to project '${_active}'.`);
+      await load();
+    } catch (e) { alert('Attach error: ' + e.message); }
+  }
+
+  async function exportBundle() {
+    if (!_active) { alert('Pick a project first.'); return; }
+    try {
+      const r = await fetch(`/api/projects/${encodeURIComponent(_active)}/export`);
+      if (!r.ok) { alert('Export failed: ' + (await r.text())); return; }
+      const bundle = await r.json();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${_active}.project.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) { alert('Export error: ' + e.message); }
+  }
+
+  function importBundle() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.json';
+    inp.onchange = async () => {
+      const file = inp.files && inp.files[0];
+      if (!file) return;
+      const text = await file.text();
+      try {
+        const bundle = JSON.parse(text);
+        const r = await fetch('/api/projects/import?overwrite=true', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bundle),
+        });
+        if (!r.ok) { alert('Import failed: ' + (await r.text())); return; }
+        const result = await r.json();
+        alert(`Imported project '${result.project_id}'.`);
+        await load();
+        setActive(result.project_id);
+      } catch (e) { alert('Import error: ' + e.message); }
+    };
+    inp.click();
+  }
+
+  return { load, setActive, create, attachCurrentWorkflow, exportBundle, importBundle };
 })();
 
 </script>
