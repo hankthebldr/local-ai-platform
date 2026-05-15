@@ -16,27 +16,35 @@ def plugin_dir():
     tmpdir = tempfile.mkdtemp()
     plugin_path = Path(tmpdir) / "test-plugin"
     plugin_path.mkdir()
-    (plugin_path / "plugin.yaml").write_text(yaml.dump({
-        "name": "Test Plugin",
-        "id": "test-plugin",
-        "version": "1.0.0",
-        "description": "A test plugin",
-        "author": "test",
-        "skills": [{
-            "id": "test-skill",
-            "file": "skills/greeting.md",
-            "triggers": [{"keyword": "hello"}, {"manual": True}],
-        }],
-        "tools": [{
-            "id": "echo",
-            "file": "tools/echo_tool.py",
-            "function": "execute",
-            "description": "Echoes input back",
-            "parameters": {
-                "text": {"type": "string", "required": True},
-            },
-        }],
-    }))
+    (plugin_path / "plugin.yaml").write_text(
+        yaml.dump(
+            {
+                "name": "Test Plugin",
+                "id": "test-plugin",
+                "version": "1.0.0",
+                "description": "A test plugin",
+                "author": "test",
+                "skills": [
+                    {
+                        "id": "test-skill",
+                        "file": "skills/greeting.md",
+                        "triggers": [{"keyword": "hello"}, {"manual": True}],
+                    }
+                ],
+                "tools": [
+                    {
+                        "id": "echo",
+                        "file": "tools/echo_tool.py",
+                        "function": "execute",
+                        "description": "Echoes input back",
+                        "parameters": {
+                            "text": {"type": "string", "required": True},
+                        },
+                    }
+                ],
+            }
+        )
+    )
     skills_dir = plugin_path / "skills"
     skills_dir.mkdir()
     (skills_dir / "greeting.md").write_text(
@@ -55,6 +63,7 @@ def plugin_dir():
 @pytest.fixture
 def plugin_service(plugin_dir):
     from api.services.plugin_service import PluginService
+
     return PluginService(plugins_dir=plugin_dir)
 
 
@@ -67,11 +76,19 @@ class TestPluginDiscovery:
     def test_scan_skips_disabled_dir(self, plugin_dir):
         disabled = Path(plugin_dir) / "_disabled"
         disabled.mkdir()
-        (disabled / "plugin.yaml").write_text(yaml.dump({
-            "name": "Disabled", "id": "disabled", "version": "1.0.0",
-            "description": "Should be skipped", "author": "test",
-        }))
+        (disabled / "plugin.yaml").write_text(
+            yaml.dump(
+                {
+                    "name": "Disabled",
+                    "id": "disabled",
+                    "version": "1.0.0",
+                    "description": "Should be skipped",
+                    "author": "test",
+                }
+            )
+        )
         from api.services.plugin_service import PluginService
+
         svc = PluginService(plugins_dir=plugin_dir)
         plugins = svc.scan_plugins()
         assert all(p["id"] != "disabled" for p in plugins)
@@ -126,14 +143,15 @@ def plugin_client():
     os.environ["ENABLE_API_AUTH"] = "false"
     os.environ["RATE_LIMIT_RPM"] = "0"
     os.environ["MASTER_API_KEY"] = "test-master"
-    os.environ["PLUGINS_DIR"] = str(
-        Path(__file__).parent.parent / "plugins"
-    )
+    os.environ["PLUGINS_DIR"] = str(Path(__file__).parent.parent / "plugins")
     import api.middleware
+
     importlib.reload(api.middleware)
     import api.main
+
     importlib.reload(api.main)
     from api.main import app
+
     client = TestClient(app)
     client.headers.update({"Authorization": "Bearer test-master"})
     return client
@@ -172,6 +190,7 @@ class TestChatPluginIntegration:
     def test_skill_triggers_inject_system_prompt(self):
         """Verify that plugin skills are found for matching messages"""
         from api.services.plugin_service import PluginService
+
         svc = PluginService(plugins_dir=str(Path(__file__).parent.parent / "plugins"))
         svc.scan_plugins()
 
@@ -182,6 +201,7 @@ class TestChatPluginIntegration:
 
     def test_no_skill_for_unmatched_message(self):
         from api.services.plugin_service import PluginService
+
         svc = PluginService(plugins_dir=str(Path(__file__).parent.parent / "plugins"))
         svc.scan_plugins()
 
@@ -202,20 +222,29 @@ class TestPluginToolConversion:
         try:
             plugin_path = Path(tmpdir) / "test-plugin"
             plugin_path.mkdir()
-            (plugin_path / "plugin.yaml").write_text(yaml.dump({
-                "name": "Test", "id": "test-plugin", "version": "1.0.0",
-                "description": "Test", "author": "test",
-                "tools": [{
-                    "id": "my_tool",
-                    "file": "tools/my_tool.py",
-                    "function": "execute",
-                    "description": "Does something useful",
-                    "parameters": {
-                        "query": {"type": "string", "required": True},
-                        "limit": {"type": "integer", "default": 10},
-                    },
-                }],
-            }))
+            (plugin_path / "plugin.yaml").write_text(
+                yaml.dump(
+                    {
+                        "name": "Test",
+                        "id": "test-plugin",
+                        "version": "1.0.0",
+                        "description": "Test",
+                        "author": "test",
+                        "tools": [
+                            {
+                                "id": "my_tool",
+                                "file": "tools/my_tool.py",
+                                "function": "execute",
+                                "description": "Does something useful",
+                                "parameters": {
+                                    "query": {"type": "string", "required": True},
+                                    "limit": {"type": "integer", "default": 10},
+                                },
+                            }
+                        ],
+                    }
+                )
+            )
             tools_dir = plugin_path / "tools"
             tools_dir.mkdir()
             (tools_dir / "__init__.py").write_text("")
@@ -224,6 +253,7 @@ class TestPluginToolConversion:
             )
 
             from api.services.plugin_service import PluginService
+
             svc = PluginService(plugins_dir=tmpdir)
             svc.scan_plugins()
 
@@ -251,6 +281,7 @@ class TestPluginToolConversion:
         tmpdir = tempfile.mkdtemp()
         try:
             from api.services.plugin_service import PluginService
+
             svc = PluginService(plugins_dir=tmpdir)
             svc.scan_plugins()
             assert svc.get_ollama_tools() == []
@@ -260,30 +291,55 @@ class TestPluginToolConversion:
 
 class TestPluginsAuthGate:
     def test_list_requires_master(self, monkeypatch):
+        # Force auth on, otherwise require_master_key is a no-op when a
+        # prior test left ENABLE_API_AUTH=false in the global env.
+        monkeypatch.setenv("ENABLE_API_AUTH", "true")
         monkeypatch.delenv("MASTER_API_KEY", raising=False)
-        import importlib, api.middleware, api.main
-        importlib.reload(api.middleware); importlib.reload(api.main)
+        import importlib
+        import api.middleware
+        import api.main
+
+        importlib.reload(api.middleware)
+        importlib.reload(api.main)
         from api.main import app
         from fastapi.testclient import TestClient
+
         client = TestClient(app)
         assert client.get("/api/plugins").status_code == 401
 
     def test_list_passes_with_master(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_API_AUTH", "true")
         monkeypatch.setenv("MASTER_API_KEY", "test-master")
-        import importlib, api.middleware, api.main
-        importlib.reload(api.middleware); importlib.reload(api.main)
+        import importlib
+        import api.middleware
+        import api.main
+
+        importlib.reload(api.middleware)
+        importlib.reload(api.main)
         from api.main import app
         from fastapi.testclient import TestClient
+
         client = TestClient(app)
-        resp = client.get("/api/plugins", headers={"Authorization": "Bearer test-master"})
+        resp = client.get(
+            "/api/plugins", headers={"Authorization": "Bearer test-master"}
+        )
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
     def test_invoke_requires_master(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_API_AUTH", "true")
         monkeypatch.delenv("MASTER_API_KEY", raising=False)
-        import importlib, api.middleware, api.main
-        importlib.reload(api.middleware); importlib.reload(api.main)
+        import importlib
+        import api.middleware
+        import api.main
+
+        importlib.reload(api.middleware)
+        importlib.reload(api.main)
         from api.main import app
         from fastapi.testclient import TestClient
+
         client = TestClient(app)
-        assert client.post("/api/plugins/some-id/tools/some-tool", json={}).status_code == 401
+        assert (
+            client.post("/api/plugins/some-id/tools/some-tool", json={}).status_code
+            == 401
+        )

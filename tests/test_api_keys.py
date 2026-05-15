@@ -5,7 +5,6 @@ import os
 import pytest
 import tempfile
 import shutil
-from pathlib import Path
 
 
 @pytest.fixture
@@ -14,6 +13,7 @@ def key_service():
     tmpdir = tempfile.mkdtemp()
     os.environ["DATA_CONFIG_DIR"] = tmpdir
     from api.services.api_key_service import APIKeyService
+
     svc = APIKeyService(config_dir=tmpdir)
     yield svc
     shutil.rmtree(tmpdir)
@@ -36,7 +36,9 @@ class TestKeyCreation:
         assert keys[0]["prefix"].startswith("sk-persist-test-")
 
     def test_create_key_with_rate_limit(self, key_service):
-        result = key_service.create_key(name="limited", scopes=["chat"], rate_limit_rpm=30)
+        result = key_service.create_key(
+            name="limited", scopes=["chat"], rate_limit_rpm=30
+        )
         keys = key_service.list_keys()
         assert keys[0]["rate_limit_rpm"] == 30
 
@@ -59,8 +61,7 @@ class TestKeyValidation:
 
     def test_validate_expired_key(self, key_service):
         result = key_service.create_key(
-            name="expired", scopes=["chat"],
-            expires_at="2020-01-01T00:00:00Z"
+            name="expired", scopes=["chat"], expires_at="2020-01-01T00:00:00Z"
         )
         assert key_service.validate_key(result["key"]) is None
 
@@ -102,24 +103,34 @@ def client_with_master(monkeypatch):
     """TestClient with MASTER_API_KEY set to 'test-master'."""
     monkeypatch.setenv("MASTER_API_KEY", "test-master")
     monkeypatch.setenv("ENABLE_API_AUTH", "false")
-    import importlib, api.middleware, api.main
+    import importlib
+    import api.middleware
+    import api.main
+
     importlib.reload(api.middleware)
     importlib.reload(api.main)
     from api.main import app
     from fastapi.testclient import TestClient
+
     return TestClient(app)
 
 
 @pytest.fixture
 def client_no_master(monkeypatch):
-    """TestClient with MASTER_API_KEY unset."""
+    """TestClient with MASTER_API_KEY unset AND auth enabled, so the
+    require_master_key dependency actually engages instead of being
+    bypassed by a previously-leaked ENABLE_API_AUTH=false."""
     monkeypatch.delenv("MASTER_API_KEY", raising=False)
-    monkeypatch.setenv("ENABLE_API_AUTH", "false")
-    import importlib, api.middleware, api.main
+    monkeypatch.setenv("ENABLE_API_AUTH", "true")
+    import importlib
+    import api.middleware
+    import api.main
+
     importlib.reload(api.middleware)
     importlib.reload(api.main)
     from api.main import app
     from fastapi.testclient import TestClient
+
     return TestClient(app)
 
 
@@ -131,12 +142,16 @@ def api_client():
     os.environ["RATE_LIMIT_RPM"] = "0"
     # Reload all modules that cache env vars at import time
     import api.middleware
+
     importlib.reload(api.middleware)
     import api.routers.api_keys
+
     importlib.reload(api.routers.api_keys)
     import api.main
+
     importlib.reload(api.main)
     from api.main import app
+
     return TestClient(app)
 
 
@@ -177,9 +192,7 @@ class TestKeyRouter:
             headers=self.MASTER_HEADER,
         )
         key_id = create_resp.json()["id"]
-        del_resp = api_client.delete(
-            f"/api/keys/{key_id}", headers=self.MASTER_HEADER
-        )
+        del_resp = api_client.delete(f"/api/keys/{key_id}", headers=self.MASTER_HEADER)
         assert del_resp.status_code == 200
 
     def test_usage_endpoint(self, api_client):
@@ -189,9 +202,7 @@ class TestKeyRouter:
             headers=self.MASTER_HEADER,
         )
         key_id = create_resp.json()["id"]
-        resp = api_client.get(
-            f"/api/keys/{key_id}/usage", headers=self.MASTER_HEADER
-        )
+        resp = api_client.get(f"/api/keys/{key_id}/usage", headers=self.MASTER_HEADER)
         assert resp.status_code == 200
         assert resp.json()["total_requests"] == 0
 
@@ -240,6 +251,7 @@ class TestMultiKeyAuth:
 def test_require_master_helper_lives_in_middleware():
     """Smoke: helper is importable from middleware so plugins.py can use it."""
     from api.middleware import require_master_key
+
     assert callable(require_master_key)
 
 

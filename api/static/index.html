@@ -1657,6 +1657,117 @@ details[open] > summary::before { transform: rotate(90deg); }
 .df-tag-remove:hover { opacity: 1; color: var(--red); }
 .df-gate-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 4px; margin-bottom: 4px; font-size: 0.6rem; }
 .df-gate-row select, .df-gate-row input { font-size: 0.6rem; padding: 3px 6px; }
+
+/* ── COMPOSER-AS-DASHBOARD ──────────────────────────────────────── */
+.composer-toolbar { margin-bottom: 10px; padding: 10px 12px; }
+.composer-meta-row { display: grid; grid-template-columns: 180px 180px 130px 130px 1fr; gap: 8px; margin-bottom: 8px; }
+.composer-meta-row label { font-size: 0.54rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 2px; }
+.composer-meta-row .chat-input, .composer-meta-row .model-select { font-size: 0.68rem; padding: 4px 8px; }
+.composer-meta-grow { grid-column: span 1; }
+.composer-actions-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--border); }
+.composer-actions-row .send-btn { padding: 6px 22px; }
+
+.composer-grid { display: grid; grid-template-columns: 220px 1fr 320px; gap: 10px; min-height: 480px; }
+.composer-left, .composer-center, .composer-right { display: flex; flex-direction: column; gap: 10px; }
+.composer-left-panel { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.composer-canvas-panel { flex: 1; min-height: 480px; position: relative; padding: 0; overflow: hidden; }
+.composer-right-panel { padding: 10px 12px; }
+.composer-right .composer-right-panel:first-child { max-height: 280px; overflow: auto; }
+
+.workbench-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 4px; }
+.workbench-tab { background: transparent; border: none; color: var(--text-dim); font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 10px; cursor: pointer; border-bottom: 2px solid transparent; }
+.workbench-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.workbench-tab:hover:not(.active) { color: var(--text); }
+.workbench-body { flex: 1; overflow: auto; padding: 6px; }
+.workbench-pane { display: flex; flex-direction: column; gap: 4px; }
+.workbench-pane[hidden] { display: none; }
+.workbench-hint { font-size: 0.58rem; color: var(--text-muted); padding: 4px 6px 8px; line-height: 1.4; }
+.workbench-item { padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; cursor: grab; font-size: 0.64rem; font-family: var(--mono); display: flex; align-items: flex-start; gap: 6px; flex-direction: column; transition: border-color 0.2s; }
+.workbench-item:hover { border-color: var(--cyan-dim); }
+.workbench-item:active { cursor: grabbing; }
+.workbench-item-head { display: flex; align-items: center; gap: 6px; width: 100%; }
+.workbench-item-title { flex: 1; color: var(--text); font-weight: 600; font-size: 0.66rem; }
+.workbench-item-pill { font-size: 0.5rem; color: var(--accent); border: 1px solid var(--accent-dim); padding: 1px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.08em; }
+.workbench-item-pill.warn { color: var(--warn); border-color: var(--warn-dim); }
+.workbench-item-pill.dim  { color: var(--text-muted); border-color: var(--border); }
+.workbench-item-desc { font-size: 0.58rem; color: var(--text-muted); line-height: 1.4; }
+.workbench-tool-row { display: flex; align-items: center; gap: 6px; font-size: 0.58rem; color: var(--text-dim); padding: 3px 0; }
+.workbench-tool-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); flex-shrink: 0; }
+
+.composer-canvas-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; color: var(--text-muted); }
+.composer-canvas-empty-inner { text-align: center; max-width: 320px; }
+.composer-canvas-empty-title { font-size: 0.9rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.composer-canvas-empty-sub { font-size: 0.7rem; line-height: 1.5; }
+.composer-canvas-panel.has-nodes .composer-canvas-empty { display: none; }
+
+.composer-config-body { font-size: 0.72rem; color: var(--text-dim); padding: 0 2px; }
+.composer-config-empty { padding: 24px 8px; text-align: center; color: var(--text-muted); font-size: 0.64rem; line-height: 1.5; }
+
+.composer-mini-status { display: flex; flex-direction: column; gap: 8px; }
+.composer-mini-gauges { display: flex; gap: 12px; justify-content: center; }
+.gauge.gauge-mini { width: 64px; height: 64px; }
+.composer-mini-models .model-list { max-height: 90px; overflow: auto; }
+
+.agent-chat-dock { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; transition: max-height 0.25s ease; max-height: 1200px; }
+.agent-chat-dock.collapsed { max-height: 60px; overflow: hidden; }
+.agent-chat-dock.collapsed .chat-messages,
+.agent-chat-dock.collapsed .chat-input-row,
+.agent-chat-dock.collapsed .system-prompt-row,
+.agent-chat-dock.collapsed .search-settings { display: none !important; }
+
+/* ── WORKFLOW INDEX ──────────────────────────────────────────────── */
+.wfi-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.wfi-controls .search-input { flex: 0 0 280px; }
+.wfi-category-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.wfi-category-chip { padding: 3px 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); font-size: 0.62rem; font-family: var(--mono); letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; border-radius: 2px; }
+.wfi-category-chip.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-ghost); }
+.wfi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.wfi-card { padding: 12px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; gap: 6px; }
+.wfi-card:hover { border-color: var(--accent-dim); }
+.wfi-card-head { display: flex; align-items: center; gap: 6px; }
+.wfi-card-title { flex: 1; color: var(--text); font-weight: 600; font-size: 0.78rem; }
+.wfi-card-cat { font-size: 0.5rem; color: var(--accent); border: 1px solid var(--accent-dim); padding: 1px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.08em; }
+.wfi-card-desc { font-size: 0.66rem; color: var(--text-dim); line-height: 1.4; min-height: 2.2em; }
+.wfi-card-meta { display: flex; gap: 10px; font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.wfi-card-refs { display: flex; flex-wrap: wrap; gap: 3px; }
+.wfi-card-tag { font-size: 0.52rem; color: var(--text-muted); border: 1px solid var(--border); padding: 1px 5px; border-radius: 2px; }
+.wfi-card-actions { display: flex; gap: 4px; margin-top: 6px; }
+.wfi-card-actions .action-btn { padding: 3px 8px; font-size: 0.6rem; flex: 1; }
+
+/* ── PROJECT BAR ─────────────────────────────────────────────────── */
+.composer-project-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.composer-project-bar code { background: var(--bg-deep); padding: 2px 6px; border-radius: 3px; font-family: var(--mono); }
+
+/* ── AGENT GENERATOR MODAL ───────────────────────────────────────── */
+.ag-steps { display: flex; gap: 8px; margin: 10px 0 14px; font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.ag-step { padding: 4px 10px; border: 1px solid var(--border); border-radius: 2px; }
+.ag-step.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-ghost); }
+.ag-pane[hidden] { display: none; }
+.ag-pane label.admin-modal-label { margin-top: 8px; }
+.ag-pane input[type="text"], .ag-pane input[type="number"], .ag-pane textarea, .ag-pane select {
+  width: 100%; padding: 6px 10px; background: var(--bg-panel); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 0.74rem; border-radius: 3px;
+  margin-bottom: 4px;
+}
+.ag-case-row { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 6px; align-items: center; }
+.ag-case-result { padding: 8px; border: 1px solid var(--border); border-radius: 3px; margin-bottom: 6px; }
+.ag-case-pill { font-size: 0.56rem; padding: 2px 8px; border-radius: 2px; letter-spacing: 0.08em; font-weight: 600; }
+.ag-case-pill.pass { color: var(--success); border: 1px solid var(--success-dim); background: var(--accent-ghost); }
+.ag-case-pill.fail { color: var(--danger); border: 1px solid var(--danger-dim); background: rgba(229,75,75,0.1); }
+
+/* ── MCP admin ───────────────────────────────────────────────────── */
+.mcp-row { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 6px; cursor: pointer; background: var(--bg); }
+.mcp-row.selected { border-color: var(--accent-dim); background: var(--accent-ghost); }
+.mcp-row-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.mcp-row-dot.up { background: var(--success); box-shadow: 0 0 6px var(--success-dim); }
+.mcp-row-dot.down { background: var(--danger); }
+.mcp-row-dot.unknown { background: var(--text-muted); }
+.mcp-row-title { flex: 1; font-size: 0.72rem; color: var(--text); font-weight: 600; }
+.mcp-row-meta { font-size: 0.58rem; color: var(--text-muted); }
+.mcp-tools-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.mcp-tool { padding: 6px 8px; border: 1px solid var(--border); border-radius: 3px; font-size: 0.66rem; }
+.mcp-tool-name { color: var(--accent); font-family: var(--mono); font-size: 0.66rem; }
+.mcp-tool-desc { color: var(--text-dim); font-size: 0.58rem; margin-top: 2px; line-height: 1.3; }
 </style>
 </head>
 <body>
@@ -1698,16 +1809,15 @@ details[open] > summary::before { transform: rotate(90deg); }
 
   <!-- TAB NAVIGATION -->
   <div class="tab-nav" role="tablist">
-    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Dashboard</button>
-    <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
-    <button class="tab-btn" data-tab="memory" onclick="switchTab('memory', this)">Memory<span class="tab-count" id="mem-count"></span></button>
-    <button class="tab-btn" data-tab="discover" onclick="switchTab('discover', this)">Discover<span class="tab-count" id="disc-count"></span></button>
-    <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Research<span class="tab-count" id="res-count"></span></button>
-    <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows', this)">Workflows</button>
-    <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">
-      <span>Documents</span>
-    </button>
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Composer</button>
+    <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
+    <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows', this)">Runs</button>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
+    <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
+    <button class="tab-btn" data-tab="discover" onclick="switchTab('discover', this)">Discover<span class="tab-count" id="disc-count"></span></button>
+    <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">Context</button>
+    <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Skill Lab<span class="tab-count" id="res-count"></span></button>
+    <button class="tab-btn" data-tab="memory" onclick="switchTab('memory', this)">Memory<span class="tab-count" id="mem-count"></span></button>
     <span class="tab-divider" aria-hidden="true"></span>
     <div class="tab-dropdown" role="presentation">
       <button class="tab-btn admin-trigger" id="admin-trigger"
@@ -1722,6 +1832,8 @@ details[open] > summary::before { transform: rotate(90deg); }
         <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-plugins" onclick="AdminMenu.select('admin-plugins')">Plugins</button>
         <button class="admin-menu-item" role="menuitem" type="button"
+                data-panel="admin-mcp" onclick="AdminMenu.select('admin-mcp')">MCP Servers</button>
+        <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-exports" onclick="AdminMenu.select('admin-exports')">Exports</button>
         <div class="admin-menu-divider" aria-hidden="true"></div>
         <div class="admin-menu-status" id="admin-menu-status">
@@ -1734,146 +1846,290 @@ details[open] > summary::before { transform: rotate(90deg); }
     </div>
   </div>
 
-  <!-- ═══ TAB: DASHBOARD ═══════════════════════════════════════════ -->
+  <!-- ═══ TAB: COMPOSER (formerly Dashboard) ════════════════════════
+       The Workflow Composer is the primary user experience: a node-
+       based DAG canvas surrounded by a step + workbench palette on the
+       left, a system / configuration rail on the right, and the
+       agent-chat dock anchored at the bottom. The legacy "Dashboard"
+       tab id is preserved for routing back-compat. -->
   <div class="tab-content active" id="tab-dashboard">
-    <div class="dashboard-grid">
-      <!-- SYSTEM STATUS -->
-      <div class="panel panel-system">
-        <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div class="panel-label">System Status</div>
-        <div id="status-content">
-          <div class="metric-row"><span class="metric-key">API</span><span class="metric-val" style="color:var(--text-muted)">loading...</span></div>
-          <div class="metric-row"><span class="metric-key">Ollama</span><span class="metric-val" style="color:var(--text-muted)">loading...</span></div>
-          <div class="metric-row"><span class="metric-key">Models</span><span class="metric-val" style="color:var(--text-muted)">--</span></div>
-          <div class="metric-row"><span class="metric-key">Version</span><span class="metric-val" style="color:var(--text-muted)">--</span></div>
+
+    <!-- Project context bar — pin the composer to a project so saves /
+         exports include the right workflows, agents, MCP refs, and chats. -->
+    <div class="composer-project-bar panel">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Project</label>
+      <select id="project-select" class="model-select" style="min-width:240px" onchange="Projects.setActive(this.value)">
+        <option value="">— no project context —</option>
+      </select>
+      <span style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Active</span>
+      <code id="project-badge" style="color:var(--accent);font-size:0.7rem">—</code>
+      <span style="flex:1"></span>
+      <button class="action-btn" onclick="Projects.create()">+ New Project</button>
+      <button class="action-btn" onclick="Projects.attachCurrentWorkflow()" title="Attach the current workflow to the active project">Attach Workflow</button>
+      <button class="action-btn" onclick="Projects.importBundle()">Import Project</button>
+      <button class="action-btn" onclick="Projects.exportBundle()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export Project</button>
+    </div>
+
+    <!-- Composer top toolbar: metadata + import/export/save/run -->
+    <div class="composer-toolbar panel">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="composer-meta-row">
+        <div class="composer-meta-field">
+          <label>Workflow ID</label>
+          <input type="text" id="df-wf-id" class="chat-input"
+                 placeholder="my-workflow" />
+        </div>
+        <div class="composer-meta-field">
+          <label>Name</label>
+          <input type="text" id="df-wf-name" class="chat-input"
+                 placeholder="My Workflow" />
+        </div>
+        <div class="composer-meta-field">
+          <label>Default Role</label>
+          <select id="df-wf-role" class="model-select">
+            <option value="reasoning">reasoning</option>
+            <option value="coding">coding</option>
+            <option value="fast">fast</option>
+            <option value="general" selected>general</option>
+            <option value="uncensored">uncensored</option>
+          </select>
+        </div>
+        <div class="composer-meta-field">
+          <label>Category</label>
+          <select id="df-wf-category" class="model-select">
+            <option value="general" selected>general</option>
+            <option value="security">security</option>
+            <option value="devops">devops</option>
+            <option value="data">data</option>
+            <option value="code">code</option>
+            <option value="content">content</option>
+            <option value="research">research</option>
+            <option value="automation">automation</option>
+          </select>
+        </div>
+        <div class="composer-meta-field composer-meta-grow">
+          <label>Description</label>
+          <input type="text" id="df-wf-desc" class="chat-input"
+                 placeholder="What does this workflow do?" />
         </div>
       </div>
-
-      <!-- MODELS -->
-      <div class="panel panel-models">
-        <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div class="panel-label">Loaded Models</div>
-        <div id="models-content" class="model-list">
-          <div class="model-empty">scanning...</div>
-        </div>
+      <div class="composer-actions-row">
+        <button class="action-btn" onclick="composerNewWorkflow()" title="Reset composer to a blank workflow">New</button>
+        <button class="action-btn" onclick="composerLoadFromIndex()" title="Open an existing workflow into the composer">Load…</button>
+        <button class="action-btn" onclick="dfImportYaml()">Import YAML</button>
+        <button class="action-btn" onclick="dfImportBundle()">Import Bundle</button>
+        <button class="action-btn" onclick="dfAutoLayout()">Auto-Layout</button>
+        <button class="action-btn" onclick="dfExportYaml()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export YAML</button>
+        <button class="action-btn" onclick="composerExportBundle()" title="Export this workflow + linked agents as a portable bundle">Export Bundle</button>
+        <button class="action-btn" onclick="dfSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
+        <div style="flex:1"></div>
+        <button class="send-btn" onclick="dfRunWorkflowFromComposer()" title="Save then run this workflow">Run ▶</button>
       </div>
+    </div>
 
-      <!-- PERFORMANCE GAUGES -->
-      <div class="panel panel-perf">
-        <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div class="panel-label">Performance</div>
-        <div class="gauge-container">
-          <div class="gauge" id="cpu-gauge">
-            <svg viewBox="0 0 90 90">
-              <circle class="gauge-track" cx="45" cy="45" r="38"/>
-              <circle class="gauge-fill cpu" cx="45" cy="45" r="38"
-                stroke-dasharray="238.76" stroke-dashoffset="238.76" id="cpu-arc"/>
-            </svg>
-            <div class="gauge-center">
-              <div class="gauge-value cpu-color" id="cpu-value">--%</div>
-              <div class="gauge-label">CPU</div>
+    <!-- Main composer grid: palette + canvas + right rail -->
+    <div class="composer-grid">
+
+      <!-- LEFT RAIL: palette + workbenches -->
+      <div class="composer-left">
+        <div class="panel composer-left-panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="workbench-tabs" role="tablist">
+            <button type="button" class="workbench-tab active" data-bench="steps"   onclick="composerSwitchBench('steps', this)">Steps</button>
+            <button type="button" class="workbench-tab"        data-bench="skills"  onclick="composerSwitchBench('skills', this)">Skills</button>
+            <button type="button" class="workbench-tab"        data-bench="plugins" onclick="composerSwitchBench('plugins', this)">Plugins</button>
+            <button type="button" class="workbench-tab"        data-bench="mcps"    onclick="composerSwitchBench('mcps', this)">MCPs</button>
+          </div>
+          <div class="workbench-body">
+            <div class="workbench-pane" id="bench-steps">
+              <div class="workbench-hint">Drag a step onto the canvas.</div>
+              <div class="df-palette" id="df-palette"></div>
+            </div>
+            <div class="workbench-pane" id="bench-skills" hidden>
+              <div class="workbench-hint">Skills are auto-attached to steps when their triggers match. Drag onto a step to pin manually.</div>
+              <div id="bench-skills-list"><div class="model-empty">Loading…</div></div>
+            </div>
+            <div class="workbench-pane" id="bench-plugins" hidden>
+              <div class="workbench-hint">Plugin tools become callable from any step. Drag onto a step to scope it.</div>
+              <div id="bench-plugins-list"><div class="model-empty">Loading…</div></div>
+            </div>
+            <div class="workbench-pane" id="bench-mcps" hidden>
+              <div class="workbench-hint">
+                MCP servers expose external tools. Register servers under <a href="#" onclick="AdminMenu.select('admin-mcp');return false">Admin → MCP</a>.
+              </div>
+              <div id="bench-mcps-list"><div class="model-empty">Loading…</div></div>
             </div>
           </div>
-          <div class="gauge" id="mem-gauge">
-            <svg viewBox="0 0 90 90">
-              <circle class="gauge-track" cx="45" cy="45" r="38"/>
-              <circle class="gauge-fill mem" cx="45" cy="45" r="38"
-                stroke-dasharray="238.76" stroke-dashoffset="238.76" id="mem-arc"/>
-            </svg>
-            <div class="gauge-center">
-              <div class="gauge-value mem-color" id="mem-value">--%</div>
-              <div class="gauge-label">MEM</div>
+        </div>
+      </div>
+
+      <!-- CENTER: Drawflow canvas -->
+      <div class="composer-center">
+        <div class="panel composer-canvas-panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div id="drawflow-canvas"></div>
+          <div class="composer-canvas-empty" id="composer-canvas-empty">
+            <div class="composer-canvas-empty-inner">
+              <div class="composer-canvas-empty-title">Compose a workflow</div>
+              <div class="composer-canvas-empty-sub">Drag steps from the palette on the left, then connect their outputs to downstream inputs.</div>
             </div>
           </div>
         </div>
-        <div id="perf-details">
-          <div class="metric-row"><span class="metric-key">Cores</span><span class="metric-val" id="cpu-cores">--</span></div>
-          <div class="metric-row"><span class="metric-key">RAM</span><span class="metric-val" id="mem-detail">-- / -- GB</span></div>
+        <div class="panel" id="df-yaml-panel" style="display:none;margin-top:10px">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">Generated YAML</div>
+          <pre id="df-yaml-output" style="font-size:0.6rem;color:var(--text-dim);max-height:240px;overflow:auto;white-space:pre-wrap"></pre>
+          <button class="action-btn" onclick="navigator.clipboard.writeText(document.getElementById('df-yaml-output').textContent)" style="font-size:0.56rem;padding:3px 10px;margin-top:6px">Copy YAML</button>
         </div>
       </div>
 
-      <!-- CHAT -->
-      <div class="panel panel-chat">
-        <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div class="chat-header">
-          <div class="panel-label" style="margin-bottom:0">Chat Interface</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <select class="model-select" id="model-select"><option>loading...</option></select>
-            <button class="action-btn" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border)">System</button>
-            <button class="action-btn" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border);display:none">EXPORT</button>
+      <!-- RIGHT RAIL: system mini-status + node config -->
+      <div class="composer-right">
+        <div class="panel composer-right-panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">System</div>
+          <div class="composer-mini-status">
+            <div id="status-content" class="composer-mini-metrics">
+              <div class="metric-row"><span class="metric-key">API</span><span class="metric-val" style="color:var(--text-muted)">loading…</span></div>
+              <div class="metric-row"><span class="metric-key">Ollama</span><span class="metric-val" style="color:var(--text-muted)">loading…</span></div>
+              <div class="metric-row"><span class="metric-key">Models</span><span class="metric-val" style="color:var(--text-muted)">--</span></div>
+              <div class="metric-row"><span class="metric-key">Version</span><span class="metric-val" style="color:var(--text-muted)">--</span></div>
+            </div>
+            <div class="composer-mini-gauges">
+              <div class="gauge gauge-mini" id="cpu-gauge">
+                <svg viewBox="0 0 90 90"><circle class="gauge-track" cx="45" cy="45" r="38"/><circle class="gauge-fill cpu" cx="45" cy="45" r="38" stroke-dasharray="238.76" stroke-dashoffset="238.76" id="cpu-arc"/></svg>
+                <div class="gauge-center"><div class="gauge-value cpu-color" id="cpu-value">--%</div><div class="gauge-label">CPU</div></div>
+              </div>
+              <div class="gauge gauge-mini" id="mem-gauge">
+                <svg viewBox="0 0 90 90"><circle class="gauge-track" cx="45" cy="45" r="38"/><circle class="gauge-fill mem" cx="45" cy="45" r="38" stroke-dasharray="238.76" stroke-dashoffset="238.76" id="mem-arc"/></svg>
+                <div class="gauge-center"><div class="gauge-value mem-color" id="mem-value">--%</div><div class="gauge-label">MEM</div></div>
+              </div>
+            </div>
+            <div class="composer-mini-models">
+              <div class="metric-row" style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:6px">Loaded Models</div>
+              <div id="models-content" class="model-list"><div class="model-empty">scanning…</div></div>
+              <div class="metric-row" style="margin-top:6px"><span class="metric-key">Cores</span><span class="metric-val" id="cpu-cores">--</span></div>
+              <div class="metric-row"><span class="metric-key">RAM</span><span class="metric-val" id="mem-detail">-- / -- GB</span></div>
+            </div>
           </div>
         </div>
-
-        <!-- System Prompt (collapsible; applies to every turn in this session) -->
-        <div class="system-prompt-row" id="system-prompt-row" style="display:none">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.15em;text-transform:uppercase">System Prompt</label>
-            <select id="sysprompt-role-select" class="model-select" style="min-width:180px;font-size:0.7rem" onchange="applyRoleAsSystemPrompt()">
-              <option value="">— load from role library —</option>
-            </select>
-            <span style="flex:1"></span>
-            <button class="action-btn" onclick="saveSystemPrompt()" style="padding:3px 10px;font-size:0.65rem">Save</button>
-            <button class="action-btn" onclick="clearSystemPrompt()" style="padding:3px 10px;font-size:0.65rem;border-color:var(--border);color:var(--text-dim)">Clear</button>
+        <div class="panel composer-right-panel" style="flex:1;overflow:auto">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label" id="df-config-title">Step Config</div>
+          <div id="df-config-panel" class="composer-config-body">
+            <div class="composer-config-empty">Click a node to configure it, or drag a workbench item onto a node to attach a skill, plugin tool, or MCP tool.</div>
           </div>
-          <textarea id="system-prompt" class="chat-input" rows="3" style="min-height:60px;max-height:200px;font-size:0.72rem" placeholder="Define the assistant's persona, tone, and constraints. Applied as role=system on every turn."></textarea>
-          <div style="font-size:0.58rem;color:var(--text-muted);margin-top:4px;letter-spacing:0.1em;text-transform:uppercase">
-            <span id="sysprompt-status">off</span>
-            <span style="margin-left:10px">saved in localStorage</span>
-          </div>
-        </div>
-
-        <div class="chat-messages" id="messages">
-          <div class="msg system-msg">Select a model and start chatting. All inference runs locally.</div>
-        </div>
-        <!-- Search Settings Panel (collapsible) -->
-        <div class="search-settings" id="search-settings">
-          <div class="search-settings-header">
-            <div class="panel-label" style="margin-bottom:0">Search Configuration</div>
-            <button class="search-settings-close" onclick="toggleSettings()">&times;</button>
-          </div>
-          <div class="settings-row">
-            <label>Backend</label>
-            <select id="cfg-backend" onchange="markSettingsDirty()">
-              <option value="auto">Auto (DDG default)</option>
-              <option value="duckduckgo">DuckDuckGo</option>
-              <option value="searxng">SearXNG</option>
-              <option value="brave">Brave Search</option>
-            </select>
-          </div>
-          <div class="settings-row">
-            <label>SearXNG URL</label>
-            <input type="text" id="cfg-searxng" placeholder="http://localhost:8888" oninput="markSettingsDirty()" />
-            <span class="status-dot inactive" id="dot-searxng"></span>
-          </div>
-          <div class="settings-row">
-            <label>Brave API Key</label>
-            <input type="password" id="cfg-brave" placeholder="Enter Brave Search API key..." oninput="markSettingsDirty()" />
-            <span class="status-dot inactive" id="dot-brave"></span>
-          </div>
-          <div class="settings-row">
-            <label>Max Results</label>
-            <input type="number" id="cfg-max-results" min="1" max="10" value="5" oninput="markSettingsDirty()" />
-          </div>
-          <div class="settings-row">
-            <label>Timeout (s)</label>
-            <input type="number" id="cfg-timeout" min="3" max="30" value="10" oninput="markSettingsDirty()" />
-          </div>
-          <div class="settings-active-backend" id="cfg-active">Active: <strong>DuckDuckGo</strong> (no API key required)</div>
-          <div class="settings-actions">
-            <button class="action-btn" onclick="toggleSettings()">Cancel</button>
-            <button class="action-btn pull" id="cfg-save-btn" onclick="saveSearchSettings()">Save</button>
-          </div>
-        </div>
-        <div class="chat-input-row">
-          <button class="search-toggle" id="search-toggle" onclick="toggleSearch()" title="Toggle web search">
-            <span class="toggle-label" id="search-label">Search: OFF</span>
-            &#x1F310;
-          </button>
-          <textarea class="chat-input" id="prompt" rows="1" placeholder="Enter query... (Enter to send, Shift+Enter for newline)" autocomplete="off" spellcheck="false"></textarea>
-          <button class="action-btn" onclick="toggleSettings()" title="Search settings" style="padding:0 12px;font-size:1rem;border-color:var(--border)">&#x2699;</button>
-          <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
         </div>
       </div>
+    </div>
+
+    <!-- AGENT CHAT DOCK: repurposed from the legacy global chat into the
+         primary interaction surface for talking to workflow agents. The
+         chat hits /v1/chat/completions normally but can scope to a
+         workflow agent (composer/custom) via the selector. -->
+    <div class="panel agent-chat-dock" id="agent-chat-dock">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="chat-header">
+        <div class="panel-label" style="margin-bottom:0">
+          Agent Chat
+          <span style="margin-left:8px;color:var(--text-muted);font-size:0.6rem;letter-spacing:0.1em">workflow interaction surface</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Agent</label>
+          <select class="model-select" id="agent-select" onchange="onAgentSelectionChanged()">
+            <option value="">— none (use model directly) —</option>
+          </select>
+          <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Model</label>
+          <select class="model-select" id="model-select"><option>loading…</option></select>
+          <button class="action-btn" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border)">System</button>
+          <button class="action-btn" onclick="toggleAgentDock()" title="Collapse / expand the agent chat dock" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border)">▾</button>
+          <button class="action-btn" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border);display:none">EXPORT</button>
+        </div>
+      </div>
+
+      <div class="system-prompt-row" id="system-prompt-row" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.15em;text-transform:uppercase">System Prompt</label>
+          <select id="sysprompt-role-select" class="model-select" style="min-width:180px;font-size:0.7rem" onchange="applyRoleAsSystemPrompt()">
+            <option value="">— load from role library —</option>
+          </select>
+          <span style="flex:1"></span>
+          <button class="action-btn" onclick="saveSystemPrompt()" style="padding:3px 10px;font-size:0.65rem">Save</button>
+          <button class="action-btn" onclick="clearSystemPrompt()" style="padding:3px 10px;font-size:0.65rem;border-color:var(--border);color:var(--text-dim)">Clear</button>
+        </div>
+        <textarea id="system-prompt" class="chat-input" rows="3" style="min-height:60px;max-height:200px;font-size:0.72rem" placeholder="Define the assistant's persona, tone, and constraints. Applied as role=system on every turn."></textarea>
+        <div style="font-size:0.58rem;color:var(--text-muted);margin-top:4px;letter-spacing:0.1em;text-transform:uppercase">
+          <span id="sysprompt-status">off</span>
+          <span style="margin-left:10px">saved in localStorage</span>
+        </div>
+      </div>
+
+      <div class="chat-messages" id="messages">
+        <div class="msg system-msg">
+          Choose an agent or a raw model and start chatting. The composer above is the design surface — the chat below is the interaction surface for the agents you build.
+        </div>
+      </div>
+
+      <div class="search-settings" id="search-settings">
+        <div class="search-settings-header">
+          <div class="panel-label" style="margin-bottom:0">Search Configuration</div>
+          <button class="search-settings-close" onclick="toggleSettings()">&times;</button>
+        </div>
+        <div class="settings-row">
+          <label>Backend</label>
+          <select id="cfg-backend" onchange="markSettingsDirty()">
+            <option value="auto">Auto (DDG default)</option>
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="searxng">SearXNG</option>
+            <option value="brave">Brave Search</option>
+          </select>
+        </div>
+        <div class="settings-row"><label>SearXNG URL</label><input type="text" id="cfg-searxng" placeholder="http://localhost:8888" oninput="markSettingsDirty()" /><span class="status-dot inactive" id="dot-searxng"></span></div>
+        <div class="settings-row"><label>Brave API Key</label><input type="password" id="cfg-brave" placeholder="Enter Brave Search API key..." oninput="markSettingsDirty()" /><span class="status-dot inactive" id="dot-brave"></span></div>
+        <div class="settings-row"><label>Max Results</label><input type="number" id="cfg-max-results" min="1" max="10" value="5" oninput="markSettingsDirty()" /></div>
+        <div class="settings-row"><label>Timeout (s)</label><input type="number" id="cfg-timeout" min="3" max="30" value="10" oninput="markSettingsDirty()" /></div>
+        <div class="settings-active-backend" id="cfg-active">Active: <strong>DuckDuckGo</strong> (no API key required)</div>
+        <div class="settings-actions">
+          <button class="action-btn" onclick="toggleSettings()">Cancel</button>
+          <button class="action-btn pull" id="cfg-save-btn" onclick="saveSearchSettings()">Save</button>
+        </div>
+      </div>
+
+      <div class="chat-input-row">
+        <button class="search-toggle" id="search-toggle" onclick="toggleSearch()" title="Toggle web search">
+          <span class="toggle-label" id="search-label">Search: OFF</span>
+          &#x1F310;
+        </button>
+        <textarea class="chat-input" id="prompt" rows="1" placeholder="Talk to your agents… (Enter to send, Shift+Enter for newline)" autocomplete="off" spellcheck="false"></textarea>
+        <button class="action-btn" onclick="toggleSettings()" title="Search settings" style="padding:0 12px;font-size:1rem;border-color:var(--border)">&#x2699;</button>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: WORKFLOW INDEX ═══════════════════════════════════════
+       Catalogue of every workflow, grouped by inferred category, with
+       import/export-as-bundle and "open in composer" actions. This is
+       the main driver for moving workflows between Enclave instances
+       (or sharing them between teammates). -->
+  <div class="tab-content" id="tab-workflow-index">
+    <div class="panel" style="margin-bottom:14px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// WORKFLOW INDEX
+        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">workflows/</span>
+      </div>
+      <div class="wfi-controls">
+        <input class="search-input" type="text" id="wfi-search" placeholder="Search workflows…" oninput="renderWorkflowIndex()" />
+        <div id="wfi-category-chips" class="wfi-category-chips"></div>
+        <div style="flex:1"></div>
+        <button class="action-btn" onclick="WorkflowIndex.refresh()">Refresh</button>
+        <button class="action-btn" onclick="WorkflowIndex.openImportDialog()">Import Bundle…</button>
+        <button class="action-btn pull" onclick="composerNewWorkflow();switchTab('dashboard')">+ New in Composer</button>
+      </div>
+    </div>
+    <div id="wfi-grid" class="wfi-grid">
+      <div class="model-empty">Loading workflows…</div>
     </div>
   </div>
 
@@ -2121,94 +2377,19 @@ details[open] > summary::before { transform: rotate(90deg); }
 
     <div class="panel" style="margin-bottom:16px">
       <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">Workflows
+      <div class="panel-label">Runs
         <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">workflows/</span>
       </div>
       <div class="wf-toolbar">
-        <!-- Mode toggle -->
-        <div style="display:flex;border:1px solid var(--border);overflow:hidden;border-radius:3px">
-          <button class="wf-mode-btn active" id="wf-mode-run" onclick="setWfMode('run')">Runner</button>
-          <button class="wf-mode-btn" id="wf-mode-compose" onclick="setWfMode('compose')">Composer</button>
-        </div>
-        <div style="width:1px;background:var(--border);margin:0 8px"></div>
-        <!-- Runner controls -->
         <div id="wf-runner-controls" style="display:flex;gap:8px;align-items:center;flex:1">
           <select id="wf-select" class="model-select" style="min-width:260px">
             <option value="">-- select workflow --</option>
           </select>
           <button class="action-btn" onclick="loadWorkflowDetail()" style="color:var(--cyan);border-color:var(--cyan-dim)">Load</button>
+          <button class="action-btn" onclick="composerLoadByIdAndSwitch()" title="Open this workflow in the Composer">Open in Composer</button>
           <div style="flex:1"></div>
           <button class="action-btn" onclick="refreshWorkflows()">Refresh</button>
         </div>
-        <!-- Composer controls (hidden by default) -->
-        <div id="wf-composer-controls" style="display:none;gap:8px;align-items:center;flex:1">
-          <span style="font-size:0.6rem;color:var(--text-dim)">Drag steps from the palette onto the canvas</span>
-          <div style="flex:1"></div>
-          <button class="action-btn" onclick="dfImportYaml()">Import YAML</button>
-          <button class="action-btn" onclick="dfAutoLayout()">Auto-Layout</button>
-          <button class="action-btn" onclick="dfExportYaml()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export YAML</button>
-          <button class="action-btn" onclick="dfSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── COMPOSER (hidden until Composer mode selected) ───────── -->
-    <div id="wf-composer" style="display:none;margin-bottom:16px">
-      <div style="display:grid;grid-template-columns:140px 1fr 300px;gap:10px;margin-bottom:10px">
-        <!-- LEFT: Node Palette -->
-        <div class="panel" style="overflow-y:auto;max-height:480px">
-          <span class="corner-tr"></span><span class="corner-bl"></span>
-          <div class="panel-label">Steps</div>
-          <div class="df-palette" id="df-palette"></div>
-        </div>
-        <!-- CENTER: Drawflow Canvas -->
-        <div class="panel" style="min-height:440px;position:relative;padding:0;overflow:hidden">
-          <span class="corner-tr"></span><span class="corner-bl"></span>
-          <div id="drawflow-canvas"></div>
-        </div>
-        <!-- RIGHT: Config Panel -->
-        <div class="panel" style="display:flex;flex-direction:column;overflow-y:auto;max-height:480px">
-          <span class="corner-tr"></span><span class="corner-bl"></span>
-          <div class="panel-label" id="df-config-title">Config</div>
-          <div id="df-config-panel" style="flex:1;overflow-y:auto;font-size:0.72rem;color:var(--text-dim);padding:0 2px">
-            <div style="padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.64rem">
-              Drag a step from the palette to begin. Click a node to configure it.
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- Bottom bar: workflow metadata -->
-      <div class="panel" style="margin-bottom:10px">
-        <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
-          <div><div class="df-config-label">Workflow ID</div><input type="text" id="df-wf-id" class="chat-input" style="font-size:0.68rem;padding:5px 8px" placeholder="my-workflow" /></div>
-          <div><div class="df-config-label">Name</div><input type="text" id="df-wf-name" class="chat-input" style="font-size:0.68rem;padding:5px 8px" placeholder="My Workflow" /></div>
-          <div><div class="df-config-label">Default Role</div>
-            <select id="df-wf-role" class="model-select" style="font-size:0.68rem;padding:3px 6px">
-              <option value="reasoning">reasoning</option>
-              <option value="coding">coding</option>
-              <option value="fast">fast</option>
-              <option value="general" selected>general</option>
-              <option value="uncensored">uncensored</option>
-            </select>
-          </div>
-          <div><div class="df-config-label">Description</div><input type="text" id="df-wf-desc" class="chat-input" style="font-size:0.68rem;padding:5px 8px" placeholder="What does this workflow do?" /></div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="action-btn" onclick="dfExportYaml()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export YAML</button>
-          <button class="action-btn" onclick="dfSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
-          <button class="action-btn" onclick="dfImportYaml()">Import YAML</button>
-          <button class="action-btn" onclick="dfAutoLayout()">Auto-Layout</button>
-          <div style="flex:1"></div>
-          <button class="action-btn" onclick="dfRunWorkflow()" style="color:var(--green);border-color:var(--green-dim)">Run ▶</button>
-        </div>
-      </div>
-      <!-- YAML preview panel (shown after Export) -->
-      <div class="panel" id="df-yaml-panel" style="display:none;margin-bottom:10px">
-        <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div class="panel-label">Generated YAML</div>
-        <pre id="df-yaml-output" style="font-size:0.6rem;color:var(--text-dim);max-height:280px;overflow:auto;white-space:pre-wrap"></pre>
-        <button class="action-btn" onclick="navigator.clipboard.writeText(document.getElementById('df-yaml-output').textContent)" style="font-size:0.56rem;padding:3px 10px;margin-top:6px">Copy YAML</button>
       </div>
     </div>
 
@@ -2265,12 +2446,20 @@ details[open] > summary::before { transform: rotate(90deg); }
 
   <!-- ── DOCUMENTS TAB ───────────────────────────────────────────── -->
   <div class="tab-content" id="tab-documents" style="display:none">
+    <div style="margin-bottom:14px;padding:10px 12px;background:var(--accent-ghost);border:1px solid var(--accent-dim);border-radius:4px;font-size:0.72rem;color:var(--text-dim);line-height:1.5">
+      <strong style="color:var(--accent)">Context Manager.</strong>
+      Documents here are RAG sources <em>and</em> reference architecture for new agents. Use
+      <strong>Convert to Agent</strong> on any document to launch the doc → agent generator —
+      the LLM drafts a system prompt grounded in the document, you review it, run validation cases,
+      and save it as a reusable agent.
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
         <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Documents</h3>
         <div style="display:flex;gap:8px;margin-bottom:12px;">
           <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" style="flex:1;color:var(--text);font-family:var(--mono);font-size:0.8rem;">
           <button onclick="uploadDocument()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Upload</button>
+          <button onclick="AgentGen.openFromText()" style="background:transparent;color:var(--accent);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Paste → Agent</button>
         </div>
         <div id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;"></div>
         <div id="documents-list" style="max-height:400px;overflow-y:auto;"></div>
@@ -2378,6 +2567,78 @@ details[open] > summary::before { transform: rotate(90deg); }
         <div class="panel-label" id="plugin-detail-label">// SELECT A PLUGIN</div>
         <div id="plugin-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
           Select a plugin from the left to see its skills and tools.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MCP Servers admin panel -->
+  <div class="tab-content" id="tab-admin-mcp" style="display:none">
+    <div class="admin-modal-error" style="background:rgba(245,166,35,0.12);border-color:#F5A623;color:#F5A623;margin-bottom:14px">
+      ⚠ MCP servers run arbitrary local processes (stdio transport) or
+      contact arbitrary URLs (http transport). Register only servers you trust.
+    </div>
+
+    <div class="plugins-layout">
+      <div class="panel plugins-list-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// MCP SERVERS
+          <span style="float:right">
+            <button class="action-btn" onclick="MCPPanel.showCreate()" style="color:var(--accent);border-color:var(--accent-dim)">+ Register</button>
+            <button class="action-btn" onclick="MCPPanel.refresh()">Refresh</button>
+          </span>
+        </div>
+        <div id="mcp-list" style="margin-top:10px;font-size:0.78rem"></div>
+      </div>
+
+      <div class="panel plugins-detail-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label" id="mcp-detail-label">// SELECT A SERVER</div>
+        <div id="mcp-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
+          Select a server from the left to inspect its tools, test the
+          handshake, or invoke a tool.
+        </div>
+      </div>
+    </div>
+
+    <!-- Register / edit modal -->
+    <div id="mcp-edit-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="width:600px">
+        <h3 id="mcp-edit-title">Register MCP server</h3>
+        <label class="admin-modal-label">ID (used in workflow refs)</label>
+        <input id="mcp-edit-id" type="text" placeholder="e.g. local-fs" autocomplete="off">
+        <label class="admin-modal-label">Name</label>
+        <input id="mcp-edit-name" type="text" placeholder="e.g. Local Filesystem" autocomplete="off">
+        <label class="admin-modal-label">Description</label>
+        <input id="mcp-edit-desc" type="text" placeholder="optional" autocomplete="off">
+        <label class="admin-modal-label">Transport</label>
+        <select id="mcp-edit-transport" onchange="MCPPanel._onTransportChange()">
+          <option value="stdio">stdio (local process)</option>
+          <option value="http">http (JSON-RPC over HTTP)</option>
+          <option value="sse">sse (HTTP with Server-Sent Events)</option>
+        </select>
+        <div id="mcp-edit-stdio-fields">
+          <label class="admin-modal-label">Command</label>
+          <input id="mcp-edit-command" type="text" placeholder="/usr/local/bin/mcp-server-fs" autocomplete="off">
+          <label class="admin-modal-label">Args (space-separated)</label>
+          <input id="mcp-edit-args" type="text" placeholder="--root /workspace --readonly" autocomplete="off">
+          <label class="admin-modal-label">Env (KEY=VALUE per line)</label>
+          <textarea id="mcp-edit-env" rows="3" placeholder="API_KEY=…"></textarea>
+        </div>
+        <div id="mcp-edit-http-fields" style="display:none">
+          <label class="admin-modal-label">URL</label>
+          <input id="mcp-edit-url" type="text" placeholder="https://mcp.example.com/jsonrpc" autocomplete="off">
+          <label class="admin-modal-label">Headers (KEY: VALUE per line)</label>
+          <textarea id="mcp-edit-headers" rows="3" placeholder="Authorization: Bearer …"></textarea>
+        </div>
+        <label class="admin-modal-label">Timeout (seconds)</label>
+        <input id="mcp-edit-timeout" type="number" min="1" max="600" value="30">
+        <label class="admin-modal-label">Tags (comma-separated)</label>
+        <input id="mcp-edit-tags" type="text" placeholder="filesystem, sandbox" autocomplete="off">
+        <div id="mcp-edit-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="MCPPanel._closeModal()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="MCPPanel._submit()">Save</button>
         </div>
       </div>
     </div>
@@ -2627,6 +2888,8 @@ function switchTab(name, el) {
     );
   if (btn) btn.classList.add('active');
 
+  if (name === 'dashboard') ComposerView.init();
+  if (name === 'workflow-index') WorkflowIndex.load();
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
   if (name === 'memory') { loadMemory(); loadMemoryTab(); }
   if (name === 'discover' && !discoverLoaded) loadDiscovery();
@@ -2977,16 +3240,29 @@ async function sendMessage() {
     const sysMsg = getSystemPromptMessage();
     const outboundMessages = sysMsg ? [sysMsg, ...chatHistory] : chatHistory;
 
-    const r = await fetch('/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: outboundMessages,
-        max_tokens: 1024,
-        web_search: webSearchEnabled,
-      })
-    });
+    // If an agent is selected in the composer's agent-chat dock, route
+    // through /api/agents/{id}/chat so the agent's system prompt, model,
+    // context sources, and tools are applied. Otherwise fall back to the
+    // raw OpenAI-compatible chat endpoint.
+    let r;
+    if (window._chatAgent) {
+      r = await fetch(`/api/agents/${encodeURIComponent(window._chatAgent)}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: chatHistory })
+      });
+    } else {
+      r = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: outboundMessages,
+          max_tokens: 1024,
+          web_search: webSearchEnabled,
+        })
+      });
+    }
     const d = await r.json();
     const ti = document.getElementById(typingId);
     if (ti) ti.remove();
@@ -4776,8 +5052,9 @@ async function loadDocumentsList() {
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="font-size:0.85rem;color:var(--text);max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.filename)}</div>
             <div>
-              <button onclick="reindexDocument('${d.id}')" style="background:none;border:none;color:var(--cyan);cursor:pointer;font-size:0.75rem;margin-right:8px;">reindex</button>
-              <button onclick="deleteDocument('${d.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+              <button onclick="AgentGen.openFromDocument('${esc(d.id)}', '${esc(d.filename||'')}')" title="Generate an agent from this document" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;margin-right:8px;font-weight:600;">→ Agent</button>
+              <button onclick="reindexDocument('${esc(d.id)}')" style="background:none;border:none;color:var(--cyan);cursor:pointer;font-size:0.75rem;margin-right:8px;">reindex</button>
+              <button onclick="deleteDocument('${esc(d.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
             </div>
           </div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
@@ -6470,6 +6747,1141 @@ window.ExportsPanel = (function () {
   return { load, refresh, view, download, deleteOne, downloadZip, bulkDelete,
            _toggle, _toggleSelectAll, _closeView };
 })();
+
+/* ══════════════════════════════════════════════════════════════════
+   COMPOSER VIEW — the Composer is now the Dashboard. This module
+   bootstraps the drawflow canvas, palette, workbenches, agent chat
+   wiring, and the import/export-bundle plumbing.
+   ══════════════════════════════════════════════════════════════════ */
+const ComposerView = (function () {
+  let _booted = false;
+
+  function init() {
+    // Boot the drawflow editor + palette regardless of whether the user
+    // had previously visited the legacy Workflows tab.
+    try { dfInitEditor(); dfInitPalette(); } catch (e) { console.warn(e); }
+    updateCanvasEmptyState();
+    if (_booted) {
+      // Already initialised — workbenches refresh quickly to pick up
+      // server-side changes (newly registered MCP, etc).
+      loadWorkbenches();
+      return;
+    }
+    _booted = true;
+    loadAgentsForSelector();
+    loadWorkbenches();
+    composerSwitchBench('steps');
+    if (typeof Projects !== 'undefined') Projects.load();
+  }
+
+  function updateCanvasEmptyState() {
+    const panel = document.querySelector('.composer-canvas-panel');
+    if (!panel) return;
+    const hasNodes = Object.keys(dfNodeData || {}).length > 0;
+    panel.classList.toggle('has-nodes', hasNodes);
+  }
+
+  return { init, updateCanvasEmptyState };
+})();
+
+/* ── Workbench tab switcher ─────────────────────────────────────── */
+function composerSwitchBench(bench, el) {
+  document.querySelectorAll('.workbench-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.bench === bench);
+  });
+  document.querySelectorAll('.workbench-pane').forEach(p => {
+    p.hidden = (p.id !== 'bench-' + bench);
+  });
+}
+
+/* ── Workbench loaders ──────────────────────────────────────────── */
+async function loadWorkbenches() {
+  // Skills + Plugins use the same /api/plugins endpoint (master-key gated).
+  // MCPs use /api/mcp/servers. Both calls fail gracefully when auth is missing.
+  const headers = (window.AdminAuth && AdminAuth.authHeaders) ? AdminAuth.authHeaders() : {};
+
+  // Plugins (skills + tools)
+  try {
+    const r = await fetch('/api/plugins', { headers });
+    if (r.ok) {
+      const plugins = await r.json();
+      renderSkillsWorkbench(plugins);
+      renderPluginsWorkbench(plugins);
+    } else {
+      renderWorkbenchAuthHint('bench-skills-list');
+      renderWorkbenchAuthHint('bench-plugins-list');
+    }
+  } catch (e) {
+    renderWorkbenchError('bench-skills-list', e.message);
+    renderWorkbenchError('bench-plugins-list', e.message);
+  }
+
+  // MCP servers
+  try {
+    const r = await fetch('/api/mcp/servers', { headers });
+    if (r.ok) {
+      const servers = await r.json();
+      renderMcpsWorkbench(servers);
+    } else {
+      renderWorkbenchAuthHint('bench-mcps-list');
+    }
+  } catch (e) {
+    renderWorkbenchError('bench-mcps-list', e.message);
+  }
+}
+
+function renderWorkbenchAuthHint(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = '<div class="model-empty" style="font-size:0.62rem">Sign in via Admin to load this workbench.</div>';
+}
+function renderWorkbenchError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = `<div class="model-empty" style="color:var(--danger);font-size:0.62rem">${esc(msg || 'load failed')}</div>`;
+}
+
+function renderSkillsWorkbench(plugins) {
+  const el = document.getElementById('bench-skills-list');
+  if (!el) return;
+  const items = [];
+  (plugins || []).forEach(p => {
+    (p.skills || []).forEach(s => {
+      items.push({ plugin: p.id, skill: s });
+    });
+  });
+  if (!items.length) {
+    el.innerHTML = '<div class="model-empty" style="font-size:0.62rem">No skills yet. Drop a skill .md file into plugins/&lt;plugin&gt;/skills/.</div>';
+    return;
+  }
+  el.innerHTML = items.map(({plugin, skill}) => {
+    const triggers = (skill.triggers || []).map(t => t.keyword).filter(Boolean).slice(0, 3).join(', ');
+    return `<div class="workbench-item" draggable="true"
+       ondragstart="event.dataTransfer.setData('application/df-skill', '${esc(plugin)}::${esc(skill.id)}')">
+      <div class="workbench-item-head">
+        <span class="workbench-item-title">${esc(skill.name || skill.id)}</span>
+        <span class="workbench-item-pill">skill</span>
+      </div>
+      <div class="workbench-item-desc">${esc(skill.description || '')}</div>
+      <div class="workbench-tool-row"><span class="workbench-tool-dot"></span>${esc(plugin)}${triggers ? ' · ' + esc(triggers) : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderPluginsWorkbench(plugins) {
+  const el = document.getElementById('bench-plugins-list');
+  if (!el) return;
+  if (!plugins || !plugins.length) {
+    el.innerHTML = '<div class="model-empty" style="font-size:0.62rem">No plugins installed. Add one under plugins/&lt;name&gt;/plugin.yaml.</div>';
+    return;
+  }
+  el.innerHTML = plugins.map(p => `
+    <div class="workbench-item">
+      <div class="workbench-item-head">
+        <span class="workbench-item-title">${esc(p.name || p.id)}</span>
+        <span class="workbench-item-pill dim">v${esc(p.version || '0.0')}</span>
+      </div>
+      <div class="workbench-item-desc">${esc(p.description || '')}</div>
+      ${(p.tools || []).map(t => `
+        <div class="workbench-tool-row" draggable="true"
+             ondragstart="event.dataTransfer.setData('application/df-tool', '${esc(p.id)}__${esc(t.id)}')"
+             title="Drag onto a step to attach this tool">
+          <span class="workbench-tool-dot"></span>
+          <code style="color:var(--accent)">${esc(p.id)}__${esc(t.id)}</code>
+          <span style="color:var(--text-muted);flex:1;text-align:right">${esc(t.description || '').slice(0,40)}</span>
+        </div>`).join('')}
+    </div>
+  `).join('');
+}
+
+function renderMcpsWorkbench(servers) {
+  const el = document.getElementById('bench-mcps-list');
+  if (!el) return;
+  if (!servers || !servers.length) {
+    el.innerHTML = '<div class="model-empty" style="font-size:0.62rem">No MCP servers yet. Register one under Admin → MCP Servers.</div>';
+    return;
+  }
+  el.innerHTML = servers.map(s => `
+    <div class="workbench-item">
+      <div class="workbench-item-head">
+        <span class="workbench-item-title">${esc(s.name || s.id)}</span>
+        <span class="workbench-item-pill ${s.enabled ? '' : 'warn'}">${esc(s.transport)}</span>
+      </div>
+      <div class="workbench-item-desc">${esc(s.description || '')}</div>
+      ${(s.tools || []).length === 0 ? '<div class="workbench-tool-row" style="opacity:0.6">no tools cached — test in Admin → MCP</div>' :
+        (s.tools || []).map(t => `
+          <div class="workbench-tool-row" draggable="true"
+               ondragstart="event.dataTransfer.setData('application/df-mcp', '${esc(s.id)}::${esc(t.name)}')"
+               title="Drag onto a step to invoke this tool">
+            <span class="workbench-tool-dot"></span>
+            <code style="color:var(--accent)">mcp__${esc(s.id)}__${esc(t.name)}</code>
+          </div>`).join('')}
+    </div>
+  `).join('');
+}
+
+/* ── Drag-to-node handlers: attach a workbench item to a node ────── */
+(function wireWorkbenchDropHandlers() {
+  document.addEventListener('drop', (e) => {
+    const canvas = document.getElementById('drawflow-canvas');
+    if (!canvas || !canvas.contains(e.target)) return;
+    const skillRef = e.dataTransfer.getData('application/df-skill');
+    const toolRef  = e.dataTransfer.getData('application/df-tool');
+    const mcpRef   = e.dataTransfer.getData('application/df-mcp');
+    if (!skillRef && !toolRef && !mcpRef) return;
+    // Find the node under the cursor
+    const nodeEl = e.target.closest('.drawflow-node');
+    if (!nodeEl) {
+      console.log('Drop a workbench item onto a step node to attach it.');
+      return;
+    }
+    const nodeIdMatch = nodeEl.id.match(/^node-(\d+)$/);
+    if (!nodeIdMatch) return;
+    const nodeId = parseInt(nodeIdMatch[1], 10);
+    const data = dfNodeData[nodeId];
+    if (!data) return;
+    data.skills = data.skills || [];
+    data.tools  = data.tools  || [];
+    if (skillRef) { if (!data.skills.includes(skillRef)) data.skills.push(skillRef); }
+    if (toolRef)  { if (!data.tools.find(t => (typeof t === 'string' ? t : t.id) === toolRef)) data.tools.push(toolRef); }
+    if (mcpRef)   {
+      const [serverId, toolName] = mcpRef.split('::');
+      const ref = `mcp__${serverId}__${toolName}`;
+      if (!data.tools.find(t => (typeof t === 'string' ? t : t.id) === ref)) data.tools.push(ref);
+    }
+    if (typeof dfRenderConfigPanel === 'function' && dfSelectedNodeId === nodeId) {
+      dfRenderConfigPanel(nodeId);
+    }
+  }, true);
+})();
+
+/* ── Agent selector for the chat dock ────────────────────────────── */
+async function loadAgentsForSelector() {
+  const sel = document.getElementById('agent-select');
+  if (!sel) return;
+  try {
+    const r = await fetch('/api/agents');
+    if (!r.ok) return;
+    const list = await r.json();
+    const opts = ['<option value="">— none (use model directly) —</option>']
+      .concat((list || []).map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}${a.role ? ' (' + esc(a.role) + ')' : ''}</option>`));
+    sel.innerHTML = opts.join('');
+  } catch (e) { /* non-fatal */ }
+}
+
+function onAgentSelectionChanged() {
+  const sel = document.getElementById('agent-select');
+  if (!sel || !sel.value) return;
+  // Scope subsequent chat turns to this agent. The existing sendMessage
+  // path reads window._chatAgent before composing the request body.
+  window._chatAgent = sel.value;
+  const msgEl = document.getElementById('messages');
+  if (msgEl) {
+    const note = document.createElement('div');
+    note.className = 'msg system-msg';
+    note.textContent = `Scoped to agent: ${sel.options[sel.selectedIndex].text}`;
+    msgEl.appendChild(note);
+    msgEl.scrollTop = msgEl.scrollHeight;
+  }
+}
+
+function toggleAgentDock() {
+  const dock = document.getElementById('agent-chat-dock');
+  if (dock) dock.classList.toggle('collapsed');
+}
+
+/* ── Bundle import / export from composer ─────────────────────────── */
+async function composerExportBundle() {
+  const wfId = (document.getElementById('df-wf-id') || {}).value;
+  if (!wfId) { alert('Set a workflow ID first.'); return; }
+  // Save first so the export reflects the current canvas state.
+  await dfSave().catch(() => { /* user dismissed */ });
+  try {
+    const r = await fetch(`/api/workflow-index/${encodeURIComponent(wfId)}/export`);
+    if (!r.ok) { alert('Export failed: ' + (await r.text())); return; }
+    const bundle = await r.json();
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${wfId}.bundle.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) { alert('Export error: ' + e.message); }
+}
+
+function dfImportBundle() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = async () => {
+    const file = inp.files && inp.files[0];
+    if (!file) return;
+    const text = await file.text();
+    let bundle;
+    try { bundle = JSON.parse(text); } catch (e) { alert('Invalid JSON: ' + e.message); return; }
+    try {
+      const r = await fetch('/api/workflow-index/import?overwrite=true', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bundle),
+      });
+      if (!r.ok) { alert('Import failed: ' + (await r.text())); return; }
+      const result = await r.json();
+      alert(`Imported workflow '${result.workflow_id}' (+${result.agents_installed.length} agents).`);
+      if (typeof WorkflowIndex !== 'undefined') WorkflowIndex.load();
+      if (typeof refreshWorkflows === 'function') refreshWorkflows();
+    } catch (e) { alert('Import error: ' + e.message); }
+  };
+  inp.click();
+}
+
+/* ── Composer convenience: new workflow / load from index ─────────── */
+function composerNewWorkflow() {
+  // Wipe all nodes and reset metadata so the user starts blank.
+  if (typeof dfEditor !== 'undefined' && dfEditor) {
+    Object.keys(dfEditor.drawflow.drawflow.Home.data || {}).forEach(id => {
+      try { dfEditor.removeNodeId('node-' + id); } catch (e) {}
+    });
+  }
+  dfNodeData = {}; dfNextId = 0; dfSelectedNodeId = null;
+  ['df-wf-id', 'df-wf-name', 'df-wf-desc'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const yamlPanel = document.getElementById('df-yaml-panel');
+  if (yamlPanel) yamlPanel.style.display = 'none';
+  ComposerView.updateCanvasEmptyState();
+}
+
+async function composerLoadFromIndex() {
+  switchTab('workflow-index');
+}
+
+async function composerLoadById(wfId) {
+  if (!wfId) return;
+  try {
+    const r = await fetch(`/api/workflows/${encodeURIComponent(wfId)}`);
+    if (!r.ok) { alert('Load failed: ' + (await r.text())); return; }
+    const defn = await r.json();
+    // Re-use the YAML import path so node placement / connections work the
+    // same as a paste-import — fewest moving parts.
+    const text = jsyaml.dump(defn);
+    composerNewWorkflow();
+    // jsyaml import path uses the modal textarea; call the function that
+    // accepts a definition object directly via the same path.
+    document.getElementById('df-wf-id').value = defn.id || wfId;
+    document.getElementById('df-wf-name').value = defn.name || '';
+    document.getElementById('df-wf-desc').value = defn.description || '';
+    if (defn.defaults && defn.defaults.role) {
+      const r = document.getElementById('df-wf-role'); if (r) r.value = defn.defaults.role;
+    }
+    if (defn.category) {
+      const c = document.getElementById('df-wf-category'); if (c) c.value = defn.category;
+    }
+    // Place steps on the canvas via the existing palette template hook.
+    (defn.steps || []).forEach((step, i) => {
+      const tmplKey = (step.role && dfStepTemplates.find(t => t.role === step.role)) ? step.role : 'custom';
+      const tmpl = dfStepTemplates.find(t => t.key === tmplKey) || dfStepTemplates.find(t => t.key === 'custom');
+      const x = 80 + (i % 4) * 220;
+      const y = 60 + Math.floor(i / 4) * 140;
+      const nodeId = dfAddNodeFromTemplate(tmpl.key, x, y);
+      if (nodeId != null) {
+        const d = dfNodeData[nodeId];
+        d.id = step.id || d.id;
+        d.name = step.name || d.name;
+        d.role = step.role || d.role;
+        d.system_prompt = step.system_prompt || d.system_prompt;
+        d.outputs = Array.isArray(step.outputs) ? step.outputs : d.outputs;
+        d.output_format = (step.output_parser && step.output_parser.format) || 'raw';
+        d.quality_gates = Array.isArray(step.quality_gates) ? step.quality_gates : [];
+        d.tools = step.tools || [];
+        d.skills = step.skills || [];
+        dfUpdateNodeData(nodeId, 'name', d.name);
+      }
+    });
+    setTimeout(() => { try { dfAutoLayout(); } catch (e) {} }, 50);
+    ComposerView.updateCanvasEmptyState();
+  } catch (e) { alert('Load error: ' + e.message); }
+}
+
+async function composerLoadByIdAndSwitch() {
+  const sel = document.getElementById('wf-select');
+  if (!sel || !sel.value) { alert('Pick a workflow first.'); return; }
+  switchTab('dashboard');
+  setTimeout(() => composerLoadById(sel.value), 100);
+}
+
+async function dfRunWorkflowFromComposer() {
+  // Use the existing run path; it saves + switches to Runner.
+  if (typeof dfRunWorkflow === 'function') {
+    await dfRunWorkflow();
+    switchTab('workflows');
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   WORKFLOW INDEX — categorized catalogue + import/export bundles.
+   ══════════════════════════════════════════════════════════════════ */
+const WorkflowIndex = (function () {
+  let _data = { workflows: [], categories: [] };
+  let _activeCat = 'all';
+
+  async function load() {
+    const grid = document.getElementById('wfi-grid');
+    if (grid) grid.innerHTML = '<div class="model-empty">Loading workflows…</div>';
+    try {
+      const r = await fetch('/api/workflow-index');
+      if (!r.ok) {
+        if (grid) grid.innerHTML = `<div class="model-empty" style="color:var(--danger)">Load failed (${r.status})</div>`;
+        return;
+      }
+      _data = await r.json();
+      const wfiCount = document.getElementById('wfi-count');
+      if (wfiCount) wfiCount.textContent = _data.total || '';
+      renderChips();
+      render();
+    } catch (e) {
+      if (grid) grid.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(e.message)}</div>`;
+    }
+  }
+
+  function refresh() { load(); }
+
+  function setCategory(cat) { _activeCat = cat; renderChips(); render(); }
+
+  function renderChips() {
+    const el = document.getElementById('wfi-category-chips');
+    if (!el) return;
+    const chips = [{id:'all', count:_data.total || 0}].concat(_data.categories || []);
+    el.innerHTML = chips.map(c => `<button class="wfi-category-chip ${_activeCat===c.id?'active':''}"
+      onclick="WorkflowIndex.setCategory('${esc(c.id)}')">${esc(c.id)} · ${c.count || 0}</button>`).join('');
+  }
+
+  function render() {
+    const grid = document.getElementById('wfi-grid');
+    if (!grid) return;
+    const q = (document.getElementById('wfi-search') || {}).value || '';
+    const ql = q.toLowerCase();
+    const filtered = (_data.workflows || []).filter(w =>
+      (_activeCat === 'all' || w.category === _activeCat) &&
+      (!ql || (w.id + ' ' + (w.name || '') + ' ' + (w.description || '')).toLowerCase().includes(ql))
+    );
+    if (!filtered.length) {
+      grid.innerHTML = '<div class="model-empty">No workflows match.</div>';
+      return;
+    }
+    grid.innerHTML = filtered.map(w => {
+      const refs = w.references || {};
+      const refTags = []
+        .concat((refs.plugins || []).map(p => `plugin:${p}`))
+        .concat((refs.mcp_servers || []).map(s => `mcp:${s}`))
+        .concat((refs.agents || []).map(a => `agent:${a}`))
+        .slice(0, 6);
+      return `<div class="wfi-card">
+        <div class="wfi-card-head">
+          <span class="wfi-card-title">${esc(w.name)}</span>
+          <span class="wfi-card-cat">${esc(w.category)}</span>
+        </div>
+        <div class="wfi-card-desc">${esc(w.description || '—')}</div>
+        <div class="wfi-card-meta">
+          <span>${w.steps} steps</span>
+          ${w.version ? `<span>v${esc(w.version)}</span>` : ''}
+          <span style="flex:1;text-align:right;color:var(--text-muted)">${esc(w.id)}</span>
+        </div>
+        <div class="wfi-card-refs">${refTags.map(t => `<span class="wfi-card-tag">${esc(t)}</span>`).join('')}</div>
+        <div class="wfi-card-actions">
+          <button class="action-btn" onclick="WorkflowIndex.openInComposer('${esc(w.id)}')">Compose</button>
+          <button class="action-btn" onclick="WorkflowIndex.run('${esc(w.id)}')">Run</button>
+          <button class="action-btn" onclick="WorkflowIndex.exportBundle('${esc(w.id)}')">Export</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function openInComposer(id) {
+    switchTab('dashboard');
+    setTimeout(() => composerLoadById(id), 80);
+  }
+
+  function run(id) {
+    switchTab('workflows');
+    setTimeout(() => {
+      const sel = document.getElementById('wf-select');
+      if (sel) { sel.value = id; if (typeof loadWorkflowDetail === 'function') loadWorkflowDetail(); }
+    }, 80);
+  }
+
+  async function exportBundle(id) {
+    try {
+      const r = await fetch(`/api/workflow-index/${encodeURIComponent(id)}/export`);
+      if (!r.ok) { alert('Export failed: ' + (await r.text())); return; }
+      const bundle = await r.json();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${id}.bundle.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) { alert('Export error: ' + e.message); }
+  }
+
+  function openImportDialog() { dfImportBundle(); }
+
+  return { load, refresh, setCategory, openInComposer, run, exportBundle, openImportDialog };
+})();
+
+function renderWorkflowIndex() { WorkflowIndex && WorkflowIndex.refresh && document.getElementById('wfi-grid') && (function(){
+  // Re-render with current cache by triggering a refresh of the chip filter.
+  const ev = new Event('input');
+  document.getElementById('wfi-search').dispatchEvent(ev);
+})(); }
+
+/* ══════════════════════════════════════════════════════════════════
+   MCP ADMIN PANEL — register / inspect / test / invoke MCP servers.
+   ══════════════════════════════════════════════════════════════════ */
+const MCPPanel = (function () {
+  let _servers = [];
+  let _selected = null;
+
+  function _headers() {
+    return (window.AdminAuth && AdminAuth.authHeaders) ? AdminAuth.authHeaders() : {};
+  }
+
+  async function load() {
+    const el = document.getElementById('mcp-list');
+    if (!el) return;
+    el.innerHTML = '<div class="model-empty">Loading…</div>';
+    try {
+      const r = await fetch('/api/mcp/servers', { headers: _headers() });
+      if (!r.ok) { el.innerHTML = `<div class="model-empty" style="color:var(--danger)">Load failed (${r.status})</div>`; return; }
+      _servers = await r.json();
+      render();
+    } catch (e) {
+      el.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(e.message)}</div>`;
+    }
+  }
+
+  function refresh() { load(); }
+
+  function render() {
+    const el = document.getElementById('mcp-list');
+    if (!el) return;
+    if (!_servers.length) {
+      el.innerHTML = '<div class="model-empty">No MCP servers registered. Click "+ Register" to add one.</div>';
+      return;
+    }
+    el.innerHTML = _servers.map(s => `
+      <div class="mcp-row ${_selected === s.id ? 'selected' : ''}" onclick="MCPPanel.select('${esc(s.id)}')">
+        <span class="mcp-row-dot ${s.tools_count > 0 ? 'up' : 'unknown'}"></span>
+        <div style="flex:1">
+          <div class="mcp-row-title">${esc(s.name || s.id)}</div>
+          <div class="mcp-row-meta">${esc(s.transport)} · ${s.enabled ? 'enabled' : 'disabled'} · ${s.tools_count || 0} tools</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function select(id) {
+    _selected = id;
+    render();
+    renderDetail();
+  }
+
+  function renderDetail() {
+    const el = document.getElementById('mcp-detail');
+    const label = document.getElementById('mcp-detail-label');
+    if (!el || !label) return;
+    const s = _servers.find(x => x.id === _selected);
+    if (!s) {
+      label.textContent = '// SELECT A SERVER';
+      el.innerHTML = 'Select a server from the left.';
+      return;
+    }
+    label.textContent = `// ${s.name || s.id}`;
+    const envStr = Object.entries(s.env || {}).map(([k, v]) => `${k}=${v}`).join(', ') || '—';
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:6px;font-size:0.74rem;line-height:1.6">
+        <div style="color:var(--text-muted)">ID</div><code style="color:var(--accent)">${esc(s.id)}</code>
+        <div style="color:var(--text-muted)">Transport</div><div>${esc(s.transport)}</div>
+        ${s.transport === 'stdio' ? `
+          <div style="color:var(--text-muted)">Command</div><code style="font-size:0.66rem">${esc(s.command || '')} ${(s.args || []).map(esc).join(' ')}</code>
+          <div style="color:var(--text-muted)">Env</div><code style="font-size:0.66rem">${esc(envStr)}</code>
+        ` : `
+          <div style="color:var(--text-muted)">URL</div><code style="font-size:0.66rem">${esc(s.url || '')}</code>
+        `}
+        <div style="color:var(--text-muted)">Enabled</div><div>${s.enabled ? '✓' : '✕'}</div>
+        <div style="color:var(--text-muted)">Description</div><div>${esc(s.description || '')}</div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap">
+        <button class="action-btn" onclick="MCPPanel.test('${esc(s.id)}')">Test handshake</button>
+        <button class="action-btn" onclick="MCPPanel.discoverTools('${esc(s.id)}')">Discover tools</button>
+        <button class="action-btn" onclick="MCPPanel.toggleEnabled('${esc(s.id)}', ${!s.enabled})">${s.enabled ? 'Disable' : 'Enable'}</button>
+        <button class="action-btn" onclick="MCPPanel.edit('${esc(s.id)}')">Edit</button>
+        <button class="action-btn" onclick="MCPPanel.remove('${esc(s.id)}')" style="color:var(--danger);border-color:var(--danger-dim)">Delete</button>
+      </div>
+      <div id="mcp-detail-tools" style="margin-top:14px">
+        <div class="panel-label" style="margin-bottom:6px">Tools (${(s.tools || []).length})</div>
+        <div class="mcp-tools-list">
+          ${(s.tools || []).map(t => `<div class="mcp-tool">
+            <div class="mcp-tool-name">${esc(t.name)}</div>
+            <div class="mcp-tool-desc">${esc(t.description || '')}</div>
+          </div>`).join('') || '<div style="color:var(--text-muted);font-size:0.66rem">No tools cached. Click "Discover tools" to query the server.</div>'}
+        </div>
+      </div>
+    `;
+  }
+
+  async function test(id) {
+    try {
+      const r = await fetch(`/api/mcp/servers/${encodeURIComponent(id)}/test`, { method: 'POST', headers: _headers() });
+      const result = await r.json();
+      if (result.reachable) alert(`OK — ${result.tools_count} tool(s) advertised.`);
+      else alert('Server unreachable: ' + (result.error || 'unknown'));
+      await load();
+    } catch (e) { alert('Test error: ' + e.message); }
+  }
+
+  async function discoverTools(id) {
+    try {
+      const r = await fetch(`/api/mcp/servers/${encodeURIComponent(id)}/tools?refresh=true`, { headers: _headers() });
+      if (!r.ok) { alert('Discover failed: ' + (await r.text())); return; }
+      await load();
+      _selected = id; renderDetail();
+    } catch (e) { alert('Discover error: ' + e.message); }
+  }
+
+  async function toggleEnabled(id, enabled) {
+    try {
+      await fetch(`/api/mcp/servers/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', ..._headers() },
+        body: JSON.stringify({ enabled }),
+      });
+      await load();
+    } catch (e) { alert('Toggle error: ' + e.message); }
+  }
+
+  async function remove(id) {
+    if (!confirm(`Delete MCP server '${id}'?`)) return;
+    try {
+      await fetch(`/api/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE', headers: _headers() });
+      _selected = null;
+      await load();
+      renderDetail();
+    } catch (e) { alert('Delete error: ' + e.message); }
+  }
+
+  // ── Create / Edit modal ─────────────────────────────────────────
+  function showCreate() {
+    document.getElementById('mcp-edit-title').textContent = 'Register MCP server';
+    ['mcp-edit-id','mcp-edit-name','mcp-edit-desc','mcp-edit-command','mcp-edit-args','mcp-edit-env','mcp-edit-url','mcp-edit-headers','mcp-edit-tags']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('mcp-edit-id').disabled = false;
+    document.getElementById('mcp-edit-transport').value = 'stdio';
+    document.getElementById('mcp-edit-timeout').value = 30;
+    _onTransportChange();
+    _hideError();
+    document.getElementById('mcp-edit-modal').hidden = false;
+  }
+
+  function edit(id) {
+    const s = _servers.find(x => x.id === id);
+    if (!s) return;
+    document.getElementById('mcp-edit-title').textContent = `Edit ${s.id}`;
+    document.getElementById('mcp-edit-id').value = s.id;
+    document.getElementById('mcp-edit-id').disabled = true;
+    document.getElementById('mcp-edit-name').value = s.name || '';
+    document.getElementById('mcp-edit-desc').value = s.description || '';
+    document.getElementById('mcp-edit-transport').value = s.transport;
+    document.getElementById('mcp-edit-command').value = s.command || '';
+    document.getElementById('mcp-edit-args').value = (s.args || []).join(' ');
+    // env / headers are masked on the wire; leave blank so PATCH only sets when user types.
+    document.getElementById('mcp-edit-env').value = '';
+    document.getElementById('mcp-edit-headers').value = '';
+    document.getElementById('mcp-edit-url').value = s.url || '';
+    document.getElementById('mcp-edit-timeout').value = s.timeout_seconds || 30;
+    document.getElementById('mcp-edit-tags').value = (s.tags || []).join(', ');
+    _onTransportChange();
+    _hideError();
+    document.getElementById('mcp-edit-modal').hidden = false;
+  }
+
+  function _onTransportChange() {
+    const t = document.getElementById('mcp-edit-transport').value;
+    document.getElementById('mcp-edit-stdio-fields').style.display = (t === 'stdio') ? '' : 'none';
+    document.getElementById('mcp-edit-http-fields').style.display  = (t === 'stdio') ? 'none' : '';
+  }
+
+  function _closeModal() { document.getElementById('mcp-edit-modal').hidden = true; }
+  function _hideError()  { const e = document.getElementById('mcp-edit-error'); if (e) { e.hidden = true; e.textContent = ''; } }
+  function _showError(m) { const e = document.getElementById('mcp-edit-error'); if (e) { e.textContent = m; e.hidden = false; } }
+
+  function _parseKvLines(text, sep) {
+    const out = {};
+    (text || '').split(/\r?\n/).forEach(line => {
+      const idx = line.indexOf(sep);
+      if (idx <= 0) return;
+      out[line.slice(0, idx).trim()] = line.slice(idx + sep.length).trim();
+    });
+    return out;
+  }
+
+  async function _submit() {
+    _hideError();
+    const isEdit = document.getElementById('mcp-edit-id').disabled;
+    const id = document.getElementById('mcp-edit-id').value.trim();
+    const transport = document.getElementById('mcp-edit-transport').value;
+    const body = {
+      name: document.getElementById('mcp-edit-name').value.trim(),
+      description: document.getElementById('mcp-edit-desc').value.trim(),
+      transport,
+      timeout_seconds: parseInt(document.getElementById('mcp-edit-timeout').value, 10) || 30,
+      tags: document.getElementById('mcp-edit-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+    };
+    if (transport === 'stdio') {
+      body.command = document.getElementById('mcp-edit-command').value.trim();
+      body.args = document.getElementById('mcp-edit-args').value.trim().split(/\s+/).filter(Boolean);
+      const env = _parseKvLines(document.getElementById('mcp-edit-env').value, '=');
+      if (Object.keys(env).length) body.env = env;
+    } else {
+      body.url = document.getElementById('mcp-edit-url').value.trim();
+      const hdrs = _parseKvLines(document.getElementById('mcp-edit-headers').value, ':');
+      if (Object.keys(hdrs).length) body.headers = hdrs;
+    }
+
+    try {
+      let r;
+      if (isEdit) {
+        r = await fetch(`/api/mcp/servers/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ..._headers() },
+          body: JSON.stringify(body),
+        });
+      } else {
+        body.id = id;
+        r = await fetch('/api/mcp/servers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ..._headers() },
+          body: JSON.stringify(body),
+        });
+      }
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        _showError(err.detail || r.statusText);
+        return;
+      }
+      _closeModal();
+      await load();
+      if (id) select(id);
+    } catch (e) { _showError(e.message); }
+  }
+
+  // Refresh when the panel becomes visible.
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-mcp') load();
+  });
+
+  return { load, refresh, render, select, test, discoverTools, toggleEnabled, remove,
+           showCreate, edit, _onTransportChange, _closeModal, _submit };
+})();
+
+/* Refresh workbenches whenever the composer becomes the active tab. */
+(function () {
+  const observer = new MutationObserver(() => {
+    const cur = document.querySelector('.tab-content.active');
+    if (cur && cur.id === 'tab-dashboard') {
+      // No-op; ComposerView.init handles the lazy boot. The hook is here
+      // so that if any future code calls .classList directly we still pick up.
+    }
+  });
+  const root = document.querySelector('.shell');
+  if (root) observer.observe(root, { attributes: true, subtree: true, attributeFilter: ['class'] });
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   AGENT GENERATOR — modal that converts a document or pasted text
+   into a draft agent, lets the user edit it, run validation cases,
+   and save. Backed by /api/agents/generate + /api/agents/{id}/evaluate.
+   ══════════════════════════════════════════════════════════════════ */
+const AgentGen = (function () {
+  let _draft = null;
+  let _modal = null;
+
+  function openFromDocument(docId, filename) {
+    _ensureModal();
+    document.getElementById('ag-mode').value = 'document';
+    document.getElementById('ag-document-id').value = docId;
+    document.getElementById('ag-filename-readonly').textContent = filename || docId;
+    document.getElementById('ag-text-row').style.display = 'none';
+    document.getElementById('ag-doc-row').style.display = '';
+    _showStep('input');
+    _modal.hidden = false;
+  }
+
+  function openFromText() {
+    _ensureModal();
+    document.getElementById('ag-mode').value = 'text';
+    document.getElementById('ag-document-id').value = '';
+    document.getElementById('ag-text-row').style.display = '';
+    document.getElementById('ag-doc-row').style.display = 'none';
+    _showStep('input');
+    _modal.hidden = false;
+  }
+
+  function _ensureModal() {
+    if (_modal) return;
+    _modal = document.createElement('div');
+    _modal.className = 'admin-modal';
+    _modal.id = 'agent-gen-modal';
+    _modal.hidden = true;
+    _modal.innerHTML = `
+      <div class="admin-modal-card" style="width:760px;max-width:94vw;max-height:88vh;overflow:auto">
+        <h3>Convert document to agent</h3>
+        <div class="ag-steps">
+          <span class="ag-step" data-ag-step="input">1. Input</span>
+          <span class="ag-step" data-ag-step="draft">2. Draft</span>
+          <span class="ag-step" data-ag-step="eval">3. Validate</span>
+        </div>
+
+        <!-- Step 1: input -->
+        <div class="ag-pane" data-ag-pane="input">
+          <input type="hidden" id="ag-mode" value="text">
+          <div id="ag-doc-row" style="margin:8px 0">
+            <label class="admin-modal-label">Source document</label>
+            <div style="padding:6px 10px;border:1px solid var(--border);border-radius:3px;font-size:0.75rem;color:var(--text-dim)" id="ag-filename-readonly">—</div>
+            <input type="hidden" id="ag-document-id" value="">
+          </div>
+          <div id="ag-text-row" style="margin:8px 0;display:none">
+            <label class="admin-modal-label">Source text (or paste reference content here)</label>
+            <textarea id="ag-text-input" rows="8" placeholder="Paste a spec, runbook, or other reference material…"></textarea>
+          </div>
+          <label class="admin-modal-label">Name hint (optional)</label>
+          <input type="text" id="ag-name-hint" placeholder="e.g. XSIAM Rule Reviewer">
+          <label class="admin-modal-label">Role hint (optional)</label>
+          <select id="ag-role-hint">
+            <option value="">— let the LLM decide —</option>
+            <option value="reasoning">reasoning</option>
+            <option value="coding">coding</option>
+            <option value="fast">fast</option>
+            <option value="general">general</option>
+            <option value="uncensored">uncensored</option>
+          </select>
+          <div id="ag-error" class="admin-modal-error" hidden></div>
+          <div class="admin-modal-actions">
+            <button type="button" class="admin-modal-btn" onclick="AgentGen.close()">Cancel</button>
+            <button type="button" class="admin-modal-btn primary" id="ag-generate-btn" onclick="AgentGen.generate()">Generate draft</button>
+          </div>
+        </div>
+
+        <!-- Step 2: draft review -->
+        <div class="ag-pane" data-ag-pane="draft" hidden>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div><label class="admin-modal-label">Agent ID</label><input type="text" id="ag-draft-id"></div>
+            <div><label class="admin-modal-label">Name</label><input type="text" id="ag-draft-name"></div>
+            <div><label class="admin-modal-label">Role</label><select id="ag-draft-role">
+              <option value="reasoning">reasoning</option>
+              <option value="coding">coding</option>
+              <option value="fast">fast</option>
+              <option value="general">general</option>
+              <option value="uncensored">uncensored</option>
+            </select></div>
+            <div><label class="admin-modal-label">Model (optional)</label><input type="text" id="ag-draft-model" placeholder="deepseek-r1:32b"></div>
+          </div>
+          <label class="admin-modal-label">Description</label>
+          <input type="text" id="ag-draft-desc">
+          <label class="admin-modal-label">System prompt</label>
+          <textarea id="ag-draft-prompt" rows="10"></textarea>
+          <label class="admin-modal-label">Starter prompts (one per line)</label>
+          <textarea id="ag-draft-starters" rows="4"></textarea>
+          <label class="admin-modal-label">Tags (comma-separated)</label>
+          <input type="text" id="ag-draft-tags">
+          <div id="ag-draft-error" class="admin-modal-error" hidden></div>
+          <div class="admin-modal-actions">
+            <button type="button" class="admin-modal-btn" onclick="AgentGen._showStep('input')">← Back</button>
+            <button type="button" class="admin-modal-btn" onclick="AgentGen.save(false)">Save (no eval)</button>
+            <button type="button" class="admin-modal-btn primary" onclick="AgentGen._showStep('eval')">Continue → Validate</button>
+          </div>
+        </div>
+
+        <!-- Step 3: validation -->
+        <div class="ag-pane" data-ag-pane="eval" hidden>
+          <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5">
+            Define a few quick acceptance cases — prompt + expected substring. The draft will be saved
+            and then evaluated; results show pass/fail per case.
+          </div>
+          <div id="ag-cases" style="display:flex;flex-direction:column;gap:6px"></div>
+          <button class="action-btn" onclick="AgentGen.addCase()" style="margin-top:6px">+ Add case</button>
+          <div id="ag-eval-results" style="margin-top:14px"></div>
+          <div id="ag-eval-error" class="admin-modal-error" hidden></div>
+          <div class="admin-modal-actions">
+            <button type="button" class="admin-modal-btn" onclick="AgentGen._showStep('draft')">← Back</button>
+            <button type="button" class="admin-modal-btn primary" onclick="AgentGen.saveAndEvaluate()">Save + Run cases</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(_modal);
+  }
+
+  function _showStep(name) {
+    _ensureModal();
+    _modal.querySelectorAll('.ag-step').forEach(s => s.classList.toggle('active', s.dataset.agStep === name));
+    _modal.querySelectorAll('.ag-pane').forEach(p => p.hidden = (p.dataset.agPane !== name));
+    if (name === 'eval') AgentGen.addCase(); // seed with one row
+  }
+
+  function _hideError(id) { const e = document.getElementById(id); if (e) { e.hidden = true; e.textContent = ''; } }
+  function _showError(id, msg) { const e = document.getElementById(id); if (e) { e.textContent = msg; e.hidden = false; } }
+
+  async function generate() {
+    _hideError('ag-error');
+    const mode = document.getElementById('ag-mode').value;
+    const nameHint = document.getElementById('ag-name-hint').value.trim();
+    const roleHint = document.getElementById('ag-role-hint').value;
+    const body = { name_hint: nameHint || null, role_hint: roleHint || null };
+    if (mode === 'document') {
+      body.document_id = document.getElementById('ag-document-id').value;
+    } else {
+      const text = document.getElementById('ag-text-input').value.trim();
+      if (!text) { _showError('ag-error', 'Paste some text first.'); return; }
+      body.text = text;
+    }
+    const btn = document.getElementById('ag-generate-btn');
+    btn.disabled = true; btn.textContent = 'Generating…';
+    try {
+      const r = await fetch('/api/agents/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        _showError('ag-error', err.detail || r.statusText);
+        return;
+      }
+      const result = await r.json();
+      _draft = result.draft;
+      _hydrateDraft(_draft);
+      _showStep('draft');
+    } catch (e) { _showError('ag-error', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Generate draft'; }
+  }
+
+  function _hydrateDraft(d) {
+    document.getElementById('ag-draft-id').value = d.id || '';
+    document.getElementById('ag-draft-name').value = d.name || '';
+    document.getElementById('ag-draft-role').value = d.role || 'reasoning';
+    document.getElementById('ag-draft-model').value = d.model || '';
+    document.getElementById('ag-draft-desc').value = d.description || '';
+    document.getElementById('ag-draft-prompt').value = d.system_prompt || '';
+    document.getElementById('ag-draft-starters').value = (d.starters || []).join('\n');
+    document.getElementById('ag-draft-tags').value = (d.tags || []).join(', ');
+  }
+
+  function _readDraft() {
+    if (!_draft) _draft = {};
+    _draft.id = document.getElementById('ag-draft-id').value.trim();
+    _draft.name = document.getElementById('ag-draft-name').value.trim();
+    _draft.role = document.getElementById('ag-draft-role').value;
+    _draft.model = document.getElementById('ag-draft-model').value.trim() || null;
+    _draft.description = document.getElementById('ag-draft-desc').value.trim();
+    _draft.system_prompt = document.getElementById('ag-draft-prompt').value;
+    _draft.starters = document.getElementById('ag-draft-starters').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    _draft.tags = document.getElementById('ag-draft-tags').value.split(',').map(s => s.trim()).filter(Boolean);
+    // Preserve any context the generator attached.
+    if (!_draft.context) _draft.context = [];
+    return _draft;
+  }
+
+  async function save(closeAfter = true) {
+    _hideError('ag-draft-error');
+    const draft = _readDraft();
+    if (!draft.id || !draft.name || !draft.system_prompt) {
+      _showError('ag-draft-error', 'id, name, and system_prompt are required.');
+      return false;
+    }
+    try {
+      const r = await fetch('/api/agents/generate/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draft, overwrite: true }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        _showError('ag-draft-error', err.detail || r.statusText);
+        return false;
+      }
+      if (closeAfter) {
+        close();
+        if (typeof loadAgentsTab === 'function') loadAgentsTab();
+        if (typeof loadAgentsForSelector === 'function') loadAgentsForSelector();
+        alert(`Agent '${draft.id}' saved.`);
+      }
+      return true;
+    } catch (e) { _showError('ag-draft-error', e.message); return false; }
+  }
+
+  function addCase() {
+    const el = document.getElementById('ag-cases');
+    if (!el) return;
+    const row = document.createElement('div');
+    row.className = 'ag-case-row';
+    row.innerHTML = `
+      <input type="text" class="ag-case-prompt" placeholder="Prompt to send the agent">
+      <input type="text" class="ag-case-expected" placeholder="Expected substring (optional)">
+      <button class="action-btn" onclick="this.parentElement.remove()" style="padding:3px 8px;color:var(--danger);border-color:var(--danger-dim)">✕</button>
+    `;
+    el.appendChild(row);
+  }
+
+  async function saveAndEvaluate() {
+    _hideError('ag-eval-error');
+    const draft = _readDraft();
+    const cases = Array.from(document.querySelectorAll('#ag-cases .ag-case-row'))
+      .map(r => ({
+        prompt: r.querySelector('.ag-case-prompt').value.trim(),
+        expected_contains: r.querySelector('.ag-case-expected').value.trim() || null,
+      }))
+      .filter(c => c.prompt);
+    if (!cases.length) {
+      _showError('ag-eval-error', 'Add at least one case.');
+      return;
+    }
+    const ok = await save(false);
+    if (!ok) return;
+    document.getElementById('ag-eval-results').innerHTML = '<div style="color:var(--text-dim);font-size:0.72rem">Running cases…</div>';
+    try {
+      const r = await fetch(`/api/agents/${encodeURIComponent(draft.id)}/evaluate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cases }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        _showError('ag-eval-error', err.detail || r.statusText);
+        return;
+      }
+      const report = await r.json();
+      document.getElementById('ag-eval-results').innerHTML = `
+        <div style="font-size:0.72rem;margin-bottom:8px">
+          <strong>${report.passed} passed</strong> · <span style="color:var(--danger)">${report.failed} failed</span>
+        </div>
+        ${(report.cases || []).map(c => `
+          <div class="ag-case-result">
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+              <span class="ag-case-pill ${c.passed ? 'pass' : 'fail'}">${c.passed ? 'PASS' : 'FAIL'}</span>
+              <span style="font-family:var(--mono);font-size:0.66rem;color:var(--text-dim)">${c.duration_seconds}s</span>
+              <span style="font-size:0.7rem;flex:1">${esc(c.prompt)}</span>
+            </div>
+            <pre style="margin:0;font-size:0.66rem;background:var(--bg-deep);padding:6px 8px;border-radius:3px;white-space:pre-wrap;max-height:120px;overflow:auto">${esc(c.response)}</pre>
+          </div>
+        `).join('')}
+      `;
+    } catch (e) { _showError('ag-eval-error', e.message); }
+  }
+
+  function close() {
+    if (_modal) _modal.hidden = true;
+  }
+
+  return { openFromDocument, openFromText, generate, save, saveAndEvaluate, addCase, close, _showStep };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   PROJECT BAR — projects are persistent groupings of workflows,
+   agents, MCPs, plugins, documents, and chats. The bar appears at the
+   top of the composer and lets you switch context + bundle export.
+   ══════════════════════════════════════════════════════════════════ */
+const Projects = (function () {
+  let _projects = [];
+  let _active = null;
+
+  async function load() {
+    try {
+      const r = await fetch('/api/projects');
+      if (!r.ok) return;
+      _projects = await r.json();
+      _renderBar();
+    } catch (e) { /* offline-tolerant */ }
+  }
+
+  function _renderBar() {
+    const sel = document.getElementById('project-select');
+    if (!sel) return;
+    sel.innerHTML = ['<option value="">— no project context —</option>']
+      .concat(_projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (${(p.counts.workflows||0)+(p.counts.agents||0)+(p.counts.mcp_servers||0)+(p.counts.documents||0)})</option>`))
+      .join('');
+    if (_active) sel.value = _active;
+  }
+
+  function setActive(id) {
+    _active = id;
+    window._activeProject = id;
+    document.getElementById('project-badge').textContent = id || '—';
+  }
+
+  async function create() {
+    const id = prompt('Project ID (alphanum/_/-, max 64 chars):');
+    if (!id) return;
+    const name = prompt('Project name:') || id;
+    try {
+      const r = await fetch('/api/projects', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name }),
+      });
+      if (!r.ok) { alert('Create failed: ' + (await r.text())); return; }
+      await load();
+      setActive(id);
+    } catch (e) { alert('Create error: ' + e.message); }
+  }
+
+  async function attachCurrentWorkflow() {
+    if (!_active) { alert('Pick a project first.'); return; }
+    const wfId = (document.getElementById('df-wf-id') || {}).value;
+    if (!wfId) { alert('Set a workflow ID first.'); return; }
+    try {
+      const r = await fetch(`/api/projects/${encodeURIComponent(_active)}/artifacts/workflows/${encodeURIComponent(wfId)}`, { method: 'POST' });
+      if (!r.ok) { alert('Attach failed: ' + (await r.text())); return; }
+      alert(`Workflow '${wfId}' attached to project '${_active}'.`);
+      await load();
+    } catch (e) { alert('Attach error: ' + e.message); }
+  }
+
+  async function exportBundle() {
+    if (!_active) { alert('Pick a project first.'); return; }
+    try {
+      const r = await fetch(`/api/projects/${encodeURIComponent(_active)}/export`);
+      if (!r.ok) { alert('Export failed: ' + (await r.text())); return; }
+      const bundle = await r.json();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${_active}.project.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) { alert('Export error: ' + e.message); }
+  }
+
+  function importBundle() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.json';
+    inp.onchange = async () => {
+      const file = inp.files && inp.files[0];
+      if (!file) return;
+      const text = await file.text();
+      try {
+        const bundle = JSON.parse(text);
+        const r = await fetch('/api/projects/import?overwrite=true', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bundle),
+        });
+        if (!r.ok) { alert('Import failed: ' + (await r.text())); return; }
+        const result = await r.json();
+        alert(`Imported project '${result.project_id}'.`);
+        await load();
+        setActive(result.project_id);
+      } catch (e) { alert('Import error: ' + e.message); }
+    };
+    inp.click();
+  }
+
+  return { load, setActive, create, attachCurrentWorkflow, exportBundle, importBundle };
+})();
+
 </script>
 </body>
 </html>
