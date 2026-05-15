@@ -1,0 +1,45 @@
+{
+  "$comment": [
+    "Example MCP server registration for a Cortex XSIAM tenant.",
+    "",
+    "Drop this payload into Admin → MCP Servers → + Register, or",
+    "POST it to /api/mcp/servers with the master key:",
+    "",
+    "  curl -X POST http://localhost:8000/api/mcp/servers \\",
+    "       -H 'Authorization: Bearer <master-key>' \\",
+    "       -H 'Content-Type: application/json' \\",
+    "       -d @docs/examples/mcp-cortex-tenant.example.json",
+    "",
+    "This assumes you have a running MCP-XSIAM server somewhere on your",
+    "network that speaks JSON-RPC and exposes tools like:",
+    "  - xql.run_query   (execute an XQL query against the tenant)",
+    "  - xql.list_datasets",
+    "  - xdm.preview_rule (dry-run a data model rule)",
+    "  - tenant.health",
+    "",
+    "An open-source reference MCP-XSIAM server lives in a separate repo",
+    "(see docs/seed/xql/README.md). This file is a registration TEMPLATE",
+    "— replace <YOUR-TENANT-URL> and <YOUR-API-KEY> before importing."
+  ],
+
+  "id": "cortex-xsiam-tenant",
+  "name": "Cortex XSIAM Tenant",
+  "description": "JSON-RPC bridge to a Cortex XSIAM tenant for XQL queries + data model rule validation. Use this when an agent needs to actually run a draft rule against live telemetry instead of just static-validating it.",
+
+  "transport": "http",
+  "url": "<YOUR-TENANT-URL>/mcp/jsonrpc",
+  "headers": {
+    "Authorization": "Bearer <YOUR-API-KEY>",
+    "X-Tenant-Id": "<YOUR-TENANT-ID>"
+  },
+
+  "timeout_seconds": 60,
+
+  "tags": [
+    "cortex",
+    "xsiam",
+    "security",
+    "xql",
+    "live-tenant"
+  ]
+}

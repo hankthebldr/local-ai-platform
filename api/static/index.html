@@ -256,6 +256,44 @@ body::before {
   outline-offset: 2px;
 }
 
+/* ── DOC DROP ZONE ─────────────────────────────────────────────── */
+.doc-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 22px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  text-align: center;
+}
+.doc-drop-zone:hover,
+.doc-drop-zone:focus-visible {
+  border-color: var(--accent-dim);
+  background: var(--accent-ghost);
+  color: var(--text);
+  outline: none;
+}
+.doc-drop-zone.is-dragging {
+  border-color: var(--accent);
+  background: var(--accent-ghost);
+  color: var(--accent);
+  border-style: solid;
+}
+.doc-drop-zone-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0.7;
+}
+.doc-drop-zone-title { font-size: 0.78rem; letter-spacing: 0.02em; }
+.doc-drop-zone-sub { font-size: 0.62rem; color: var(--text-muted); font-family: var(--mono); }
+
 /* ── TAB NAV ───────────────────────────────────────────────────── */
 .tab-nav {
   display: flex;
@@ -1671,6 +1709,66 @@ details[open] > summary::before { transform: rotate(90deg); }
 .composer-left, .composer-center, .composer-right { display: flex; flex-direction: column; gap: 10px; }
 .composer-left-panel { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .composer-canvas-panel { flex: 1; min-height: 480px; position: relative; padding: 0; overflow: hidden; }
+
+/* Floating canvas controls (zoom + fullscreen). Top-right, over the canvas. */
+.composer-canvas-controls {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 4px;
+  backdrop-filter: blur(4px);
+}
+.canvas-ctrl {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.canvas-ctrl:hover { color: var(--accent); background: var(--accent-ghost); }
+.canvas-ctrl:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.canvas-ctrl-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+/* Fullscreen mode: lifts the canvas panel out of the page layout so it
+   fills the viewport. Class is toggled on the panel itself; the chrome
+   (controls, drawflow node, header overlay) stays inside it. */
+.composer-canvas-panel.is-fullscreen {
+  position: fixed !important;
+  inset: 0;
+  z-index: 200;
+  min-height: 0;
+  border-radius: 0;
+  border-color: var(--accent-dim);
+  box-shadow: var(--glow-cyan);
+}
+.composer-canvas-panel.is-fullscreen #drawflow-canvas {
+  height: 100vh !important;
+}
+.composer-canvas-panel.is-fullscreen .composer-canvas-controls {
+  top: 14px;
+  right: 16px;
+}
 .composer-right-panel { padding: 10px 12px; }
 .composer-right .composer-right-panel:first-child { max-height: 280px; overflow: auto; }
 
@@ -1814,7 +1912,6 @@ details[open] > summary::before { transform: rotate(90deg); }
     <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows', this)">Runs</button>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
-    <button class="tab-btn" data-tab="discover" onclick="switchTab('discover', this)">Discover<span class="tab-count" id="disc-count"></span></button>
     <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">Context</button>
     <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Skill Lab<span class="tab-count" id="res-count"></span></button>
     <button class="tab-btn" data-tab="memory" onclick="switchTab('memory', this)">Memory<span class="tab-count" id="mem-count"></span></button>
@@ -1832,7 +1929,11 @@ details[open] > summary::before { transform: rotate(90deg); }
         <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-plugins" onclick="AdminMenu.select('admin-plugins')">Plugins</button>
         <button class="admin-menu-item" role="menuitem" type="button"
+                data-panel="admin-skills" onclick="AdminMenu.select('admin-skills')">Skills</button>
+        <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-mcp" onclick="AdminMenu.select('admin-mcp')">MCP Servers</button>
+        <button class="admin-menu-item" role="menuitem" type="button"
+                data-panel="admin-cloud" onclick="AdminMenu.select('admin-cloud')">Cloud Models</button>
         <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-exports" onclick="AdminMenu.select('admin-exports')">Exports</button>
         <div class="admin-menu-divider" aria-hidden="true"></div>
@@ -1966,8 +2067,17 @@ details[open] > summary::before { transform: rotate(90deg); }
 
       <!-- CENTER: Drawflow canvas -->
       <div class="composer-center">
-        <div class="panel composer-canvas-panel">
+        <div class="panel composer-canvas-panel" id="composer-canvas-panel">
           <span class="corner-tr"></span><span class="corner-bl"></span>
+          <!-- Floating zoom + maximize controls. Positioned absolute over
+               the canvas so they don't reflow when the panel fullscreens. -->
+          <div class="composer-canvas-controls" role="toolbar" aria-label="Canvas controls">
+            <button type="button" class="canvas-ctrl" onclick="dfZoomOut()" title="Zoom out (or scroll down on canvas)" aria-label="Zoom out">−</button>
+            <button type="button" class="canvas-ctrl" onclick="dfZoomReset()" title="Reset zoom (100%)" aria-label="Reset zoom">⟲</button>
+            <button type="button" class="canvas-ctrl" onclick="dfZoomIn()" title="Zoom in (or scroll up on canvas)" aria-label="Zoom in">+</button>
+            <span class="canvas-ctrl-divider" aria-hidden="true"></span>
+            <button type="button" class="canvas-ctrl" id="canvas-fullscreen-btn" onclick="dfToggleFullscreen()" title="Maximize the composer to fill the viewport (Esc to exit)" aria-label="Toggle fullscreen">⛶</button>
+          </div>
           <div id="drawflow-canvas"></div>
           <div class="composer-canvas-empty" id="composer-canvas-empty">
             <div class="composer-canvas-empty-inner">
@@ -2254,36 +2364,47 @@ details[open] > summary::before { transform: rotate(90deg); }
         Profiles are edited in <code style="color:var(--cyan);">data/profiles/*.yaml</code>. Click Reload after changes.
       </div>
     </div>
-  </div>
 
-  <!-- ═══ TAB: DISCOVER ═════════════════════════════════════════════ -->
-  <div class="tab-content" id="tab-discover">
-    <div class="panel" style="margin-bottom:16px">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">HuggingFace Discovery</div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:0.72rem;color:var(--text-dim)" id="disc-status">
-          Auto-discovers abliterated, uncensored &amp; unsensored models from trusted authors on HuggingFace.
+    <!-- ── Discover: HuggingFace catalog, embedded in the Models tab as a
+         collapsible section so local + discoverable models share one
+         surface. Was a top-level tab pre-PR; promoted/demoted as a
+         sub-section keeps the IA tighter without losing capability. -->
+    <details class="panel" style="margin-top:16px;padding:14px 16px" id="discover-section">
+      <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--cyan);font-family:var(--mono);letter-spacing:0.04em;">
+        <span>// Discover — HuggingFace catalog</span>
+        <span class="tab-count" id="disc-count" style="color:var(--text-muted);font-size:0.7rem"></span>
+        <span style="flex:1"></span>
+        <span style="font-size:0.62rem;color:var(--text-muted);font-weight:normal">click to expand</span>
+      </summary>
+      <div style="margin-top:14px">
+        <div class="panel" style="margin-bottom:16px;border-color:var(--border)">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">HuggingFace Discovery</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:0.72rem;color:var(--text-dim)" id="disc-status">
+              Auto-discovers abliterated, uncensored &amp; unsensored models from trusted authors on HuggingFace.
+            </div>
+            <button class="action-btn pull" id="disc-refresh-btn" onclick="refreshDiscovery()" style="white-space:nowrap">
+              Scan Now
+            </button>
+          </div>
+          <div id="disc-authors" style="margin-top:10px;font-size:0.65rem;color:var(--text-muted)"></div>
         </div>
-        <button class="action-btn pull" id="disc-refresh-btn" onclick="refreshDiscovery()" style="white-space:nowrap">
-          Scan Now
-        </button>
+
+        <div class="inv-toolbar">
+          <input class="search-input" type="text" placeholder="Search discovered models..." id="disc-search" oninput="renderDiscovery()" />
+          <button class="filter-btn active" onclick="setDiscFilter('all', this)">All</button>
+          <button class="filter-btn" onclick="setDiscFilter('trusted', this)">Trusted Authors</button>
+          <button class="filter-btn" onclick="setDiscFilter('gguf', this)">GGUF Ready</button>
+          <button class="filter-btn" onclick="setDiscFilter('large-ctx', this)">128K+ Context</button>
+        </div>
+
+        <div class="inv-stats" id="disc-stats"></div>
+        <div class="inv-grid" id="disc-grid">
+          <div class="model-empty">Click "Scan Now" to discover models from HuggingFace...</div>
+        </div>
       </div>
-      <div id="disc-authors" style="margin-top:10px;font-size:0.65rem;color:var(--text-muted)"></div>
-    </div>
-
-    <div class="inv-toolbar">
-      <input class="search-input" type="text" placeholder="Search discovered models..." id="disc-search" oninput="renderDiscovery()" />
-      <button class="filter-btn active" onclick="setDiscFilter('all', this)">All</button>
-      <button class="filter-btn" onclick="setDiscFilter('trusted', this)">Trusted Authors</button>
-      <button class="filter-btn" onclick="setDiscFilter('gguf', this)">GGUF Ready</button>
-      <button class="filter-btn" onclick="setDiscFilter('large-ctx', this)">128K+ Context</button>
-    </div>
-
-    <div class="inv-stats" id="disc-stats"></div>
-    <div class="inv-grid" id="disc-grid">
-      <div class="model-empty">Click "Scan Now" to discover models from HuggingFace...</div>
-    </div>
+    </details>
   </div>
 
   <!-- ═══ TAB: RESEARCH ════════════════════════════════════════════ -->
@@ -2456,13 +2577,25 @@ details[open] > summary::before { transform: rotate(90deg); }
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
         <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Documents</h3>
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" style="flex:1;color:var(--text);font-family:var(--mono);font-size:0.8rem;">
-          <button onclick="uploadDocument()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Upload</button>
-          <button onclick="AgentGen.openFromText()" style="background:transparent;color:var(--accent);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Paste → Agent</button>
+        <!-- Drop zone: click to open the file picker, or drag a file onto it.
+             Upload fires automatically on selection — no second click. The
+             hidden <input> still backs it so accept=".txt,.md,.pdf" works. -->
+        <div id="doc-drop-zone" class="doc-drop-zone"
+             onclick="document.getElementById('doc-file-input').click()"
+             role="button" tabindex="0"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('doc-file-input').click()}"
+             aria-label="Choose a document, or drag one here">
+          <div class="doc-drop-zone-icon" aria-hidden="true">⤓</div>
+          <div class="doc-drop-zone-title">Drag a file here or click to browse</div>
+          <div class="doc-drop-zone-sub">Accepted: .txt, .md, .pdf</div>
         </div>
-        <div id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;"></div>
-        <div id="documents-list" style="max-height:400px;overflow-y:auto;"></div>
+        <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" hidden
+               onchange="uploadDocument()">
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <span id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);flex:1;"></span>
+          <button onclick="AgentGen.openFromText()" style="background:transparent;color:var(--accent);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.75rem;">Paste → Agent</button>
+        </div>
+        <div id="documents-list" style="max-height:400px;overflow-y:auto;margin-top:12px;"></div>
       </div>
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
         <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Search Preview</h3>
@@ -2572,6 +2705,53 @@ details[open] > summary::before { transform: rotate(90deg); }
     </div>
   </div>
 
+  <!-- Skills admin panel — manage skills across all installed plugins.
+       A skill is a markdown body + trigger keywords that gets injected
+       into a chat session when one of its triggers matches the user's
+       message. Skills live inside plugins (plugins/<id>/skills/*.md);
+       this panel surfaces them in one flat browseable + filterable
+       list so the admin doesn't have to dig per-plugin. -->
+  <div class="tab-content" id="tab-admin-skills" style="display:none">
+    <div class="admin-modal-error" style="background:rgba(0,192,232,0.10);border-color:#00C0E8;color:#00C0E8;margin-bottom:14px;font-size:0.7rem">
+      ℹ Skills are markdown bodies attached to plugins. They auto-inject into chats when their trigger keywords match. Skill files live in <code>plugins/&lt;plugin&gt;/skills/</code>.
+    </div>
+
+    <div class="plugins-layout">
+      <div class="panel plugins-list-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// SKILLS
+          <span style="float:right">
+            <select id="skills-filter-plugin" class="model-select" style="font-size:0.62rem;padding:2px 6px;min-width:140px"
+                    onchange="SkillsPanel.refresh()" title="Filter by plugin">
+              <option value="">— all plugins —</option>
+            </select>
+            <select id="skills-filter-role" class="model-select" style="font-size:0.62rem;padding:2px 6px;min-width:120px;margin-left:4px"
+                    onchange="SkillsPanel.refresh()" title="Filter by role (matches the workflow step role each skill applies to)">
+              <option value="">— all roles —</option>
+              <option value="general">general</option>
+              <option value="reasoning">reasoning</option>
+              <option value="coding">coding</option>
+              <option value="fast">fast</option>
+              <option value="uncensored">uncensored</option>
+            </select>
+            <button class="action-btn" onclick="SkillsPanel.refresh()" style="margin-left:4px">Refresh</button>
+          </span>
+        </div>
+        <div id="skills-list" style="margin-top:10px;font-size:0.78rem"></div>
+      </div>
+
+      <div class="panel plugins-detail-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label" id="skill-detail-label">// SELECT A SKILL</div>
+        <div id="skill-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
+          Select a skill from the left to read its body, triggers, and
+          assigned roles. Skills marked "all" are eligible to be
+          auto-injected into any chat / step regardless of role.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- MCP Servers admin panel -->
   <div class="tab-content" id="tab-admin-mcp" style="display:none">
     <div class="admin-modal-error" style="background:rgba(245,166,35,0.12);border-color:#F5A623;color:#F5A623;margin-bottom:14px">
@@ -2639,6 +2819,76 @@ details[open] > summary::before { transform: rotate(90deg); }
         <div class="admin-modal-actions">
           <button type="button" class="admin-modal-btn" onclick="MCPPanel._closeModal()">Cancel</button>
           <button type="button" class="admin-modal-btn primary" onclick="MCPPanel._submit()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cloud Models admin panel — external/frontier LLM provider registry.
+       Local-first stays the project's posture; this is the in-app
+       management surface for operators who opt into OpenAI / Anthropic /
+       Together / OpenRouter / etc. The shell here lists configured
+       providers, opens a register/edit modal, and tracks api_key
+       presence as a boolean — keys never round-trip on the wire after
+       create. Proxy-through to /v1/chat/completions for cloud models
+       is deferred to a follow-up PR. -->
+  <div class="tab-content" id="tab-admin-cloud" style="display:none">
+    <div class="admin-modal-error" style="background:rgba(0,192,232,0.10);border-color:#00C0E8;color:#00C0E8;margin-bottom:14px;font-size:0.7rem">
+      ℹ Configure external LLM providers (OpenAI, Anthropic, Together, OpenRouter, custom OpenAI-compatible). API keys are stored on the host in <code>data/config/cloud_providers.json</code> (chmod 0600); the dashboard never echoes them back.
+    </div>
+
+    <div class="plugins-layout">
+      <div class="panel plugins-list-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// CLOUD PROVIDERS
+          <span style="float:right">
+            <button class="action-btn" onclick="CloudPanel.showCreate()" style="color:var(--accent);border-color:var(--accent-dim)">+ Add Provider</button>
+            <button class="action-btn" onclick="CloudPanel.refresh()">Refresh</button>
+          </span>
+        </div>
+        <div id="cloud-list" style="margin-top:10px;font-size:0.78rem"></div>
+      </div>
+
+      <div class="panel plugins-detail-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label" id="cloud-detail-label">// SELECT A PROVIDER</div>
+        <div id="cloud-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
+          Select a provider to inspect its config or rotate its API key. Use <strong>+ Add Provider</strong> to register a new one.
+        </div>
+      </div>
+    </div>
+
+    <!-- Register / edit modal -->
+    <div id="cloud-edit-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="width:600px">
+        <h3 id="cloud-edit-title">Add cloud provider</h3>
+        <label class="admin-modal-label">ID <span style="color:var(--text-muted);font-weight:normal">(used in URLs; alphanum/_/- only)</span></label>
+        <input id="cloud-edit-id" type="text" placeholder="e.g. openai-prod" autocomplete="off">
+        <label class="admin-modal-label">Display name</label>
+        <input id="cloud-edit-name" type="text" placeholder="e.g. OpenAI · production" autocomplete="off">
+        <label class="admin-modal-label">Kind</label>
+        <select id="cloud-edit-kind" class="model-select" style="font-size:0.8rem">
+          <option value="openai">openai (and OpenAI-compatible: Together, Groq, OpenRouter, vLLM-OpenAI)</option>
+          <option value="anthropic">anthropic (Claude Messages API)</option>
+          <option value="custom">custom (other / experimental)</option>
+        </select>
+        <label class="admin-modal-label">Base URL</label>
+        <input id="cloud-edit-base-url" type="text" placeholder="https://api.openai.com" autocomplete="off">
+        <label class="admin-modal-label">API key <span style="color:var(--text-muted);font-weight:normal">(rotates when you save; leave empty on edit to keep the current key)</span></label>
+        <input id="cloud-edit-api-key" type="password" placeholder="sk-…" autocomplete="off">
+        <label class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <input id="cloud-edit-desc" type="text" placeholder="What this provider is for" autocomplete="off">
+        <label class="admin-modal-label">Curated model IDs <span style="color:var(--text-muted);font-weight:normal">(comma-separated; empty = fetch from /v1/models on first use)</span></label>
+        <input id="cloud-edit-models" type="text" placeholder="gpt-4o, gpt-4o-mini" autocomplete="off">
+        <label class="admin-modal-label">Tags <span style="color:var(--text-muted);font-weight:normal">(comma-separated)</span></label>
+        <input id="cloud-edit-tags" type="text" placeholder="frontier, paid" autocomplete="off">
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.74rem;color:var(--text-dim)">
+          <input id="cloud-edit-enabled" type="checkbox" checked> Enabled (surface in selection menus)
+        </label>
+        <div id="cloud-edit-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="CloudPanel._closeModal()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="CloudPanel._submit()">Save</button>
         </div>
       </div>
     </div>
@@ -2892,7 +3142,16 @@ function switchTab(name, el) {
   if (name === 'workflow-index') WorkflowIndex.load();
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
   if (name === 'memory') { loadMemory(); loadMemoryTab(); }
-  if (name === 'discover' && !discoverLoaded) loadDiscovery();
+  // Discover was promoted-then-demoted into Models tab as a collapsible
+  // sub-section. Legacy switchTab('discover', ...) calls (from old links
+  // or external bookmarks) redirect to inventory and pop the Discover
+  // section open so the user lands on the right content.
+  if (name === 'discover') {
+    if (!catalogLoaded) loadCatalog();
+    const sect = document.getElementById('discover-section');
+    if (sect) sect.open = true;
+    if (!discoverLoaded) loadDiscovery();
+  }
   if (name === 'research') initResearch();
   if (name === 'workflows') loadWorkflowsTab();
   if (name === 'documents') loadDocumentsTab();
@@ -3720,6 +3979,17 @@ async function unloadModel(name) {
 let discoverData = [];
 let discoverLoaded = false;
 let discFilter = 'all';
+
+// Lazy-load the HuggingFace discovery the first time the Discover
+// sub-section is expanded inside the Models tab. Saves the network
+// scan on Models-tab visits when the user doesn't need it.
+document.addEventListener('DOMContentLoaded', () => {
+  const sect = document.getElementById('discover-section');
+  if (!sect) return;
+  sect.addEventListener('toggle', () => {
+    if (sect.open && !discoverLoaded) loadDiscovery();
+  });
+});
 
 async function loadDiscovery(force = false) {
   const url = '/api/inventory/discover' + (force ? '?force=true' : '');
@@ -5116,24 +5386,57 @@ async function loadDocStats() {
   } catch(e) {}
 }
 
-async function uploadDocument() {
-  const input = document.getElementById('doc-file-input');
+// Internal: post a single File to /api/documents and refresh the list.
+// Called both from the <input onchange> auto-upload AND the drag-drop
+// handler, so file-selection and drag-drop share the same code path.
+async function _uploadDocumentFile(file) {
   const status = document.getElementById('doc-upload-status');
-  if (!input.files.length) { status.textContent = 'Pick a file first.'; return; }
-  const file = input.files[0];
+  status.textContent = `Uploading ${file.name}…`;
   const form = new FormData();
   form.append('file', file);
-  status.textContent = `Uploading ${file.name}...`;
   try {
     const r = await fetch('/api/documents', { method: 'POST', body: form });
     const data = await r.json();
     if (!r.ok) { status.textContent = `Error: ${data.detail || 'upload failed'}`; return; }
-    status.textContent = `Indexed: ${data.filename} (${data.chunk_count} chunks)`;
-    input.value = '';
+    status.textContent = `✓ Indexed ${data.filename} (${data.chunk_count} chunks)`;
     loadDocumentsList();
     loadDocStats();
   } catch(e) { status.textContent = `Error: ${e.message}`; }
 }
+
+async function uploadDocument() {
+  const input = document.getElementById('doc-file-input');
+  if (!input.files.length) {
+    const status = document.getElementById('doc-upload-status');
+    if (status) status.textContent = 'Pick a file first.';
+    return;
+  }
+  await _uploadDocumentFile(input.files[0]);
+  input.value = '';   // reset so picking the same file again re-fires onchange
+}
+
+// Drag-and-drop wiring for the Documents drop zone. Mirrors the visual
+// state class `.is-dragging` so the zone highlights under the cursor.
+document.addEventListener('DOMContentLoaded', () => {
+  const zone = document.getElementById('doc-drop-zone');
+  if (!zone) return;
+  ['dragenter','dragover'].forEach(evt =>
+    zone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      zone.classList.add('is-dragging');
+    })
+  );
+  ['dragleave','dragend','drop'].forEach(evt =>
+    zone.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      zone.classList.remove('is-dragging');
+    })
+  );
+  zone.addEventListener('drop', async (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) await _uploadDocumentFile(f);
+  });
+});
 
 async function deleteDocument(id) {
   await fetch('/api/documents/' + id, { method: 'DELETE' });
@@ -5464,6 +5767,49 @@ function dfClearConfigPanel() {
   const title = document.getElementById('df-config-title');
   if (panel) panel.innerHTML = '<div style="padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.64rem">Drag a step from the palette to begin. Click a node to configure it.</div>';
   if (title) title.textContent = 'Config';
+}
+
+/* ── Canvas controls: zoom + fullscreen ─────────────────────────── */
+// Drawflow ships native zoom_in/zoom_out/zoom_reset that already track
+// the precanvas transform — we just expose them to the toolbar.
+function dfZoomIn()    { if (window.dfEditor) dfEditor.zoom_in(); }
+function dfZoomOut()   { if (window.dfEditor) dfEditor.zoom_out(); }
+function dfZoomReset() { if (window.dfEditor) dfEditor.zoom_reset(); }
+
+// Fullscreen toggles a class on the canvas PANEL (not the body) so the
+// rest of the dashboard chrome stays mounted; Esc exits. Using a class
+// instead of the Fullscreen API keeps the in-page chat input usable
+// from within the maximized canvas (Fullscreen API would steal focus
+// and inhibit text entry in some browsers).
+function dfToggleFullscreen() {
+  const panel = document.getElementById('composer-canvas-panel');
+  const btn   = document.getElementById('canvas-fullscreen-btn');
+  if (!panel) return;
+  const entering = !panel.classList.contains('is-fullscreen');
+  panel.classList.toggle('is-fullscreen', entering);
+  if (btn) {
+    btn.textContent = entering ? '⤓' : '⛶';
+    btn.title = entering
+      ? 'Exit fullscreen (Esc)'
+      : 'Maximize the composer to fill the viewport (Esc to exit)';
+  }
+  // Force Drawflow to recompute its canvas size after the dimensions
+  // change — its precanvas math is based on the panel rect.
+  if (window.dfEditor) {
+    try { dfEditor.zoom_reset(); } catch (e) {}
+  }
+}
+// Bind Esc to exit fullscreen — one-time listener.
+if (!window._dfFullscreenEscBound) {
+  window._dfFullscreenEscBound = true;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const panel = document.getElementById('composer-canvas-panel');
+      if (panel && panel.classList.contains('is-fullscreen')) {
+        dfToggleFullscreen();
+      }
+    }
+  });
 }
 
 function dfAutoLayout() {
@@ -6635,6 +6981,405 @@ window.PluginsPanel = (function () {
 
   return { load, refresh, select, renderDetail, renderToolAccordion,
            runTool, renderToolForm, _collectParams };
+})();
+
+// ── SkillsPanel ───────────────────────────────────────────────────────────
+// Flat view of every skill across every installed plugin. Lets the admin
+// browse + filter (by plugin, by role) + inspect the markdown body, without
+// needing to dig per-plugin. Auth-mirrors the Plugins panel: list view uses
+// the anonymous /api/plugins GET (open since PR #43); no write actions yet.
+window.SkillsPanel = (function () {
+  let _items = [];           // flattened [{ plugin, skill }]
+  let _selectedId = null;    // composite "plugin_id::skill_id"
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function _matchesRole(skill, role) {
+    if (!role) return true;
+    // Forward-compat: skills may declare roles[] in their manifest. Until
+    // that ships, treat unspecified roles[] as "applies to all roles" so
+    // the filter doesn't hide anything pre-tagging.
+    const roles = skill.roles;
+    if (!Array.isArray(roles) || roles.length === 0) return true;
+    return roles.includes(role) || roles.includes('*');
+  }
+
+  async function load() {
+    const list = document.getElementById('skills-list');
+    if (list) list.innerHTML = '<div style="color:var(--text-muted);font-size:0.7rem">Loading…</div>';
+    try {
+      const r = await fetch('/api/plugins');
+      if (!r.ok) {
+        list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
+        return;
+      }
+      const plugins = await r.json();
+      _items = [];
+      (plugins || []).forEach(p => {
+        (p.skills || []).forEach(s => {
+          _items.push({
+            plugin_id: p.id,
+            plugin_name: p.name || p.id,
+            skill_id: s.id,
+            name: s.name || s.id,
+            description: s.description || '',
+            inject: s.inject || 'none',
+            content: s.content || '',
+            triggers: s.triggers || [],
+            roles: s.roles || [],
+          });
+        });
+      });
+
+      // Populate the plugin filter dropdown — once, keep selection if any.
+      const pluginSel = document.getElementById('skills-filter-plugin');
+      if (pluginSel) {
+        const cur = pluginSel.value;
+        const ids = Array.from(new Set((plugins || []).map(p => p.id))).sort();
+        const opts = ['<option value="">— all plugins —</option>']
+          .concat(ids.map(id => `<option value="${esc(id)}"${cur === id ? ' selected' : ''}>${esc(id)}</option>`));
+        pluginSel.innerHTML = opts.join('');
+      }
+
+      refresh();
+    } catch (e) {
+      if (list) list.innerHTML = `<div class="admin-modal-error" style="margin:0">${esc(e.message)}</div>`;
+    }
+  }
+
+  function refresh() {
+    const list = document.getElementById('skills-list');
+    if (!list) return;
+    const pluginFilter = (document.getElementById('skills-filter-plugin') || {}).value || '';
+    const roleFilter   = (document.getElementById('skills-filter-role')   || {}).value || '';
+
+    const filtered = _items.filter(it => {
+      if (pluginFilter && it.plugin_id !== pluginFilter) return false;
+      if (!_matchesRole(it, roleFilter)) return false;
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      const reason = (pluginFilter || roleFilter)
+        ? 'No skills match these filters.'
+        : 'No skills installed. Add one under plugins/&lt;plugin&gt;/skills/.';
+      list.innerHTML = `<div style="color:var(--text-muted);font-size:0.7rem">${reason}</div>`;
+      return;
+    }
+
+    list.innerHTML = filtered.map(it => {
+      const compositeId = `${it.plugin_id}::${it.skill_id}`;
+      const triggers = (it.triggers || [])
+        .map(t => t.keyword || (t.manual ? 'manual' : ''))
+        .filter(Boolean)
+        .slice(0, 4)
+        .join(', ');
+      const roleBadges = (it.roles && it.roles.length > 0)
+        ? it.roles.map(r => `<span class="role-pill">${esc(r)}</span>`).join(' ')
+        : '<span class="role-pill role-pill-all">all</span>';
+      return `<div class="plugin-card ${compositeId === _selectedId ? 'selected' : ''}"
+                   onclick="SkillsPanel.select('${esc(compositeId)}')">
+        <div class="plugin-card-title">
+          <span class="plugin-status-pip"></span>${esc(it.name)}
+          <span style="color:var(--text-muted);font-size:0.66rem;margin-left:6px">${esc(it.plugin_id)}</span>
+        </div>
+        <div class="plugin-card-meta">
+          ${(it.triggers || []).length} trigger${(it.triggers || []).length === 1 ? '' : 's'}${triggers ? ' · ' + esc(triggers) : ''}
+        </div>
+        <div class="plugin-card-meta" style="margin-top:3px">${roleBadges}</div>
+        <div class="plugin-card-desc">${esc((it.description || '').slice(0, 140))}</div>
+      </div>`;
+    }).join('');
+
+    // Auto-select first match if nothing is currently selected.
+    if (!_selectedId && filtered.length) select(`${filtered[0].plugin_id}::${filtered[0].skill_id}`);
+  }
+
+  function select(compositeId) {
+    _selectedId = compositeId;
+    document.querySelectorAll('#skills-list .plugin-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll(`#skills-list .plugin-card[onclick*="${compositeId.replace(/'/g, "\\'")}"]`)
+      .forEach(c => c.classList.add('selected'));
+
+    const detail = document.getElementById('skill-detail');
+    const label  = document.getElementById('skill-detail-label');
+    const it = _items.find(x => `${x.plugin_id}::${x.skill_id}` === compositeId);
+    if (!detail || !it) return;
+
+    if (label) label.textContent = `// ${it.skill_id.toUpperCase()}`;
+    const triggerRows = (it.triggers || []).map(t => {
+      if (t.manual) return '<li><code>manual</code> (only on direct invocation)</li>';
+      if (t.keyword) return `<li>keyword <code>${esc(t.keyword)}</code></li>`;
+      return `<li>${esc(JSON.stringify(t))}</li>`;
+    }).join('') || '<li style="color:var(--text-muted)">(none — manual-only)</li>';
+
+    const rolesLine = (it.roles && it.roles.length > 0)
+      ? it.roles.map(r => `<span class="role-pill">${esc(r)}</span>`).join(' ')
+      : '<span class="role-pill role-pill-all">all</span> <span style="color:var(--text-muted);font-size:0.62rem">(no roles[] field in manifest — defaults to all)</span>';
+
+    detail.innerHTML = `
+      <div style="font-size:0.72rem">
+        <div style="display:grid;grid-template-columns:90px 1fr;gap:6px 12px;margin-bottom:10px">
+          <div style="color:var(--text-muted)">Plugin</div><div><code>${esc(it.plugin_id)}</code> · ${esc(it.plugin_name)}</div>
+          <div style="color:var(--text-muted)">Skill ID</div><div><code>${esc(it.skill_id)}</code></div>
+          <div style="color:var(--text-muted)">Description</div><div>${esc(it.description || '(none)')}</div>
+          <div style="color:var(--text-muted)">Inject</div><div><code>${esc(it.inject)}</code></div>
+          <div style="color:var(--text-muted)">Roles</div><div>${rolesLine}</div>
+          <div style="color:var(--text-muted)">Triggers</div><div><ul style="margin:0;padding-left:14px">${triggerRows}</ul></div>
+        </div>
+        <div style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Skill body (rendered when injected)</div>
+        <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:4px;padding:10px 12px;font-size:0.66rem;max-height:380px;overflow:auto;white-space:pre-wrap;color:var(--text-dim)">${esc(it.content || '(empty)')}</pre>
+      </div>`;
+  }
+
+  // Reload whenever the admin Skills panel is activated — keeps the list
+  // fresh as plugins are added/removed under plugins/.
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-skills') load();
+  });
+
+  return { load, refresh, select };
+})();
+
+// Tiny styles for the role pills, scoped to the skills admin panel.
+(function () {
+  const style = document.createElement('style');
+  style.textContent = `
+    .role-pill { display:inline-block; padding:1px 6px; margin-right:3px;
+                 font-size:0.55rem; font-family:var(--mono);
+                 border:1px solid var(--accent-dim); color:var(--accent);
+                 border-radius:2px; letter-spacing:0.06em; text-transform:uppercase; }
+    .role-pill-all { border-color:var(--text-muted); color:var(--text-muted); }
+  `;
+  document.head.appendChild(style);
+})();
+
+// ── CloudPanel ────────────────────────────────────────────────────────────
+// Admin panel for external/frontier LLM provider configs. Mirrors the
+// MCPPanel pattern: list + detail + register/edit modal. Writes hit
+// /api/cloud-providers which require the master key; the GET list is
+// open (returns redacted records — api_key never appears on the wire,
+// just an `api_key_set` boolean).
+window.CloudPanel = (function () {
+  let _items = [];
+  let _selectedId = null;
+  let _editId = null;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  async function load() {
+    const list = document.getElementById('cloud-list');
+    if (!list) return;
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.7rem">Loading…</div>';
+    try {
+      const r = await fetch('/api/cloud-providers');
+      if (!r.ok) {
+        list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
+        return;
+      }
+      _items = await r.json();
+      _render();
+    } catch (e) {
+      list.innerHTML = `<div class="admin-modal-error" style="margin:0">${esc(e.message)}</div>`;
+    }
+  }
+
+  function refresh() { load(); }
+
+  function _render() {
+    const list = document.getElementById('cloud-list');
+    if (!list) return;
+    if (!Array.isArray(_items) || _items.length === 0) {
+      list.innerHTML = '<div style="color:var(--text-muted);font-size:0.7rem">No cloud providers configured. Click <strong>+ Add Provider</strong> to register one.</div>';
+      _renderDetailPlaceholder();
+      return;
+    }
+    list.innerHTML = _items.map(p => `
+      <div class="plugin-card ${p.id === _selectedId ? 'selected' : ''}"
+           onclick="CloudPanel.select('${esc(p.id)}')">
+        <div class="plugin-card-title">
+          <span class="plugin-status-pip ${p.enabled ? '' : 'error'}"></span>${esc(p.name || p.id)}
+          <span style="color:var(--text-muted);font-size:0.66rem;margin-left:6px">${esc(p.kind || 'custom')}</span>
+        </div>
+        <div class="plugin-card-meta">
+          ${p.api_key_set ? '<span style="color:var(--accent)">⚿ key set</span>' : '<span style="color:var(--warn)">no key</span>'}
+          · ${(p.models || []).length} curated model${(p.models || []).length === 1 ? '' : 's'}
+        </div>
+        <div class="plugin-card-desc"><code style="color:var(--text-muted)">${esc(p.base_url || '')}</code></div>
+      </div>
+    `).join('');
+    if (!_selectedId && _items.length) select(_items[0].id);
+  }
+
+  function _renderDetailPlaceholder() {
+    const detail = document.getElementById('cloud-detail');
+    const label = document.getElementById('cloud-detail-label');
+    if (label) label.textContent = '// SELECT A PROVIDER';
+    if (detail) detail.innerHTML = 'Select a provider to inspect its config or rotate its API key. Use <strong>+ Add Provider</strong> to register a new one.';
+  }
+
+  function select(id) {
+    _selectedId = id;
+    document.querySelectorAll('#cloud-list .plugin-card').forEach(c => c.classList.remove('selected'));
+    const card = document.querySelector(`#cloud-list .plugin-card[onclick*="'${id.replace(/'/g, "\\'")}'"]`);
+    if (card) card.classList.add('selected');
+
+    const p = _items.find(x => x.id === id);
+    const detail = document.getElementById('cloud-detail');
+    const label = document.getElementById('cloud-detail-label');
+    if (!p || !detail) return;
+    if (label) label.textContent = `// ${esc(p.id.toUpperCase())}`;
+
+    const tagList = (p.tags || []).map(t => `<span class="role-pill">${esc(t)}</span>`).join(' ') || '<span style="color:var(--text-muted)">none</span>';
+    const modelList = (p.models || []).map(m => `<code>${esc(m)}</code>`).join(', ') || '<span style="color:var(--text-muted)">(empty — will list from provider /v1/models on first use)</span>';
+    detail.innerHTML = `
+      <div style="font-size:0.74rem;display:grid;grid-template-columns:120px 1fr;gap:6px 14px;margin-bottom:14px">
+        <div style="color:var(--text-muted)">Name</div><div>${esc(p.name)}</div>
+        <div style="color:var(--text-muted)">Kind</div><div><code>${esc(p.kind)}</code></div>
+        <div style="color:var(--text-muted)">Base URL</div><div><code>${esc(p.base_url)}</code></div>
+        <div style="color:var(--text-muted)">API key</div><div>${p.api_key_set ? '<span style="color:var(--accent)">set ✓</span> (re-save with a new value to rotate)' : '<span style="color:var(--warn)">not set</span>'}</div>
+        <div style="color:var(--text-muted)">Enabled</div><div>${p.enabled ? '<span style="color:var(--accent)">yes</span>' : '<span style="color:var(--warn)">no</span>'}</div>
+        <div style="color:var(--text-muted)">Curated models</div><div>${modelList}</div>
+        <div style="color:var(--text-muted)">Tags</div><div>${tagList}</div>
+        <div style="color:var(--text-muted)">Description</div><div>${esc(p.description || '(none)')}</div>
+      </div>
+      <div class="admin-modal-actions" style="justify-content:flex-end">
+        <button type="button" class="admin-modal-btn" onclick="CloudPanel.showEdit('${esc(p.id)}')">Edit</button>
+        <button type="button" class="admin-modal-btn" style="color:var(--danger);border-color:var(--danger-dim)" onclick="CloudPanel.del('${esc(p.id)}')">Delete</button>
+      </div>
+    `;
+  }
+
+  function showCreate() {
+    _editId = null;
+    _resetModal();
+    document.getElementById('cloud-edit-title').textContent = 'Add cloud provider';
+    document.getElementById('cloud-edit-modal').hidden = false;
+    setTimeout(() => document.getElementById('cloud-edit-id').focus(), 0);
+  }
+
+  function showEdit(id) {
+    const p = _items.find(x => x.id === id);
+    if (!p) return;
+    _editId = id;
+    _resetModal();
+    document.getElementById('cloud-edit-title').textContent = `Edit ${p.id}`;
+    document.getElementById('cloud-edit-id').value = p.id;
+    document.getElementById('cloud-edit-id').disabled = true; // ID is immutable
+    document.getElementById('cloud-edit-name').value = p.name || '';
+    document.getElementById('cloud-edit-kind').value = p.kind || 'custom';
+    document.getElementById('cloud-edit-base-url').value = p.base_url || '';
+    document.getElementById('cloud-edit-desc').value = p.description || '';
+    document.getElementById('cloud-edit-models').value = (p.models || []).join(', ');
+    document.getElementById('cloud-edit-tags').value = (p.tags || []).join(', ');
+    document.getElementById('cloud-edit-enabled').checked = p.enabled !== false;
+    document.getElementById('cloud-edit-modal').hidden = false;
+    setTimeout(() => document.getElementById('cloud-edit-api-key').focus(), 0);
+  }
+
+  function _resetModal() {
+    ['cloud-edit-id','cloud-edit-name','cloud-edit-base-url','cloud-edit-api-key',
+     'cloud-edit-desc','cloud-edit-models','cloud-edit-tags']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('cloud-edit-id').disabled = false;
+    document.getElementById('cloud-edit-kind').value = 'openai';
+    document.getElementById('cloud-edit-enabled').checked = true;
+    document.getElementById('cloud-edit-error').hidden = true;
+  }
+
+  function _closeModal() {
+    document.getElementById('cloud-edit-modal').hidden = true;
+    _editId = null;
+  }
+
+  async function _submit() {
+    const errBox = document.getElementById('cloud-edit-error');
+    errBox.hidden = true;
+    const id = document.getElementById('cloud-edit-id').value.trim();
+    const name = document.getElementById('cloud-edit-name').value.trim();
+    const kind = document.getElementById('cloud-edit-kind').value;
+    const baseUrl = document.getElementById('cloud-edit-base-url').value.trim();
+    const apiKey = document.getElementById('cloud-edit-api-key').value;
+    const description = document.getElementById('cloud-edit-desc').value.trim();
+    const modelsRaw = document.getElementById('cloud-edit-models').value.trim();
+    const tagsRaw = document.getElementById('cloud-edit-tags').value.trim();
+    const enabled = document.getElementById('cloud-edit-enabled').checked;
+
+    if (!id) { errBox.hidden = false; errBox.textContent = 'ID is required.'; return; }
+    if (!name) { errBox.hidden = false; errBox.textContent = 'Display name is required.'; return; }
+    if (!baseUrl) { errBox.hidden = false; errBox.textContent = 'Base URL is required.'; return; }
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      errBox.hidden = false;
+      errBox.textContent = "ID can only contain letters, digits, '_' and '-'.";
+      return;
+    }
+
+    const body = {
+      name, kind, base_url: baseUrl, description, enabled,
+      models: modelsRaw ? modelsRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
+      tags: tagsRaw ? tagsRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
+    };
+    if (apiKey) body.api_key = apiKey;
+
+    try {
+      let r;
+      if (_editId) {
+        r = await AdminAuth.fetch(`/api/cloud-providers/${encodeURIComponent(_editId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }, 'admin-cloud');
+      } else {
+        body.id = id;
+        r = await AdminAuth.fetch('/api/cloud-providers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }, 'admin-cloud');
+      }
+      if (!r.ok) {
+        let detail = `HTTP ${r.status}`;
+        try { const j = await r.json(); detail = j.detail || detail; } catch (e) {}
+        errBox.hidden = false;
+        errBox.textContent = detail;
+        return;
+      }
+      _closeModal();
+      _selectedId = id;
+      await load();
+    } catch (e) {
+      errBox.hidden = false;
+      errBox.textContent = e.message;
+    }
+  }
+
+  async function del(id) {
+    if (!confirm(`Delete cloud provider '${id}'?`)) return;
+    const r = await AdminAuth.fetch(`/api/cloud-providers/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }, 'admin-cloud');
+    if (!r.ok) {
+      alert(`Delete failed (HTTP ${r.status})`);
+      return;
+    }
+    if (_selectedId === id) _selectedId = null;
+    await load();
+  }
+
+  // Hot-load whenever the Cloud Models admin panel becomes active.
+  window.addEventListener('adminPanelActivated', e => {
+    if (e.detail && e.detail.panel === 'admin-cloud') load();
+  });
+
+  return { load, refresh, select, showCreate, showEdit, del, _closeModal, _submit };
 })();
 
 // ── ExportsPanel ──────────────────────────────────────────────────────────

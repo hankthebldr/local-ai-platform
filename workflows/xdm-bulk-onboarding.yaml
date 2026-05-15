@@ -1,0 +1,244 @@
+id: xdm-bulk-onboarding
+name: "Bulk Vendor Onboarding (multi-sample)"
+description: |
+  End-to-end onboarding of a new vendor / product into Cortex XSIAM. Takes
+  multiple sample logs covering the major event types the vendor emits
+  (auth, network, process, alert, etc.) and produces:
+
+    1. A single canonical data model rule per detected event type
+    2. A vendor onboarding brief documenting field coverage, omissions,
+       XDM_CONST defaults, and recommended downstream correlation rules
+
+  6-step pipeline:
+    1. survey_samples       — Cluster the supplied logs by event type
+    2. analyze_each_cluster — For each cluster, identify pattern family
+                              + candidate fields (parallel)
+    3. map_to_xdm           — Bulk XDM mapping across all clusters
+    4. write_rules          — Emit one MODEL block per cluster
+    5. validate_all         — Run the XQL validator over every rule
+    6. write_brief          — Produce the onboarding brief MD doc
+
+  Designed to be the "vendor sprint" workflow — pair with the
+  XQL Data Model Rule Engineer agent for the actual rule authoring.
+
+version: "1.0"
+schema_version: 1
+
+defaults:
+  role: reasoning
+  temperature: 0.3
+  max_tokens: 8192
+  retries: 1
+  retry_delay: 5
+
+context:
+  description: |
+    Required seed keys:
+      vendor      — vendor name string
+      product     — product name string
+      samples     — list of {label?: str, raw_log: str}; at least 2
+
+steps:
+  # ── 1. Survey samples → cluster by event type ────────────────────
+  - id: survey_samples
+    name: "Cluster log samples by event type"
+    role: reasoning
+    system_prompt: |
+      You are a log-sample triager. Given multiple raw log samples from
+      ONE vendor product, group them into clusters by event type.
+
+      Output ONLY JSON:
+
+        {
+          "clusters": [
+            {
+              "cluster_id":   "auth-success" | "auth-failure" | "network-flow" | "process-create" | "alert" | "custom-<n>",
+              "label":        "human label",
+              "sample_indices": [0, 2, 5],
+              "summary":      "what this cluster represents"
+            }
+          ],
+          "noise_samples": [<indices of unclassifiable logs>]
+        }
+
+      Constraints:
+      - One sample belongs to exactly one cluster (or noise).
+      - Don't propose XDM paths or pattern families here.
+      - Max 8 clusters.
+    inputs:
+      - seed.vendor
+      - seed.product
+      - seed.samples
+    outputs:
+      - clusters
+      - noise_samples
+    output_format: json
+
+  # ── 2. Per-cluster pattern + candidate-field analysis ────────────
+  # NOTE: For v1 we serialise this; future PR can run clusters in
+  # parallel when the engine supports map-over-list at the step level.
+  - id: analyze_clusters
+    name: "Analyze pattern + fields per cluster"
+    role: reasoning
+    system_prompt: |
+      For each cluster from the input, pick the first sample and run a
+      log-structure analysis. Output ONE JSON object listing the per-
+      cluster analysis:
+
+        {
+          "by_cluster": [
+            {
+              "cluster_id":     "<id>",
+              "pattern_family": "A" | "B" | "C" | "D",
+              "candidate_fields": [{vendor_field, sample_value, type_hint}],
+              "raw_format":      "JSON" | "syslog" | "..."
+            }
+          ]
+        }
+    inputs:
+      - seed.samples
+      - survey_samples.clusters
+    outputs:
+      - by_cluster
+    output_format: json
+
+  # ── 3. Bulk XDM mapping ──────────────────────────────────────────
+  - id: map_to_xdm_bulk
+    name: "Map all clusters' fields to XDM"
+    role: reasoning
+    system_prompt: |
+      You are the bulk Cortex XDM mapper. For each cluster's
+      candidate_fields, produce mappings to XDM following the same
+      discipline as single-sample mapping:
+
+      - Only XDM paths from §2 of the attached knowledge
+      - Surface companion-pair gaps (§9.2)
+      - Flag XDM_CONST defaults (§9.4)
+
+      Output ONLY JSON:
+
+        {
+          "by_cluster": [
+            {
+              "cluster_id": "...",
+              "mappings":   [...],
+              "companion_pair_warnings": [...],
+              "xdm_const_used": [...]
+            }
+          ]
+        }
+    inputs:
+      - analyze_clusters.by_cluster
+    outputs:
+      - by_cluster
+    output_format: json
+
+  # ── 4. Write one rule per cluster ────────────────────────────────
+  - id: write_rules
+    name: "Write the XQL MODEL block for each cluster"
+    role: reasoning
+    system_prompt: |
+      For each cluster mapping, emit a complete MODEL block following
+      the canonical structure (MAPPED-header comment, [MODEL: ...] line,
+      alter stages, no duplicate assignments).
+
+      Output ONLY JSON:
+
+        {
+          "rules": [
+            {"cluster_id": "...", "dataset": "<vendor>_<product>_<cluster_id>", "rule": "<full XQL text>"}
+          ]
+        }
+
+      Constraints:
+      - One rule per cluster (no shared rules across clusters)
+      - Dataset names: vendor_product_<cluster_id> (lowercased, _-safe)
+    inputs:
+      - seed.vendor
+      - seed.product
+      - map_to_xdm_bulk.by_cluster
+    outputs:
+      - rules
+    output_format: json
+
+  # ── 5. Validate every rule ───────────────────────────────────────
+  - id: validate_all
+    name: "Run XQL validator on every rule"
+    role: general
+    system_prompt: |
+      You are the validation aggregator. You will be given a list of
+      rules and the validator_reports collected by the before_step hook.
+      Emit a per-rule pass/fail summary:
+
+        {
+          "results": [
+            {
+              "cluster_id": "...",
+              "dataset":    "...",
+              "verdict":    "READY-TO-DEPLOY" | "NEEDS-FIXES" | "REWRITE-RECOMMENDED",
+              "blockers":   <count>,
+              "warnings":   <count>,
+              "top_issues": [...]  // up to 5 most critical messages
+            }
+          ],
+          "overall_pass": <true if every cluster is READY-TO-DEPLOY>
+        }
+    inputs:
+      - write_rules.rules
+      - validate_all.validator_reports
+    outputs:
+      - results
+      - overall_pass
+    output_format: json
+    hooks:
+      before_step:
+        - name: invoke_validate_xql_for_each
+          config:
+            plugin_id: xdm-toolkit
+            tool_id: validate_xql
+            for_each: write_rules.rules
+            param_template:
+              rule: "{{ item.rule }}"
+            store_as: validator_reports
+
+  # ── 6. Onboarding brief ──────────────────────────────────────────
+  - id: write_brief
+    name: "Write the vendor onboarding brief (Markdown)"
+    role: general
+    system_prompt: |
+      Produce a vendor-onboarding brief as Markdown, ready to drop into a
+      handoff doc. Required sections:
+
+        # <Vendor> · <Product> XDM Onboarding Brief
+
+        ## 1. Coverage
+        - Number of clusters: <n>
+        - Datasets produced: <list>
+        - Overall validation verdict: <PASS | NEEDS-FIXES>
+
+        ## 2. Per-cluster summary
+        | Cluster | Dataset | Verdict | Top issue (if any) |
+
+        ## 3. XDM_CONST defaults
+        Bullet list of every XDM_CONST field used + its default.
+
+        ## 4. Omissions
+        Bullet list of vendor fields the workflow could not map cleanly,
+        with the reason from map_to_xdm_bulk.
+
+        ## 5. Recommended next steps
+        Three concrete next actions (e.g. "add parsing rule for X",
+        "write a correlation rule joining cluster auth-success and
+        network-flow on src.user").
+
+      Keep total brief under 600 words. Be specific, not vague.
+    inputs:
+      - seed.vendor
+      - seed.product
+      - survey_samples.clusters
+      - map_to_xdm_bulk.by_cluster
+      - validate_all.results
+      - validate_all.overall_pass
+    outputs:
+      - brief
+    output_format: markdown

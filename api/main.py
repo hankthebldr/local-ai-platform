@@ -28,6 +28,7 @@ from .routers import (
     api_keys,
     plugins,
     mcp,
+    cloud_providers,  # noqa: F401 — used below via app.include_router
     setup,
     context,
     memory,
@@ -208,6 +209,7 @@ app.include_router(workflow_index.router)
 app.include_router(api_keys.router)
 app.include_router(plugins.router)
 app.include_router(mcp.router)
+app.include_router(cloud_providers.router)
 app.include_router(setup.router)
 app.include_router(context.router)
 app.include_router(memory.router)
