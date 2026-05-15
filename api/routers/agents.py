@@ -15,9 +15,8 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from ..logging_config import logger
 from ..models.agent_models import AgentDefinition
 from ..services.agent_service import AgentService
 from ..services.model_resolver import ModelResolver
@@ -190,3 +189,89 @@ async def preview_context(agent_id: str):
         "context_sources": len(resolved),
         "context": resolved,
     }
+
+
+# ── Doc → Agent generator ────────────────────────────────────────────────
+# Imports kept inline so the project-formatter (ruff/isort) doesn't strip
+# them as "unused" between edit passes — they're consumed below.
+from ..models.project_models import (  # noqa: E402
+    AgentEvaluationRequest,
+    AgentGenerationRequest,
+)
+from ..services.agent_generator import AgentGenerator  # noqa: E402
+from ..logging_config import logger as _gen_logger  # noqa: E402
+
+_generator: Optional[AgentGenerator] = None
+
+
+def get_generator() -> AgentGenerator:
+    global _generator
+    if _generator is None:
+        _generator = AgentGenerator(get_ollama())
+    return _generator
+
+
+class AgentDraftSaveRequest(BaseModel):
+    draft: Dict[str, Any]
+    overwrite: bool = False
+
+
+@router.post("/generate")
+async def generate_agent(req: AgentGenerationRequest):
+    """Produce a draft agent definition from a document or pasted text."""
+    if not req.document_id and not req.text:
+        raise HTTPException(
+            status_code=400, detail="provide either document_id or text"
+        )
+    gen = get_generator()
+    try:
+        if req.document_id:
+            result = gen.generate_from_document(
+                req.document_id,
+                name_hint=req.name_hint,
+                role_hint=req.role_hint,
+                model=req.model,
+            )
+        else:
+            result = gen.generate_from_text(
+                req.text or "",
+                name_hint=req.name_hint,
+                role_hint=req.role_hint,
+                model=req.model,
+                include_source_as_context=req.include_source_as_context,
+            )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="document not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001
+        _gen_logger.warning("Agent generation failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    return result.model_dump(mode="json")
+
+
+@router.post("/generate/save")
+async def save_generated_agent(body: AgentDraftSaveRequest):
+    """Persist a (possibly user-edited) draft agent."""
+    try:
+        path = get_generator().save_draft(body.draft, overwrite=body.overwrite)
+    except FileExistsError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"agent '{exc}' already exists; pass overwrite=true to replace",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"saved": True, "path": path, "agent_id": body.draft.get("id")}
+
+
+@router.post("/{agent_id}/evaluate")
+async def evaluate_agent(agent_id: str, req: AgentEvaluationRequest):
+    """Run an agent against a list of {prompt, expected_contains} cases."""
+    if not req.cases:
+        raise HTTPException(status_code=400, detail="at least one case required")
+    try:
+        report = get_generator().evaluate_agent(agent_id, req.cases)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="agent not found")
+    return report.model_dump(mode="json")

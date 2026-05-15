@@ -8,7 +8,6 @@ Results are scored and ranked for the Discover tab.
 
 import json
 import os
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -33,16 +32,16 @@ DISCOVERY_INTERVAL = int(os.getenv("DISCOVERY_INTERVAL", "21600"))
 # The service monitors their repos for new releases.
 
 TRUSTED_AUTHORS = [
-    "huihui_ai",            # Prolific abliterator (qwen, llama, mistral variants)
-    "DavidAU",              # Creative uncensored merges (MOE, Hivemind, etc.)
-    "cognitivecomputations", # Eric Hartford — Dolphin series
-    "jaahas",               # Qwen uncensored series
-    "mradermacher",         # Large-scale GGUF converter + abliterator
-    "TheDrummer",           # Rocinante, UnslopNemo uncensored
-    "NousResearch",         # Hermes series
-    "Gryphe",               # MythoMax creative models
-    "bartowski",            # High-quality GGUF quants
-    "unsloth",              # Efficient fine-tunes
+    "huihui_ai",  # Prolific abliterator (qwen, llama, mistral variants)
+    "DavidAU",  # Creative uncensored merges (MOE, Hivemind, etc.)
+    "cognitivecomputations",  # Eric Hartford — Dolphin series
+    "jaahas",  # Qwen uncensored series
+    "mradermacher",  # Large-scale GGUF converter + abliterator
+    "TheDrummer",  # Rocinante, UnslopNemo uncensored
+    "NousResearch",  # Hermes series
+    "Gryphe",  # MythoMax creative models
+    "bartowski",  # High-quality GGUF quants
+    "unsloth",  # Efficient fine-tunes
 ]
 
 # Search keywords for broader discovery beyond trusted authors
@@ -60,6 +59,7 @@ MIN_LIKES = 5
 
 
 # ── HuggingFace API ───────────────────────────────────────────────────────
+
 
 def _hf_headers() -> dict:
     headers = {"Accept": "application/json"}
@@ -116,6 +116,7 @@ def get_model_details(repo_id: str) -> Optional[Dict]:
 
 # ── Model Analysis ─────────────────────────────────────────────────────────
 
+
 def _extract_context_window(model_data: dict) -> Optional[int]:
     """Try to extract context window from model card or config."""
     # Check tags for context hints
@@ -139,8 +140,13 @@ def _is_abliterated(model_data: dict) -> bool:
     all_text = name + " " + " ".join(tags)
 
     abliteration_signals = [
-        "abliterated", "abliterate", "uncensored", "unsensored",
-        "heretic", "unfiltered", "unrestricted",
+        "abliterated",
+        "abliterate",
+        "uncensored",
+        "unsensored",
+        "heretic",
+        "unfiltered",
+        "unrestricted",
     ]
     return any(signal in all_text for signal in abliteration_signals)
 
@@ -166,6 +172,7 @@ def _extract_param_size(model_data: dict) -> Optional[str]:
     tags = [t.lower() for t in model_data.get("tags", [])]
 
     import re
+
     # Look for patterns like 7b, 8b, 13b, 14b, 27b, 32b, 70b
     for text in [name] + tags:
         match = re.search(r"(\d+\.?\d*)\s*b\b", text)
@@ -189,6 +196,7 @@ def _estimate_gguf_size_gb(param_size: Optional[str], quant: str = "Q4_K_M") -> 
 
 
 # ── Scoring ────────────────────────────────────────────────────────────────
+
 
 def score_discovered_model(model: dict) -> float:
     """
@@ -253,6 +261,7 @@ def score_discovered_model(model: dict) -> float:
 
 
 # ── Discovery Engine ───────────────────────────────────────────────────────
+
 
 def discover_models(max_model_ram_gb: float = 50) -> List[Dict]:
     """
@@ -352,11 +361,22 @@ def discover_models(max_model_ram_gb: float = 50) -> List[Dict]:
     # Sort by score
     results.sort(key=lambda m: m.get("score", 0), reverse=True)
 
+    # Tag each entry with the workflow roles it fits so the Discover
+    # tab can filter by composer category (reasoning / coding / fast / …).
+    try:
+        from .workflow_index import classify_workflow_roles
+
+        for entry in results:
+            entry["workflow_roles"] = classify_workflow_roles(entry)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Skipping workflow-role classification: %s", exc)
+
     logger.info(f"Discovery complete: {len(results)} models found")
     return results
 
 
 # ── Cache Management ───────────────────────────────────────────────────────
+
 
 def save_discovery_cache(models: List[Dict]):
     """Save discovered models to disk."""

@@ -4,6 +4,7 @@ Each Week-1 task adds one test. A failing test BEFORE the fix demonstrates the
 bug; a passing test AFTER demonstrates the fix. Tests are deliberately coarse —
 they target invariants, not implementation.
 """
+
 from __future__ import annotations
 
 import re
@@ -28,9 +29,12 @@ def test_index_header_says_enclave_not_cortex(index_html_text):
 
 
 def test_index_footer_version_matches_api(index_html_text):
-    """Footer version must match the 0.1.0 release declared in api/main.py."""
-    assert "v1.0.0" not in index_html_text, "stale v1.0.0 footer still present"
-    assert "Enclave v0.1.0" in index_html_text, "footer must read 'Enclave v0.1.0'"
+    """Footer version must match the version declared in api/__init__.py."""
+    from api import __version__ as _api_version
+
+    assert (
+        f"Enclave v{_api_version}" in index_html_text
+    ), f"footer must read 'Enclave v{_api_version}'"
 
 
 def test_mobile_media_query_contains_all_responsive_rules(index_html_text):
@@ -382,14 +386,17 @@ def test_render_markdown_helper_present(index_html_text):
 def test_api_keys_panel_has_list_container(index_html_text):
     """The API Keys panel must include a list container and a refresh button."""
     assert 'id="api-keys-list"' in index_html_text
-    assert "loadApiKeysPanel" in index_html_text or "ApiKeysPanel.load" in index_html_text
+    assert (
+        "loadApiKeysPanel" in index_html_text or "ApiKeysPanel.load" in index_html_text
+    )
 
 
 def test_api_keys_panel_has_new_key_button(index_html_text):
-    assert "showCreateKeyModal" in index_html_text or \
-           "showNewKeyModal" in index_html_text or \
-           "ApiKeysPanel.showCreate" in index_html_text, \
-        "expected a 'New Key' trigger function"
+    assert (
+        "showCreateKeyModal" in index_html_text
+        or "showNewKeyModal" in index_html_text
+        or "ApiKeysPanel.showCreate" in index_html_text
+    ), "expected a 'New Key' trigger function"
 
 
 def test_create_key_modal_present(index_soup):
@@ -403,15 +410,16 @@ def test_create_key_modal_present(index_soup):
 def test_create_key_modal_has_one_time_reveal_warning(index_html_text):
     """The reveal area must say the key is shown once."""
     needle = "only time"
-    assert needle in index_html_text.lower(), (
-        "expected one-time-reveal warning copy in create-key modal"
-    )
+    assert (
+        needle in index_html_text.lower()
+    ), "expected one-time-reveal warning copy in create-key modal"
 
 
 def test_create_key_modal_has_copy_button(index_html_text):
-    assert "navigator.clipboard.writeText" in index_html_text or \
-           "copyKey" in index_html_text, \
-        "expected a clipboard copy mechanism"
+    assert (
+        "navigator.clipboard.writeText" in index_html_text
+        or "copyKey" in index_html_text
+    ), "expected a clipboard copy mechanism"
 
 
 def test_api_keys_panel_has_audit_strip(index_html_text):
@@ -427,9 +435,9 @@ def test_api_keys_panel_has_rotate_and_revoke_handlers(index_html_text):
 
 def test_plugins_panel_has_warning_banner(index_html_text):
     """Plugins panel must show a non-dismissable warning about in-process exec."""
-    assert "execute plugin code" in index_html_text.lower(), (
-        "expected warning copy about in-process plugin execution"
-    )
+    assert (
+        "execute plugin code" in index_html_text.lower()
+    ), "expected warning copy about in-process plugin execution"
 
 
 def test_plugins_panel_has_two_pane_layout(index_html_text):
@@ -439,17 +447,16 @@ def test_plugins_panel_has_two_pane_layout(index_html_text):
 
 def test_plugins_panel_has_tool_tester(index_html_text):
     """Each tool accordion must contain a Run button + result container."""
-    assert "tool-tester-run" in index_html_text or \
-           "PluginsPanel.runTool" in index_html_text, (
-        "expected a tool-tester run handler"
-    )
+    assert (
+        "tool-tester-run" in index_html_text
+        or "PluginsPanel.runTool" in index_html_text
+    ), "expected a tool-tester run handler"
 
 
 def test_plugins_panel_has_param_form_renderer(index_html_text):
-    assert "renderToolForm" in index_html_text or \
-           "buildToolForm" in index_html_text, (
-        "expected a tool-form renderer"
-    )
+    assert (
+        "renderToolForm" in index_html_text or "buildToolForm" in index_html_text
+    ), "expected a tool-form renderer"
 
 
 def test_exports_panel_has_list(index_html_text):
@@ -473,7 +480,8 @@ def test_exports_panel_has_bulk_delete(index_html_text):
 def test_exports_zip_uses_get_with_names_param(index_html_text):
     """Zip endpoint takes a comma-separated names param via GET."""
     import re
+
     # Look for fetch('/api/exports/zip?names=...') or similar.
-    assert re.search(r"/api/exports/zip\?names=", index_html_text), (
-        "expected zip request to use ?names= query"
-    )
+    assert re.search(
+        r"/api/exports/zip\?names=", index_html_text
+    ), "expected zip request to use ?names= query"
