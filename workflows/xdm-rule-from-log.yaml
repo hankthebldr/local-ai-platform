@@ -1,0 +1,235 @@
+id: xdm-rule-from-log
+name: "XDM Rule from Single Log Sample"
+description: |
+  Given a raw log sample from one vendor source, produce a production-ready
+  Cortex XSIAM XQL data model rule that maps the vendor fields to XDM.
+
+  4-step pipeline:
+    1. analyze_log_structure  — Identify pattern family (A/B/C/D) and
+       extract candidate vendor fields from the raw sample.
+    2. map_to_xdm             — Project each candidate field onto the XDM
+       schema. Surface companion-pair gaps + XDM_CONST defaults.
+    3. write_rule             — Emit the full MODEL block with MAPPED-header
+       comment.
+    4. validate_and_revise    — Run the static validator; if blockers,
+       loop one revision pass; otherwise emit final.
+
+  Quality gates fail the run if the validator reports a BLOCKER on the
+  final pass.
+
+version: "1.0"
+schema_version: 1
+
+defaults:
+  role: reasoning
+  temperature: 0.3
+  max_tokens: 8192
+  retries: 2
+  retry_delay: 5
+
+# The expected seed shape for this workflow.
+context:
+  description: |
+    Required seed keys:
+      vendor       — vendor name string (e.g. "Cisco")
+      product      — product name string (e.g. "ASA")
+      raw_log      — the raw log sample text (single event)
+      dataset_name — optional dataset name; if absent, derived from vendor+product
+
+steps:
+  # ── Step 1: analyse the log ───────────────────────────────────────
+  - id: analyze_log_structure
+    name: "Analyze log structure"
+    role: reasoning
+    system_prompt: |
+      You are a Cortex XSIAM log-structure analyser. Read the raw log
+      sample below and produce ONLY a JSON object with these keys:
+
+        {
+          "pattern_family":   "A" | "B" | "C" | "D",
+          "pattern_reason":   "one-line justification",
+          "candidate_fields": [
+            {"vendor_field": "<source field name>", "sample_value": "...", "type_hint": "string|int|ip|timestamp|enum"}
+          ],
+          "raw_format":       "JSON" | "syslog" | "labelled-values" | "key=value" | "csv" | "other"
+        }
+
+      Constraints:
+      - Maximum 30 candidate fields. Pick the highest-signal fields first.
+      - Do NOT propose XDM paths here — that's the next step's job.
+      - Do NOT generate XQL — just structure analysis.
+      - If the sample is empty or unrecognisable, set pattern_family to
+        "A" and add a candidate_fields entry with vendor_field
+        "_raw_log_only" + a note.
+
+      Pattern families:
+        A — JSON field extraction (json_extract_scalar)
+        B — Syslog / positional parsing (split + arrayindex on _raw_log)
+        C — Label/value array extraction (regextract on structured arrays)
+        D — Arrow operator on parsed JSON objects (field -> Key.SubKey)
+    inputs:
+      - seed.vendor
+      - seed.product
+      - seed.raw_log
+    outputs:
+      - pattern_family
+      - pattern_reason
+      - candidate_fields
+      - raw_format
+    output_format: json
+    output_schema:
+      type: object
+      required: [pattern_family, candidate_fields, raw_format]
+      properties:
+        pattern_family: {type: string, enum: [A, B, C, D]}
+        pattern_reason: {type: string}
+        candidate_fields:
+          type: array
+          items:
+            type: object
+            required: [vendor_field, type_hint]
+        raw_format: {type: string}
+
+  # ── Step 2: map candidates to XDM ────────────────────────────────
+  - id: map_to_xdm
+    name: "Map candidate fields to XDM"
+    role: reasoning
+    system_prompt: |
+      You are the Cortex XDM mapping engine. For each candidate vendor
+      field in the input, produce an XDM mapping decision.
+
+      Output ONLY a JSON object:
+
+        {
+          "mappings": [
+            {
+              "vendor_field": "...",
+              "xdm_path":     "xdm.<...>"  OR  null  (if no good match),
+              "confidence":   "HIGH" | "MEDIUM" | "LOW",
+              "transform":    "to_number(...)" | "arraycreate(coalesce(...))" | "if(...)" | "direct" | "...",
+              "companion":    "xdm.<...>"  OR  null,
+              "xdm_const":    boolean,
+              "omit_reason":  "..."  (only if xdm_path is null)
+            }
+          ],
+          "companion_pair_warnings": [
+            "<vendor_field> mapped one side of pair without partner"
+          ],
+          "xdm_const_used": ["xdm.event.outcome", ...]
+        }
+
+      Rules:
+      - Use ONLY XDM paths from §2 of the attached XQL/XDM knowledge.
+      - For companion pairs (§9.2), if you map one side, you MUST surface
+        the partner in companion_pair_warnings unless both are mapped.
+      - Numeric fields get to_number() in transform; array fields get
+        arraycreate(coalesce(...)).
+      - XDM_CONST fields (§9.4) get an if-chain transform — set xdm_const: true.
+      - If no high-quality match exists for a vendor field, set xdm_path
+        to null and explain in omit_reason.
+    inputs:
+      - seed.vendor
+      - seed.product
+      - analyze_log_structure.candidate_fields
+      - analyze_log_structure.pattern_family
+    outputs:
+      - mappings
+      - companion_pair_warnings
+      - xdm_const_used
+    output_format: json
+
+  # ── Step 3: write the rule ────────────────────────────────────────
+  - id: write_rule
+    name: "Write the XQL MODEL block"
+    role: reasoning
+    system_prompt: |
+      You are an expert Cortex XSIAM XQL rule author. Emit a complete,
+      production-ready data model rule based on the input mappings.
+
+      Output format (this exact shape, no preamble):
+
+        // MAPPED-HEADER
+        // vendor:    <name>
+        // product:   <name>
+        // pattern:   <A|B|C|D>
+        // xdm_const: <list>
+        // omitted:   <list with reasons, one per line>
+        // raw_log:   <yes/no — explain>
+
+        [MODEL: dataset=<vendor>_<product>_raw]
+        <XQL rule body using alter / filter stages>
+
+      Rules:
+      - Use only XQL functions from §1 of the attached knowledge.
+      - Use only XDM paths from §2.
+      - Use only XDM_CONST values from §1.3 for XDM_CONST-typed fields.
+      - One assignment per xdm.* field — never duplicate.
+      - Wrap ipv4_addresses / mac_addresses fields in arraycreate(coalesce(...)).
+      - MITRE arrays use arraymap directly, NOT arraycreate(arraymap(...)).
+      - End the rule body cleanly with the last alter stage.
+
+      Do NOT include the validation report — that's the next step's job.
+    inputs:
+      - seed.vendor
+      - seed.product
+      - seed.dataset_name
+      - analyze_log_structure.pattern_family
+      - analyze_log_structure.raw_format
+      - map_to_xdm.mappings
+      - map_to_xdm.xdm_const_used
+    outputs:
+      - rule
+    output_format: text
+
+  # ── Step 4: validate + (optional) revise ─────────────────────────
+  - id: validate_and_revise
+    name: "Validate the rule, revise on blockers"
+    role: reasoning
+    system_prompt: |
+      You are the XQL self-review pass. You are given:
+        - the rule from write_rule.rule
+        - the validate_xql tool report (passed as input.validator_report)
+
+      If the report's verdict is READY-TO-DEPLOY:
+        - Emit the rule UNCHANGED, followed by:
+          "// PRE-FLIGHT VERDICT: READY-TO-DEPLOY"
+
+      If the report shows BLOCKER or 2+ WARNINGS:
+        - Revise the rule to fix every BLOCKER and as many WARNINGS as
+          possible without breaking other invariants.
+        - Emit the revised rule, then:
+          "// PRE-FLIGHT VERDICT: REVISED (was <NEEDS-FIXES|REWRITE-RECOMMENDED>)"
+          followed by a 1-line summary of what changed.
+
+      If you can't safely revise (e.g. unknown XDM namespace, missing
+      sample log):
+        - Emit the rule UNCHANGED with comments inline marking each
+          issue, then:
+          "// PRE-FLIGHT VERDICT: NEEDS-OPERATOR — see inline notes"
+
+      Output: ONLY the rule + the verdict line(s). No commentary.
+    inputs:
+      - write_rule.rule
+      - validate_and_revise.validator_report   # provided by an on_failure hook OR external pre-run
+    outputs:
+      - final_rule
+      - verdict
+    output_format: text
+    hooks:
+      # Pre-step: run validate_xql against write_rule.rule and stuff the
+      # result into the input as validator_report.
+      before_step:
+        - name: invoke_validate_xql
+          config:
+            plugin_id: xdm-toolkit
+            tool_id: validate_xql
+            params_from:
+              rule: write_rule.rule
+            store_as: validator_report
+      validate_output:
+        - name: refuse_if_blockers
+          config:
+            # Quality gate: fail the workflow run if validator still
+            # reports BLOCKERs after this step.
+            require_field: verdict
+            forbid_value_contains: "REWRITE-RECOMMENDED"

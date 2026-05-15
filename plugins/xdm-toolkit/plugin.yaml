@@ -1,0 +1,61 @@
+id: xdm-toolkit
+name: "XDM Toolkit"
+version: "1.0.0"
+description: "Skills + tools for writing Cortex XSIAM data model rules in XQL. Triggers on XQL/XDM keywords and exposes validate + lookup utilities."
+author: "ohno llc"
+
+# Skills auto-inject when the user message contains a trigger keyword.
+# Each skill is a markdown body that the LLM reads as additional context.
+skills:
+  - id: "xdm-rule-writer"
+    file: "skills/xdm-rule-writer.md"
+    triggers:
+      - keyword: "write XQL"
+      - keyword: "data model rule"
+      - keyword: "XDM rule"
+      - keyword: "MODEL block"
+      - keyword: "normalization rule"
+      - manual: true
+
+  - id: "xql-validator"
+    file: "skills/xql-validator.md"
+    triggers:
+      - keyword: "validate XQL"
+      - keyword: "check XQL"
+      - keyword: "lint XQL"
+      - keyword: "review my rule"
+      - manual: true
+
+# Tools are callable from any step's agentic loop. Each is a Python file
+# implementing an `execute(params: dict) -> dict` entrypoint.
+tools:
+  - id: "validate_xql"
+    file: "tools/validate_xql.py"
+    function: "execute"
+    description: |
+      Static-validate an XQL data model rule. Catches: missing MODEL/INGEST
+      header, missing MAPPED-header comment, unbalanced parens/brackets,
+      unknown XDM paths, XDM_CONST default-value violations, missing
+      companion-pair fields. Returns a structured pass/fail report.
+    parameters:
+      rule:
+        type: string
+        required: true
+        description: "The XQL rule text to validate (full MODEL block including any leading comment)."
+
+  - id: "lookup_xdm_path"
+    file: "tools/lookup_xdm_path.py"
+    function: "execute"
+    description: |
+      Lookup candidate XDM field paths for a vendor field name or short
+      description. Returns the top 5 matches with confidence + companion
+      pairs + XDM_CONST values when applicable.
+    parameters:
+      query:
+        type: string
+        required: true
+        description: "Vendor field name (e.g. 'src.ip', 'event.kind') or short description (e.g. 'source IP address')."
+      top_k:
+        type: integer
+        default: 5
+        description: "Number of candidate matches to return (1..10)."
