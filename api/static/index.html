@@ -26,97 +26,149 @@
 })();
 </script>
 <style>
-/* ── DESIGN TOKENS ──────────────────────────────────────────────── */
+/* ── DESIGN TOKENS — Cortex Console palette ─────────────────────────
+   Re-skin aligned to the PANW Cortex product family (XSIAM / XDR /
+   XSOAR). Aesthetic direction: "Operator Grade" — slate-navy canvas
+   (subtle blue undertone, never pure black), Cortex Green primary,
+   cool-blue secondary for navigation/info, PANW Orange reserved
+   exclusively for the co-brand mark and critical alerts. Scan-line
+   accents replace flat box-shadows. All legacy --cyan / --amber /
+   --green / --red / --purple aliases retained so the 800+ existing
+   token references in this file rebrand transparently. */
 :root {
-  /* Enclave Brand — dark mode palette */
-  --bg-deep: #0a0a0a;
-  --bg: #141414;
-  --bg-panel: rgba(20, 20, 20, 0.9);
-  --border: #2a2a2a;
-  --border-glow: #00CC6618;
+  /* ─ Canvas (Cortex-style slate, not pure black) ─ */
+  --bg-deep: #070A0F;             /* outer canvas / body */
+  --bg: #0B0F14;                  /* primary surface */
+  --bg-elev: #11161D;             /* elevated card */
+  --bg-elev-2: #161D26;           /* most elevated (modals, popovers) */
+  --bg-panel: rgba(17, 22, 29, 0.92);
+  --border: #1F2933;              /* default rule */
+  --border-strong: #2A3441;       /* emphasised rule */
+  --border-glow: #00CC661F;       /* accent-tinted rule */
 
-  /* === Primary accent (Enclave Terminal Green) === */
-  --accent: #00CC66;
+  /* ─ Primary accent — Cortex Green ─ */
+  --accent: #00CC66;              /* CTAs / active / success */
+  --accent-bright: #52E89E;       /* hover / focus emphasis */
   --accent-dim: #00CC6660;
-  --accent-ghost: #00CC6615;
+  --accent-ghost: #00CC6612;
+  --accent-trace: #00CC6608;      /* near-invisible wash */
 
-  /* === Secondary accent (muted green for less-prominent highlights) === */
-  --accent-2: #19AA61;
-  --accent-2-dim: #19AA6160;
+  /* ─ Secondary accent — Cortex Cool Blue (navigation, info) ─ */
+  --accent-2: #5EB3FF;
+  --accent-2-bright: #8DCBFF;
+  --accent-2-dim: #5EB3FF55;
+  --accent-2-ghost: #5EB3FF12;
 
-  /* === Semantic status === */
+  /* ─ PANW co-brand — Orange, used SPARINGLY (brand mark, critical) ─ */
+  --panw-orange: #FA582D;
+  --panw-orange-dim: #FA582D55;
+  --panw-orange-ghost: #FA582D14;
+
+  /* ─ Semantic status ─ */
   --success: #00CC66;
   --success-dim: #00CC6660;
-  --warn: #F5A623;              /* real amber — warnings only */
-  --warn-dim: #F5A62360;
-  --danger: #E54B4B;            /* real red — errors only */
-  --danger-dim: #E54B4B60;
-  --info: #00C0E8;              /* signal cyan — info accents */
-  --info-dim: #00C0E860;
+  --warn: #FFB020;
+  --warn-dim: #FFB02060;
+  --danger: #F23E3E;
+  --danger-dim: #F23E3E60;
+  --info: #5EB3FF;
+  --info-dim: #5EB3FF60;
 
-  /* === DEPRECATED aliases — remove after Month-1 token pass === */
+  /* ─ Legacy aliases — existing CSS keeps working as the palette shifts ─ */
   --cyan: var(--accent);
   --cyan-dim: var(--accent-dim);
   --cyan-ghost: var(--accent-ghost);
-  --amber: var(--accent-2);      /* was misnamed: this is green, not amber */
-  --amber-dim: var(--accent-2-dim);
+  --amber: var(--accent);
+  --amber-dim: var(--accent-dim);
   --green: var(--success);
   --green-dim: var(--success-dim);
-  --red: #FA582D;                /* Enclave Alert Orange — legacy; prefer --danger */
-  --red-dim: #FA582D60;
+  --red: var(--panw-orange);
+  --red-dim: var(--panw-orange-dim);
   --purple: var(--info);
   --purple-dim: var(--info-dim);
 
-  --text: #e0e0e0;
-  --text-dim: #8D8D8D;
-  --text-muted: #555555;
-  --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-  --sans: 'Space Grotesk', 'TT Hoves', system-ui, sans-serif;
-  --glow-cyan: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
-  --glow-green: 0 0 12px #00CC6630, 0 0 4px #00CC6620;
-  --glow-red: 0 0 12px #FA582D30, 0 0 4px #FA582D20;
-  --glow-amber: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
-  --glow-warn: 0 0 12px #F5A62330, 0 0 4px #F5A62320;
+  /* ─ Text hierarchy (Cortex tightens the muted band so dense tables
+       stay legible without losing the layered-information feel) ─ */
+  --text: #E8ECEF;
+  --text-dim: #9AA3AD;
+  --text-muted: #5B6470;
+  --text-faint: #3A424D;
+
+  /* ─ Typography ─ */
+  --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  --sans: 'Space Grotesk', 'TT Hoves', 'Public Sans', system-ui, sans-serif;
+  --tracking-caps: 0.22em;        /* signature Cortex section-label tracking */
+
+  /* ─ Glows — sharper, smaller halos than the prior "ambient bloom" look ─ */
+  --glow-accent: 0 0 10px #00CC6640, 0 0 2px #00CC6680;
+  --glow-info:   0 0 10px #5EB3FF38, 0 0 2px #5EB3FF70;
+  --glow-warn:   0 0 10px #FFB02038, 0 0 2px #FFB02070;
+  --glow-danger: 0 0 10px #F23E3E38, 0 0 2px #F23E3E70;
+  --glow-orange: 0 0 10px #FA582D38, 0 0 2px #FA582D70;
+  /* legacy glow aliases */
+  --glow-cyan: var(--glow-accent);
+  --glow-green: var(--glow-accent);
+  --glow-red: var(--glow-orange);
+  --glow-amber: var(--glow-warn);
+
+  /* ─ Surface elevation shadows (Cortex modals sit on a heavier base) ─ */
+  --shadow-1: 0 1px 0 rgba(255,255,255,0.02), 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-2: 0 4px 14px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.02);
+  --shadow-3: 0 18px 40px rgba(0,0,0,0.6), 0 2px 0 rgba(255,255,255,0.02);
 }
 
 /* ── LIGHT MODE PALETTE ─────────────────────────────────────────── */
-/* Activated when <html data-theme="light"> is set (via the header toggle
-   or the prefers-color-scheme initialization below). Re-maps only the
-   surface and text tokens — brand accents stay green for continuity. */
+/* Mirrors the dark theme — neutral cool surface, Cortex green and
+   blue accents desaturated for white backgrounds. PANW orange keeps
+   its hue (it's the brand). */
 :root[data-theme="light"] {
-  --bg-deep: #f4f4f4;
-  --bg: #ffffff;
-  --bg-panel: rgba(255, 255, 255, 0.95);
-  --border: #d8d8d8;
-  --border-glow: #00A35218;
+  --bg-deep: #F2F4F7;
+  --bg: #FFFFFF;
+  --bg-elev: #F8FAFC;
+  --bg-elev-2: #FFFFFF;
+  --bg-panel: rgba(255, 255, 255, 0.96);
+  --border: #DDE3EA;
+  --border-strong: #C5CDD6;
+  --border-glow: #00A35221;
 
   --accent: #00A352;
+  --accent-bright: #18C46E;
   --accent-dim: #00A35260;
-  --accent-ghost: #00A35215;
-  --accent-2: #19884f;
-  --accent-2-dim: #19884f60;
+  --accent-ghost: #00A35212;
+  --accent-trace: #00A35208;
+
+  --accent-2: #2F86E5;
+  --accent-2-bright: #4FA0F0;
+  --accent-2-dim: #2F86E555;
+  --accent-2-ghost: #2F86E512;
 
   --success: #00A352;
   --success-dim: #00A35260;
+  --info: #2F86E5;
+  --info-dim: #2F86E560;
 
-  --text: #1a1a1a;
-  --text-dim: #4a4a4a;
-  --text-muted: #777777;
+  --text: #11161D;
+  --text-dim: #4B5563;
+  --text-muted: #6B7280;
+  --text-faint: #9CA3AF;
 
   --cyan: var(--accent);
   --cyan-dim: var(--accent-dim);
   --cyan-ghost: var(--accent-ghost);
-  --amber: var(--accent-2);
-  --amber-dim: var(--accent-2-dim);
+  --amber: var(--accent);
+  --amber-dim: var(--accent-dim);
   --green: var(--success);
   --green-dim: var(--success-dim);
 
-  /* Glows are noisy on white surfaces — tone them down. */
-  --glow-cyan: 0 0 6px #00A35218;
-  --glow-green: 0 0 6px #00A35218;
-  --glow-red: 0 0 6px #FA582D18;
-  --glow-amber: 0 0 6px #F5A62318;
-  --glow-warn: 0 0 6px #F5A62318;
+  --glow-accent: 0 0 6px #00A35221;
+  --glow-info:   0 0 6px #2F86E521;
+  --glow-warn:   0 0 6px #FFB02021;
+  --glow-danger: 0 0 6px #F23E3E21;
+  --glow-orange: 0 0 6px #FA582D21;
+  --glow-cyan: var(--glow-accent);
+  --glow-green: var(--glow-accent);
+  --glow-red: var(--glow-orange);
+  --glow-amber: var(--glow-warn);
 }
 
 /* ── RESET & BASE ───────────────────────────────────────────────── */
@@ -156,16 +208,39 @@ body {
 }
 
 /* ── AMBIENT BACKGROUND ─────────────────────────────────────────── */
+/* Two stacked fixed layers: a fine 32px grid (the Cortex "engineered
+   canvas" feel) and a soft green/blue radial undertone in opposite
+   corners. The grid is what separates this from generic dark-UI bloom;
+   the radials anchor the brand colour without dominating. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 20% 20%, #00CC6606 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 80%, #19AA6104 0%, transparent 60%),
-    linear-gradient(180deg, var(--bg-deep) 0%, #141414 100%);
+    radial-gradient(ellipse 70% 50% at 12% 8%,  #00CC6608 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 92% 96%, #5EB3FF06 0%, transparent 55%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg) 100%);
   z-index: -2;
   pointer-events: none;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.018) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.018) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+  z-index: -1;
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 40%, transparent 100%);
+}
+:root[data-theme="light"] body::after {
+  background-image:
+    linear-gradient(to right, rgba(11,15,20,0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(11,15,20,0.04) 1px, transparent 1px);
 }
 
 /* ── LAYOUT ─────────────────────────────────────────────────────── */
@@ -176,13 +251,18 @@ body::before {
   position: relative;
 }
 
-/* ── HEADER ─────────────────────────────────────────────────────── */
+/* ── HEADER — Cortex Command Bar ─────────────────────────────────
+   Two-row layout. Row 1: brand mark + wordmark + co-brand chip (left),
+   environment chip + clock + uptime + theme toggle (right). Row 2:
+   breadcrumb that reflects the current tab + sub-context. The scan-
+   line under the header is the Cortex active-surface signature. */
 .header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  row-gap: 12px;
   margin-bottom: 0;
-  padding-bottom: 20px;
+  padding: 16px 0 14px 0;
   border-bottom: 1px solid var(--border);
   position: relative;
 }
@@ -191,44 +271,168 @@ body::before {
   position: absolute;
   bottom: -1px;
   left: 0;
-  width: 120px;
+  width: 160px;
   height: 1px;
-  background: var(--cyan);
-  box-shadow: var(--glow-cyan);
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 65%, transparent 100%);
+  box-shadow: var(--glow-accent);
 }
-.logo { display: flex; align-items: center; gap: 16px; }
-.logo-text { display: flex; flex-direction: column; gap: 4px; }
+.logo { display: flex; align-items: center; gap: 14px; grid-row: 1; grid-column: 1; }
+.logo-text { display: flex; flex-direction: column; gap: 2px; }
 .logo-mark {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
-  color: var(--accent);             /* Drives currentColor in the nested SVG */
-  filter: drop-shadow(0 0 6px var(--accent-dim));
+  color: var(--accent);
+  filter: drop-shadow(0 0 8px var(--accent-dim));
+  position: relative;
+}
+.logo-mark::after {
+  /* Cortex-style status pip on the brand mark — pulses when the
+     local inference daemon is healthy. Animated by JS via the
+     #brand-status data attribute. */
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-deep);
+  box-shadow: var(--glow-accent);
+  animation: pulse-glow 2.5s ease-in-out infinite;
 }
 .logo-mark svg { width: 100%; height: 100%; display: block; }
 .logo-title {
   font-family: var(--sans);
-  font-size: 1.6rem;
+  font-size: 1.45rem;
   font-weight: 700;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.18em;
   color: var(--text);
   text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  line-height: 1;
 }
-.logo-title span { color: var(--cyan); }
+.logo-title span { color: var(--accent); }
 .logo-sub {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   color: var(--text-dim);
-  letter-spacing: 0.3em;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
+  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+.logo-sub .sep { color: var(--text-faint); }
+
+/* Cortex co-brand chip — small PANW-orange-outlined pill next to the
+   wordmark. Anchors the "by Cortex" partnership without dominating. */
+.brand-cobrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--panw-orange);
+  background: var(--panw-orange-ghost);
+  border: 1px solid var(--panw-orange-dim);
+  border-radius: 2px;
+  line-height: 1;
+  position: relative;
+}
+.brand-cobrand::before {
+  content: '';
+  width: 6px; height: 6px;
+  background: var(--panw-orange);
+  box-shadow: var(--glow-orange);
+  transform: rotate(45deg);
+  display: inline-block;
+}
+.brand-cobrand-label { color: var(--text-dim); }
+
+/* Cortex environment chip — shows deployment context (LOCAL / DEV /
+   PROD). Green border = trusted / sovereign. Orange = cloud-attached. */
+.env-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-ghost);
+  border: 1px solid var(--accent-dim);
+  border-radius: 2px;
+  line-height: 1;
+}
+.env-chip::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+
 .header-status {
   display: flex;
   align-items: center;
-  gap: 16px;
-  font-size: 0.75rem;
+  gap: 14px;
+  font-size: 0.7rem;
+  font-family: var(--mono);
   color: var(--text-dim);
+  grid-row: 1;
+  grid-column: 2;
+}
+.header-status .stat-key {
+  color: var(--text-faint);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  font-size: 0.56rem;
+  margin-right: 4px;
 }
 .header-status .uptime { color: var(--text-muted); }
+.header-status .vsep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+}
+
+/* Breadcrumb row — context for the current tab, lives on header row 2.
+   JS owns the inner span values; this just paints the chrome. */
+.header-breadcrumb {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+.header-breadcrumb .crumb {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  font-size: 0.58rem;
+}
+.header-breadcrumb .crumb.active { color: var(--accent); }
+.header-breadcrumb .crumb-sep { color: var(--text-faint); font-size: 0.6rem; }
+.header-breadcrumb .crumb-ctx {
+  color: var(--text);
+  font-size: 0.66rem;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 500;
+}
 
 /* ── THEME TOGGLE ──────────────────────────────────────────────── */
 .theme-toggle {
@@ -294,48 +498,109 @@ body::before {
 .doc-drop-zone-title { font-size: 0.78rem; letter-spacing: 0.02em; }
 .doc-drop-zone-sub { font-size: 0.62rem; color: var(--text-muted); font-family: var(--mono); }
 
-/* ── TAB NAV ───────────────────────────────────────────────────── */
+/* ── TAB NAV — Cortex grouped IA ─────────────────────────────────
+   Tabs grouped by operator phase (BUILD · OPERATE · LIBRARY · ADMIN).
+   Each group is preceded by a caps-tracked section label so the
+   information architecture is legible at a glance — the Cortex
+   product nav uses the same pattern. Active tab is marked by a
+   top scan-line (1px gradient + glow) rather than a bottom border;
+   this matches the panel scan-line treatment for visual consistency. */
 .tab-nav {
   display: flex;
+  align-items: stretch;
   gap: 0;
-  margin-bottom: 20px;
+  margin: 16px 0 20px 0;
   border-bottom: 1px solid var(--border);
+  position: relative;
+  flex-wrap: wrap;
 }
+.tab-section {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px 0 14px;
+  font-family: var(--mono);
+  font-size: 0.54rem;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-faint);
+  align-self: center;
+  user-select: none;
+  pointer-events: none;
+}
+.tab-section::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 1px;
+  background: var(--text-faint);
+  margin-left: 8px;
+  opacity: 0.5;
+}
+.tab-section:first-child { padding-left: 4px; }
+
 .tab-btn {
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
   color: var(--text-dim);
   font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.2em;
+  font-size: 0.68rem;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  padding: 12px 24px;
+  padding: 12px 16px 14px 16px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, background 0.15s ease;
   position: relative;
 }
-.tab-btn:hover { color: var(--text); background: #ffffff04; }
+.tab-btn::before {
+  /* Cortex scan-line: top edge accent that paints on active. */
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  transform-origin: center;
+  width: calc(100% - 8px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+  box-shadow: var(--glow-accent);
+  transition: transform 0.2s ease;
+}
+.tab-btn:hover {
+  color: var(--text);
+  background: var(--accent-trace);
+}
 .tab-btn.active {
-  color: var(--cyan);
-  border-bottom-color: var(--cyan);
-  box-shadow: 0 2px 8px #00CC6615;
+  color: var(--accent);
+  background: var(--accent-ghost);
+}
+.tab-btn.active::before {
+  transform: translateX(-50%) scaleX(1);
 }
 .tab-btn .tab-count {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   color: var(--text-muted);
-  margin-left: 6px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg);
+  font-variant-numeric: tabular-nums;
 }
-.tab-btn.active .tab-count { color: var(--cyan-dim); }
+.tab-btn.active .tab-count {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: var(--accent-ghost);
+}
 
 /* === Admin dropdown ============================================= */
 .tab-divider {
   display: inline-block;
   width: 1px;
-  height: 22px;
+  height: 18px;
   background: var(--border);
-  margin: 0 6px;
+  margin: 0 12px;
   vertical-align: middle;
+  align-self: center;
 }
 
 .tab-dropdown {
@@ -647,45 +912,82 @@ details[open] > summary::before { transform: rotate(90deg); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
-/* ── HUD PANEL ──────────────────────────────────────────────────── */
+/* ── CORTEX PANEL ────────────────────────────────────────────────
+   Slate-elevated card with a 1px rule, a 1px Cortex-green scan-line
+   along the top edge, and tighter corner brackets at top-right and
+   bottom-left. The corner brackets stay (Enclave equity) but render
+   sharper (1.5px) and use --border-strong rather than the accent —
+   the scan-line carries the brand colour now. */
 .panel {
   position: relative;
-  background: var(--bg-panel);
-  padding: 20px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow-1);
 }
-.panel::before, .panel::after {
+.panel::before {
+  /* Cortex scan-line — runs along the top edge of every panel. */
   content: '';
   position: absolute;
-  width: 16px;
-  height: 16px;
-  border-color: var(--cyan-dim);
-  border-style: solid;
+  top: -1px;
+  left: 12px;
+  width: 56px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 70%, transparent 100%);
+  box-shadow: var(--glow-accent);
 }
-.panel::before { top: 0; left: 0; border-width: 1px 0 0 1px; }
-.panel::after { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+.panel::after {
+  /* Bottom-right corner bracket. */
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  border-color: var(--border-strong);
+  border-style: solid;
+  border-width: 0 1.5px 1.5px 0;
+  pointer-events: none;
+}
 .panel .corner-tr, .panel .corner-bl {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  border-color: var(--cyan-dim);
+  width: 12px;
+  height: 12px;
+  border-color: var(--border-strong);
   border-style: solid;
+  pointer-events: none;
 }
-.panel .corner-tr { top: 0; right: 0; border-width: 1px 1px 0 0; }
-.panel .corner-bl { bottom: 0; left: 0; border-width: 0 0 1px 1px; }
+.panel .corner-tr { top: -1px; right: -1px; border-width: 1.5px 1.5px 0 0; }
+.panel .corner-bl { bottom: -1px; left: -1px; border-width: 0 0 1.5px 1.5px; }
+
+/* Hover lift — only for interactive panels that opt in via .panel.is-interactive */
+.panel.is-interactive { transition: border-color 0.15s ease, box-shadow 0.15s ease; cursor: pointer; }
+.panel.is-interactive:hover {
+  border-color: var(--accent-dim);
+  box-shadow: var(--shadow-2);
+}
 
 .panel-label {
-  font-size: 0.65rem;
-  letter-spacing: 0.25em;
+  font-size: 0.6rem;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  color: var(--cyan);
+  color: var(--accent);
   margin-bottom: 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  font-family: var(--mono);
 }
-.panel-label::before { content: '//'; color: var(--text-muted); }
+.panel-label::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+  transform: rotate(45deg);
+  display: inline-block;
+}
 
 /* ── GRID LAYOUT ────────────────────────────────────────────────── */
 .dashboard-grid {
@@ -1238,26 +1540,95 @@ details[open] > summary::before { transform: rotate(90deg); }
 .running-model-card .rm-name { font-weight: 600; color: var(--text); }
 .running-model-card .rm-detail { font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; }
 
-/* ── FOOTER NAV ─────────────────────────────────────────────────── */
+/* ── STATUS RAIL — Cortex operations bar ────────────────────────
+   Fixed at the bottom of the shell. Mirrors the Cortex product
+   bottom-status pattern: env on the left, live system signals in
+   the middle, version + doc links on the right. Caps-tracked
+   mono labels with green/blue/orange status pips. */
 .footer {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
+  margin-top: 28px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  font-size: 0.68rem;
+  gap: 18px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  position: relative;
 }
-.footer-links { display: flex; gap: 20px; }
+.footer::before {
+  /* Scan-line on the rail — same vocabulary as panel + tab. */
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 14px;
+  width: 56px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 70%, transparent 100%);
+  box-shadow: var(--glow-accent);
+}
+.footer-rail-section {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-dim);
+}
+.footer-rail-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.footer-rail-stat .k {
+  color: var(--text-faint);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  font-size: 0.55rem;
+}
+.footer-rail-stat .v {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.footer-rail-stat.is-accent .v { color: var(--accent); }
+.footer-rail-stat.is-info   .v { color: var(--info); }
+.footer-rail-stat.is-warn   .v { color: var(--warn); }
+.footer-rail-stat .pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+  animation: pulse-glow 2.5s ease-in-out infinite;
+}
+.footer-rail-stat .pip.idle   { background: var(--text-faint); box-shadow: none; animation: none; }
+.footer-rail-stat .pip.warn   { background: var(--warn); box-shadow: var(--glow-warn); }
+.footer-rail-stat .pip.danger { background: var(--danger); box-shadow: var(--glow-danger); }
+
+.footer-rail-vsep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+}
+
+.footer-links { display: flex; gap: 14px; align-items: center; }
 .footer-links a {
   color: var(--text-muted);
   text-decoration: none;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  transition: color 0.2s ease;
+  font-size: 0.55rem;
+  transition: color 0.15s ease;
 }
-.footer-links a:hover { color: var(--cyan); }
-.footer-meta { color: var(--text-muted); }
+.footer-links a:hover { color: var(--accent); }
+.footer-meta {
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.55rem;
+}
 
 /* ── ANIMATIONS ─────────────────────────────────────────────────── */
 @keyframes fadeInUp {
@@ -1873,13 +2244,15 @@ details[open] > summary::before { transform: rotate(90deg); }
 
 <div class="shell">
 
-  <!-- HEADER -->
+  <!-- HEADER — Cortex command bar -->
   <div class="header">
     <div class="logo">
       <div class="logo-mark" aria-label="Enclave logo">
         <!-- Canonical Enclave mark: nested rectangles (enclosure / containment
              / layered security). Mirrors assets/logo/enclave-mark.svg and the
-             installer DMG background. Uses currentColor so CSS themes it. -->
+             installer DMG background. Uses currentColor so CSS themes it.
+             A pulsing health pip is painted via .logo-mark::after to turn the
+             brand mark into a live system signal — Cortex product UI pattern. -->
         <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" role="img">
           <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
           <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
@@ -1888,11 +2261,28 @@ details[open] > summary::before { transform: rotate(90deg); }
         </svg>
       </div>
       <div class="logo-text">
-        <div class="logo-title">EN<span>CLAVE</span></div>
-        <div class="logo-sub">Local sovereign AI</div>
+        <div class="logo-title">
+          EN<span>CLAVE</span>
+          <span class="brand-cobrand" aria-label="Cortex co-brand">
+            <span class="brand-cobrand-label">by</span>
+            CORTEX
+          </span>
+        </div>
+        <div class="logo-sub">
+          <span>Local Sovereign AI</span>
+          <span class="sep">·</span>
+          <span id="brand-fleet-host">Operator Console</span>
+        </div>
       </div>
     </div>
     <div class="header-status">
+      <span class="env-chip" id="env-chip" title="Deployment environment">
+        <span id="env-chip-label">LOCAL</span>
+      </span>
+      <span class="vsep" aria-hidden="true"></span>
+      <span><span class="stat-key">Time</span><span id="clock">--:--:--</span></span>
+      <span class="uptime"><span class="stat-key">Up</span><span id="uptime">--</span></span>
+      <span class="vsep" aria-hidden="true"></span>
       <button id="theme-toggle" class="theme-toggle"
               type="button"
               onclick="Theme.toggle()"
@@ -1900,20 +2290,38 @@ details[open] > summary::before { transform: rotate(90deg); }
               title="Toggle theme (light / dark)">
         <span id="theme-toggle-icon" aria-hidden="true">☾</span>
       </button>
-      <span id="clock">--:--:--</span>
-      <span class="uptime" id="uptime">uptime: --</span>
+    </div>
+    <!-- Breadcrumb row — JS updates these spans on tab switch so the
+         operator always knows which mode/sub-context they're in. -->
+    <div class="header-breadcrumb" id="header-breadcrumb">
+      <span class="crumb">Cortex</span>
+      <span class="crumb-sep">›</span>
+      <span class="crumb active" id="crumb-mode">Compose</span>
+      <span class="crumb-sep">›</span>
+      <span class="crumb-ctx" id="crumb-context">Workflow Composer</span>
     </div>
   </div>
 
-  <!-- TAB NAVIGATION -->
+  <!-- TAB NAVIGATION — grouped by operator phase (Cortex IA pattern):
+       BUILD   = author what runs        (Composer, Workflow Index, Agents, Skill Lab)
+       OPERATE = run + observe           (Runs)
+       LIBRARY = governed assets         (Models, Context, Memory)
+       ADMIN   = system + identity       (dropdown)
+       Section labels are visual only; existing data-tab IDs are
+       preserved so switchTab() and routing back-compat keep working. -->
   <div class="tab-nav" role="tablist">
+    <span class="tab-section" aria-hidden="true">Build</span>
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Composer</button>
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
-    <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows', this)">Runs</button>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
+    <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Skill Lab<span class="tab-count" id="res-count"></span></button>
+    <span class="tab-divider" aria-hidden="true"></span>
+    <span class="tab-section" aria-hidden="true">Operate</span>
+    <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows', this)">Runs</button>
+    <span class="tab-divider" aria-hidden="true"></span>
+    <span class="tab-section" aria-hidden="true">Library</span>
     <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
     <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">Context</button>
-    <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Skill Lab<span class="tab-count" id="res-count"></span></button>
     <button class="tab-btn" data-tab="memory" onclick="switchTab('memory', this)">Memory<span class="tab-count" id="mem-count"></span></button>
     <span class="tab-divider" aria-hidden="true"></span>
     <div class="tab-dropdown" role="presentation">
@@ -3033,16 +3441,53 @@ details[open] > summary::before { transform: rotate(90deg); }
     </div>
   </div>
 
-  <!-- FOOTER -->
-  <div class="footer">
-    <div class="footer-links">
-      <a href="/docs">API DOCS</a>
-      <a href="/redoc">SCHEMA</a>
-      <a href="/health">HEALTH</a>
-      <a href="/v1/models">MODELS</a>
-      <a href="/api/info">INFO</a>
+  <!-- STATUS RAIL — Cortex bottom ops bar
+       Left:   environment + active project (sovereign context)
+       Center: live system signals (model, queue, last run)
+       Right:  service links + version + co-brand
+       JS owns the inner span values; this is the chrome only. -->
+  <div class="footer" role="contentinfo">
+    <div class="footer-rail-section">
+      <span class="footer-rail-stat is-accent">
+        <span class="pip" id="rail-env-pip"></span>
+        <span class="k">Env</span>
+        <span class="v" id="rail-env">LOCAL</span>
+      </span>
+      <span class="footer-rail-vsep" aria-hidden="true"></span>
+      <span class="footer-rail-stat">
+        <span class="k">Project</span>
+        <span class="v" id="rail-project">—</span>
+      </span>
     </div>
-    <div class="footer-meta" id="footer-version">Enclave v1.1.0 &mdash; by ohno llc</div>
+
+    <div class="footer-rail-section" style="justify-content:center">
+      <span class="footer-rail-stat">
+        <span class="k">Model</span>
+        <span class="v" id="rail-model">—</span>
+      </span>
+      <span class="footer-rail-vsep" aria-hidden="true"></span>
+      <span class="footer-rail-stat">
+        <span class="k">Queue</span>
+        <span class="v" id="rail-queue">0</span>
+      </span>
+      <span class="footer-rail-vsep" aria-hidden="true"></span>
+      <span class="footer-rail-stat is-info">
+        <span class="pip idle" id="rail-run-pip"></span>
+        <span class="k">Last Run</span>
+        <span class="v" id="rail-last-run">—</span>
+      </span>
+    </div>
+
+    <div class="footer-rail-section" style="justify-content:flex-end">
+      <div class="footer-links">
+        <a href="/docs">API</a>
+        <a href="/redoc">Schema</a>
+        <a href="/health">Health</a>
+        <a href="/v1/models">Models</a>
+      </div>
+      <span class="footer-rail-vsep" aria-hidden="true"></span>
+      <div class="footer-meta" id="footer-version">Enclave v1.1.0 · Cortex Console</div>
+    </div>
   </div>
 
 </div>
