@@ -49,7 +49,8 @@ tools:
     description: |
       Lookup candidate XDM field paths for a vendor field name or short
       description. Returns the top 5 matches with confidence + companion
-      pairs + XDM_CONST values when applicable.
+      pairs + XDM_CONST values when applicable. Backed by the 375-anchor
+      synonym database mined from the 17-pack corpus.
     parameters:
       query:
         type: string
@@ -59,3 +60,73 @@ tools:
         type: integer
         default: 5
         description: "Number of candidate matches to return (1..10)."
+
+  - id: "analyse_xql"
+    file: "tools/analyse_xql.py"
+    function: "execute"
+    description: |
+      Run the full 82-rule XQL/XDM analyser against a rule body. Returns
+      a structured report with rule IDs, severities, line numbers, and
+      recommendations. Use this directly for high-fidelity validation;
+      validate_xql is the legacy-shape shim.
+    parameters:
+      rule:
+        type: string
+        required: true
+        description: "The XQL rule body (full MODEL or INGEST block)."
+      kind:
+        type: string
+        default: "modeling"
+        description: "Either 'modeling' or 'parsing'. Defaults to modeling."
+
+  - id: "xdm_snippets"
+    file: "tools/xdm_snippets.py"
+    function: "execute"
+    description: |
+      Look up XQL/XDM code snippets by free-text query, category filter,
+      pattern-family hint (A/B/C/D), and/or required tags. Reads the
+      112-entry library shipped at docs/seed/xql/snippets.json.
+    parameters:
+      query:
+        type: string
+        default: ""
+        description: "Free-text matched against title, tags, description."
+      category:
+        type: string
+        default: ""
+        description: "Exact category filter (e.g. 'Data Model Rules')."
+      pattern:
+        type: string
+        default: ""
+        description: "Pattern family hint (A/B/C/D)."
+      tags:
+        type: array
+        default: []
+        description: "Required tags (all must match)."
+      top_k:
+        type: integer
+        default: 5
+        description: "Number of snippets to return (1..20)."
+
+  - id: "rag_lookup"
+    file: "tools/rag_lookup.py"
+    function: "execute"
+    description: |
+      Retrieve grounding chunks from the 'xql_corpus' Chroma collection
+      built by scripts/ingest_xql_corpus.py. Optional metadata filters
+      ({pack_name, pack_role, category}) narrow to specific packs or
+      file roles (parser.xql vs datamodel.xql vs documentation.md).
+      Returns top-k chunks with similarity score and source metadata.
+    parameters:
+      query:
+        type: string
+        required: true
+        description: "Free-text query."
+      top_k:
+        type: integer
+        default: 5
+        description: "Number of chunks to return (1..20)."
+      filters:
+        type: object
+        default: {}
+        description: "Optional metadata equality filters."
