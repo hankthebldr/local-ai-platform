@@ -1,0 +1,367 @@
+// ExtraHop RevealX -- XDM Data Model Rule
+// Dataset: extrahop_revealx_raw
+// Vendor: ExtraHop | Product: RevealX
+//
+// Maps ExtraHop RevealX detection events to the Cortex XDM schema.
+//
+// CRITICAL DOCTRINE -- parser stage and datamodel stage see DIFFERENT
+// shapes of the same nested columns. The PARSER reads the raw ingest
+// payload where `categories`, `participants`, `mitre_tactics` and
+// `mitre_techniques` are still native Arrays (see parser.xql header
+// for why a `-> []` cast is rejected there). This data model rule
+// reads the persisted dataset where the same four columns have been
+// serialised to JSON STRINGS on write. Each one fails save here with
+// "Field <col> for function arraymap is invalid. Expected array but
+// received string" when read as a bare column reference, so all four
+// MUST go through the `-> []` JSON-array cast (which desugars to
+// `json_extract_array(<col>, "$[*]")`) before any array-function call
+// in this file.
+//
+// `properties` is the only nested column that arrives as a typed
+// Object in BOTH stages -- read with the scalar `->` field accessor
+// here (`properties -> risk_event_name`). Two-bucket rule for the
+// datamodel: typed Object (`properties`) -> scalar `->` accessor;
+// everything else nested (`categories`, `participants`,
+// `mitre_tactics`, `mitre_techniques`) -> `-> []` cast at the point
+// of first use.
+//
+// XDM array-typed sinks: the live tenant treats `xdm.alert.risks`,
+// `xdm.alert.mitre_tactics` and `xdm.alert.mitre_techniques` as
+// ARRAY fields (rejecting bare scalars with "Expected array but
+// received string") even though the local XDM schema doc marks them
+// Scalar. The MITRE temps are already arrays (`arraymap` output) so
+// they sink directly; `_risk_band` is a scalar and is wrapped in a
+// gated `arraycreate(...)` at the sink site.
+//
+// Participant projection -- six payload shapes are observed in the
+// wild and all are handled here:
+//
+//   1. Single offender + single victim (canonical M365 / unusual
+//      HTTP plaintext auth example) -- offender drives source.*,
+//      victim drives target.*.
+//   2. Multiple offenders, no victims (e.g. SMB lateral movement
+//      with two device offenders) -- offenders drive source.*,
+//      offender array also mirrors into target.* so correlation
+//      queries find the actor regardless of side.
+//   3. Multiple victims (e.g. msrpc_admin_access_check with one
+//      offender and 22 victims) -- victim IPs aggregate into
+//      target.host.ipv4_addresses; the deterministic first
+//      element drives target.ipv4 / target.host.hostname.
+//   4. Victim-only payload, zero offenders (e.g. inbound from
+//      suspicious IP) -- victim drives target.*; source.* stays
+//      empty rather than fabricating an offender.
+//   5. Participant rows where `object_value` is missing but
+//      `object_id` is set (e.g. device-typed offenders that the
+//      appliance has resolved to an internal id but whose IP
+//      lookup has not yet completed) -- the row stamps
+//      `xdm.{source,target}.host.device_id` from
+//      `to_string(object_id)` so the entity is still identifiable.
+//   6. Sibling `hostname` field carries a DNS name even when the
+//      participant's `object_value` is an IP -- the (IP, hostname)
+//      pair lands in `*.ipv4` and `*.host.hostname` together.
+//
+// Routing is driven by the SHAPE of `object_value` (regex match
+// against the IPv4 dotted-quad form), not by the `object_type`
+// string. RevealX uses `"ipaddr"` and `"device"` for IP-bearing
+// rows interchangeably and the shape check is the durable
+// discriminator. IPv6 detection is out of scope (no fixtures
+// exercise it; the XQL regex would need a separate alternative
+// branch). Hostname routing combines (a) the sibling `hostname`
+// field and (b) `object_value` where `object_type = "hostname"`.
+//
+// Documentation: extrahop_revealx_xdm_model_rule_documentation.md
+//
+// SPDX-FileCopyrightText: GoCortexIO
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+[MODEL: dataset = extrahop_revealx_raw]
+
+alter
+    _event_id = to_string(id),
+    _event_type = type,
+    _alert_title = title,
+    _alert_description = description,
+    _alert_url = url,
+    _risk_score = risk_score,
+    _start_ms = start_time,
+    _end_ms = end_time,
+    _reporting_device = _reporting_device_ip,
+    _appliance_id = to_string(appliance_id),
+    // Backward-compat: derive `_categories_arr` from the raw `categories`
+    // column directly. parser.xql still stamps `_detection_category` for
+    // analyst-side anchor coverage on enriched rows, but the data model
+    // rule does NOT read it -- a bare reference to a column absent from
+    // the dataset schema (i.e. on tenants whose RevealX data was ingested
+    // before the parser update) fails to save in Cortex even when wrapped
+    // in coalesce(). `categories` arrives as a JSON string on the live
+    // tenant (the producer schema doc claims `Array<String>` but bare
+    // reads fail save with "Expected array but received string"), so the
+    // `-> []` JSON-array cast is required here. This is the first
+    // ARRAY-typed anchor in the codebase -- see parser.xql header for
+    // the doctrine note.
+    _categories_arr = categories -> [],
+    _risk_event_name = properties -> risk_event_name,
+    // `mitre_tactics`, `mitre_techniques`, `participants` and
+    // `categories` all arrive as JSON strings on the live tenant
+    // (the producer schema doc disagrees on all four -- see
+    // header). The `-> []` JSON-array cast desugars to
+    // `json_extract_array(<col>, "$[*]")` and turns the JSON
+    // string into the typed Array the inner `"@element" -> <field>`
+    // accessor expects. Without the cast the rule fails to save
+    // with "Field <col> for function arraymap is invalid. Expected
+    // array but received string". The same cast is applied to
+    // every `arraymap(participants, ...)` call in the per-role
+    // projection block below and to the `_categories_arr`
+    // assignment above.
+    _mitre_tactic_ids = arraymap(mitre_tactics -> [], "@element" -> id),
+    _mitre_technique_ids = arraymap(mitre_techniques -> [], "@element" -> id),
+    // Per-role array projections of participants[]. Every projection is a
+    // typed array; null rows are filtered out so empty roles surface as []
+    // (zero-length) rather than [null]. The `arrayindex(empty_array, 0)`
+    // identity returns null which is exactly what the *_first scalars need.
+    _offender_role_marks = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "offender", "1", null)), "@element" != null),
+    _offender_ip_seq = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "offender", "@element" -> object_value, null)),
+        "@element" ~= "^[0-9]{1,3}([.][0-9]{1,3}){3}$"),
+    // Hostname union: prefer the participant's sibling `hostname` field
+    // (carries the DNS name when `object_value` carries the IP, as in
+    // fixture 12884912070). Otherwise fall through to `object_value`
+    // whenever it is non-null AND NOT IP-shaped, regardless of
+    // `object_type`. RevealX uses `device`, `hostname`, `ipaddr`, and
+    // other type tags interchangeably; routing is driven by the SHAPE
+    // of `object_value` so a `device`-typed row carrying a DNS name
+    // still lands in the hostname sink.
+    _offender_hostname_seq = arrayfilter(arraymap(participants -> [], if(
+        "@element" -> role = "offender" and "@element" -> hostname != null, "@element" -> hostname,
+        "@element" -> role = "offender" and "@element" -> object_value != null
+            and not("@element" -> object_value ~= "^[0-9]{1,3}([.][0-9]{1,3}){3}$"), "@element" -> object_value,
+        null)), "@element" != null),
+    _offender_username_seq = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "offender", "@element" -> username, null)),
+        "@element" != null),
+    _offender_external_seq = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "offender", "@element" -> external, null)),
+        "@element" != null),
+    _offender_object_id_seq = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "offender", to_string("@element" -> object_id), null)),
+        "@element" != null),
+    _victim_role_marks = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "victim", "1", null)), "@element" != null),
+    _victim_ip_seq = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "victim", "@element" -> object_value, null)),
+        "@element" ~= "^[0-9]{1,3}([.][0-9]{1,3}){3}$"),
+    _victim_hostname_seq = arrayfilter(arraymap(participants -> [], if(
+        "@element" -> role = "victim" and "@element" -> hostname != null, "@element" -> hostname,
+        "@element" -> role = "victim" and "@element" -> object_value != null
+            and not("@element" -> object_value ~= "^[0-9]{1,3}([.][0-9]{1,3}){3}$"), "@element" -> object_value,
+        null)), "@element" != null),
+    _victim_username_seq = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "victim", "@element" -> username, null)),
+        "@element" != null),
+    _victim_external_seq = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "victim", "@element" -> external, null)),
+        "@element" != null),
+    _victim_object_id_seq = arrayfilter(arraymap(participants -> [],
+        if("@element" -> role = "victim", to_string("@element" -> object_id), null)),
+        "@element" != null)
+
+// Stage 2a -- LEAF temps only (depend on stage-1 outputs, not each other).
+| alter
+    _offender_count = array_length(_offender_role_marks),
+    _victim_count = array_length(_victim_role_marks),
+    _offender_ip_first = arrayindex(_offender_ip_seq, 0),
+    _offender_hostname_first = arrayindex(_offender_hostname_seq, 0),
+    _offender_username_first = arrayindex(_offender_username_seq, 0),
+    _offender_external_first = arrayindex(_offender_external_seq, 0),
+    _offender_object_id_first = arrayindex(_offender_object_id_seq, 0),
+    _victim_ip_first = arrayindex(_victim_ip_seq, 0),
+    _victim_hostname_first = arrayindex(_victim_hostname_seq, 0),
+    _victim_username_first = arrayindex(_victim_username_seq, 0),
+    _victim_external_first = arrayindex(_victim_external_seq, 0),
+    _victim_object_id_first = arrayindex(_victim_object_id_seq, 0),
+    // Duration via subtract() (infix -- is rejected); wrap to_integer for the integer sink.
+    _duration_ms = to_integer(subtract(to_number(_end_ms), to_number(_start_ms))),
+    // Pre-derive banded severity / log level for single-line drains.
+    _severity = if(
+        _risk_score >= 80, "Critical",
+        _risk_score >= 50, "High",
+        _risk_score >= 30, "Medium",
+        _risk_score != null, "Low"),
+    _log_level = if(
+        _risk_score >= 80, XDM_CONST.LOG_LEVEL_CRITICAL,
+        _risk_score >= 50, XDM_CONST.LOG_LEVEL_ERROR,
+        _risk_score >= 30, XDM_CONST.LOG_LEVEL_WARNING,
+        _risk_score != null, XDM_CONST.LOG_LEVEL_INFORMATIONAL),
+    // Backward-compat: derive `_risk_band` from the numeric `risk_score`
+    // column directly via the same 3-value bucket (LOW <30, MEDIUM 30-69,
+    // HIGH >=70). parser.xql also stamps `_risk_band` for analyst-side
+    // anchor coverage on enriched rows, but the data model rule does NOT
+    // read the parser-stamped column -- a bare reference to a column
+    // absent from the dataset schema (i.e. on tenants whose RevealX data
+    // was ingested before the parser update) fails to save in Cortex even
+    // when wrapped in coalesce(). The MODEL itself drives
+    // xdm.alert.severity off the four-band `_severity` derivation above
+    // (Critical/High/Medium/Low); `_risk_band` exists for interactive
+    // triage symmetry with the parser column and is surfaced in
+    // xdm.event.description and xdm.alert.risks below. Defined in this
+    // stage (not the next one) so the description-builder and the final
+    // sink alter can read it as a non-sibling temp.
+    _risk_band = if(_risk_score >= 70, "HIGH",
+                    _risk_score >= 30, "MEDIUM",
+                    _risk_score != null, "LOW"),
+    _category_const = arrayindex(arrayfilter(arraymap(_categories_arr, if(
+        "@element" ~= "(?i)brute",       XDM_CONST.THREAT_CATEGORY_BRUTE_FORCE,
+        "@element" ~= "(?i)phish",       XDM_CONST.THREAT_CATEGORY_PHISHING,
+        "@element" ~= "(?i)dos|ddos",    XDM_CONST.THREAT_CATEGORY_DOS,
+        "@element" ~= "(?i)botnet",      XDM_CONST.THREAT_CATEGORY_BOTNET,
+        "@element" ~= "(?i)backdoor",    XDM_CONST.THREAT_CATEGORY_BACKDOOR,
+        "@element" ~= "(?i)spyware",     XDM_CONST.THREAT_CATEGORY_SPYWARE,
+        "@element" ~= "(?i)cryptominer|miner", XDM_CONST.THREAT_CATEGORY_CRYPTOMINER,
+        "@element" ~= "(?i)exfil|data",  XDM_CONST.THREAT_CATEGORY_DATA_THEFT,
+        "@element" ~= "(?i)code",        XDM_CONST.THREAT_CATEGORY_CODE_EXECUTION,
+        "@element" ~= "(?i)dns",         XDM_CONST.THREAT_CATEGORY_DNS,
+        "@element" ~= "(?i)hacktool|tool", XDM_CONST.THREAT_CATEGORY_HACKTOOL,
+        "@element" ~= "(?i)post.?expl",  XDM_CONST.THREAT_CATEGORY_POST_EXPLOITATION,
+        "@element" ~= "(?i)protocol",    XDM_CONST.THREAT_CATEGORY_PROTOCOL_ANOMALY,
+        "@element" ~= "(?i)sec",         XDM_CONST.THREAT_CATEGORY_HACKTOOL)),
+        "@element" != null), 0),
+    _mitre_tactics_const = arraymap(_mitre_tactic_ids, if(
+        "@element" = "TA0001", XDM_CONST.MITRE_TACTIC_INITIAL_ACCESS,
+        "@element" = "TA0002", XDM_CONST.MITRE_TACTIC_EXECUTION,
+        "@element" = "TA0003", XDM_CONST.MITRE_TACTIC_PERSISTENCE,
+        "@element" = "TA0004", XDM_CONST.MITRE_TACTIC_PRIVILEGE_ESCALATION,
+        "@element" = "TA0005", XDM_CONST.MITRE_TACTIC_DEFENSE_EVASION,
+        "@element" = "TA0006", XDM_CONST.MITRE_TACTIC_CREDENTIAL_ACCESS,
+        "@element" = "TA0007", XDM_CONST.MITRE_TACTIC_DISCOVERY,
+        "@element" = "TA0008", XDM_CONST.MITRE_TACTIC_LATERAL_MOVEMENT,
+        "@element" = "TA0009", XDM_CONST.MITRE_TACTIC_COLLECTION,
+        "@element" = "TA0010", XDM_CONST.MITRE_TACTIC_EXFILTRATION,
+        "@element" = "TA0011", XDM_CONST.MITRE_TACTIC_COMMAND_AND_CONTROL,
+        "@element" = "TA0040", XDM_CONST.MITRE_TACTIC_IMPACT,
+        "@element" = "TA0042", XDM_CONST.MITRE_TACTIC_RESOURCE_DEVELOPMENT,
+        "@element" = "TA0043", XDM_CONST.MITRE_TACTIC_RECONNAISSANCE)),
+    _mitre_techniques_const = arraymap(_mitre_technique_ids, if(
+        "@element" = "T1078", XDM_CONST.MITRE_TECHNIQUE_VALID_ACCOUNTS,
+        "@element" = "T1098", XDM_CONST.MITRE_TECHNIQUE_ACCOUNT_MANIPULATION,
+        "@element" = "T1110", XDM_CONST.MITRE_TECHNIQUE_BRUTE_FORCE,
+        "@element" = "T1114", XDM_CONST.MITRE_TECHNIQUE_EMAIL_COLLECTION,
+        "@element" = "T1087", XDM_CONST.MITRE_TECHNIQUE_ACCOUNT_DISCOVERY,
+        "@element" = "T1190", XDM_CONST.MITRE_TECHNIQUE_EXPLOITATION_OF_REMOTE_SERVICES,
+        "@element" = "T1133", XDM_CONST.MITRE_TECHNIQUE_EXTERNAL_REMOTE_SERVICES,
+        "@element" = "T1566", XDM_CONST.MITRE_TECHNIQUE_PHISHING,
+        "@element" = "T1136", XDM_CONST.MITRE_TECHNIQUE_CREATE_ACCOUNT,
+        "@element" = "T1071", XDM_CONST.MITRE_TECHNIQUE_WEB_SERVICE))
+
+// Stage 2b -- DEPENDENT temps (reference 2a outputs only; no sibling reads).
+| alter
+    // Per-role is_internal inversion. Only stamped when the role row exists;
+    // for roles with zero rows the field stays null rather than fabricating
+    // an internal/external assertion.
+    _source_is_internal = if(
+        _offender_count > 0 and to_boolean(_offender_external_first) = true, to_boolean("false"),
+        _offender_count > 0 and to_boolean(_offender_external_first) = false, to_boolean("true")),
+    // Mirror gating: when a victim row exists, target.* is driven by the
+    // victim. Otherwise (offender-only payloads) the offender is mirrored
+    // into target.* so single-sided detections still correlate from either
+    // side. When neither role exists the target stays null.
+    _target_is_internal = if(
+        _victim_count > 0 and to_boolean(_victim_external_first) = true, to_boolean("false"),
+        _victim_count > 0 and to_boolean(_victim_external_first) = false, to_boolean("true"),
+        _victim_count = 0 and _offender_count > 0 and to_boolean(_offender_external_first) = true, to_boolean("false"),
+        _victim_count = 0 and _offender_count > 0 and to_boolean(_offender_external_first) = false, to_boolean("true")),
+    _target_ip_first = if(_victim_count > 0, _victim_ip_first, _offender_ip_first),
+    _target_hostname_first = if(_victim_count > 0, _victim_hostname_first, _offender_hostname_first),
+    _target_username_first = if(_victim_count > 0, _victim_username_first, _offender_username_first),
+    // Array sinks: when a victim row exists, target.host.ipv4_addresses is
+    // the victim aggregate; otherwise mirror the offender aggregate.
+    _target_ip_arr = if(_victim_count > 0, _victim_ip_seq, _offender_ip_seq),
+    // device_id fallback: a participant row with no resolvable IP /
+    // hostname stamps to_string(object_id) into *.host.device_id so the
+    // entity is still queryable. Only fires when the role row exists
+    // AND both the IP and hostname *_first scalars are null. The
+    // predicate is split into nested single-arm guards rather than a
+    // compound 'X = null and Y = null' form because the Cortex parser
+    // rejects compound null guards in if() predicates (ERR-013).
+    _source_device_id = if(_offender_count > 0,
+        if(_offender_ip_first != null, null,
+            if(_offender_hostname_first != null, null, _offender_object_id_first)),
+        null),
+    _target_device_id = if(_victim_count > 0,
+        if(_victim_ip_first != null, null,
+            if(_victim_hostname_first != null, null, _victim_object_id_first)),
+        if(_offender_count > 0,
+            if(_offender_ip_first != null, null,
+                if(_offender_hostname_first != null, null, _offender_object_id_first)),
+            null)),
+    _description = concat(
+        coalesce(_alert_title, "RevealX detection"),
+        if(_risk_band != null, concat(" | Risk band: ", _risk_band), ""),
+        if(_categories_arr != null, concat(" | Categories: ", arraystring(_categories_arr, ", ")), ""),
+        if(_offender_username_first != null, concat(" | Offender user: ", _offender_username_first), ""),
+        if(_offender_ip_first != null, concat(" | Offender IP: ", _offender_ip_first), ""),
+        if(_victim_ip_first != null, concat(" | Victim IP: ", _victim_ip_first), ""))
+
+| alter
+    xdm.observer.vendor = "ExtraHop",
+    xdm.observer.product = "RevealX",
+    xdm.event.id = _event_id,
+    xdm.event.type = "ALERT",
+    xdm.event.original_event_type = _event_type,
+    xdm.event.outcome = XDM_CONST.OUTCOME_UNKNOWN,
+    xdm.event.duration = _duration_ms,
+    xdm.event.description = _description,
+    xdm.alert.original_alert_id = _event_id,
+    xdm.alert.name = _alert_title,
+    xdm.alert.original_threat_name = _alert_title,
+    xdm.alert.description = _alert_description,
+    xdm.alert.subcategory = _risk_event_name,
+    xdm.alert.source_url = _alert_url,
+    xdm.alert.category = _category_const,
+    xdm.alert.severity = _severity,
+    // `xdm.alert.risks` is an Array-typed sink on the live tenant
+    // (the live validator rejects a bare scalar with "Expected
+    // array but received string", even though the local XDM schema
+    // doc marks it Scalar). Wrap the scalar `_risk_band` in a
+    // single-element array, gated on null so empty-risk rows sink
+    // null instead of [null].
+    xdm.alert.risks = if(_risk_band != null, arraycreate(_risk_band), null),
+    xdm.event.log_level = _log_level,
+    xdm.alert.mitre_tactics = _mitre_tactics_const,
+    xdm.alert.mitre_techniques = _mitre_techniques_const,
+    // Source side -- the offender drives source.*. Empty when zero offenders
+    // (victim-only payloads); the *_first scalars and the array seq are
+    // already null / [] in that case so no extra gating is needed.
+    xdm.source.ipv4 = _offender_ip_first,
+    xdm.source.host.ipv4_addresses = _offender_ip_seq,
+    xdm.source.host.hostname = _offender_hostname_first,
+    xdm.source.host.device_id = _source_device_id,
+    xdm.source.user.upn = _offender_username_first,
+    xdm.source.user.username = _offender_username_first,
+    // RevealX participants don't carry a user-type discriminator; when a
+    // username is present we mark the user REGULAR / USER so downstream
+    // consumers can filter by user_type / identity_type without dropping
+    // these rows. The two sinks are paired (SUG-013): mapping user_type
+    // alone triggers a "Consider identity_type mapping" suggestion.
+    xdm.source.user.user_type = if(_offender_username_first != null,
+        XDM_CONST.USER_TYPE_REGULAR, null),
+    xdm.source.user.identity_type = if(_offender_username_first != null,
+        XDM_CONST.IDENTITY_TYPE_USER, null),
+    xdm.source.is_internal_ip = _source_is_internal,
+    // Target side -- victim drives target.* when present; otherwise mirror
+    // the offender so single-sided detections still correlate from either
+    // side. The 2b-derived _target_* temps already encode the gating.
+    xdm.target.ipv4 = _target_ip_first,
+    xdm.target.host.ipv4_addresses = _target_ip_arr,
+    xdm.target.host.hostname = _target_hostname_first,
+    xdm.target.host.device_id = _target_device_id,
+    xdm.target.user.upn = _target_username_first,
+    xdm.target.user.username = _target_username_first,
+    // Same REGULAR / USER when-named convention as the source side.
+    xdm.target.user.user_type = if(_target_username_first != null,
+        XDM_CONST.USER_TYPE_REGULAR, null),
+    xdm.target.user.identity_type = if(_target_username_first != null,
+        XDM_CONST.IDENTITY_TYPE_USER, null),
+    xdm.target.is_internal_ip = _target_is_internal,
+    xdm.intermediate.ipv4 = _reporting_device,
+    xdm.intermediate.host.device_id = _appliance_id;

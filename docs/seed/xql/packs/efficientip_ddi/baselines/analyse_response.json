@@ -1,0 +1,21 @@
+{
+  "violations": [
+    {
+      "ruleId": "INFO-006",
+      "ruleName": "Missing fields cleanup",
+      "severity": "info",
+      "category": "Best Practices",
+      "message": "Rule uses alter to create intermediary fields but does not include a fields - statement to clean up unused variables",
+      "recommendation": "Add | fields - <intermediary_fields> at the end to remove fields that are not needed in the final output",
+      "codeSnippet": "| fields -tmp_field1, tmp_field2"
+    }
+  ],
+  "suggestions": [],
+  "score": 97,
+  "summary": {
+    "errors": 0,
+    "warnings": 0,
+    "info": 1,
+    "suggestions": 0
+  }
+}

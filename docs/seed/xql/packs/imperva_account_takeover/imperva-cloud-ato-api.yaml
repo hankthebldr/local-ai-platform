@@ -1,0 +1,2175 @@
+---
+swagger: "2.0"
+info:
+  description: "This is the API documentation for Imperva Account Takeover Protection.\
+    \ ATO detects and mitigates account takeover attempts, protecting your web applications\
+    \ against volumetric and low and slow ATO attacks. For the full feature documentation,\
+    \ see https://docs.imperva.com/bundle/account-takeover."
+  version: "2.0.0"
+  title: "Account Takeover Protection API"
+host: "api.imperva.com"
+basePath: "/ato"
+tags:
+- name: "Configuration"
+- name: "Evidence"
+- name: "General"
+- name: "Mitigation"
+- name: "PiiPassword"
+- name: "Statistics"
+- name: "Timeline"
+- name: "TopSources"
+- name: "Users"
+schemes:
+- "https"
+security:
+- api_id: []
+  api_key: []
+paths:
+  /v2/sites:
+    get:
+      tags:
+      - "Configuration"
+      summary: "Retrieve all onboarded sites with their mitigation status."
+      description: "Retrieve a list of all onboarded sites for the account ID. Each\
+        \ site will include the Imperva website ID, site name, and mitigation status.\
+        \ If the API key used is for a parent account, and the website belongs to\
+        \ a sub account, the caid of the sub account must be specified."
+      operationId: "getOnboardedSitesWithMitigationStatus"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      responses:
+        200:
+          description: "List of onboarded sites with their mitigation status."
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/SiteStatus"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/allowlist:
+    get:
+      tags:
+      - "General"
+      summary: "Retrieve the allowlist for a specific site"
+      description: "Retrieve the list of IPs and subnets excluded from traffic mitigation\
+        \ by ATO Protection.\nAll traffic from these IPs will not be mitigated."
+      operationId: "getAllowList"
+      parameters:
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of the IPs and subnets to exclude from mitigation"
+          schema:
+            $ref: "#/definitions/AllowlistIp"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+    post:
+      tags:
+      - "General"
+      summary: "Update the allowlist for a specific site"
+      description: "Update the list of IPs and subnets excluded from traffic mitigation\
+        \ by ATO Protection.\nAll traffic from these IPs will not be mitigated.\n\
+        The input should be a comma separated JSON list containing the IPs to add\
+        \ to the site allowlist.\nEach allowed IP object can have a mask property\
+        \ to be applied to that IP and allow that whole subnet.\nFor example:\n[{\"\
+        ip\":\"192.20.1.1\",\"desc\":\"My own IP\"},{\"ip\":\"15.5.0.0\",\"mask\"\
+        :\"16\",\"desc\":\"Office subnet\"},{\"ip\":\"20.1.1.0\",\"mask\":\"24\",\"\
+        desc\":\"Home subnet\"}]"
+      operationId: "addToAllowList"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "List of IPs/subnets"
+        required: true
+        schema:
+          type: "array"
+          items:
+            $ref: "#/definitions/AllowlistIp"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+    put:
+      tags:
+      - "General"
+      summary: "Overwrite the allowlist for a specific site"
+      description: "Overwrite the list of IPs and subnets excluded from traffic mitigation\
+        \ by ATO Protection.\nTHIS CALL WILL REPLACE THE EXISTING LIST.\nAll traffic\
+        \ from these IPs will not be mitigated.\nThe input should be a comma separated\
+        \ JSON list containing all the IPs in the allowlist for the site.\nEach allowed\
+        \ IP object can have a mask property to be applied to that IP and allow that\
+        \ whole subnet."
+      operationId: "setAllowList"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Complete list of IPs/subnets"
+        required: true
+        schema:
+          type: "array"
+          items:
+            $ref: "#/definitions/AllowlistIp"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+    delete:
+      tags:
+      - "General"
+      summary: "Remove IPs from the allowlist for a specific site"
+      description: "Remove the list of IPs and subnets from the current allowlist\
+        \ configuration of the site.\nMatching the IPs and subnets will be done by\
+        \ comparing the 'ip' and 'mask' fields of the entries.\nFor example:\n[{\"\
+        ip\":\"192.20.1.1\"},{\"ip\":\"15.5.0.0\",\"mask\":\"16\"}]"
+      operationId: "removeFromAllowList"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "List of IPs/subnets to remove"
+        required: true
+        schema:
+          type: "array"
+          items:
+            $ref: "#/definitions/AllowlistIp"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/endpoint/{endpointId}:
+    delete:
+      tags:
+      - "Configuration"
+      summary: "Delete an endpoint for this website"
+      description: "Delete the specified endpoint from the specified website.If the\
+        \ API key used is for a parent account, and the website belongs to a sub account,\
+        \ the caid of the sub account must be specified."
+      operationId: "deleteEndpoint"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "path"
+        description: "The endpoint ID to delete"
+        required: true
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/endpoints:
+    get:
+      tags:
+      - "Configuration"
+      summary: "Retrieve all the onboarded login endpoints for this website"
+      description: "Retrieve a list of all onboarded login endpoints for your website.\
+        \ Each endpoint will include its id, url, username and password parameters.\
+        \ If the API key used is for a parent account, and the website belongs to\
+        \ a sub account, the caid of the sub account must be specified."
+      operationId: "getEndpoints"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of onboarded endpoints, each includes url, id, username\
+            \ and password parameters"
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/Endpoints"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/mitigation:
+    get:
+      tags:
+      - "Mitigation"
+      summary: "Get the mitigation configuration for a specific site."
+      description: "Pass a comma-separated string of endpoint ids in order to get\
+        \ the mitigation configuration just for those ones. If not passed, this API\
+        \ will retrieve the mitigation configuration for all endpoints"
+      operationId: "getMitigationConfig"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointIds"
+        in: "query"
+        description: "Comma-separated list of endpoint ids"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve a list of endpoint IDs with their mitigation configuration,\
+            \ e.g. [\n    {\n        \"endpointId\": \"764337755\",\n        \"lowAction\"\
+            : \"NONE\",\n        \"mediumAction\": \"NONE\",\n        \"highAction\"\
+            : \"BLOCK\"\n    },\n    {\n        \"endpointId\": \"1429179364\",\n\
+            \        \"lowAction\": \"NONE\",\n        \"mediumAction\": \"CAPTCHA\"\
+            ,\n        \"highAction\": \"CAPTCHA\"\n    }\n]"
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/MitigationRequest"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+    post:
+      tags:
+      - "Mitigation"
+      summary: "Change the mitigation configuration for a specific site and endpoint.\
+        \ The actions (low, medium, high) should all be in UPPER CASE."
+      description: "Possible values for actions are: NONE, CAPTCHA, BLOCK, TARPIT."
+      operationId: "setMitigationConfigForEndpoints"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify endpoint ID and mitigation actions list"
+        required: true
+        schema:
+          type: "array"
+          items:
+            $ref: "#/definitions/MitigationRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/onboard/copy-to/{target-site-id}:
+    post:
+      tags:
+      - "Configuration"
+      summary: "Copy a single login endpoint, or all of them, from the \"source\"\
+        \ website to the \"target\" website under the same account ID"
+      description: "Both sites must be under the same account ID (no sub-accounts\
+        \ support yet). In addition, mitigation settings are not copied."
+      operationId: "copyEndpointConfigurationFromSiteToAnotherSite"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        description: "Optional: pass an endpoint ID to copy, if none passed all endpoints\
+          \ will be copied"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the \"source\" website (the website we copy\
+          \ from)"
+        required: true
+        type: "integer"
+        format: "int64"
+      - name: "target-site-id"
+        in: "path"
+        description: "The Imperva ID of the \"target\" website (the website we want\
+          \ to copy the endpoint config to)"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/pii-password:
+    post:
+      tags:
+      - "PiiPassword"
+      summary: "Update the PII password"
+      description: "Update the PII password for the current account. If the API key\
+        \ used is for a parent account, and the website belongs to a sub account,\
+        \ the caid of the sub account must be specified."
+      operationId: "setPiiPassword"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Pii Password to update"
+        required: true
+        schema:
+          $ref: "#/definitions/PiiConfigPassword"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+    delete:
+      tags:
+      - "PiiPassword"
+      summary: "Reset the PII password"
+      description: "Reset the PII password for the current account. This will delete\
+        \ the currently configured PII password and you will have to configure a new\
+        \ one before being able to see plaintext usernames. If the API key used is\
+        \ for a parent account, and the website belongs to a sub account, the caid\
+        \ of the sub account must be specified."
+      operationId: "deletePiiPassword"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        204:
+          description: "No Content"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/report/evidence:
+    post:
+      tags:
+      - "Evidence"
+      summary: "Retrieve report of all user logins"
+      description: "Retrieve the list of successful login events that used publicly\
+        \ available leaked credentials. If the API key used is for a parent account,\
+        \ and the website belongs to a sub account, the caid of the sub account must\
+        \ be specified."
+      operationId: "getAllEvidence"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection and/or endpoint ID"
+        required: true
+        schema:
+          $ref: "#/definitions/EvidenceRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of login events"
+          schema:
+            $ref: "#/definitions/SuspiciousSuccessfulEvidence"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/report/evidence/aggregators:
+    post:
+      tags:
+      - "Evidence"
+      summary: "Retrieve aggregated login report"
+      description: "Retrieve the list of login events that were classified as coming\
+        \ from known aggregators. If the API key used is for a parent account, and\
+        \ the website belongs to a sub account, the caid of the sub account must be\
+        \ specified."
+      operationId: "getAggregatorsEvidence"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection and/or endpoint ID"
+        required: true
+        schema:
+          $ref: "#/definitions/EvidenceRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of aggregator login events"
+          schema:
+            $ref: "#/definitions/Evidence"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/report/evidence/leaked:
+    post:
+      tags:
+      - "General"
+      summary: "Retrieve the leaked users login report"
+      description: "Retrieve the list of successful login events that used publicly\
+        \ available leaked credentials. If the API key used is for a parent account,\
+        \ and the website belongs to a sub account, the caid of the sub account must\
+        \ be specified."
+      operationId: "getLeakedReport"
+      consumes:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify event selection range, PII password and endpoint ID"
+        required: true
+        schema:
+          $ref: "#/definitions/ReportRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of login events, returned type is always LEAKED"
+          schema:
+            $ref: "#/definitions/LoginEvent"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/report/evidence/leaked-creds:
+    post:
+      tags:
+      - "Evidence"
+      summary: "Retrieve the leaked users login report"
+      description: "Retrieve the list of successful login events that used publicly\
+        \ available leaked credentials. If the API key used is for a parent account,\
+        \ and the website belongs to a sub account, the caid of the sub account must\
+        \ be specified."
+      operationId: "getLeakedEvidence"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection and/or endpoint ID"
+        required: true
+        schema:
+          $ref: "#/definitions/EvidenceRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of login events, returned type is always LEAKED"
+          schema:
+            $ref: "#/definitions/Evidence"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/report/evidence/likely-leaked:
+    post:
+      tags:
+      - "Evidence"
+      summary: "Retrieve the likely leaked users login report"
+      description: "Retrieve the list of likely leaked login events that potentially\
+        \ used publicly available leaked credentials. If the API key used is for a\
+        \ parent account, and the website belongs to a sub account, the caid of the\
+        \ sub account must be specified."
+      operationId: "getLikelyLeakedEvidence"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection and/or endpoint ID"
+        required: true
+        schema:
+          $ref: "#/definitions/EvidenceRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of likely leaked login events"
+          schema:
+            $ref: "#/definitions/LikelyLeakedEvidence"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/report/evidence/mitigated:
+    post:
+      tags:
+      - "General"
+      summary: "Retrieve the mitigated (CAPTCHA, BLOCK) users login report"
+      description: "Retrieve the list of mitigated (CAPTCHA, BLOCK) login events.\
+        \ If the API key used is for a parent account, and the website belongs to\
+        \ a sub account, the caid of the sub account must be specified."
+      operationId: "getMitigatedReport"
+      consumes:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify event selection range, PII password and endpoint ID"
+        required: true
+        schema:
+          $ref: "#/definitions/ReportRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of login events, returned type is always MITIGATED"
+          schema:
+            $ref: "#/definitions/LoginEvent"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/report/evidence/mitigated-request:
+    post:
+      tags:
+      - "Evidence"
+      summary: "Retrieve the mitigated (CAPTCHA, BLOCK, TARPIT) users login report"
+      description: "Retrieve the list of mitigated (CAPTCHA, BLOCK, TARPIT) login\
+        \ events. If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getMitigatedEvidence"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection and/or endpoint ID"
+        required: true
+        schema:
+          $ref: "#/definitions/EvidenceRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of login events, returned type is always MITIGATED"
+          schema:
+            $ref: "#/definitions/Evidence"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/report/evidence/suspicious-successful:
+    post:
+      tags:
+      - "Evidence"
+      summary: "Retrieve the compromised users login report"
+      description: "Retrieve the list of successful login events that had a non-zero\
+        \ probability of being an attack. If the API key used is for a parent account,\
+        \ and the website belongs to a sub account, the caid of the sub account must\
+        \ be specified."
+      operationId: "getCompromisedEvidence"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection and/or endpoint ID"
+        required: true
+        schema:
+          $ref: "#/definitions/EvidenceRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of login events, returned type is always COMPROMISED"
+          schema:
+            $ref: "#/definitions/Evidence"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/report/evidence/suspicious/successful:
+    post:
+      tags:
+      - "General"
+      summary: "Retrieve the compromised users login report"
+      description: "Retrieve the list of successful login events that had a non-zero\
+        \ probability of being an attack. If the API key used is for a parent account,\
+        \ and the website belongs to a sub account, the caid of the sub account must\
+        \ be specified."
+      operationId: "getSuccessfulAndSuspiciousReport"
+      consumes:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify event selection range, PII password and endpoint ID"
+        required: true
+        schema:
+          $ref: "#/definitions/ReportRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "List of login events, returned type is always COMPROMISED"
+          schema:
+            $ref: "#/definitions/LoginEvent"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/reset-risk:
+    post:
+      tags:
+      - "General"
+      summary: "Reset the risk level of IPs for a specific site"
+      description: "Resets the risk level assigned to an IP address by Account Takeover\
+        \ Protection. Risk level indicates the severity of risk. \nIf there is continued\
+        \ suspicious activity from an IP, the risk level will escalate again afterwards.\
+        \ \nFor example:\n[\"192.20.1.1\",\"15.5.0.0\"] \nFor sites with ATO fingerprint\
+        \ enabled, not all devices will have their risk reset. Priority will be given\
+        \ to devices that were most recently active. \nIPV4 and IPV6 values are accepted\
+        \ but IP ranges will be rejected \nThere is a limit of 10 IPs per request\
+        \ \n"
+      operationId: "resetRisk"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "List of IPs. The input must be a comma separated list of IP\
+          \ addresses in JSON format. It can take up to one minute to fully process\
+          \ the request after it has been sent."
+        required: true
+        schema:
+          type: "array"
+          items:
+            type: "string"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        429:
+          description: "Too many requests"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats:
+    post:
+      tags:
+      - "Statistics"
+      summary: "Get all stats - top stats and unique users stats."
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getAllStats"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "integer"
+        format: "int64"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve all stats - top stats and unique users stats."
+          schema:
+            $ref: "#/definitions/AllStats"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/top:
+    post:
+      tags:
+      - "TopSources"
+      summary: "Get all the top stats (country, client, reputation, successful user,\
+        \ ip, ip+fingerprint)."
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getAllTopSourcesStats"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve all the top stats (country, client, reputation, successful\
+            \ user, ip, ip+fingerprint)."
+          schema:
+            $ref: "#/definitions/TopStats"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/top/client:
+    post:
+      tags:
+      - "TopSources"
+      summary: "Get top number of requests by client of unique users for the current\
+        \ time period compared to previous time period"
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getTopClients"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the top clients performing logins to this site and\
+            \ endpoint ID, by risk level"
+          schema:
+            $ref: "#/definitions/TopSource"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/top/country:
+    post:
+      tags:
+      - "TopSources"
+      summary: "Get top number of requests by country of unique users for the current\
+        \ time period compared to previous time period"
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getTopCountries"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the top countries performing logins to this site\
+            \ and endpoint ID, by risk level"
+          schema:
+            $ref: "#/definitions/TopSource"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/top/ip:
+    post:
+      tags:
+      - "TopSources"
+      summary: "Get top number of requests by IP of unique users for the current time\
+        \ period compared to previous time period"
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getTopIps"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the top IPs performing logins to this site and endpoint\
+            \ ID, by risk level"
+          schema:
+            $ref: "#/definitions/TopSource"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/top/ip-fingerprint:
+    post:
+      tags:
+      - "TopSources"
+      summary: "Get top number of requests by IP + Fingerprint of unique users for\
+        \ the current time period compared to previous time period"
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getTopIpsFps"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the top IPs + Fingerprints performing logins to this\
+            \ site and endpoint ID, by risk level"
+          schema:
+            $ref: "#/definitions/TopSource"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/top/reputation:
+    post:
+      tags:
+      - "TopSources"
+      summary: "Get top number of requests by reputation of unique users for the current\
+        \ time period compared to previous time period"
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getTopReputation"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the top reputations performing logins to this site\
+            \ and endpoint ID, by risk level"
+          schema:
+            $ref: "#/definitions/TopSource"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/users:
+    post:
+      tags:
+      - "Users"
+      summary: "Get all the unique users stats (leaked, aggregator, likely-leaked,\
+        \ suspicious-successful)."
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getAllUniqueUsersStats"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Get all the unique users stats (leaked, aggregator, likely-leaked,\
+            \ suspicious-successful)."
+          schema:
+            $ref: "#/definitions/AllUserStats"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/users/aggregators:
+    post:
+      tags:
+      - "Users"
+      summary: "Get aggregators successful requests of unique users for the current\
+        \ time period compared to previous time period"
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getAggregatorsStats"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the aggregators unique users for the requested time\
+            \ span, including the same for the previous time span"
+          schema:
+            $ref: "#/definitions/UsersStats"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/users/leaked:
+    post:
+      tags:
+      - "Users"
+      summary: "Get leaked successful requests of unique users for the current time\
+        \ period compared to previous time period"
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getLeakedStats"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the leaked unique users for the requested time span,\
+            \ including the same for the previous time span"
+          schema:
+            $ref: "#/definitions/UsersStats"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/users/likely-leaked:
+    post:
+      tags:
+      - "Users"
+      summary: "Get likely leaked successful requests of unique users for the current\
+        \ time period compared to previous time period"
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getLikelyLeakedCredentialsStats"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the likely leaked unique users for the requested\
+            \ time span, including the same for the previous time span"
+          schema:
+            $ref: "#/definitions/UsersStats"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/stats/users/suspicious-successful:
+    post:
+      tags:
+      - "Users"
+      summary: "Get suspicious successful requests of unique users for the current\
+        \ time period compared to previous time period"
+      description: "If the API key used is for a parent account, and the website belongs\
+        \ to a sub account, the caid of the sub account must be specified."
+      operationId: "getSuspiciousSuccessfulStats"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the suspicious successful unique users for the requested\
+            \ time span, including the same for the previous time span"
+          schema:
+            $ref: "#/definitions/UsersStats"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+  /v2/sites/{siteId}/timeline:
+    post:
+      tags:
+      - "Timeline"
+      summary: "Get the login timeline for a site."
+      description: "Pass an endpoint id in order to get the timeline just for that\
+        \ one.\nIf you don't pass an endpoint id, all configured ids will be sent\
+        \ as one \"TOTAL\" (summed together).\nA login timeline represents ongoing\
+        \ login requests made to your site over a time period. Each data point represents\
+        \ the number of logins attempted for that time bucket (each 5 minutes)."
+      operationId: "getLoginsTimeline"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: "Specify the time selection"
+        required: true
+        schema:
+          $ref: "#/definitions/StatsRequest"
+      - name: "caid"
+        in: "query"
+        description: "The Imperva account ID. By default, the API operates on account\
+          \ (A) associated with the API credentials used for authentication. To operate\
+          \ on a different account (an account under the account (A)), specify the\
+          \ account ID."
+        required: false
+        type: "integer"
+        default: -1
+        format: "int64"
+      - name: "endpointId"
+        in: "query"
+        required: false
+        type: "string"
+      - name: "siteId"
+        in: "path"
+        description: "The Imperva ID of the website"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        200:
+          description: "Retrieve the login requests timeline"
+          schema:
+            $ref: "#/definitions/LoginsTimeline"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Not Authorized"
+        500:
+          description: "Internal Server Error"
+securityDefinitions:
+  api_id:
+    description: "An API ID created and managed in the Imperva Cloud Security Console\
+      \ and used for authentication"
+    type: "apiKey"
+    name: "x-API-Id"
+    in: "header"
+  api_key:
+    description: "An API key created and managed in the Imperva Cloud Security Console\
+      \ and used for authentication"
+    type: "apiKey"
+    name: "x-API-Key"
+    in: "header"
+definitions:
+  AllStats:
+    type: "object"
+    properties:
+      users:
+        description: "Total number of unique users per type for the the requested\
+          \ time span."
+        $ref: "#/definitions/AllUserStats"
+      top:
+        description: "Top unique sources per risk level for the the requested time\
+          \ span."
+        $ref: "#/definitions/TopStats"
+  AllUserStats:
+    type: "object"
+    properties:
+      leaked:
+        description: "User stats of of those using leaked credentials."
+        $ref: "#/definitions/UsersStats"
+      aggregator:
+        description: "User stats of of those classified as aggregators."
+        $ref: "#/definitions/UsersStats"
+      suspiciousSuccessful:
+        description: "User stats of of those that performed successful login requests\
+          \ that were classified as suspicious as well."
+        $ref: "#/definitions/UsersStats"
+      likelyLeaked:
+        description: "User stats of of those using likely-leaked credentials."
+        $ref: "#/definitions/UsersStats"
+  AllowlistIp:
+    type: "object"
+    required:
+    - "ip"
+    properties:
+      ip:
+        type: "string"
+        example: "192.10.20.0"
+        description: "IP address to exclude. This will be either an IPv4 (e.g. 50.3.183.2)\
+          \ or normalized IPv6 representation (e.g. 2001:db8:0:0:1:0:0:1)."
+      mask:
+        type: "string"
+        example: "24"
+        description: "[Optional] IP subnet mask to use for excluding a range of IPs.\
+          \ This is the number of bits to use from the IP address as a subnet mask\
+          \ to apply on the source IP of incoming traffic."
+      updated:
+        type: "integer"
+        format: "int64"
+        example: 1632530998076
+        description: "Timestamp, in UNIX Epoch milliseconds, of the latest update\
+          \ of this entry."
+      desc:
+        type: "string"
+        example: "My own IP to always allow"
+        description: "Description of the IP/subnet."
+  DeviceStats:
+    type: "object"
+    properties:
+      failedLogins:
+        type: "integer"
+        format: "int64"
+        description: "Failed logins in last 24 hours."
+      fingerprint:
+        type: "string"
+        description: "Client fingerprint."
+      leakedCredentials:
+        type: "integer"
+        format: "int64"
+        description: "Number of leaked credentials used to login in last 24 hours."
+      risk:
+        type: "string"
+        description: "Probability that this event was part of an attack, as computed\
+          \ post-factum."
+        enum:
+        - "LOW"
+        - "MEDIUM"
+        - "HIGH"
+      successfulLogins:
+        type: "integer"
+        format: "int64"
+        description: "Successful logins in last 24 hours."
+  Endpoints:
+    type: "object"
+    properties:
+      endpointId:
+        type: "string"
+        description: "The endpoint ID"
+      url:
+        type: "string"
+        description: "URL configured for this endpoint"
+      usernameParameter:
+        type: "string"
+        description: "Username parameter configured for this endpoint"
+      passwordParameter:
+        type: "string"
+        description: "Password parameter configured for this endpoint"
+  Evaluation:
+    type: "object"
+    properties:
+      riskFactors:
+        type: "array"
+        description: "Additional risk factors contributing to the total risk score."
+        uniqueItems: true
+        items:
+          type: "string"
+      recordType:
+        type: "string"
+        description: "Type of login evidence."
+      reputation:
+        type: "array"
+        description: "IP reputation as classified by the proxy."
+        uniqueItems: true
+        items:
+          type: "string"
+  Evidence:
+    type: "object"
+    properties:
+      request:
+        $ref: "#/definitions/Request"
+      deviceStats:
+        $ref: "#/definitions/DeviceStats"
+      evaluation:
+        $ref: "#/definitions/Evaluation"
+  EvidenceRequest:
+    type: "object"
+    properties:
+      piiPassword:
+        type: "string"
+        example: "password"
+        description: "Specify the PII password used to encrypt login information.\
+          \ If not specified, the user names will be hashed or encrypted."
+      endpointId:
+        type: "string"
+        example: "1234567890"
+        description: "Optional: Specify the endpoint ID you would like to fetch information\
+          \ for. If not specified, all endpoints would be used. If no endpoint ID\
+          \ is supplied, the default will be all endpoints."
+      startTime:
+        type: "integer"
+        format: "int64"
+        example: 1644000700000
+        description: "Specify the timestamp, in UNIX Epoch milliseconds, from which\
+          \ events are retrieved."
+      endTime:
+        type: "integer"
+        format: "int64"
+        example: 1644000702000
+        description: "Specify the timestamp, in UNIX Epoch milliseconds, to which\
+          \ events are retrieved."
+      rangeHours:
+        type: "integer"
+        format: "int64"
+        example: 24
+        description: "Specify the range, in hours, for which events are retrieved.\
+          \ If specified, range will be used. If not specified, startTime and endTime\
+          \ will be used instead."
+  LikelyLeakedEvidence:
+    type: "object"
+    properties:
+      user:
+        type: "string"
+        description: "The username of the user sending the login request. If the PII\
+          \ password was specified, the username is returned. If the PII password\
+          \ was not specified or does not match our record, a hashed/encrypted form\
+          \ of the username is returned."
+        readOnly: true
+      ip:
+        type: "string"
+        description: "IP address from which the login attempt was made. This will\
+          \ be either an IPv4 (e.g. 50.3.183.2) or normalized IPv6 representation\
+          \ (e.g. 2001:db8:0:0:1:0:0:1)."
+        readOnly: true
+      timestamp:
+        type: "integer"
+        format: "int64"
+        description: "Timestamp, in UNIX Epoch milliseconds, of the login event."
+        readOnly: true
+  LoginEvent:
+    type: "object"
+    properties:
+      ip:
+        type: "string"
+        description: "IP address from which the login attempt was made. This will\
+          \ be either an IPv4 (e.g. 50.3.183.2) or normalized IPv6 representation\
+          \ (e.g. 2001:db8:0:0:1:0:0:1)."
+      risk:
+        type: "string"
+        description: "Probability that this event was part of an attack, as computed\
+          \ post-factum."
+        enum:
+        - "LOW"
+        - "MEDIUM"
+        - "HIGH"
+      time:
+        type: "integer"
+        format: "int64"
+        description: "Timestamp, in UNIX Epoch milliseconds, of the login event."
+      user:
+        type: "string"
+        description: "The username, if the PII password was specified, or a hashed/encrypted\
+          \ form of the username if the PII password was not specified or does not\
+          \ match."
+      type:
+        type: "string"
+        description: "Reason for the presence of the login event in the report."
+        enum:
+        - "LEAKED"
+        - "COMPROMISED"
+      path:
+        type: "string"
+        description: "The login request endpoint path."
+      referrer:
+        type: "string"
+        description: "The URL of the referring page."
+      endpointId:
+        type: "string"
+        description: "The endpoint ID associated with the login request."
+  LoginsTimeline:
+    type: "object"
+    required:
+    - "timeline"
+    properties:
+      startTime:
+        type: "integer"
+        format: "int64"
+        example: 1673624384997
+        description: "Starting timestamp in UNIX Epoch milliseconds from which this\
+          \ timeline data begins."
+      intervalMs:
+        type: "integer"
+        format: "int64"
+        example: 300000
+        description: "Time interval between data points in milliseconds."
+      endpointId:
+        type: "string"
+        example: "1616877031"
+        description: "The endpoint ID related to this login timeline."
+      timeline:
+        type: "object"
+        additionalProperties:
+          $ref: "#/definitions/RequestTimeline"
+  MitigationRequest:
+    type: "object"
+    properties:
+      endpointId:
+        type: "string"
+        description: "Endpoint ID associated with this request."
+        readOnly: true
+      lowAction:
+        type: "string"
+        description: "Mitigation action configured for low risk requests - in UPPER\
+          \ CASE."
+        readOnly: true
+        enum:
+        - "NONE"
+        - "CAPTCHA"
+        - "BLOCK"
+        - "TARPIT"
+      mediumAction:
+        type: "string"
+        description: "Mitigation action configured for medium risk requests - in UPPER\
+          \ CASE."
+        readOnly: true
+        enum:
+        - "NONE"
+        - "CAPTCHA"
+        - "BLOCK"
+        - "TARPIT"
+      highAction:
+        type: "string"
+        description: "Mitigation action configured for high risk requests - in UPPER\
+          \ CASE."
+        readOnly: true
+        enum:
+        - "NONE"
+        - "CAPTCHA"
+        - "BLOCK"
+        - "TARPIT"
+  PiiConfigPassword:
+    type: "object"
+    properties:
+      current:
+        type: "string"
+        description: "Current password."
+      proposed:
+        type: "string"
+        description: "Proposed password."
+  ReportRequest:
+    type: "object"
+    properties:
+      startTime:
+        type: "integer"
+        format: "int64"
+        description: "Specify the timestamp, in UNIX Epoch milliseconds, from which\
+          \ events are retrieved."
+      limit:
+        type: "integer"
+        format: "int32"
+        example: 10
+        description: "Specify the maximum number of events in the report (maximum\
+          \ 10000, default 10000)."
+      piiPassword:
+        type: "string"
+        description: "Specify the PII password used to encrypt login information.\
+          \ If not specified, the user names will be hashed or encrypted in the response."
+      endpointId:
+        type: "string"
+        description: "Optional: Specify the endpoint ID to fetch information for.\
+          \ If no endpoint ID is specified, details of all endpoints defined for the\
+          \ website are returned."
+  Request:
+    type: "object"
+    properties:
+      user:
+        type: "string"
+        description: "The username of the user sending the login request. If the PII\
+          \ password was specified, the username is returned. If the PII password\
+          \ was not specified or does not match our record, a hashed/encrypted form\
+          \ of the username is returned."
+      client:
+        type: "string"
+        description: "The client application used to send the request."
+      declaredClient:
+        type: "string"
+        description: "The client application used to send the request, according to\
+          \ the declaration in the UserAgent HTTP header."
+      clients:
+        type: "array"
+        description: "All client applications used to send requests during the specified\
+          \ timeframe."
+        uniqueItems: true
+        items:
+          type: "string"
+      declaredClients:
+        type: "array"
+        description: "All client applications used to send requests during the specified\
+          \ timeframe, according to the declaration in the UserAgent HTTP header."
+        uniqueItems: true
+        items:
+          type: "string"
+      requestId:
+        type: "integer"
+        format: "int64"
+        description: "A unique identifier assigned to the request."
+      sessionId:
+        type: "integer"
+        format: "int64"
+        description: "A unique identifier assigned to the session."
+      ip:
+        type: "string"
+        description: "IP address from which the login attempt was made. This will\
+          \ be either an IPv4 (e.g. 50.3.183.2) or normalized IPv6 representation\
+          \ (e.g. 2001:db8:0:0:1:0:0:1)."
+      timestamp:
+        type: "integer"
+        format: "int64"
+        description: "Timestamp, in UNIX Epoch milliseconds, of the login event."
+      path:
+        type: "string"
+        description: "The login request endpoint path."
+      country:
+        type: "string"
+        description: "Country code where the login attempt was made."
+      referrer:
+        type: "string"
+        description: "The URL of the referring page."
+      userAgent:
+        type: "string"
+        description: "The user agent of the login event."
+  RequestTimeline:
+    type: "object"
+    properties:
+      total:
+        type: "integer"
+        format: "int64"
+        example: 7944
+        description: "Total requests for the current time span selection."
+      prevTotal:
+        type: "integer"
+        format: "int64"
+        example: 4532
+        description: "Total requests for the previous time span selection."
+      data:
+        type: "array"
+        example: "[5, 1, 0, 0, 0, 75, 2, 1, 0, 0]"
+        description: "List where every value is the count of login requests for that\
+          \ time interval."
+        items:
+          type: "integer"
+          format: "int64"
+  SiteStatus:
+    type: "object"
+    properties:
+      siteId:
+        type: "integer"
+        format: "int64"
+        description: "The Imperva website ID"
+      websiteName:
+        type: "string"
+        example: "mysite.com"
+        description: "The site name (URL)"
+      isMitigationOn:
+        type: "boolean"
+        example: true
+        description: "The site mitigation status (true/false)"
+  StatsRequest:
+    type: "object"
+    properties:
+      startTime:
+        type: "integer"
+        format: "int64"
+        example: 1644000700000
+        description: "Specify the timestamp, in UNIX Epoch milliseconds, from which\
+          \ events are retrieved."
+      endTime:
+        type: "integer"
+        format: "int64"
+        example: 1644000702000
+        description: "Specify the timestamp, in UNIX Epoch milliseconds, to which\
+          \ events are retrieved."
+      rangeHours:
+        type: "integer"
+        format: "int64"
+        example: 24
+        description: "Specify the range, in hours, for which events are retrieved.\
+          \ If specified, range will be used. If not specified, startTime and endTime\
+          \ will be used instead."
+  StreamingOutput:
+    type: "object"
+  SuspiciousSuccessfulEvidence:
+    type: "object"
+    properties:
+      likelyLeaked:
+        type: "string"
+      aggregators:
+        type: "string"
+      suspiciousSuccessful:
+        type: "string"
+      mitigated:
+        type: "string"
+      leaked:
+        type: "string"
+  TopSource:
+    type: "object"
+    properties:
+      none:
+        type: "object"
+        description: "Top source by type mapped to a count of requests with risk level\
+          \ \"none\"."
+        additionalProperties:
+          type: "integer"
+          format: "int64"
+      low:
+        type: "object"
+        description: "Top source by type mapped to a count of requests with risk level\
+          \ \"low\"."
+        additionalProperties:
+          type: "integer"
+          format: "int64"
+      medium:
+        type: "object"
+        description: "Top source by type mapped to a count of requests with risk level\
+          \ \"medium\"."
+        additionalProperties:
+          type: "integer"
+          format: "int64"
+      high:
+        type: "object"
+        description: "Top source by type mapped to a count of requests with risk level\
+          \ \"high\"."
+        additionalProperties:
+          type: "integer"
+          format: "int64"
+  TopStats:
+    type: "object"
+    properties:
+      client:
+        description: "Top clients performing login requests."
+        $ref: "#/definitions/TopSource"
+      country:
+        description: "Top countries performing login requests."
+        $ref: "#/definitions/TopSource"
+      ip:
+        description: "Top IPs performing login requests."
+        $ref: "#/definitions/TopSource"
+      ipFingerprint:
+        description: "Top IP+Fingerprint combinations performing login requests."
+        $ref: "#/definitions/TopSource"
+      reputation:
+        description: "Top reputations performing login requests."
+        $ref: "#/definitions/TopSource"
+  UsersStats:
+    type: "object"
+    properties:
+      currentTotal:
+        type: "integer"
+        format: "int32"
+        description: "Total number of unique users for the the requested time span,\
+          \ as passed in the API model \"StatsRequest\""
+      prevTotal:
+        type: "integer"
+        format: "int32"
+        description: "Total number of unique users for the previous time span, as\
+          \ passed in the API model \"StatsRequest\" (e.g. if time specified in API\
+          \ is 24 hours, then this will return for the previous 24 hours."

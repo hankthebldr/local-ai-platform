@@ -1,0 +1,2160 @@
+{
+  "_meta": {
+    "source": "gocortex-xql-ide/server/data/snippets.ts",
+    "spdx_license": "AGPL-3.0-or-later",
+    "spdx_copyright": "GoCortexIO",
+    "snippet_count": 112
+  },
+  "snippets": [
+    {
+      "id": "parse-boilerplate",
+      "title": "Parsing Rule Boilerplate",
+      "description": "Basic parsing rule structure with required vendor, product, and dataset fields",
+      "category": "Parsing Rules",
+      "tags": [
+        "boilerplate",
+        "required",
+        "vendor",
+        "product"
+      ],
+      "code": "[INGEST:vendor=\"VENDOR_NAME\", product=\"PRODUCT_NAME\", target_dataset=\"VENDOR_NAME_PRODUCT_NAME_raw\", no_hit=drop]\nalter\n    _time = _raw_log -> timestamp,\n    vendor = \"VENDOR_NAME\",\n    product = \"PRODUCT_NAME\";",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.event.type"
+      ]
+    },
+    {
+      "id": "model-boilerplate",
+      "title": "Data Model Rule Boilerplate",
+      "description": "Basic data model rule structure for mapping raw fields to XDM",
+      "category": "Data Model Rules",
+      "tags": [
+        "boilerplate",
+        "xdm",
+        "mapping"
+      ],
+      "code": "[MODEL: dataset=VENDOR_NAME_PRODUCT_NAME_raw]\nfilter\n    event_type in (XDM_CONST.EVENT_TYPE_NETWORK)\n| alter\n    xdm.source.ipv4 = src_ip,\n    xdm.target.ipv4 = dst_ip,\n    xdm.target.port = to_number(dst_port),\n    xdm.network.ip_protocol = protocol,\n    xdm.observer.action = action,\n    xdm.event.type = XDM_CONST.EVENT_TYPE_NETWORK;",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.target.ipv4",
+        "xdm.target.port"
+      ]
+    },
+    {
+      "id": "regex-ip-extract",
+      "title": "Extract IP Address with Regex",
+      "description": "Extract IPv4 addresses from unstructured log fields using regextract",
+      "category": "Field Extraction",
+      "tags": [
+        "regex",
+        "ip",
+        "extraction"
+      ],
+      "code": "alter src_ip = regextract(_raw_log, \"(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})\\s+->\")",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.target.ipv4"
+      ]
+    },
+    {
+      "id": "regex-domain-extract",
+      "title": "Extract Domain from URL",
+      "description": "Extract the domain name from a URL field",
+      "category": "Field Extraction",
+      "tags": [
+        "regex",
+        "domain",
+        "url"
+      ],
+      "code": "alter domain = regextract(url, \"https?://([^/:]+)\")",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.target.domain",
+        "xdm.network.http.url"
+      ]
+    },
+    {
+      "id": "regex-email-extract",
+      "title": "Extract Email Addresses",
+      "description": "Extract email addresses from free-text log fields",
+      "category": "Field Extraction",
+      "tags": [
+        "regex",
+        "email"
+      ],
+      "code": "alter email_addr = regextract(message, \"([\\w.+-]+@[\\w-]+\\.[\\w.]+)\")",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.email.sender",
+        "xdm.email.recipients"
+      ]
+    },
+    {
+      "id": "json-structured",
+      "title": "JSON Field Extraction",
+      "description": "Extract multiple fields from a structured JSON log",
+      "category": "Field Extraction",
+      "tags": [
+        "json",
+        "structured",
+        "extraction"
+      ],
+      "code": "alter\n    user = json_extract_scalar(_raw_log, \"$.user.name\"),\n    action = json_extract_scalar(_raw_log, \"$.event.action\"),\n    src_ip = json_extract_scalar(_raw_log, \"$.source.ip\"),\n    result = json_extract_scalar(_raw_log, \"$.event.outcome\");",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.user.username",
+        "xdm.event.outcome"
+      ]
+    },
+    {
+      "id": "timestamp-iso",
+      "title": "ISO 8601 Timestamp Parsing",
+      "description": "Parse ISO 8601 formatted timestamps. Use in INGEST (parsing) rules only -- do not set _time in MODEL (data model) rules",
+      "category": "Timestamp Handling",
+      "tags": [
+        "timestamp",
+        "iso8601",
+        "time"
+      ],
+      "code": "alter _time = to_timestamp(timestamp_str, \"%Y-%m-%dT%H:%M:%S.%fZ\")",
+      "difficulty": "easy",
+      "relatedFields": []
+    },
+    {
+      "id": "timestamp-epoch",
+      "title": "Epoch Seconds Timestamp",
+      "description": "Convert epoch seconds to proper timestamp. Use in INGEST (parsing) rules only -- do not set _time in MODEL (data model) rules",
+      "category": "Timestamp Handling",
+      "tags": [
+        "timestamp",
+        "epoch",
+        "unix"
+      ],
+      "code": "alter _time = timestamp_seconds(to_number(epoch_field))",
+      "difficulty": "easy",
+      "relatedFields": []
+    },
+    {
+      "id": "timestamp-custom",
+      "title": "Custom Date Format Parsing",
+      "description": "Parse timestamps in common syslog or custom formats. Use in INGEST (parsing) rules only -- do not set _time in MODEL (data model) rules",
+      "category": "Timestamp Handling",
+      "tags": [
+        "timestamp",
+        "syslog",
+        "custom"
+      ],
+      "code": "alter _time = to_timestamp(date_str, \"%b %d %Y %H:%M:%S\")",
+      "difficulty": "medium",
+      "relatedFields": []
+    },
+    {
+      "id": "severity-mapping",
+      "title": "Severity Level Mapping",
+      "description": "Map vendor severity values to standardised XDM severity",
+      "category": "Common Patterns",
+      "tags": [
+        "severity",
+        "mapping",
+        "conditional"
+      ],
+      "code": "alter xdm.alert.severity = if(\n    severity_num <= 2, \"informational\",\n    if(severity_num <= 4, \"low\",\n    if(severity_num <= 6, \"medium\",\n    if(severity_num <= 8, \"high\", \"critical\"))))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.alert.severity"
+      ]
+    },
+    {
+      "id": "coalesce-fallback",
+      "title": "Fallback Values with Coalesce",
+      "description": "Use coalesce to handle null fields with fallback values",
+      "category": "Common Patterns",
+      "tags": [
+        "coalesce",
+        "null",
+        "fallback"
+      ],
+      "code": "alter\n    src_ip = coalesce(source_ip, client_ip, originating_ip),\n    username = coalesce(user_name, account_name, \"unknown\"),\n    action = coalesce(event_action, disposition, \"unspecified\");",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.source.user.username"
+      ]
+    },
+    {
+      "id": "incidr-check",
+      "title": "IP Range Check with incidr",
+      "description": "Check whether an IP is in a private or specific network range",
+      "category": "Common Patterns",
+      "tags": [
+        "incidr",
+        "ip",
+        "network",
+        "filter"
+      ],
+      "code": "filter\n    incidr(src_ip, \"10.0.0.0/8\") = false\n    AND incidr(src_ip, \"172.16.0.0/12\") = false\n    AND incidr(src_ip, \"192.168.0.0/16\") = false",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.ipv4"
+      ]
+    },
+    {
+      "id": "event-type-mapping",
+      "title": "Event Type Classification",
+      "description": "Map vendor event types to XDM event type and sub-type",
+      "category": "Data Model Rules",
+      "tags": [
+        "event",
+        "type",
+        "classification"
+      ],
+      "code": "alter\n    xdm.event.type = if(category = \"firewall\", \"NETWORK\",\n        if(category = \"authentication\", \"AUTH\",\n        if(category = \"file\", \"FILE\", \"GENERIC\"))),\n    xdm.event.operation_sub_type = if(action = \"login\", \"LOGIN\",\n        if(action = \"logout\", \"LOGOUT\",\n        if(action contains \"connect\", \"CONNECT\", action)));",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.event.type",
+        "xdm.event.operation_sub_type"
+      ]
+    },
+    {
+      "id": "network-full-model",
+      "title": "Full Network Event Mapping",
+      "description": "Complete XDM mapping for a typical firewall/network log",
+      "category": "Data Model Rules",
+      "tags": [
+        "network",
+        "firewall",
+        "complete"
+      ],
+      "code": "alter\n    xdm.source.ipv4 = src_ip,\n    xdm.source.port = to_number(src_port),\n    xdm.source.zone = src_zone,\n    xdm.target.ipv4 = dst_ip,\n    xdm.target.port = to_number(dst_port),\n    xdm.target.zone = dst_zone,\n    xdm.network.ip_protocol = protocol,\n    xdm.network.application_protocol = app,\n    xdm.network.session_id = session_id,\n    xdm.network.rule = rule_name,\n    xdm.observer.action = action,\n    xdm.observer.name = device_name,\n    xdm.source.sent_bytes = to_number(bytes_sent),\n    xdm.target.sent_bytes = to_number(bytes_received),\n    xdm.event.type = \"NETWORK\",\n    xdm.event.outcome = if(action = \"allow\", \"SUCCESS\", \"FAILURE\");",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.target.ipv4",
+        "xdm.network.ip_protocol",
+        "xdm.observer.action"
+      ]
+    },
+    {
+      "id": "auth-model",
+      "title": "Authentication Event Mapping",
+      "description": "XDM mapping for authentication/login events",
+      "category": "Data Model Rules",
+      "tags": [
+        "auth",
+        "login",
+        "identity"
+      ],
+      "code": "alter\n    xdm.source.ipv4 = client_ip,\n    xdm.source.user.username = username,\n    xdm.source.user.domain = domain,\n    xdm.auth.auth_method = auth_type,\n    xdm.event.type = \"AUTH\",\n    xdm.event.operation_sub_type = if(event_id = \"4624\", \"LOGIN\", \"LOGOUT\"),\n    xdm.event.outcome = if(status = \"success\", \"SUCCESS\", \"FAILURE\"),\n    xdm.event.outcome_reason = if(status != \"success\", failure_reason, null);",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.user.username",
+        "xdm.auth.auth_method",
+        "xdm.event.outcome"
+      ]
+    },
+    {
+      "id": "conditional-alter",
+      "title": "Conditional Field Assignment",
+      "description": "Assign fields conditionally based on event content",
+      "category": "Conditional Logic",
+      "tags": [
+        "if",
+        "conditional",
+        "branching"
+      ],
+      "code": "alter\n    xdm.observer.action = if(\n        action in (\"allow\", \"accept\", \"permit\"), \"allow\",\n        if(action in (\"deny\", \"block\", \"reject\", \"drop\"), \"deny\",\n        if(action in (\"reset\", \"rst\"), \"reset\", action)));",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.observer.action"
+      ]
+    },
+    {
+      "id": "array-handling",
+      "title": "Array Field Processing",
+      "description": "Create and process array fields for multi-value data",
+      "category": "Common Patterns",
+      "tags": [
+        "array",
+        "arraymap",
+        "arraycreate"
+      ],
+      "code": "alter\n    all_ips = arraycreate(src_ip, dst_ip, nat_src_ip, nat_dst_ip),\n    clean_ips = arraymap(all_ips, if(\"@element\" != null, \"@element\", null)),\n    tags_lower = arraymap(split(tag_list, \",\"), lowercase(trim(\"@element\")));",
+      "difficulty": "advanced",
+      "relatedFields": []
+    },
+    {
+      "id": "dedup-aggregate",
+      "title": "Deduplication and Aggregation",
+      "description": "Remove duplicates and compute summary statistics",
+      "category": "Common Patterns",
+      "tags": [
+        "dedup",
+        "comp",
+        "aggregate",
+        "count"
+      ],
+      "code": "| dedup src_ip, dst_ip, dst_port\n| comp\n    count() as connection_count,\n    sum(bytes_sent) as total_bytes,\n    min(_time) as first_seen,\n    max(_time) as last_seen\n    by src_ip",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.source.sent_bytes"
+      ]
+    },
+    {
+      "id": "datamodel-query",
+      "title": "Datamodel Query with XDM Fields",
+      "description": "Query normalised XDM data from a data model dataset for analytics",
+      "category": "Data Model Rules",
+      "tags": [
+        "datamodel",
+        "xdm",
+        "query",
+        "analytics"
+      ],
+      "code": "datamodel dataset = xdr_data\n| filter xdm.event.type = \"NETWORK\" AND xdm.observer.action = \"deny\"\n| comp count() as blocked_count by xdm.source.ipv4, xdm.target.ipv4\n| sort desc blocked_count\n| limit 20",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.event.type",
+        "xdm.observer.action",
+        "xdm.source.ipv4",
+        "xdm.target.ipv4"
+      ]
+    },
+    {
+      "id": "xdm-const-usage",
+      "title": "XDM Constants for Standardised Values",
+      "description": "Use XDM_CONST enums for standardised field values instead of raw strings",
+      "category": "Data Model Rules",
+      "tags": [
+        "xdm_const",
+        "enum",
+        "constants",
+        "best-practice"
+      ],
+      "code": "alter\n    xdm.event.type = \"NETWORK\",\n    xdm.event.outcome = XDM_CONST.OUTCOME_SUCCESS,\n    xdm.network.ip_protocol = XDM_CONST.IP_PROTOCOL_TCP,\n    xdm.event.outcome_reason = coalesce(reason_field, \"unspecified\");",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.event.type",
+        "xdm.event.outcome",
+        "xdm.network.ip_protocol"
+      ]
+    },
+    {
+      "id": "arrayexpand-arraymap",
+      "title": "Expand and Transform Arrays",
+      "description": "Use arrayexpand to flatten array fields and arraymap to transform elements",
+      "category": "Common Patterns",
+      "tags": [
+        "arrayexpand",
+        "arraymap",
+        "array",
+        "transform"
+      ],
+      "code": "| arrayexpand action_app_id_transitions\n| alter app_lower = lowercase(action_app_id_transitions)\n| filter app_lower != null AND app_lower != \"unknown\"\n| comp count() as app_count by app_lower\n| sort desc app_count",
+      "difficulty": "advanced",
+      "relatedFields": []
+    },
+    {
+      "id": "transaction-stage",
+      "title": "Group Events into Transactions",
+      "description": "Use the transaction stage to correlate related events by a shared field within a time window",
+      "category": "Common Patterns",
+      "tags": [
+        "transaction",
+        "session",
+        "correlation",
+        "group"
+      ],
+      "code": "| transaction session_id span = 30m\n| alter\n    session_duration = timestamp_diff(arrayindex(_time, array_length(_time) - 1), arrayindex(_time, 0), \"SECOND\"),\n    event_count = array_length(_time)\n| filter event_count > 5\n| sort desc session_duration",
+      "difficulty": "advanced",
+      "relatedFields": []
+    },
+    {
+      "id": "ip-validation",
+      "title": "IP Address Validation with is_ipv4/is_ipv6",
+      "description": "Validate and classify IP addresses using built-in validation functions",
+      "category": "Common Patterns",
+      "tags": [
+        "is_ipv4",
+        "is_ipv6",
+        "ip",
+        "validation",
+        "network"
+      ],
+      "code": "alter\n    has_valid_src = is_ipv4(action_local_ip),\n    has_valid_dst = is_ipv4(action_remote_ip),\n    is_private_src = if(is_ipv4(action_local_ip), is_known_private_ipv4(action_local_ip), null),\n    ip_version = if(is_ipv4(action_local_ip), \"v4\", if(is_ipv6(action_local_ip), \"v6\", \"unknown\"))\n| filter has_valid_src = true",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.target.ipv4"
+      ]
+    },
+    {
+      "id": "url-extraction",
+      "title": "URL Component Extraction",
+      "description": "Extract host, domain, and public suffix from URLs using built-in URL functions",
+      "category": "Field Extraction",
+      "tags": [
+        "url",
+        "extract_url_host",
+        "domain",
+        "extraction"
+      ],
+      "code": "alter\n    url_host = extract_url_host(request_url),\n    url_domain = extract_url_registered_domain(request_url),\n    url_tld = extract_url_pub_suffix(request_url)\n| filter url_domain != null",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.target.url",
+        "xdm.target.domain"
+      ]
+    },
+    {
+      "id": "timestamp-parse-epoch",
+      "title": "Timestamp Parsing with parse_timestamp and parse_epoch",
+      "description": "Parse timestamps from various formats using parse_timestamp and epoch conversions with parse_epoch. Use in INGEST (parsing) rules only -- do not set _time in MODEL (data model) rules",
+      "category": "Timestamp Handling",
+      "tags": [
+        "parse_timestamp",
+        "parse_epoch",
+        "timestamp",
+        "time"
+      ],
+      "code": "alter\n    ts_iso = parse_timestamp(iso_date_field, \"%Y-%m-%dT%H:%M:%S.%fZ\"),\n    ts_syslog = parse_timestamp(syslog_date, \"%b %d %H:%M:%S\"),\n    ts_epoch_sec = parse_epoch(epoch_seconds_field, \"SECONDS\"),\n    ts_epoch_ms = parse_epoch(epoch_millis_field, \"MILLIS\")\n| alter _time = coalesce(ts_iso, ts_syslog, ts_epoch_sec, ts_epoch_ms)",
+      "difficulty": "medium",
+      "relatedFields": []
+    },
+    {
+      "id": "parsing-workflow",
+      "title": "Parsing Rule Workflow (Raw -> XQL Schema Fields)",
+      "description": "Extract raw log fields into XQL schema fields during the parsing (INGEST) phase. These intermediate fields will later be mapped to XDM in a data model rule.",
+      "category": "Parsing Rules",
+      "tags": [
+        "parsing",
+        "workflow",
+        "xql-schema",
+        "ingest",
+        "extraction"
+      ],
+      "code": "[INGEST:vendor=\"MyVendor\", product=\"MyFirewall\", target_dataset=\"myvendor_myfirewall_raw\", no_hit=drop]\nalter\n    _time = parse_timestamp(json_extract_scalar(_raw_log, \"$.timestamp\"), \"%Y-%m-%dT%H:%M:%SZ\"),\n    vendor = \"MyVendor\",\n    product = \"MyFirewall\",\n    action_local_ip = json_extract_scalar(_raw_log, \"$.src_ip\"),\n    action_local_port = to_number(json_extract_scalar(_raw_log, \"$.src_port\")),\n    action_remote_ip = json_extract_scalar(_raw_log, \"$.dst_ip\"),\n    action_remote_port = to_number(json_extract_scalar(_raw_log, \"$.dst_port\")),\n    action_protocol = json_extract_scalar(_raw_log, \"$.protocol\"),\n    actor_primary_username = json_extract_scalar(_raw_log, \"$.user\");",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.target.ipv4"
+      ]
+    },
+    {
+      "id": "modeling-workflow",
+      "title": "Data Model Rule Workflow (XQL Schema -> XDM Fields)",
+      "description": "Map XQL schema fields (set during parsing) to standardised XDM fields in a data model rule",
+      "category": "Data Model Rules",
+      "tags": [
+        "modeling",
+        "workflow",
+        "xdm",
+        "mapping",
+        "model"
+      ],
+      "code": "[MODEL: dataset=myvendor_myfirewall_raw]\nalter\n    xdm.source.ipv4 = action_local_ip,\n    xdm.source.port = to_number(action_local_port),\n    xdm.target.ipv4 = action_remote_ip,\n    xdm.target.port = to_number(action_remote_port),\n    xdm.network.ip_protocol = action_protocol,\n    xdm.source.user.username = actor_primary_username,\n    xdm.observer.product = product,\n    xdm.observer.vendor = vendor,\n    xdm.event.type = \"NETWORK\",\n    xdm.event.outcome = if(action = \"allow\", XDM_CONST.OUTCOME_SUCCESS, XDM_CONST.OUTCOME_FAILED);",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.target.ipv4",
+        "xdm.network.ip_protocol",
+        "xdm.observer.product"
+      ]
+    },
+    {
+      "id": "observer-product-mapping",
+      "title": "Observer Product and Vendor Mapping",
+      "description": "Always map xdm.observer.product and xdm.observer.vendor in data model rules for proper SIEM normalisation",
+      "category": "Data Model Rules",
+      "tags": [
+        "observer",
+        "product",
+        "vendor",
+        "required"
+      ],
+      "code": "alter\n    xdm.observer.vendor = vendor,\n    xdm.observer.product = product,\n    xdm.observer.name = coalesce(device_name, agent_hostname),\n    xdm.observer.version = agent_version,\n    xdm.observer.action = if(\n        action in (\"allow\", \"pass\", \"accept\"), \"allow\",\n        if(action in (\"deny\", \"drop\", \"block\", \"reject\"), \"deny\",\n        if(action in (\"reset\", \"rst-both\", \"rst-client\", \"rst-server\"), \"reset\", action)));",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.observer.product",
+        "xdm.observer.vendor",
+        "xdm.observer.name",
+        "xdm.observer.action"
+      ]
+    },
+    {
+      "id": "windowcomp-ranking",
+      "title": "Window Computation with Ranking",
+      "description": "Use windowcomp to rank events and find the first/last occurrence per group",
+      "category": "Common Patterns",
+      "tags": [
+        "windowcomp",
+        "rank",
+        "row_number",
+        "window",
+        "analytics"
+      ],
+      "code": "| windowcomp row_number() by src_ip sort _time as event_order\n| windowcomp first_value(action) by src_ip sort _time as first_action\n| windowcomp last_value(action) by src_ip sort _time as last_action\n| filter event_order = 1\n| fields src_ip, first_action, last_action",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.ipv4"
+      ]
+    },
+    {
+      "id": "getrole-enrichment",
+      "title": "Enrich Events with Asset Roles",
+      "description": "Use the getrole stage to enrich events with roles associated with usernames or endpoints",
+      "category": "Common Patterns",
+      "tags": [
+        "getrole",
+        "enrichment",
+        "roles",
+        "identity"
+      ],
+      "code": "| getrole actor_primary_username as user_role\n| filter user_role != null\n| comp count() as event_count by user_role, xdm.event.type\n| sort desc event_count",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.user.username"
+      ]
+    },
+    {
+      "id": "view-column-order",
+      "title": "View Stage for Display Configuration",
+      "description": "Use the view stage to configure column ordering and populate only non-empty columns",
+      "category": "Common Patterns",
+      "tags": [
+        "view",
+        "display",
+        "columns",
+        "formatting"
+      ],
+      "code": "| fields src_ip, dst_ip, action, xdm.event.type, _time\n| sort desc _time\n| view column order = populated",
+      "difficulty": "easy",
+      "relatedFields": []
+    },
+    {
+      "id": "incidr-incidr6-dual",
+      "title": "Dual-Stack IP Range Checks (IPv4 + IPv6)",
+      "description": "Use incidr() for IPv4 and incidr6() for IPv6 together to handle dual-stack environments",
+      "category": "Common Patterns",
+      "tags": [
+        "incidr",
+        "incidr6",
+        "ipv4",
+        "ipv6",
+        "dual-stack",
+        "network"
+      ],
+      "code": "alter\n    is_private_v4 = if(is_ipv4(src_ip), incidrlist(src_ip, \"10.0.0.0/8\", \"172.16.0.0/12\", \"192.168.0.0/16\"), null),\n    is_private_v6 = if(is_ipv6(src_ipv6), incidr6(src_ipv6, \"fd00::/8\"), null),\n    is_private = coalesce(is_private_v4, is_private_v6, false)\n| filter is_private = false",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.source.ipv6"
+      ]
+    },
+    {
+      "id": "reusable-rule-call",
+      "title": "Reusable Rule with Call",
+      "description": "Define a shared [RULE:] block and invoke it from multiple data model rules using call, avoiding duplication of common mapping logic",
+      "category": "Data Model Rules",
+      "tags": [
+        "rule",
+        "call",
+        "reusable",
+        "shared",
+        "modular"
+      ],
+      "code": "[RULE: shared_user_mapping]\nalter\n    _src_user = coalesce(actor_primary_username, user_name),\n    _src_domain = coalesce(actor_primary_domain, user_domain),\n    xdm.source.user.username = _src_user,\n    xdm.source.user.domain = _src_domain;\n\n[MODEL: dataset=myvendor_auth_raw, model=Auth]\ncall shared_user_mapping\n| alter\n    xdm.event.type = \"AUTH\",\n    xdm.auth.auth_method = auth_type;\n\n[MODEL: dataset=myvendor_vpn_raw, model=Network]\ncall shared_user_mapping\n| alter\n    xdm.event.type = \"NETWORK\",\n    xdm.source.ipv4 = src_ip;",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.user.username",
+        "xdm.source.user.domain"
+      ]
+    },
+    {
+      "id": "os-family-mapping",
+      "title": "OS Family Constant Mapping",
+      "description": "Map operating system strings to XDM_CONST.OS_FAMILY_* using an if() chain for host classification",
+      "category": "Data Model Rules",
+      "tags": [
+        "os",
+        "xdm_const",
+        "os_family",
+        "host",
+        "mapping"
+      ],
+      "code": "alter xdm.source.host.os_family = if(\n    os_type contains \"Windows\", XDM_CONST.OS_FAMILY_WINDOWS,\n    if(os_type in (\"Mac OS X\", \"macOS\", \"Darwin\"), XDM_CONST.OS_FAMILY_MACOS,\n    if(os_type contains \"Ubuntu\", XDM_CONST.OS_FAMILY_UBUNTU,\n    if(os_type contains \"Debian\", XDM_CONST.OS_FAMILY_DEBIAN,\n    if(os_type contains \"CentOS\", XDM_CONST.OS_FAMILY_CENTOS,\n    if(os_type contains \"Linux\", XDM_CONST.OS_FAMILY_LINUX,\n    if(os_type contains \"Android\", XDM_CONST.OS_FAMILY_ANDROID,\n    if(os_type contains \"iOS\", XDM_CONST.OS_FAMILY_IOS,\n    if(os_type contains \"Chrome\", XDM_CONST.OS_FAMILY_CHROMEOS,\n    os_type)))))))))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.host.os_family",
+        "xdm.target.host.os_family"
+      ]
+    },
+    {
+      "id": "http-method-const",
+      "title": "HTTP Method Constant Mapping",
+      "description": "Map HTTP request methods to XDM_CONST.HTTP_METHOD_* for standardised web traffic modelling",
+      "category": "Data Model Rules",
+      "tags": [
+        "http",
+        "xdm_const",
+        "method",
+        "web",
+        "mapping"
+      ],
+      "code": "alter xdm.network.http.method = if(\n    http_method = \"GET\", XDM_CONST.HTTP_METHOD_GET,\n    if(http_method = \"POST\", XDM_CONST.HTTP_METHOD_POST,\n    if(http_method = \"PUT\", XDM_CONST.HTTP_METHOD_PUT,\n    if(http_method = \"DELETE\", XDM_CONST.HTTP_METHOD_DELETE,\n    if(http_method = \"PATCH\", XDM_CONST.HTTP_METHOD_PATCH,\n    if(http_method = \"HEAD\", XDM_CONST.HTTP_METHOD_HEAD,\n    if(http_method = \"OPTIONS\", XDM_CONST.HTTP_METHOD_OPTIONS,\n    if(http_method = \"CONNECT\", XDM_CONST.HTTP_METHOD_CONNECT,\n    http_method))))))))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.network.http.method",
+        "xdm.network.http.url"
+      ]
+    },
+    {
+      "id": "ip-protocol-const",
+      "title": "IP Protocol Constant Mapping",
+      "description": "Map transport protocol names or numbers to XDM_CONST.IP_PROTOCOL_* for network event modelling",
+      "category": "Data Model Rules",
+      "tags": [
+        "protocol",
+        "xdm_const",
+        "ip_protocol",
+        "network",
+        "tcp",
+        "udp"
+      ],
+      "code": "alter xdm.network.ip_protocol = if(\n    protocol in (\"TCP\", \"tcp\", \"6\"), XDM_CONST.IP_PROTOCOL_TCP,\n    if(protocol in (\"UDP\", \"udp\", \"17\"), XDM_CONST.IP_PROTOCOL_UDP,\n    if(protocol in (\"ICMP\", \"icmp\", \"1\"), XDM_CONST.IP_PROTOCOL_ICMP,\n    if(protocol in (\"IGMP\", \"igmp\", \"2\"), XDM_CONST.IP_PROTOCOL_IGMP,\n    if(protocol in (\"GRE\", \"gre\", \"47\"), XDM_CONST.IP_PROTOCOL_GRE,\n    if(protocol in (\"ESP\", \"esp\", \"50\"), XDM_CONST.IP_PROTOCOL_ESP,\n    if(protocol in (\"AH\", \"ah\", \"51\"), XDM_CONST.IP_PROTOCOL_AH,\n    if(protocol in (\"ICMPv6\", \"icmpv6\", \"58\"), XDM_CONST.IP_PROTOCOL_ICMPV6,\n    protocol))))))))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.network.ip_protocol"
+      ]
+    },
+    {
+      "id": "outcome-const-mapping",
+      "title": "Event Outcome Constant Mapping",
+      "description": "Map vendor result/status strings to XDM_CONST.OUTCOME_* with outcome_reason enrichment",
+      "category": "Data Model Rules",
+      "tags": [
+        "outcome",
+        "xdm_const",
+        "success",
+        "failure",
+        "status",
+        "mapping"
+      ],
+      "code": "alter\n    xdm.event.outcome = if(\n        status in (\"success\", \"ok\", \"allowed\", \"0\"), XDM_CONST.OUTCOME_SUCCESS,\n        if(status in (\"failure\", \"failed\", \"denied\", \"error\", \"1\"), XDM_CONST.OUTCOME_FAILED,\n        if(status in (\"partial\", \"warning\"), XDM_CONST.OUTCOME_PARTIAL,\n        XDM_CONST.OUTCOME_UNKNOWN))),\n    xdm.event.outcome_reason = if(\n        status not in (\"success\", \"ok\", \"allowed\", \"0\"),\n        coalesce(failure_reason, error_message, status),\n        null)",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.event.outcome",
+        "xdm.event.outcome_reason"
+      ]
+    },
+    {
+      "id": "file-extension-extract",
+      "title": "Extract File Extension",
+      "description": "Extract the file extension from a filename using split and arrayindex, commonly used for file event modelling",
+      "category": "Field Extraction",
+      "tags": [
+        "file",
+        "extension",
+        "split",
+        "arrayindex",
+        "extraction"
+      ],
+      "code": "alter\n    xdm.target.file.filename = file_name,\n    xdm.target.file.path = file_path,\n    xdm.target.file.directory = regextract(file_path, \"^(.+)[/\\\\]\"),\n    xdm.target.file.extension = if(\n        file_name contains \".\",\n        arrayindex(split(file_name, \".\"), -1),\n        null),\n    xdm.target.file.size = to_number(file_size)",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.target.file.filename",
+        "xdm.target.file.extension",
+        "xdm.target.file.path"
+      ]
+    },
+    {
+      "id": "ipv4-v6-detection",
+      "title": "IPv4 vs IPv6 Detection Pattern",
+      "description": "Detect whether an IP address is IPv4 or IPv6 and map to the correct XDM field using contains \":\"",
+      "category": "Common Patterns",
+      "tags": [
+        "ipv4",
+        "ipv6",
+        "detection",
+        "conditional",
+        "network"
+      ],
+      "code": "alter\n    xdm.source.ipv4 = if(src_ip !~= \":\", src_ip, null),\n    xdm.source.ipv6 = if(src_ip ~= \":\", src_ip, null),\n    xdm.target.ipv4 = if(dst_ip !~= \":\", dst_ip, null),\n    xdm.target.ipv6 = if(dst_ip ~= \":\", dst_ip, null)",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.source.ipv6",
+        "xdm.target.ipv4",
+        "xdm.target.ipv6"
+      ]
+    },
+    {
+      "id": "signature-status-mapping",
+      "title": "Signature Status Constant Mapping",
+      "description": "Map file or process signature status to XDM_CONST.SIGNATURE_STATUS_* for endpoint security events",
+      "category": "Data Model Rules",
+      "tags": [
+        "signature",
+        "xdm_const",
+        "endpoint",
+        "file",
+        "process"
+      ],
+      "code": "alter\n    xdm.source.process.executable.signer = process_signer,\n    xdm.source.process.executable.signature_status = if(\n        signature_signed = \"true\" AND signature_valid = \"true\", XDM_CONST.SIGNATURE_STATUS_SIGNED_VERIFIED,\n        if(signature_signed = \"true\" AND signature_valid = \"false\", XDM_CONST.SIGNATURE_STATUS_SIGNED_INVALID,\n        if(signature_signed = \"false\", XDM_CONST.SIGNATURE_STATUS_UNSIGNED,\n        XDM_CONST.SIGNATURE_STATUS_STATUS_UNKNOWN)))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.process.executable.signature_status",
+        "xdm.source.process.executable.signer"
+      ]
+    },
+    {
+      "id": "dns-response-code-mapping",
+      "title": "DNS Response Code Constant Mapping",
+      "description": "Map DNS RCODE values to XDM_CONST.DNS_RESPONSE_CODE_* for DNS event modelling",
+      "category": "Data Model Rules",
+      "tags": [
+        "dns",
+        "xdm_const",
+        "rcode",
+        "response",
+        "network"
+      ],
+      "code": "alter\n    xdm.network.dns.dns_question.name = query_name,\n    xdm.network.dns.dns_question.type = query_type,\n    xdm.network.dns.response_code = if(\n        rcode in (\"0\", \"NOERROR\", \"No error\"), XDM_CONST.DNS_RESPONSE_CODE_NO_ERROR,\n        if(rcode in (\"1\", \"FORMERR\"), XDM_CONST.DNS_RESPONSE_CODE_FORMAT_ERROR,\n        if(rcode in (\"2\", \"SERVFAIL\"), XDM_CONST.DNS_RESPONSE_CODE_SERVER_FAILURE,\n        if(rcode in (\"3\", \"NXDOMAIN\", \"Name Error\"), XDM_CONST.DNS_RESPONSE_CODE_NAME_ERROR,\n        if(rcode in (\"5\", \"REFUSED\", \"Query Refused\"), XDM_CONST.DNS_RESPONSE_CODE_QUERY_REFUSED,\n        rcode)))))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.network.dns.response_code",
+        "xdm.network.dns.dns_question.name"
+      ]
+    },
+    {
+      "id": "log-level-mapping",
+      "title": "Log Level Constant Mapping",
+      "description": "Map syslog severity strings to XDM_CONST.LOG_LEVEL_* numeric values for event importance classification",
+      "category": "Data Model Rules",
+      "tags": [
+        "log_level",
+        "xdm_const",
+        "severity",
+        "syslog",
+        "mapping"
+      ],
+      "code": "alter xdm.event.log_level = if(\n    severity in (\"emergency\", \"emerg\", \"0\"), XDM_CONST.LOG_LEVEL_EMERGENCY,\n    if(severity in (\"alert\", \"1\"), XDM_CONST.LOG_LEVEL_ALERT,\n    if(severity in (\"critical\", \"crit\", \"2\"), XDM_CONST.LOG_LEVEL_CRITICAL,\n    if(severity in (\"error\", \"err\", \"3\"), XDM_CONST.LOG_LEVEL_ERROR,\n    if(severity in (\"warning\", \"warn\", \"4\"), XDM_CONST.LOG_LEVEL_WARNING,\n    if(severity in (\"notice\", \"5\"), XDM_CONST.LOG_LEVEL_NOTICE,\n    if(severity in (\"informational\", \"info\", \"6\"), XDM_CONST.LOG_LEVEL_INFORMATIONAL,\n    if(severity in (\"debug\", \"7\"), XDM_CONST.LOG_LEVEL_DEBUG,\n    null))))))))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.event.log_level"
+      ]
+    },
+    {
+      "id": "process-tree-mapping",
+      "title": "Full Process Tree Mapping",
+      "description": "Map source process fields including PID, command line, executable path, hash, signer, and integrity level for endpoint telemetry",
+      "category": "Data Model Rules",
+      "tags": [
+        "process",
+        "endpoint",
+        "pid",
+        "hash",
+        "command_line",
+        "signer"
+      ],
+      "code": "alter\n    xdm.source.process.pid = to_number(process_id),\n    xdm.source.process.name = process_name,\n    xdm.source.process.command_line = command_line,\n    xdm.source.process.executable.path = image_path,\n    xdm.source.process.executable.filename = arrayindex(split(image_path, \"\\\\\"), -1),\n    xdm.source.process.executable.md5 = lowercase(md5_hash),\n    xdm.source.process.executable.sha256 = lowercase(sha256_hash),\n    xdm.source.process.executable.signer = process_signer,\n    xdm.source.process.executable.signature_status = if(\n        is_signed = \"true\", XDM_CONST.SIGNATURE_STATUS_SIGNED_VERIFIED,\n        XDM_CONST.SIGNATURE_STATUS_UNSIGNED),\n    xdm.source.process.parent_id = to_string(parent_pid),\n    xdm.source.user.username = process_user",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.process.pid",
+        "xdm.source.process.command_line",
+        "xdm.source.process.executable.path",
+        "xdm.source.process.executable.sha256"
+      ]
+    },
+    {
+      "id": "registry-mapping",
+      "title": "Windows Registry Mapping",
+      "description": "Map Windows registry operations to XDM target.registry fields with XDM_CONST.REGISTRY_VALUE_TYPE_*",
+      "category": "Data Model Rules",
+      "tags": [
+        "registry",
+        "windows",
+        "endpoint",
+        "xdm_const",
+        "sysmon"
+      ],
+      "code": "alter\n    xdm.target.registry.key = registry_key,\n    xdm.target.registry.value = registry_value_name,\n    xdm.target.registry.data = registry_data,\n    xdm.target.registry.value_type = if(\n        reg_type in (\"REG_SZ\", \"1\"), XDM_CONST.REGISTRY_VALUE_TYPE_REG_SZ,\n        if(reg_type in (\"REG_EXPAND_SZ\", \"2\"), XDM_CONST.REGISTRY_VALUE_TYPE_REG_EXPAND_SZ,\n        if(reg_type in (\"REG_BINARY\", \"3\"), XDM_CONST.REGISTRY_VALUE_TYPE_REG_BINARY,\n        if(reg_type in (\"REG_DWORD\", \"4\"), XDM_CONST.REGISTRY_VALUE_TYPE_REG_DWORD,\n        if(reg_type in (\"REG_MULTI_SZ\", \"7\"), XDM_CONST.REGISTRY_VALUE_TYPE_REG_MULTI_SZ,\n        if(reg_type in (\"REG_QWORD\", \"11\"), XDM_CONST.REGISTRY_VALUE_TYPE_REG_QWORD,\n        reg_type))))))",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.target.registry.key",
+        "xdm.target.registry.value",
+        "xdm.target.registry.value_type"
+      ]
+    },
+    {
+      "id": "domain-user-split",
+      "title": "Split DOMAIN\\Username",
+      "description": "Split a DOMAIN\\username string into separate domain and username fields using regextract",
+      "category": "Field Extraction",
+      "tags": [
+        "domain",
+        "username",
+        "split",
+        "regex",
+        "identity",
+        "active-directory"
+      ],
+      "code": "alter\n    _raw_user = coalesce(target_user, subject_user),\n    xdm.target.user.domain = if(\n        _raw_user contains \"\\\\\",\n        arrayindex(regextract(_raw_user, \"^([^\\\\]+)\\\\\"), 0),\n        null),\n    xdm.target.user.username = if(\n        _raw_user contains \"\\\\\",\n        arrayindex(regextract(_raw_user, \"\\\\(.+)$\"), 0),\n        _raw_user)",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.target.user.username",
+        "xdm.target.user.domain",
+        "xdm.source.user.username"
+      ]
+    },
+    {
+      "id": "intermediate-proxy",
+      "title": "Intermediate/Proxy Field Mapping",
+      "description": "Use xdm.intermediate fields when traffic passes through a proxy, NAT gateway, or load balancer between source and target",
+      "category": "Data Model Rules",
+      "tags": [
+        "intermediate",
+        "proxy",
+        "nat",
+        "load-balancer",
+        "network"
+      ],
+      "code": "alter\n    xdm.source.ipv4 = original_client_ip,\n    xdm.source.port = to_number(original_client_port),\n    xdm.intermediate.ipv4 = proxy_ip,\n    xdm.intermediate.port = to_number(proxy_port),\n    xdm.intermediate.hostname = proxy_hostname,\n    xdm.target.ipv4 = destination_ip,\n    xdm.target.port = to_number(destination_port),\n    xdm.event.type = \"NETWORK\",\n    xdm.event.description = concat(\"Traffic via proxy \", proxy_hostname)",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.intermediate.ipv4",
+        "xdm.intermediate.port",
+        "xdm.intermediate.hostname"
+      ]
+    },
+    {
+      "id": "mac-address-array",
+      "title": "MAC Address to Array Field",
+      "description": "Convert a single MAC address string into an array using arraycreate, as xdm.*.host.mac_addresses is an array field",
+      "category": "Common Patterns",
+      "tags": [
+        "mac",
+        "array",
+        "arraycreate",
+        "host",
+        "network"
+      ],
+      "code": "alter\n    xdm.source.host.mac_addresses = if(src_mac != null, arraycreate(src_mac), null),\n    xdm.target.host.mac_addresses = if(dst_mac != null, arraycreate(dst_mac), null),\n    xdm.source.host.hostname = src_hostname,\n    xdm.target.host.hostname = dst_hostname",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.host.mac_addresses",
+        "xdm.target.host.mac_addresses"
+      ]
+    },
+    {
+      "id": "cloud-provider-mapping",
+      "title": "Cloud Provider Constant Mapping",
+      "description": "Map cloud platform names to XDM_CONST.CLOUD_PROVIDER_* for cloud security event modelling",
+      "category": "Data Model Rules",
+      "tags": [
+        "cloud",
+        "xdm_const",
+        "aws",
+        "gcp",
+        "azure",
+        "provider"
+      ],
+      "code": "alter\n    xdm.source.cloud.provider = if(\n        cloud_type contains \"aws\", XDM_CONST.CLOUD_PROVIDER_AWS,\n        if(cloud_type contains \"gcp\", XDM_CONST.CLOUD_PROVIDER_GCP,\n        if(cloud_type contains \"azure\", XDM_CONST.CLOUD_PROVIDER_AZURE,\n        if(cloud_type contains \"alibaba\", XDM_CONST.CLOUD_PROVIDER_ALIBABA,\n        XDM_CONST.CLOUD_PROVIDER_ON_PREM)))),\n    xdm.source.cloud.project = cloud_account_id,\n    xdm.source.cloud.region = cloud_region,\n    xdm.source.cloud.zone = cloud_zone",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.cloud.provider",
+        "xdm.source.cloud.project",
+        "xdm.source.cloud.region"
+      ]
+    },
+    {
+      "id": "empty-ip-sentinel",
+      "title": "Empty IP Sentinel Pattern",
+      "description": "Guard against sentinel IP values (0.0.0.0, ::, empty string) that indicate no real address was present",
+      "category": "Common Patterns",
+      "tags": [
+        "ip",
+        "sentinel",
+        "null",
+        "guard",
+        "validation"
+      ],
+      "code": "alter\n    _clean_src = if(src_ip in (\"0.0.0.0\", \"::\", \"\", \"N/A\", \"unknown\"), null, src_ip),\n    _clean_dst = if(dst_ip in (\"0.0.0.0\", \"::\", \"\", \"N/A\", \"unknown\"), null, dst_ip),\n    xdm.source.ipv4 = if(_clean_src != null AND _clean_src !~= \":\", _clean_src, null),\n    xdm.source.ipv6 = if(_clean_src != null AND _clean_src ~= \":\", _clean_src, null),\n    xdm.target.ipv4 = if(_clean_dst != null AND _clean_dst !~= \":\", _clean_dst, null),\n    xdm.target.ipv6 = if(_clean_dst != null AND _clean_dst ~= \":\", _clean_dst, null)",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.source.ipv6",
+        "xdm.target.ipv4",
+        "xdm.target.ipv6"
+      ]
+    },
+    {
+      "id": "threat-category-mapping",
+      "title": "Threat Category Constant Mapping",
+      "description": "Map threat/malware classification strings to XDM_CONST.THREAT_CATEGORY_* for alert modelling",
+      "category": "Data Model Rules",
+      "tags": [
+        "threat",
+        "xdm_const",
+        "alert",
+        "malware",
+        "security"
+      ],
+      "code": "alter\n    xdm.alert.name = threat_name,\n    xdm.alert.original_threat_id = to_string(threat_id),\n    xdm.alert.severity = coalesce(severity, \"informational\"),\n    xdm.alert.category = if(\n        category contains \"spyware\", XDM_CONST.THREAT_CATEGORY_SPYWARE,\n        if(category contains \"ransomware\", XDM_CONST.THREAT_CATEGORY_RANSOMWARE,\n        if(category contains \"trojan\", XDM_CONST.THREAT_CATEGORY_TROJAN,\n        if(category contains \"backdoor\", XDM_CONST.THREAT_CATEGORY_BACKDOOR,\n        if(category contains \"botnet\", XDM_CONST.THREAT_CATEGORY_BOTNET,\n        if(category contains \"cryptominer\", XDM_CONST.THREAT_CATEGORY_CRYPTOMINER,\n        if(category contains \"adware\", XDM_CONST.THREAT_CATEGORY_ADWARE,\n        if(category contains \"phishing\", XDM_CONST.THREAT_CATEGORY_PHISHING,\n        category))))))))",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.alert.category",
+        "xdm.alert.name",
+        "xdm.alert.severity"
+      ]
+    },
+    {
+      "id": "vpn-event-model",
+      "title": "VPN Event Data Model Mapping",
+      "description": "Complete VPN event mapping including allocated IP, tunnel info, and authentication with EVENT_TAG_VPN",
+      "category": "Data Model Rules",
+      "tags": [
+        "vpn",
+        "globalprotect",
+        "tunnel",
+        "network",
+        "auth"
+      ],
+      "code": "alter\n    xdm.source.ipv4 = public_ip,\n    xdm.source.user.username = vpn_user,\n    xdm.source.host.hostname = client_hostname,\n    xdm.source.host.os_family = if(\n        client_os contains \"Windows\", XDM_CONST.OS_FAMILY_WINDOWS,\n        if(client_os contains \"Mac\", XDM_CONST.OS_FAMILY_MACOS,\n        if(client_os contains \"Linux\", XDM_CONST.OS_FAMILY_LINUX, client_os))),\n    xdm.network.vpn.allocated_ipv4 = assigned_ip,\n    xdm.target.ipv4 = gateway_ip,\n    xdm.target.hostname = gateway_hostname,\n    xdm.event.type = \"NETWORK\",\n    xdm.event.tags = arraycreate(XDM_CONST.EVENT_TAG_VPN),\n    xdm.event.outcome = if(\n        vpn_status = \"connected\", XDM_CONST.OUTCOME_SUCCESS,\n        if(vpn_status = \"disconnected\", XDM_CONST.OUTCOME_SUCCESS,\n        XDM_CONST.OUTCOME_FAILED)),\n    xdm.observer.action = vpn_action",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.network.vpn.allocated_ipv4",
+        "xdm.event.tags",
+        "xdm.source.host.os_family"
+      ]
+    },
+    {
+      "id": "raw-log-regex-parse",
+      "title": "Multi-Field Regex Extraction from Raw Log",
+      "description": "Parse multiple fields from an unstructured syslog or Apache-style log line using regextract with named groups",
+      "category": "Parsing Rules",
+      "tags": [
+        "regex",
+        "raw_log",
+        "syslog",
+        "apache",
+        "parsing",
+        "extraction"
+      ],
+      "code": "[INGEST:vendor=\"WebServer\", product=\"Apache\", target_dataset=\"webserver_apache_raw\", no_hit=drop]\nalter\n    _src_ip = arrayindex(regextract(_raw_log, \"^(\\d+\\.\\d+\\.\\d+\\.\\d+)\"), 0),\n    _identity = arrayindex(regextract(_raw_log, \"^\\S+\\s+(\\S+)\"), 0),\n    _user = arrayindex(regextract(_raw_log, \"^\\S+\\s+\\S+\\s+(\\S+)\"), 0),\n    _timestamp_str = arrayindex(regextract(_raw_log, \"\\[([^\\]]+)\\]\"), 0),\n    _request = arrayindex(regextract(_raw_log, \"\\\"([^\\\"]+)\\\"\"), 0),\n    _status = arrayindex(regextract(_raw_log, \"\\\"\\s+(\\d{3})\"), 0),\n    _bytes = arrayindex(regextract(_raw_log, \"\\\"\\s+\\d{3}\\s+(\\d+)\"), 0),\n    _time = parse_timestamp(_timestamp_str, \"%d/%b/%Y:%H:%M:%S %z\"),\n    vendor = \"WebServer\",\n    product = \"Apache\";",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.network.http.method",
+        "xdm.network.http.url"
+      ]
+    },
+    {
+      "id": "json-nested-extract",
+      "title": "Deep Nested JSON Extraction",
+      "description": "Extract fields from deeply nested JSON structures using json_extract_scalar and json_extract_array for complex log formats",
+      "category": "Field Extraction",
+      "tags": [
+        "json",
+        "nested",
+        "json_extract_scalar",
+        "json_extract_array",
+        "deep"
+      ],
+      "code": "alter\n    event_type = json_extract_scalar(_raw_log, \"$.event.category\"),\n    user_email = json_extract_scalar(_raw_log, \"$.actor.email\"),\n    user_id = json_extract_scalar(_raw_log, \"$.actor.profile.id\"),\n    target_name = json_extract_scalar(_raw_log, \"$.target[0].displayName\"),\n    target_type = json_extract_scalar(_raw_log, \"$.target[0].type\"),\n    client_ip = json_extract_scalar(_raw_log, \"$.client.ipAddress\"),\n    user_agent = json_extract_scalar(_raw_log, \"$.client.userAgent.rawUserAgent\"),\n    geo_city = json_extract_scalar(_raw_log, \"$.client.geographicalContext.city\"),\n    raw_targets = json_extract_array(_raw_log, \"$.target\")",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.user.username",
+        "xdm.source.ipv4",
+        "xdm.target.resource.name"
+      ]
+    },
+    {
+      "id": "arraymap-json-element",
+      "title": "Arraymap with @element for JSON Arrays",
+      "description": "Use arraymap with @element to transform each element in a JSON array, extracting nested fields from array items",
+      "category": "Common Patterns",
+      "tags": [
+        "arraymap",
+        "element",
+        "json",
+        "array",
+        "transform"
+      ],
+      "code": "alter\n    raw_targets = json_extract_array(_raw_log, \"$.targets\"),\n    target_names = arraymap(\n        raw_targets,\n        json_extract_scalar(\"@element\", \"$.displayName\")),\n    target_types = arraymap(\n        raw_targets,\n        json_extract_scalar(\"@element\", \"$.type\")),\n    xdm.target.resource.name = arraystring(target_names, \", \"),\n    xdm.target.resource.type = arrayindex(target_types, 0)",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.target.resource.name",
+        "xdm.target.resource.type"
+      ]
+    },
+    {
+      "id": "object-create-description",
+      "title": "Structured Description with object_create",
+      "description": "Use object_create to build a structured JSON description from multiple fields when no single XDM field fits",
+      "category": "Common Patterns",
+      "tags": [
+        "object_create",
+        "description",
+        "json",
+        "structured",
+        "enrichment"
+      ],
+      "code": "alter xdm.event.description = to_json_string(object_create(\n    \"action\", event_action,\n    \"category\", event_category,\n    \"table\", affected_table,\n    \"record_id\", record_id,\n    \"changes\", change_summary,\n    \"source_module\", module_name))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.event.description"
+      ]
+    },
+    {
+      "id": "operation-type-mapping",
+      "title": "Operation Type Constant Mapping",
+      "description": "Map event actions or task types to XDM_CONST.OPERATION_TYPE_* for standardised operation classification",
+      "category": "Data Model Rules",
+      "tags": [
+        "operation",
+        "xdm_const",
+        "file",
+        "registry",
+        "process",
+        "mapping"
+      ],
+      "code": "alter xdm.event.operation = if(\n    action in (\"create\", \"created\", \"new\", \"1\"), XDM_CONST.OPERATION_TYPE_FILE_CREATE,\n    if(action in (\"modify\", \"modified\", \"change\", \"update\", \"set\"), XDM_CONST.OPERATION_TYPE_FILE_SET_ATTRIBUTES,\n    if(action in (\"delete\", \"deleted\", \"remove\", \"removed\"), XDM_CONST.OPERATION_TYPE_FILE_REMOVE,\n    if(action in (\"rename\", \"renamed\", \"move\"), XDM_CONST.OPERATION_TYPE_FILE_RENAME,\n    if(action in (\"read\", \"open\", \"access\", \"accessed\"), XDM_CONST.OPERATION_TYPE_FILE_OPEN,\n    if(action in (\"write\", \"written\"), XDM_CONST.OPERATION_TYPE_FILE_WRITE,\n    if(action in (\"execute\", \"exec\", \"run\"), XDM_CONST.OPERATION_TYPE_PROCESS_OPEN,\n    action)))))))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.event.operation",
+        "xdm.event.operation_sub_type"
+      ]
+    },
+    {
+      "id": "rfc3339-zulu-offset-autodetect",
+      "title": "RFC 3339 Z/Offset Auto-Detect Timestamp",
+      "description": "Parse ISO 8601 / RFC 3339 timestamps that may end in Z (Zulu/UTC) or a numeric offset such as +02:00, with variable fractional-second precision. Uses a conditional branch to select the correct parse_timestamp format string.",
+      "category": "Parsing Rules",
+      "tags": [
+        "timestamp",
+        "rfc3339",
+        "iso8601",
+        "zulu",
+        "offset",
+        "parse_timestamp"
+      ],
+      "code": "alter tmp_raw_ts = arrayindex(regextract(_raw_log, \"(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))\"), 0)\n| alter _time = if(\n    tmp_raw_ts ~= \"Z$\", parse_timestamp(\"%FT%H:%M:%E*SZ\", tmp_raw_ts),\n    tmp_raw_ts ~= \"[+-]\\d{2}:\\d{2}$\", parse_timestamp(\"%FT%H:%M:%E*S%Ez\", tmp_raw_ts))\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "rfc3164-year-inference",
+      "title": "RFC 3164 Year Inference with Rollover Guard",
+      "description": "RFC 3164 syslog timestamps lack a year. Prepend the current year from _insert_time, parse the result, then check whether the constructed timestamp is in the future (Dec-to-Jan rollover). If so, subtract one year.",
+      "category": "Parsing Rules",
+      "tags": [
+        "timestamp",
+        "rfc3164",
+        "syslog",
+        "year",
+        "rollover",
+        "current_time"
+      ],
+      "code": "alter\n    tmp_rfc3164_ts = arrayindex(regextract(_raw_log, \"([A-Z][a-z]{2}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})\"), 0),\n    tmp_current_year = format_timestamp(\"%Y\", _insert_time)\n| alter tmp_with_year = parse_timestamp(\"%Y %b %e %H:%M:%S\", concat(tmp_current_year, \" \", tmp_rfc3164_ts))\n| alter _time = if(\n    timestamp_diff(tmp_with_year, current_time(), \"MILLISECOND\") <= 0, tmp_with_year,\n    parse_timestamp(\"%Y %b %e %H:%M:%S\", concat(to_string(subtract(to_integer(tmp_current_year), 1)), \" \", tmp_rfc3164_ts)))\n| fields - tmp*;",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "epoch-auto-detect",
+      "title": "Epoch Auto-Detect by Digit Length",
+      "description": "Detect whether an epoch timestamp is in seconds (10 digits), milliseconds (13 digits), or microseconds (16 digits) and convert accordingly using to_timestamp with the appropriate unit.",
+      "category": "Parsing Rules",
+      "tags": [
+        "timestamp",
+        "epoch",
+        "seconds",
+        "milliseconds",
+        "microseconds",
+        "to_timestamp"
+      ],
+      "code": "alter tmp_epoch_str = to_string(raw_timestamp)\n| alter _time = if(\n    tmp_epoch_str ~= \"^\\d{16}$\", to_timestamp(to_integer(tmp_epoch_str), \"MICROSECONDS\"),\n    tmp_epoch_str ~= \"^\\d{13}$\", to_timestamp(to_integer(tmp_epoch_str), \"MILLIS\"),\n    tmp_epoch_str ~= \"^\\d{10}$\", to_timestamp(to_integer(tmp_epoch_str), \"SECONDS\"))\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "clf-timestamp-parse",
+      "title": "Common Log Format (CLF) Timestamp",
+      "description": "Parse the bracket-enclosed timestamp used by Apache httpd, Tomcat, and other web servers in Common/Combined Log Format: [dd/Mon/yyyy:HH:mm:ss +0000]",
+      "category": "Parsing Rules",
+      "tags": [
+        "timestamp",
+        "clf",
+        "apache",
+        "httpd",
+        "web",
+        "access_log"
+      ],
+      "code": "alter tmp_clf_ts = arrayindex(regextract(_raw_log, \"\\[(\\d{2}/[A-Z][a-z]{2}/\\d{4}:\\d{2}:\\d{2}:\\d{2}\\s[+-]\\d{4})\\]\"), 0)\n| alter _time = parse_timestamp(\"%d/%b/%Y:%H:%M:%S %z\", tmp_clf_ts)\n| fields - tmp*;",
+      "difficulty": "easy",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "variable-precision-ts",
+      "title": "Variable Fractional-Second Precision (E*S)",
+      "description": "Use the %E*S format directive to handle timestamps with 0 to 9 fractional-second digits (E1S for exactly 1, E3S for exactly 3, E*S for variable). Handles vendors that emit varying precision.",
+      "category": "Parsing Rules",
+      "tags": [
+        "timestamp",
+        "precision",
+        "fractional",
+        "E*S",
+        "E3S",
+        "parse_timestamp"
+      ],
+      "code": "alter tmp_ts = arrayindex(regextract(_raw_log, \"(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z)\"), 0)\n| alter _time = parse_timestamp(\"%FT%H:%M:%E*SZ\", tmp_ts)\n| fields - tmp*;",
+      "difficulty": "easy",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "concat-date-time-tz",
+      "title": "Concat Separate Date/Time/TZ Fields",
+      "description": "When a log source provides date, time, and timezone as separate fields, concatenate them into a single string and parse. Common with Fortinet, SonicWall, and DHCP logs.",
+      "category": "Parsing Rules",
+      "tags": [
+        "timestamp",
+        "concat",
+        "date",
+        "time",
+        "timezone",
+        "format_string"
+      ],
+      "code": "alter tmp_formatted_ts = format_string(\"%sT%s%s\", tmp_date, tmp_time, tmp_tz_offset)\n| alter _time = if(\n    tmp_tz_offset = \"Z\", parse_timestamp(\"%FT%H:%M:%E*SZ\", tmp_formatted_ts),\n    tmp_tz_offset ~= \"[+-]\\d{4}\", parse_timestamp(\"%FT%H:%M:%E*S%z\", tmp_formatted_ts),\n    tmp_tz_offset ~= \"[+-]\\d{2}:\\d{2}\", parse_timestamp(\"%FT%H:%M:%E*S%Ez\", tmp_formatted_ts))\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "timestamp-coalesce-chain",
+      "title": "Timestamp Priority Chain with Fallback",
+      "description": "Try multiple timestamp formats in priority order using coalesce. The first non-null result wins. Essential when a single vendor emits logs in varying timestamp formats.",
+      "category": "Parsing Rules",
+      "tags": [
+        "timestamp",
+        "coalesce",
+        "fallback",
+        "priority",
+        "multi-format"
+      ],
+      "code": "alter\n    tmp_ts_iso = arrayindex(regextract(_raw_log, \"(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z)\"), 0),\n    tmp_ts_space = arrayindex(regextract(_raw_log, \"(\\d{4}-\\d{2}-\\d{2}\\s\\d{2}:\\d{2}:\\d{2})\"), 0),\n    tmp_ts_epoch = arrayindex(regextract(_raw_log, \"\"timestamp\"\\s*:\\s*(\\d{10,13})\"), 0)\n| alter _time = coalesce(\n    parse_timestamp(\"%FT%H:%M:%E*SZ\", tmp_ts_iso),\n    parse_timestamp(\"%F %H:%M:%S\", tmp_ts_space),\n    if(tmp_ts_epoch != null and len(tmp_ts_epoch) = 13, to_timestamp(to_integer(tmp_ts_epoch), \"MILLIS\"),\n       tmp_ts_epoch != null and len(tmp_ts_epoch) = 10, to_timestamp(to_integer(tmp_ts_epoch), \"SECONDS\")))\n| fields - tmp*;",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "epoch-millis-from-split",
+      "title": "Epoch Millis via String Split",
+      "description": "Extract epoch milliseconds by splitting a dotted timestamp string. Useful when a vendor provides seconds.millis as a floating-point string.",
+      "category": "Parsing Rules",
+      "tags": [
+        "timestamp",
+        "epoch",
+        "split",
+        "milliseconds",
+        "to_integer"
+      ],
+      "code": "alter tmp_ts_str = to_string(raw_timestamp)\n| alter\n    tmp_has_dot = if(tmp_ts_str ~= \"\\.\", \"true\", \"false\"),\n    tmp_seconds_str = arrayindex(regextract(tmp_ts_str, \"(\\d+)\"), 0),\n    tmp_frac_str = arrayindex(regextract(tmp_ts_str, \"\\.(\\d+)\"), 0)\n| alter _time = if(\n    tmp_has_dot = \"true\" and len(tmp_ts_str) >= 13, to_timestamp(to_integer(concat(tmp_seconds_str, tmp_frac_str)), \"MILLIS\"),\n    len(tmp_seconds_str) = 13, to_timestamp(to_integer(tmp_seconds_str), \"MILLIS\"),\n    to_timestamp(to_integer(tmp_seconds_str), \"SECONDS\"))\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "regexcapture-syslog",
+      "title": "regexcapture() Named Groups for Syslog Headers",
+      "description": "Use regexcapture with named capture groups to parse a syslog header into a parsed_fields object in one step. Each (?P<name>...) group becomes a key in the returned object.",
+      "category": "Field Extraction",
+      "tags": [
+        "regexcapture",
+        "syslog",
+        "named_groups",
+        "parsed_fields",
+        "header"
+      ],
+      "code": "alter parsed_fields = regexcapture(_raw_log, \"\\<(?P<priority>\\d+)\\>(?P<timestamp>\\d{4}-\\d{2}-\\d{2}T\\S+)\\s+(?P<hostname>\\S+)\\s+(?P<app_name>\\S+?)\\[(?P<pid>\\d+)\\]:\\s*(?P<message>.+)\")\n| alter _time = coalesce(\n    parse_timestamp(\"%FT%H:%M:%E*SZ\", parsed_fields -> timestamp),\n    parse_timestamp(\"%FT%H:%M:%E*S%Ez\", parsed_fields -> timestamp))\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "dynamic-kv-regexcapture",
+      "title": "Dynamic Key-Value Extraction with regexcapture",
+      "description": "Build a dynamic regex pattern from extracted keys and values, then use regexcapture to produce a parsed_fields object. Used when log key names vary between events.",
+      "category": "Field Extraction",
+      "tags": [
+        "regexcapture",
+        "dynamic",
+        "key-value",
+        "arraymap",
+        "pattern"
+      ],
+      "code": "alter\n    tmp_keys = regextract(_raw_log, \"(\\w+)=\"),\n    tmp_values = regextract(_raw_log, \"\\w+=([^\\s;]+)\")\n| alter tmp_pattern = arraystring(arraymap(tmp_keys, concat(\"(?P<\", \"@element\", \">[^\\s;]+)\")), \"\\s+\\w+=\")\n| alter parsed_fields = if(\n    tmp_pattern != null and tmp_values != null,\n    regexcapture(arraystring(tmp_values, \" \"), tmp_pattern))\n| fields - tmp*;",
+      "difficulty": "advanced",
+      "relatedFields": []
+    },
+    {
+      "id": "json-arrow-parse",
+      "title": "JSON Arrow Notation Extraction",
+      "description": "Use the -> arrow operator to extract fields from JSON objects without json_extract_scalar. Supports nested paths with chained arrows.",
+      "category": "Field Extraction",
+      "tags": [
+        "json",
+        "arrow",
+        "nested",
+        "extract",
+        "object"
+      ],
+      "code": "alter\n    event_type = _raw_log -> eventType,\n    username = _raw_log -> actor -> email,\n    target_name = _raw_log -> target -> displayName,\n    source_ip = _raw_log -> client -> ipAddress,\n    outcome = _raw_log -> outcome -> result,\n    detail_msg = _raw_log -> outcome -> reason;",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.event.type",
+        "xdm.source.user.username"
+      ]
+    },
+    {
+      "id": "arrayexpand-grouped",
+      "title": "arrayexpand for Grouped/Batched Events",
+      "description": "When a single log message contains an array of events (common with cloud APIs), use arrayexpand to split each array element into its own row for independent processing.",
+      "category": "Parsing Rules",
+      "tags": [
+        "arrayexpand",
+        "array",
+        "batch",
+        "split",
+        "grouped",
+        "cloud"
+      ],
+      "code": "alter tmp_events = json_extract_array(_raw_log, \"$.records\")\n| arrayexpand tmp_events\n| alter\n    event_time = tmp_events -> time,\n    event_category = tmp_events -> category,\n    event_operation = tmp_events -> operationName,\n    event_result = tmp_events -> resultType,\n    caller_ip = tmp_events -> callerIpAddress\n| alter _time = parse_timestamp(\"%FT%H:%M:%E*SZ\", event_time)\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "_time",
+        "xdm.event.operation"
+      ]
+    },
+    {
+      "id": "filter-multi-schema",
+      "title": "Multi-Schema Filter Routing",
+      "description": "Route a single dataset into multiple processing branches using filter at the start of each INGEST or MODEL block. Common when one product emits structurally different log types.",
+      "category": "Parsing Rules",
+      "tags": [
+        "filter",
+        "routing",
+        "multi-schema",
+        "log_type",
+        "branching"
+      ],
+      "code": "// Block 1: JSON-structured events\n[INGEST:vendor=\"VENDOR\", product=\"PRODUCT\", target_dataset=\"vendor_product_raw\", no_hit=drop]\nfilter _raw_log ~= \"^\\s*\\{\"\n| alter\n    _time = parse_timestamp(\"%FT%H:%M:%E*SZ\", _raw_log -> timestamp),\n    event_type = _raw_log -> eventType;\n\n// Block 2: Syslog-formatted events\n[INGEST:vendor=\"VENDOR\", product=\"PRODUCT\", target_dataset=\"vendor_product_raw\", no_hit=drop]\nfilter _raw_log ~= \"^<\\d+>\"\n| alter tmp_ts = arrayindex(regextract(_raw_log, \"(\\w{3}\\s+\\d+\\s+\\d{2}:\\d{2}:\\d{2})\"), 0)\n| alter _time = parse_timestamp(\"%b %e %H:%M:%S\", tmp_ts)\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "_time",
+        "xdm.event.type"
+      ]
+    },
+    {
+      "id": "shared-ingest-timestamp-rule",
+      "title": "Shared Timestamp RULE for Multiple INGEST Blocks",
+      "description": "Define a reusable [RULE:] block for timestamp parsing that multiple [INGEST:] blocks can reference. Avoids duplicating timestamp logic across log types from the same vendor.",
+      "category": "Parsing Rules",
+      "tags": [
+        "rule",
+        "shared",
+        "reusable",
+        "timestamp",
+        "ingest"
+      ],
+      "code": "[RULE: VENDOR_TIMESTAMP_PARSE]\nalter tmp_raw_ts = arrayindex(regextract(_raw_log, \"(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2}))\"), 0)\n| alter _time = coalesce(\n    parse_timestamp(\"%FT%H:%M:%E*SZ\", tmp_raw_ts),\n    parse_timestamp(\"%FT%H:%M:%E*S%Ez\", tmp_raw_ts))\n| fields - tmp*;\n\n[INGEST:vendor=\"VENDOR\", product=\"PRODUCT_A\", target_dataset=\"vendor_product_a_raw\", no_hit=drop]\ncall VENDOR_TIMESTAMP_PARSE;\n\n[INGEST:vendor=\"VENDOR\", product=\"PRODUCT_B\", target_dataset=\"vendor_product_b_raw\", no_hit=drop]\ncall VENDOR_TIMESTAMP_PARSE;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "fields-tmp-cleanup",
+      "title": "tmp_ Convention and Cleanup with fields -",
+      "description": "Use the tmp_ prefix for all intermediate variables, then remove them in a single fields - tmp* statement. This is the universal cleanup pattern used in every production parsing and modelling rule.",
+      "category": "Common Patterns",
+      "tags": [
+        "tmp",
+        "cleanup",
+        "fields",
+        "convention",
+        "hygiene",
+        "best_practice"
+      ],
+      "code": "alter\n    tmp_raw_ip = arrayindex(regextract(_raw_log, \"src=(\\S+)\"), 0),\n    tmp_raw_port = arrayindex(regextract(_raw_log, \"spt=(\\d+)\"), 0)\n| alter\n    tmp_ipv4 = if(tmp_raw_ip ~= \"^(?:\\d{1,3}\\.){3}\\d{1,3}$\", tmp_raw_ip),\n    tmp_ipv6 = if(tmp_raw_ip ~= \":\", tmp_raw_ip),\n    tmp_port = to_integer(tmp_raw_port)\n| alter\n    xdm.source.ipv4 = tmp_ipv4,\n    xdm.source.ipv6 = tmp_ipv6,\n    xdm.source.port = tmp_port\n| fields - tmp*;",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.source.ipv6",
+        "xdm.source.port"
+      ]
+    },
+    {
+      "id": "replex-string-clean",
+      "title": "replex() for Regex-Based String Normalisation",
+      "description": "Use replex() (regex replace) to strip unwanted characters, normalise whitespace, or clean field values before further processing. Unlike replace() which matches literal strings, replex() uses regex patterns.",
+      "category": "Common Patterns",
+      "tags": [
+        "replex",
+        "regex",
+        "replace",
+        "normalise",
+        "clean",
+        "string"
+      ],
+      "code": "alter\n    tmp_clean_hostname = replex(raw_hostname, \"[\\[\\]\\\"']\", \"\"),\n    tmp_clean_path = replex(raw_path, \"\\\\+\", \"/\"),\n    tmp_normalised_ws = replex(raw_message, \"\\s+\", \" \"),\n    tmp_strip_quotes = replex(raw_value, \"^\"|\"$\", \"\"),\n    tmp_strip_domain = replex(raw_user, \"^.*\\\\\\\\\", \"\")\n| alter\n    xdm.source.host.hostname = tmp_clean_hostname,\n    xdm.target.file.path = tmp_clean_path,\n    xdm.event.description = tmp_normalised_ws,\n    xdm.source.user.username = tmp_strip_domain\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.host.hostname",
+        "xdm.target.file.path"
+      ]
+    },
+    {
+      "id": "object-merge-parsed",
+      "title": "object_merge() for Combining parsed_fields",
+      "description": "Use object_merge to combine multiple parsed_fields objects or to append computed fields to an existing parsed_fields object. Later keys override earlier ones on collision.",
+      "category": "Common Patterns",
+      "tags": [
+        "object_merge",
+        "object_create",
+        "parsed_fields",
+        "combine",
+        "override"
+      ],
+      "code": "alter parsed_fields = regexcapture(_raw_log, \"^.+?%(?P<facility>[\\w\\-]+)-(?P<severity>\\d)-(?P<mnemonic>\\S+?):\\s*(?P<description>.+)\")\n| alter tmp_syslog_priority = to_integer(arrayindex(regextract(_raw_log, \"^\\<(\\d{1,3})\\>\"), 0))\n| alter tmp_syslog_severity = to_string(subtract(tmp_syslog_priority, multiply(floor(divide(tmp_syslog_priority, 8)), 8)))\n| alter parsed_fields = object_merge(parsed_fields, object_create(\"severity\", tmp_syslog_severity, \"log_type\", \"syslog\"))\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": []
+    },
+    {
+      "id": "parse-cisco-builtin",
+      "title": "parse_cisco() Built-In Function",
+      "description": "Use the built-in parse_cisco() function for Cisco ASA/FTD logs. Returns a structured JSON object with date, severity, facility, and message fields already extracted.",
+      "category": "Parsing Rules",
+      "tags": [
+        "parse_cisco",
+        "cisco",
+        "asa",
+        "ftd",
+        "built_in",
+        "structured"
+      ],
+      "code": "[INGEST:vendor=\"cisco\", product=\"asa\", target_dataset=\"cisco_asa_raw\", no_hit=keep]\nalter _json = parse_cisco(_raw_log)\n| alter tmp_time = _json -> date\n| alter _time = if(\n    tmp_time ~= \"Z$\", parse_timestamp(\"%Y-%m-%dT%H:%M:%SZ\", tmp_time),\n    tmp_time ~= \"[+-]\\d{1,2}:\\d{1,2}$\", parse_timestamp(\"%Y-%m-%dT%H:%M:%S%Ez\", tmp_time))\n| fields - tmp*;",
+      "difficulty": "easy",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "arraystring-join",
+      "title": "arraystring() Join Array to Delimited String",
+      "description": "Convert an array to a delimited string using arraystring(). The second argument is the delimiter. Used 921 times across production rules for flattening arrays into readable values.",
+      "category": "Common Patterns",
+      "tags": [
+        "arraystring",
+        "join",
+        "array",
+        "delimiter",
+        "flatten",
+        "string"
+      ],
+      "code": "alter\n    tmp_tags = arraycreate(\"authentication\", \"login\", \"mfa\"),\n    tmp_ips = regextract(raw_addresses, \"(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})\"),\n    tmp_single_match = regextract(raw_field, \"(\\w+)\")\n| alter\n    tags_csv = arraystring(tmp_tags, \", \"),\n    ip_list = arraystring(tmp_ips, \"; \"),\n    first_match = arraystring(tmp_single_match, \"\"),\n    xdm.event.tags = tmp_tags,\n    xdm.event.description = arraystring(tmp_tags, \" | \")\n| fields - tmp*;",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.event.tags",
+        "xdm.event.description"
+      ]
+    },
+    {
+      "id": "arraydistinct-unique",
+      "title": "arraydistinct() Remove Duplicate Values",
+      "description": "Remove duplicate entries from an array using arraydistinct(). Commonly used after arrayconcat or when merging values from multiple fields that may overlap.",
+      "category": "Common Patterns",
+      "tags": [
+        "arraydistinct",
+        "unique",
+        "deduplicate",
+        "array",
+        "distinct"
+      ],
+      "code": "alter\n    tmp_all_ips = arrayconcat(\n        regextract(src_field, \"((?:\\d{1,3}\\.){3}\\d{1,3})\"),\n        regextract(dst_field, \"((?:\\d{1,3}\\.){3}\\d{1,3})\")),\n    tmp_all_users = arraycreate(actor_user, target_user, delegated_user)\n| alter\n    xdm.observer.unique_ips = arraydistinct(tmp_all_ips),\n    xdm.target.user.groups = arraydistinct(tmp_all_users)\n| fields - tmp*;",
+      "difficulty": "easy",
+      "relatedFields": []
+    },
+    {
+      "id": "arrayfilter-condition",
+      "title": "arrayfilter() with @element Conditions",
+      "description": "Filter array elements using arrayfilter() with @element predicates. Supports arrow notation for nested object arrays and incidr() for IP range checks.",
+      "category": "Common Patterns",
+      "tags": [
+        "arrayfilter",
+        "element",
+        "condition",
+        "predicate",
+        "incidr",
+        "array"
+      ],
+      "code": "alter\n    tmp_failed_rules = arrayfilter(scorecard->[], \"@element\"->pass = \"false\"),\n    tmp_private_ips = arrayfilter(all_ips, incidr(\"@element\", \"10.0.0.0/8\") or incidr(\"@element\", \"172.16.0.0/12\") or incidr(\"@element\", \"192.168.0.0/16\")),\n    tmp_non_empty = arrayfilter(raw_values, \"@element\" != \"\" and \"@element\" != null),\n    tmp_high_severity = arrayfilter(alerts->[], to_integer(\"@element\"->severity) >= 7)\n| alter\n    xdm.alert.risks = arraymap(tmp_failed_rules, object_create(\"Rule\", \"@element\"->label, \"Section\", \"@element\"->section))\n| fields - tmp*;",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.alert.risks"
+      ]
+    },
+    {
+      "id": "arrayconcat-merge",
+      "title": "arrayconcat() Merge Multiple Arrays",
+      "description": "Merge two or more arrays into a single array using arrayconcat(). Preserves order and allows duplicates (use arraydistinct afterwards to deduplicate).",
+      "category": "Common Patterns",
+      "tags": [
+        "arrayconcat",
+        "merge",
+        "combine",
+        "array",
+        "union"
+      ],
+      "code": "alter\n    tmp_src_ips = regextract(_raw_log, \"src=((?:\\d{1,3}\\.){3}\\d{1,3})\"),\n    tmp_dst_ips = regextract(_raw_log, \"dst=((?:\\d{1,3}\\.){3}\\d{1,3})\"),\n    tmp_nat_ips = regextract(_raw_log, \"nat=((?:\\d{1,3}\\.){3}\\d{1,3})\")\n| alter tmp_all_ips = arraydistinct(arrayconcat(arrayconcat(tmp_src_ips, tmp_dst_ips), tmp_nat_ips))\n| alter xdm.event.description = concat(\"Observed IPs: \", arraystring(tmp_all_ips, \", \"))\n| fields - tmp*;",
+      "difficulty": "easy",
+      "relatedFields": []
+    },
+    {
+      "id": "timestamp-diff-calc",
+      "title": "timestamp_diff() Time Difference Calculation",
+      "description": "Calculate the difference between two timestamps using timestamp_diff(). Returns the difference in the specified unit (MILLISECOND, SECOND, MINUTE, HOUR, DAY). Commonly used for year-rollover detection and duration calculation.",
+      "category": "Common Patterns",
+      "tags": [
+        "timestamp_diff",
+        "duration",
+        "difference",
+        "time",
+        "rollover"
+      ],
+      "code": "alter\n    tmp_start = parse_timestamp(\"%FT%H:%M:%E*SZ\", start_time),\n    tmp_end = parse_timestamp(\"%FT%H:%M:%E*SZ\", end_time)\n| alter\n    duration_ms = timestamp_diff(tmp_end, tmp_start, \"MILLISECOND\"),\n    duration_seconds = timestamp_diff(tmp_end, tmp_start, \"SECOND\"),\n    duration_minutes = timestamp_diff(tmp_end, tmp_start, \"MINUTE\"),\n    is_future = if(timestamp_diff(tmp_start, current_time(), \"MILLISECOND\") > 0, to_boolean(\"true\"), to_boolean(\"false\"))\n| alter xdm.event.duration = duration_ms\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.event.duration"
+      ]
+    },
+    {
+      "id": "format-timestamp-display",
+      "title": "format_timestamp() for Display and Year Extraction",
+      "description": "Convert a timestamp to a formatted string using format_timestamp(). Most commonly used to extract the current year from _insert_time for RFC 3164 year inference.",
+      "category": "Common Patterns",
+      "tags": [
+        "format_timestamp",
+        "year",
+        "display",
+        "strftime",
+        "insert_time"
+      ],
+      "code": "alter\n    current_year = format_timestamp(\"%Y\", _insert_time),\n    current_month = format_timestamp(\"%m\", _insert_time),\n    readable_time = format_timestamp(\"%Y-%m-%d %H:%M:%S\", _time),\n    day_of_week = format_timestamp(\"%A\", _time),\n    iso_date_only = format_timestamp(\"%F\", _time);",
+      "difficulty": "easy",
+      "relatedFields": [
+        "_time"
+      ]
+    },
+    {
+      "id": "to-epoch-conversion",
+      "title": "to_epoch() Convert Timestamp to Epoch Number",
+      "description": "Convert a parsed timestamp back to an epoch number in seconds, milliseconds, or microseconds using to_epoch(). Useful for arithmetic on timestamps or feeding downstream systems that expect epoch values.",
+      "category": "Common Patterns",
+      "tags": [
+        "to_epoch",
+        "epoch",
+        "seconds",
+        "milliseconds",
+        "number",
+        "convert"
+      ],
+      "code": "alter\n    epoch_seconds = to_epoch(_time, \"SECONDS\"),\n    epoch_millis = to_epoch(_time, \"MILLIS\"),\n    epoch_micros = to_epoch(_time, \"MICROSECONDS\")\n| alter\n    xdm.event.id = to_string(epoch_millis),\n    tmp_age_hours = divide(subtract(to_epoch(current_time(), \"SECONDS\"), epoch_seconds), 3600)\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.event.id"
+      ]
+    },
+    {
+      "id": "type-conversion-chain",
+      "title": "Type Conversion Functions Reference",
+      "description": "Reference for all type conversion functions: to_string, to_integer, to_number, to_float, to_boolean. These are the most-used functions in production (2,300+ combined uses across modelling rules).",
+      "category": "Common Patterns",
+      "tags": [
+        "to_string",
+        "to_integer",
+        "to_number",
+        "to_float",
+        "to_boolean",
+        "type",
+        "conversion"
+      ],
+      "code": "alter\n    str_from_int = to_string(numeric_field),\n    str_from_bool = to_string(bool_field),\n    int_from_str = to_integer(string_number),\n    int_from_float = to_integer(float_field),\n    num_from_str = to_number(string_number),\n    float_from_str = to_float(string_decimal),\n    bool_true = to_boolean(\"true\"),\n    bool_false = to_boolean(\"false\"),\n    bool_from_int = to_boolean(if(status_code = 1, \"true\", \"false\"))\n| alter\n    xdm.source.port = to_integer(raw_port),\n    xdm.event.id = to_string(numeric_id),\n    xdm.event.is_completed = to_boolean(if(result = \"success\", \"true\", \"false\")),\n    xdm.source.host.memory = to_integer(memory_bytes);",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.port",
+        "xdm.event.id",
+        "xdm.event.is_completed"
+      ]
+    },
+    {
+      "id": "len-string-length",
+      "title": "len() for String and Array Length",
+      "description": "Use len() to get the character length of a string or the number of elements in an array. Commonly used for validation, filtering empty values, and conditional branching based on field length.",
+      "category": "Common Patterns",
+      "tags": [
+        "len",
+        "length",
+        "string",
+        "array",
+        "count",
+        "validation"
+      ],
+      "code": "filter len(Message) > 0\n| alter\n    msg_length = len(raw_message),\n    ip_octet_count = len(split(raw_ip, \".\")),\n    field_count = len(split(_raw_log, \",\")),\n    hash_type = if(\n        len(hash_value) = 32, \"MD5\",\n        len(hash_value) = 40, \"SHA1\",\n        len(hash_value) = 64, \"SHA256\",\n        \"UNKNOWN\")\n| alter\n    xdm.source.process.executable.md5 = if(hash_type = \"MD5\", hash_value),\n    xdm.source.process.executable.sha256 = if(hash_type = \"SHA256\", hash_value);",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.process.executable.md5",
+        "xdm.source.process.executable.sha256"
+      ]
+    },
+    {
+      "id": "replace-vs-replex",
+      "title": "replace() Literal vs replex() Regex Substitution",
+      "description": "replace() performs literal string substitution whilst replex() uses regex patterns. Use replace() for simple exact matches and replex() for pattern-based transformations.",
+      "category": "Common Patterns",
+      "tags": [
+        "replace",
+        "replex",
+        "substitution",
+        "literal",
+        "regex",
+        "string"
+      ],
+      "code": "alter\n    // replace() - literal string matching (faster, simpler)\n    clean_tz = replace(raw_timestamp, \"Z\", \"\"),\n    fix_separator = replace(raw_timestamp, \"T\", \" \"),\n    strip_prefix = replace(raw_domain, \"www.\", \"\"),\n\n    // replex() - regex pattern matching (more powerful)\n    strip_quotes = replex(raw_value, \"^\"|\"$\", \"\"),\n    normalise_ws = replex(raw_msg, \"\\s+\", \" \"),\n    strip_ansi = replex(raw_log, \"\\x1b\\[[0-9;]*m\", \"\"),\n    mask_ip = replex(raw_text, \"\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\", \"[REDACTED]\");",
+      "difficulty": "medium",
+      "relatedFields": []
+    },
+    {
+      "id": "format-string-template",
+      "title": "format_string() Templated String Construction",
+      "description": "Build formatted strings using format_string() with %s (string), %d (integer), and other printf-style placeholders. Cleaner than multiple concat() calls for complex string assembly.",
+      "category": "Common Patterns",
+      "tags": [
+        "format_string",
+        "template",
+        "printf",
+        "concat",
+        "string"
+      ],
+      "code": "alter\n    tmp_formatted_ts = format_string(\"%sT%s%s\", tmp_date, tmp_time, tmp_tz),\n    xdm.event.description = format_string(\"User %s performed %s on %s from %s\", username, action, target, source_ip),\n    xdm.observer.version = format_string(\"Threat Version %s\", to_string(signatures_version)),\n    tmp_year_ts = format_string(\"%s %s\", tmp_current_year, tmp_raw_timestamp)\n| alter _time = parse_timestamp(\"%Y %b %d %H:%M:%S\", tmp_year_ts)\n| fields - tmp*;",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.event.description",
+        "xdm.observer.version"
+      ]
+    },
+    {
+      "id": "math-arithmetic",
+      "title": "Arithmetic Functions: add, subtract, multiply, divide",
+      "description": "XQL provides named arithmetic functions rather than operators. Used 369+ times in production for unit conversions, syslog priority calculation, duration maths, and byte/bit conversions.",
+      "category": "Common Patterns",
+      "tags": [
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+        "arithmetic",
+        "math",
+        "calculation"
+      ],
+      "code": "alter\n    // Syslog priority decoding: facility = pri / 8, severity = pri % 8\n    tmp_facility = floor(divide(to_integer(syslog_priority), 8)),\n    tmp_severity = subtract(to_integer(syslog_priority), multiply(tmp_facility, 8)),\n\n    // Unit conversions\n    bytes_to_kb = divide(to_number(raw_bytes), 1024),\n    millis_to_seconds = divide(to_number(raw_duration_ms), 1000),\n    minutes_to_seconds = multiply(to_integer(raw_minutes), 60),\n    kb_to_bytes = multiply(to_integer(raw_kb), 1024),\n\n    // Duration from components: hours:minutes:seconds to total seconds\n    total_seconds = add(multiply(to_integer(hours), 3600), add(multiply(to_integer(minutes), 60), to_integer(seconds)))\n| alter\n    xdm.event.duration = multiply(total_seconds, 1000),\n    xdm.network.session_id = to_string(tmp_facility)\n| fields - tmp*;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.event.duration",
+        "xdm.network.session_id"
+      ]
+    },
+    {
+      "id": "http-response-code-const",
+      "title": "HTTP Response Code Constant Mapping",
+      "description": "Map numeric HTTP status codes to XDM_CONST.HTTP_RSP_CODE_* constants. Covers the most common response codes (200, 201, 204, 301, 302, 400, 401, 403, 404, 500, 502, 503). The full set includes 50+ status codes.",
+      "category": "Data Model Rules",
+      "tags": [
+        "http",
+        "response_code",
+        "status",
+        "xdm_const",
+        "web",
+        "mapping"
+      ],
+      "code": "alter xdm.network.http.response_code = if(\n    response_code = \"200\", XDM_CONST.HTTP_RSP_CODE_OK,\n    response_code = \"201\", XDM_CONST.HTTP_RSP_CODE_CREATED,\n    response_code = \"202\", XDM_CONST.HTTP_RSP_CODE_ACCEPTED,\n    response_code = \"204\", XDM_CONST.HTTP_RSP_CODE_NO_CONTENT,\n    response_code = \"301\", XDM_CONST.HTTP_RSP_CODE_MOVED_PERMANENTLY,\n    response_code = \"302\", XDM_CONST.HTTP_RSP_CODE_FOUND,\n    response_code = \"304\", XDM_CONST.HTTP_RSP_CODE_NOT_MODIFIED,\n    response_code = \"400\", XDM_CONST.HTTP_RSP_CODE_BAD_REQUEST,\n    response_code = \"401\", XDM_CONST.HTTP_RSP_CODE_UNAUTHORIZED,\n    response_code = \"403\", XDM_CONST.HTTP_RSP_CODE_FORBIDDEN,\n    response_code = \"404\", XDM_CONST.HTTP_RSP_CODE_NOT_FOUND,\n    response_code = \"405\", XDM_CONST.HTTP_RSP_CODE_METHOD_NOT_ALLOWED,\n    response_code = \"408\", XDM_CONST.HTTP_RSP_CODE_REQUEST_TIMEOUT,\n    response_code = \"429\", XDM_CONST.HTTP_RSP_CODE_TOO_MANY_REQUESTS,\n    response_code = \"500\", XDM_CONST.HTTP_RSP_CODE_INTERNAL_SERVER_ERROR,\n    response_code = \"502\", XDM_CONST.HTTP_RSP_CODE_BAD_GATEWAY,\n    response_code = \"503\", XDM_CONST.HTTP_RSP_CODE_SERVICE_UNAVAILABLE,\n    response_code = \"504\", XDM_CONST.HTTP_RSP_CODE_GATEWAY_TIMEOUT)",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.network.http.response_code"
+      ]
+    },
+    {
+      "id": "user-type-const",
+      "title": "User Type Constant Mapping",
+      "description": "Map user account types to XDM_CONST.USER_TYPE_* constants: REGULAR (person), SERVICE_ACCOUNT (application/automation), or MACHINE_ACCOUNT (device/host).",
+      "category": "Data Model Rules",
+      "tags": [
+        "user",
+        "type",
+        "xdm_const",
+        "service_account",
+        "machine",
+        "identity"
+      ],
+      "code": "alter xdm.source.user.user_type = if(\n    user_type in (\"user\", \"regular\", \"member\", \"Person\", \"User\"), XDM_CONST.USER_TYPE_REGULAR,\n    user_type in (\"service\", \"service_account\", \"ServicePrincipal\", \"app\", \"application\", \"bot\"), XDM_CONST.USER_TYPE_SERVICE_ACCOUNT,\n    user_type in (\"machine\", \"computer\", \"device\", \"host\", \"ManagedIdentity\"), XDM_CONST.USER_TYPE_MACHINE_ACCOUNT)",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.user.user_type",
+        "xdm.target.user.user_type"
+      ]
+    },
+    {
+      "id": "logon-type-const",
+      "title": "Logon Type Constant Mapping",
+      "description": "Map Windows logon type codes (2-13) to XDM_CONST.LOGON_TYPE_* constants. Based on Win32_LogonSession types used in Windows Security Event Log.",
+      "category": "Data Model Rules",
+      "tags": [
+        "logon",
+        "type",
+        "xdm_const",
+        "windows",
+        "authentication",
+        "security"
+      ],
+      "code": "alter xdm.logon.type = if(\n    logon_type = \"2\", XDM_CONST.LOGON_TYPE_INTERACTIVE,\n    logon_type = \"3\", XDM_CONST.LOGON_TYPE_NETWORK,\n    logon_type = \"4\", XDM_CONST.LOGON_TYPE_BATCH,\n    logon_type = \"5\", XDM_CONST.LOGON_TYPE_SERVICE,\n    logon_type = \"7\", XDM_CONST.LOGON_TYPE_UNLOCK,\n    logon_type = \"8\", XDM_CONST.LOGON_TYPE_NETWORK_CLEARTEXT,\n    logon_type = \"9\", XDM_CONST.LOGON_TYPE_NEW_CREDENTIALS,\n    logon_type = \"10\", XDM_CONST.LOGON_TYPE_REMOTE_INTERACTIVE,\n    logon_type = \"11\", XDM_CONST.LOGON_TYPE_CACHED_INTERACTIVE,\n    logon_type = \"12\", XDM_CONST.LOGON_TYPE_CACHED_REMOTE_INTERACTIVE,\n    logon_type = \"13\", XDM_CONST.LOGON_TYPE_CACHED_UNLOCK)",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.logon.type"
+      ]
+    },
+    {
+      "id": "privilege-level-const",
+      "title": "Privilege Level Constant Mapping",
+      "description": "Map privilege or access levels to XDM_CONST.PRIVILEGE_LEVEL_* constants: GUEST, USER, ADMIN, or SYSTEM.",
+      "category": "Data Model Rules",
+      "tags": [
+        "privilege",
+        "level",
+        "xdm_const",
+        "admin",
+        "access",
+        "authorization"
+      ],
+      "code": "alter xdm.auth.privilege_level = if(\n    privilege in (\"guest\", \"Guest\", \"anonymous\", \"readonly\", \"read-only\"), XDM_CONST.PRIVILEGE_LEVEL_GUEST,\n    privilege in (\"user\", \"User\", \"standard\", \"member\", \"normal\"), XDM_CONST.PRIVILEGE_LEVEL_USER,\n    privilege in (\"admin\", \"Admin\", \"administrator\", \"Administrator\", \"root\", \"superadmin\", \"owner\"), XDM_CONST.PRIVILEGE_LEVEL_ADMIN,\n    privilege in (\"system\", \"System\", \"SYSTEM\", \"kernel\", \"NT AUTHORITY\\\\SYSTEM\"), XDM_CONST.PRIVILEGE_LEVEL_SYSTEM)",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.auth.privilege_level"
+      ]
+    },
+    {
+      "id": "mitre-tactic-mapping",
+      "title": "MITRE ATT&CK Tactic Constant Mapping",
+      "description": "Map MITRE ATT&CK tactic IDs (TA0001-TA0043) to XDM_CONST.MITRE_TACTIC_* constants for alert enrichment. Covers all 14 Enterprise ATT&CK tactics.",
+      "category": "Data Model Rules",
+      "tags": [
+        "mitre",
+        "attack",
+        "tactic",
+        "xdm_const",
+        "threat",
+        "enrichment"
+      ],
+      "code": "alter xdm.alert.mitre_tactics = arraycreate(\n    if(tactic_id = \"TA0001\", XDM_CONST.MITRE_TACTIC_INITIAL_ACCESS,\n    tactic_id = \"TA0002\", XDM_CONST.MITRE_TACTIC_EXECUTION,\n    tactic_id = \"TA0003\", XDM_CONST.MITRE_TACTIC_PERSISTENCE,\n    tactic_id = \"TA0004\", XDM_CONST.MITRE_TACTIC_PRIVILEGE_ESCALATION,\n    tactic_id = \"TA0005\", XDM_CONST.MITRE_TACTIC_DEFENSE_EVASION,\n    tactic_id = \"TA0006\", XDM_CONST.MITRE_TACTIC_CREDENTIAL_ACCESS,\n    tactic_id = \"TA0007\", XDM_CONST.MITRE_TACTIC_DISCOVERY,\n    tactic_id = \"TA0008\", XDM_CONST.MITRE_TACTIC_LATERAL_MOVEMENT,\n    tactic_id = \"TA0009\", XDM_CONST.MITRE_TACTIC_COLLECTION,\n    tactic_id = \"TA0010\", XDM_CONST.MITRE_TACTIC_EXFILTRATION,\n    tactic_id = \"TA0011\", XDM_CONST.MITRE_TACTIC_COMMAND_AND_CONTROL,\n    tactic_id = \"TA0040\", XDM_CONST.MITRE_TACTIC_IMPACT,\n    tactic_id = \"TA0042\", XDM_CONST.MITRE_TACTIC_RESOURCE_DEVELOPMENT,\n    tactic_id = \"TA0043\", XDM_CONST.MITRE_TACTIC_RECONNAISSANCE))",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.alert.mitre_tactics",
+        "xdm.alert.mitre_techniques"
+      ]
+    },
+    {
+      "id": "dns-record-type-const",
+      "title": "DNS Record Type Constant Mapping",
+      "description": "Map DNS query/response record types (A, AAAA, CNAME, MX, NS, PTR, SOA, SRV, TXT) to XDM_CONST.DNS_RECORD_TYPE_* constants.",
+      "category": "Data Model Rules",
+      "tags": [
+        "dns",
+        "record_type",
+        "xdm_const",
+        "query",
+        "response",
+        "mapping"
+      ],
+      "code": "alter xdm.network.dns.dns_resource_record.type = if(\n    record_type in (\"A\", \"1\"), XDM_CONST.DNS_RECORD_TYPE_A,\n    record_type in (\"AAAA\", \"28\"), XDM_CONST.DNS_RECORD_TYPE_AAAA,\n    record_type in (\"CNAME\", \"5\"), XDM_CONST.DNS_RECORD_TYPE_CNAME,\n    record_type in (\"MX\", \"15\"), XDM_CONST.DNS_RECORD_TYPE_MX,\n    record_type in (\"NS\", \"2\"), XDM_CONST.DNS_RECORD_TYPE_NS,\n    record_type in (\"PTR\", \"12\"), XDM_CONST.DNS_RECORD_TYPE_PTR,\n    record_type in (\"SOA\", \"6\"), XDM_CONST.DNS_RECORD_TYPE_SOA,\n    record_type in (\"SRV\", \"33\"), XDM_CONST.DNS_RECORD_TYPE_SRV,\n    record_type in (\"TXT\", \"16\"), XDM_CONST.DNS_RECORD_TYPE_TXT,\n    record_type in (\"HTTPS\", \"65\"), XDM_CONST.DNS_RECORD_TYPE_HTTPS,\n    record_type in (\"DNSKEY\", \"48\"), XDM_CONST.DNS_RECORD_TYPE_DNSKEY,\n    record_type in (\"DS\", \"43\"), XDM_CONST.DNS_RECORD_TYPE_DS)",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.network.dns.dns_resource_record.type"
+      ]
+    },
+    {
+      "id": "dhcp-message-type-const",
+      "title": "DHCP Message Type Constant Mapping",
+      "description": "Map DHCP message type codes (1-18) to XDM_CONST.DHCP_MESSAGE_TYPE_* constants per RFC 2132 and IANA BOOTP/DHCP parameters.",
+      "category": "Data Model Rules",
+      "tags": [
+        "dhcp",
+        "message_type",
+        "xdm_const",
+        "network",
+        "lease",
+        "mapping"
+      ],
+      "code": "alter xdm.network.dhcp.message_type = if(\n    msg_type = \"1\", XDM_CONST.DHCP_MESSAGE_TYPE_DHCPDISCOVER,\n    msg_type = \"2\", XDM_CONST.DHCP_MESSAGE_TYPE_DHCPOFFER,\n    msg_type = \"3\", XDM_CONST.DHCP_MESSAGE_TYPE_DHCPREQUEST,\n    msg_type = \"4\", XDM_CONST.DHCP_MESSAGE_TYPE_DHCPDECLINE,\n    msg_type = \"5\", XDM_CONST.DHCP_MESSAGE_TYPE_DHCPACK,\n    msg_type = \"6\", XDM_CONST.DHCP_MESSAGE_TYPE_DHCPNAK,\n    msg_type = \"7\", XDM_CONST.DHCP_MESSAGE_TYPE_DHCPRELEASE,\n    msg_type = \"8\", XDM_CONST.DHCP_MESSAGE_TYPE_DHCPINFORM)",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.network.dhcp.message_type"
+      ]
+    },
+    {
+      "id": "alert-status-const",
+      "title": "Alert Status Constant Mapping",
+      "description": "Map alert lifecycle states to XDM_CONST.ALERT_STATUS_* constants: PENDING, IN_REVIEW, or DONE.",
+      "category": "Data Model Rules",
+      "tags": [
+        "alert",
+        "status",
+        "xdm_const",
+        "lifecycle",
+        "triage",
+        "mapping"
+      ],
+      "code": "alter xdm.alert.status = if(\n    alert_status in (\"new\", \"pending\", \"open\", \"created\", \"New\", \"Open\"), XDM_CONST.ALERT_STATUS_PENDING,\n    alert_status in (\"investigating\", \"in_review\", \"in_progress\", \"triaging\", \"InProgress\", \"Investigating\"), XDM_CONST.ALERT_STATUS_IN_REVIEW,\n    alert_status in (\"resolved\", \"closed\", \"done\", \"completed\", \"Resolved\", \"Closed\", \"Dismissed\"), XDM_CONST.ALERT_STATUS_DONE)",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.alert.status"
+      ]
+    },
+    {
+      "id": "email-event-model",
+      "title": "Email Event Data Model Mapping",
+      "description": "Complete XDM mapping for email security events covering sender, recipients, subject, message ID, attachments, and delivery timestamps. Based on 15 xdm.email.* fields used across production modelling rules.",
+      "category": "Data Model Rules",
+      "tags": [
+        "email",
+        "xdm",
+        "attachment",
+        "sender",
+        "recipient",
+        "phishing"
+      ],
+      "code": "alter\n    xdm.email.sender = json_extract_scalar(source, \"$.sender\"),\n    xdm.email.recipients = arraycreate(to_field, cc_field),\n    xdm.email.cc = split(cc_raw, \";\"),\n    xdm.email.bcc = split(bcc_raw, \";\"),\n    xdm.email.subject = subject,\n    xdm.email.message_id = message_id,\n    xdm.email.return_path = return_path,\n    xdm.email.delivery_timestamp = parse_timestamp(\"%FT%H:%M:%E*SZ\", delivery_time),\n    xdm.email.data = to_integer(message_size),\n    xdm.email.attachment.filename = attachment_name,\n    xdm.email.attachment.extension = arrayindex(regextract(attachment_name, \"\\.(\\w+)$\"), 0),\n    xdm.email.attachment.md5 = attachment_md5,\n    xdm.email.attachment.sha256 = attachment_sha256,\n    xdm.email.attachment.size = to_integer(attachment_size),\n    xdm.email.attachment.file_type = attachment_content_type;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.email.sender",
+        "xdm.email.recipients",
+        "xdm.email.subject",
+        "xdm.email.message_id",
+        "xdm.email.attachment.filename",
+        "xdm.email.attachment.md5",
+        "xdm.email.attachment.sha256"
+      ]
+    },
+    {
+      "id": "database-event-model",
+      "title": "Database Event Data Model Mapping",
+      "description": "Complete XDM mapping for database audit events covering database name, schema, statement, operation type, affected rows, connection ID, and response time. Based on 8 xdm.database.* fields.",
+      "category": "Data Model Rules",
+      "tags": [
+        "database",
+        "xdm",
+        "sql",
+        "audit",
+        "query",
+        "statement"
+      ],
+      "code": "alter\n    xdm.database.name = db_name,\n    xdm.database.schema = db_schema,\n    xdm.database.statement = query_text,\n    xdm.database.operation = uppercase(arrayindex(regextract(query_text, \"^\\s*(\\w+)\"), 0)),\n    xdm.database.tables = split(table_names, \",\"),\n    xdm.database.affected_rows = to_integer(rows_affected),\n    xdm.database.connection_id = to_string(connection_id),\n    xdm.database.response_time = to_integer(duration_ms),\n    xdm.source.user.username = db_user,\n    xdm.source.ipv4 = client_ip,\n    xdm.source.port = to_integer(client_port),\n    xdm.event.type = \"DATABASE\",\n    xdm.event.operation = uppercase(arrayindex(regextract(query_text, \"^\\s*(\\w+)\"), 0));",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.database.name",
+        "xdm.database.schema",
+        "xdm.database.statement",
+        "xdm.database.operation",
+        "xdm.database.tables",
+        "xdm.database.affected_rows",
+        "xdm.database.connection_id",
+        "xdm.database.response_time"
+      ]
+    },
+    {
+      "id": "http-full-model",
+      "title": "Full HTTP Request/Response Data Model Mapping",
+      "description": "Complete XDM mapping for HTTP events including method, URL, response code, content type, referrer, user agent, and request/response sizes. Combines xdm.network.http.* with URL extraction functions.",
+      "category": "Data Model Rules",
+      "tags": [
+        "http",
+        "xdm",
+        "web",
+        "request",
+        "response",
+        "url",
+        "proxy"
+      ],
+      "code": "alter\n    xdm.network.http.method = if(\n        method = \"GET\", XDM_CONST.HTTP_METHOD_GET,\n        method = \"POST\", XDM_CONST.HTTP_METHOD_POST,\n        method = \"PUT\", XDM_CONST.HTTP_METHOD_PUT,\n        method = \"DELETE\", XDM_CONST.HTTP_METHOD_DELETE,\n        method = \"PATCH\", XDM_CONST.HTTP_METHOD_PATCH,\n        method = \"OPTIONS\", XDM_CONST.HTTP_METHOD_OPTIONS,\n        method = \"HEAD\", XDM_CONST.HTTP_METHOD_HEAD),\n    xdm.network.http.response_code = if(\n        status = \"200\", XDM_CONST.HTTP_RSP_CODE_OK,\n        status = \"301\", XDM_CONST.HTTP_RSP_CODE_MOVED_PERMANENTLY,\n        status = \"403\", XDM_CONST.HTTP_RSP_CODE_FORBIDDEN,\n        status = \"404\", XDM_CONST.HTTP_RSP_CODE_NOT_FOUND,\n        status = \"500\", XDM_CONST.HTTP_RSP_CODE_INTERNAL_SERVER_ERROR),\n    xdm.network.http.url = request_url,\n    xdm.network.http.content_type = content_type,\n    xdm.network.http.referrer = referrer,\n    xdm.network.http.browser = user_agent,\n    xdm.target.url = request_url,\n    xdm.target.host.hostname = extract_url_host(request_url),\n    xdm.target.domain = extract_url_registered_domain(request_url),\n    xdm.target.sent_bytes = to_integer(response_size),\n    xdm.source.sent_bytes = to_integer(request_size);",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.network.http.method",
+        "xdm.network.http.response_code",
+        "xdm.network.http.url",
+        "xdm.network.http.content_type",
+        "xdm.network.http.referrer",
+        "xdm.network.http.browser",
+        "xdm.target.url"
+      ]
+    },
+    {
+      "id": "dns-full-model",
+      "title": "Full DNS Event with Question and Resource Records",
+      "description": "Complete XDM mapping for DNS events including query name, query type, response code, resource record name/type/value/class, and transaction ID. Extends the basic DNS question snippet with full response mapping.",
+      "category": "Data Model Rules",
+      "tags": [
+        "dns",
+        "xdm",
+        "query",
+        "response",
+        "resource_record",
+        "resolver"
+      ],
+      "code": "alter\n    xdm.network.dns.dns_question.name = query_name,\n    xdm.network.dns.dns_question.type = if(\n        query_type in (\"A\", \"1\"), XDM_CONST.DNS_RECORD_TYPE_A,\n        query_type in (\"AAAA\", \"28\"), XDM_CONST.DNS_RECORD_TYPE_AAAA,\n        query_type in (\"CNAME\", \"5\"), XDM_CONST.DNS_RECORD_TYPE_CNAME,\n        query_type in (\"MX\", \"15\"), XDM_CONST.DNS_RECORD_TYPE_MX,\n        query_type in (\"PTR\", \"12\"), XDM_CONST.DNS_RECORD_TYPE_PTR,\n        query_type in (\"TXT\", \"16\"), XDM_CONST.DNS_RECORD_TYPE_TXT),\n    xdm.network.dns.dns_question.class = query_class,\n    xdm.network.dns.dns_resource_record.name = answer_name,\n    xdm.network.dns.dns_resource_record.type = if(\n        answer_type in (\"A\", \"1\"), XDM_CONST.DNS_RECORD_TYPE_A,\n        answer_type in (\"AAAA\", \"28\"), XDM_CONST.DNS_RECORD_TYPE_AAAA,\n        answer_type in (\"CNAME\", \"5\"), XDM_CONST.DNS_RECORD_TYPE_CNAME),\n    xdm.network.dns.dns_resource_record.value = answer_data,\n    xdm.network.dns.dns_resource_record.class = answer_class,\n    xdm.network.dns.response_code = if(\n        rcode = \"0\", XDM_CONST.DNS_RESPONSE_CODE_NO_ERROR,\n        rcode = \"2\", XDM_CONST.DNS_RESPONSE_CODE_SERVER_FAILURE,\n        rcode = \"3\", XDM_CONST.DNS_RESPONSE_CODE_NAME_ERROR,\n        rcode = \"5\", XDM_CONST.DNS_RESPONSE_CODE_REFUSED),\n    xdm.network.dns.is_authoritative = to_boolean(if(aa_flag = \"1\", \"true\", \"false\")),\n    xdm.network.dns.is_truncated = to_boolean(if(tc_flag = \"1\", \"true\", \"false\")),\n    xdm.event.type = \"DNS\";",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.network.dns.dns_question.name",
+        "xdm.network.dns.dns_question.type",
+        "xdm.network.dns.dns_resource_record.name",
+        "xdm.network.dns.dns_resource_record.type",
+        "xdm.network.dns.dns_resource_record.value",
+        "xdm.network.dns.response_code"
+      ]
+    },
+    {
+      "id": "tls-certificate-model",
+      "title": "TLS/SSL Certificate Data Model Mapping",
+      "description": "Complete XDM mapping for TLS handshake events including protocol version, cipher suite, SNI, and both client and server certificate details. Based on 10+ xdm.network.tls.* fields.",
+      "category": "Data Model Rules",
+      "tags": [
+        "tls",
+        "ssl",
+        "certificate",
+        "xdm",
+        "handshake",
+        "cipher",
+        "encryption"
+      ],
+      "code": "alter\n    xdm.network.tls.protocol_version = tls_version,\n    xdm.network.tls.cipher = cipher_suite,\n    xdm.network.tls.server_name = sni_hostname,\n    xdm.network.tls.server_certificate.issuer = server_cert_issuer,\n    xdm.network.tls.server_certificate.subject = server_cert_subject,\n    xdm.network.tls.server_certificate.serial = server_cert_serial,\n    xdm.network.tls.server_certificate.version = server_cert_version,\n    xdm.network.tls.client_certificate.issuer = client_cert_issuer,\n    xdm.network.tls.client_certificate.subject = client_cert_subject,\n    xdm.network.tls.client_certificate.serial = client_cert_serial,\n    xdm.network.tls.client_certificate.algorithm = client_cert_algorithm,\n    xdm.network.tls.client_certificate.md5 = client_cert_md5,\n    xdm.event.type = \"TLS\";",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.network.tls.protocol_version",
+        "xdm.network.tls.cipher",
+        "xdm.network.tls.server_name",
+        "xdm.network.tls.server_certificate.issuer",
+        "xdm.network.tls.server_certificate.subject",
+        "xdm.network.tls.client_certificate.issuer"
+      ]
+    },
+    {
+      "id": "geo-location-model",
+      "title": "Geographic Location Enrichment Mapping",
+      "description": "Map geographic location fields to xdm.source.location.* and xdm.target.location.* including city, country, region, latitude, longitude, continent, and timezone.",
+      "category": "Data Model Rules",
+      "tags": [
+        "geolocation",
+        "location",
+        "xdm",
+        "city",
+        "country",
+        "latitude",
+        "longitude"
+      ],
+      "code": "alter\n    xdm.source.location.country = src_country,\n    xdm.source.location.city = src_city,\n    xdm.source.location.region = src_region,\n    xdm.source.location.continent = src_continent,\n    xdm.source.location.latitude = to_float(src_lat),\n    xdm.source.location.longitude = to_float(src_lon),\n    xdm.source.location.timezone = src_timezone,\n    xdm.target.location.country = dst_country,\n    xdm.target.location.city = dst_city,\n    xdm.target.location.region = dst_region,\n    xdm.target.location.latitude = to_float(dst_lat),\n    xdm.target.location.longitude = to_float(dst_lon);",
+      "difficulty": "easy",
+      "relatedFields": [
+        "xdm.source.location.country",
+        "xdm.source.location.city",
+        "xdm.source.location.region",
+        "xdm.source.location.latitude",
+        "xdm.source.location.longitude",
+        "xdm.target.location.country",
+        "xdm.target.location.city"
+      ]
+    },
+    {
+      "id": "target-resource-model",
+      "title": "Target Resource Mapping for Cloud/SaaS Events",
+      "description": "Map cloud and SaaS resource details to xdm.target.resource.* fields including resource ID, name, type, value, sub-type, and parent ID. Also covers resource_before for change tracking.",
+      "category": "Data Model Rules",
+      "tags": [
+        "resource",
+        "target",
+        "xdm",
+        "cloud",
+        "saas",
+        "change_tracking"
+      ],
+      "code": "alter\n    xdm.target.resource.id = resource_id,\n    xdm.target.resource.name = resource_name,\n    xdm.target.resource.type = resource_type,\n    xdm.target.resource.sub_type = resource_sub_type,\n    xdm.target.resource.value = to_json_string(resource_properties),\n    xdm.target.resource.parent_id = to_string(account_id),\n    xdm.target.resource_before.id = previous_resource_id,\n    xdm.target.resource_before.name = previous_resource_name,\n    xdm.target.resource_before.type = previous_resource_type,\n    xdm.target.resource_before.value = to_json_string(previous_properties),\n    xdm.source.cloud.project = cloud_project,\n    xdm.source.cloud.project_id = cloud_project_id,\n    xdm.source.cloud.region = cloud_region;",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.target.resource.id",
+        "xdm.target.resource.name",
+        "xdm.target.resource.type",
+        "xdm.target.resource.value",
+        "xdm.target.resource.parent_id",
+        "xdm.target.resource_before.name"
+      ]
+    },
+    {
+      "id": "json-label-value-extraction",
+      "title": "JSON Label/Value Array Extraction",
+      "description": "Extract values from JSON arrays of {label, value} objects using regextract instead of json_extract_scalar. Common in IoT Security alerts and other APIs that embed key-value pairs inside a msg JSON field.",
+      "category": "Field Extraction",
+      "tags": [
+        "regextract",
+        "json",
+        "label",
+        "value",
+        "array",
+        "iot"
+      ],
+      "code": "alter\n    _severity = regextract(msg, \"\"label\"\\s*:\\s*\"severityNumber\"\\s*,\\s*\"value\"\\s*:\\s*\"?(\\d+)\"?\"),\n    _site_name = regextract(msg, \"\"label\"\\s*:\\s*\"site_name\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]+)\"\"),\n    _device_id = regextract(msg, \"\"label\"\\s*:\\s*\"deviceid\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]+)\"\"),\n    _alert_type = regextract(msg, \"\"label\"\\s*:\\s*\"alert_type\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]+)\"\"),\n    _description = regextract(msg, \"\"label\"\\s*:\\s*\"description\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]+)\"\");",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.alert.severity",
+        "xdm.alert.name",
+        "xdm.alert.description"
+      ]
+    },
+    {
+      "id": "mac-vs-hostname-routing",
+      "title": "MAC Address vs Hostname Routing",
+      "description": "Detect whether a device identifier is a MAC address (colon-separated hex) or a hostname, and route it to the correct XDM field using regex and if(). Common in IoT and network device logs where the same field may contain either format.",
+      "category": "Common Patterns",
+      "tags": [
+        "mac",
+        "hostname",
+        "regex",
+        "if",
+        "routing",
+        "iot",
+        "network"
+      ],
+      "code": "alter\n    _device_name = coalesce(hostname, device_name, endpoint_name),\n    _is_mac = if(\n        _device_name ~= \"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$\", true, false),\n    xdm.source.host.mac_addresses = if(_is_mac = true,\n        arraycreate(_device_name), null),\n    xdm.source.host.hostname = if(_is_mac = false,\n        _device_name, null);",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.source.host.mac_addresses",
+        "xdm.source.host.hostname"
+      ]
+    },
+    {
+      "id": "severity-number-log-level",
+      "title": "Severity Number to Log Level Mapping",
+      "description": "Map numeric severity values to XDM_CONST.LOG_LEVEL_* constants using an if() chain with numeric (not string) comparisons. Important: compare as numbers using to_number() to avoid string comparison bugs.",
+      "category": "Data Model Rules",
+      "tags": [
+        "severity",
+        "log_level",
+        "xdm_const",
+        "numeric",
+        "mapping",
+        "iot"
+      ],
+      "code": "alter\n    _sev_num = to_number(arrayindex(_severity, 0)),\n    xdm.alert.severity = if(\n        _sev_num <= 1, XDM_CONST.LOG_LEVEL_INFORMATIONAL,\n        _sev_num <= 3, XDM_CONST.LOG_LEVEL_WARNING,\n        _sev_num <= 5, XDM_CONST.LOG_LEVEL_ERROR,\n        _sev_num <= 7, XDM_CONST.LOG_LEVEL_CRITICAL,\n        XDM_CONST.LOG_LEVEL_EMERGENCY);",
+      "difficulty": "medium",
+      "relatedFields": [
+        "xdm.alert.severity"
+      ]
+    },
+    {
+      "id": "iot-security-alert-model",
+      "title": "IoT Security Alert Data Model Rule",
+      "description": "Complete production-validated data model rule for Palo Alto Networks IoT Security alerts (panw_iot_security_alerts_raw). Demonstrates JSON label/value extraction, MAC vs hostname routing, severity mapping, coalesce for IP fields, and interface mapping.",
+      "category": "Data Model Rules",
+      "tags": [
+        "iot",
+        "security",
+        "alert",
+        "panw",
+        "complete",
+        "production",
+        "data-model"
+      ],
+      "code": "[MODEL: dataset=panw_iot_security_alerts_raw, model=Audit]\nfilter\n    _raw_log != null\n| alter\n    _severity = regextract(msg, \"\"label\"\\s*:\\s*\"severityNumber\"\\s*,\\s*\"value\"\\s*:\\s*\"?(\\d+)\"?\"),\n    _site_name = regextract(msg, \"\"label\"\\s*:\\s*\"site_name\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]+)\"\"),\n    _device_id = regextract(msg, \"\"label\"\\s*:\\s*\"deviceid\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]+)\"\"),\n    _alert_type = regextract(msg, \"\"label\"\\s*:\\s*\"alert_type\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]+)\"\"),\n    _description = regextract(msg, \"\"label\"\\s*:\\s*\"description\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]+)\"\"),\n    _device_name = regextract(msg, \"\"label\"\\s*:\\s*\"hostname\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]+)\"\"),\n    _src_ip = coalesce(fromip, localip),\n    _is_mac = if(\n        arrayindex(_device_name, 0) ~= \"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$\", true, false)\n| alter\n    _sev_num = to_number(arrayindex(_severity, 0)),\n    xdm.source.ipv4 = _src_ip,\n    xdm.source.host.mac_addresses = if(_is_mac = true,\n        arraycreate(arrayindex(_device_name, 0)), null),\n    xdm.source.host.hostname = if(_is_mac = false,\n        arrayindex(_device_name, 0), null),\n    xdm.source.interface = inbound_if,\n    xdm.target.interface = outbound_if,\n    xdm.alert.name = arrayindex(_alert_type, 0),\n    xdm.alert.description = arrayindex(_description, 0),\n    xdm.alert.severity = if(\n        to_number(arrayindex(_severity, 0)) <= 1, XDM_CONST.LOG_LEVEL_INFORMATIONAL,\n        to_number(arrayindex(_severity, 0)) <= 3, XDM_CONST.LOG_LEVEL_WARNING,\n        to_number(arrayindex(_severity, 0)) <= 5, XDM_CONST.LOG_LEVEL_ERROR,\n        to_number(arrayindex(_severity, 0)) <= 7, XDM_CONST.LOG_LEVEL_CRITICAL,\n        XDM_CONST.LOG_LEVEL_EMERGENCY),\n    xdm.observer.unique_identifier = arrayindex(_device_id, 0),\n    xdm.observer.name = arrayindex(_site_name, 0),\n    xdm.observer.vendor = \"Palo Alto Networks\",\n    xdm.observer.product = \"IoT Security\",\n    xdm.event.type = \"ALERT\";",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.ipv4",
+        "xdm.source.host.mac_addresses",
+        "xdm.source.host.hostname",
+        "xdm.source.interface",
+        "xdm.target.interface",
+        "xdm.alert.name",
+        "xdm.alert.description",
+        "xdm.alert.severity",
+        "xdm.observer.unique_identifier",
+        "xdm.observer.name",
+        "xdm.observer.vendor",
+        "xdm.observer.product",
+        "xdm.event.type"
+      ]
+    },
+    {
+      "id": "imperva-audit-trail-parsing",
+      "title": "Imperva Audit Trail Parsing Rule",
+      "description": "Complete validated INGEST rule for Imperva Cloud WAF audit trail logs (imperva_audit_raw). Extracts structured JSON fields from _raw_log, sets _time from epoch milliseconds using parse_epoch, packs vendor metadata into action_evtlog_data_fields as JSON, and extracts object type/ID/name from free-text message fields using regextract.",
+      "category": "Parsing Rules",
+      "tags": [
+        "imperva",
+        "audit",
+        "cloud",
+        "saas",
+        "waf",
+        "ingest",
+        "complete",
+        "production",
+        "json",
+        "parse_epoch"
+      ],
+      "code": "[INGEST:vendor=\"Imperva\", product=\"CloudWAF_Audit\", target_dataset=\"imperva_audit_raw\", no_hit=drop]\nalter\n    _event_id = json_extract_scalar(_raw_log, \"$.eventId\"),\n    _event_type = json_extract_scalar(_raw_log, \"$.eventType\"),\n    _timestamp_ms = json_extract_scalar(_raw_log, \"$.timestamp\"),\n    _user_email = json_extract_scalar(_raw_log, \"$.userEmail\"),\n    _user_name = json_extract_scalar(_raw_log, \"$.userName\"),\n    _source_ip = json_extract_scalar(_raw_log, \"$.sourceIp\"),\n    _message = json_extract_scalar(_raw_log, \"$.message\"),\n    _resource_type = json_extract_scalar(_raw_log, \"$.resourceType\"),\n    _resource_id = json_extract_scalar(_raw_log, \"$.resourceId\"),\n    _account_id = json_extract_scalar(_raw_log, \"$.accountId\"),\n    _site_id = json_extract_scalar(_raw_log, \"$.siteId\"),\n    _result = json_extract_scalar(_raw_log, \"$.result\")\n| alter\n    _time = if(_timestamp_ms != null and _timestamp_ms != \"\", parse_epoch(_timestamp_ms, \"MILLIS\"), null),\n    vendor = \"Imperva\",\n    product = \"CloudWAF_Audit\",\n    event_id = _event_id,\n    event_sub_type = _event_type,\n    actor_primary_username = coalesce(_user_email, _user_name),\n    action_evtlog_description = _message,\n    action_evtlog_event_id = _event_id,\n    action_remote_ip = _source_ip,\n    _obj_type = regextract(_message, \"^(\\\\w+)\\\\s\"),\n    _obj_id = regextract(_message, \"ID:\\\\s*(\\\\d+)\"),\n    _obj_name = regextract(_message, \"name:\\\\s*([^,]+)\")\n| alter\n    action_evtlog_data_fields = to_json_string(object_create(\n        \"resource_type\", _resource_type,\n        \"resource_id\", _resource_id,\n        \"account_id\", _account_id,\n        \"site_id\", _site_id,\n        \"result\", _result,\n        \"object_type\", arrayindex(_obj_type, 0),\n        \"object_id\", arrayindex(_obj_id, 0),\n        \"object_name\", arrayindex(_obj_name, 0)));",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.event.id",
+        "xdm.source.user.username",
+        "xdm.event.description"
+      ]
+    },
+    {
+      "id": "cloud-saas-audit-json-extraction",
+      "title": "Cloud SaaS Audit Trail JSON Extraction",
+      "description": "Generic pattern for extracting structured JSON audit data from _raw_log into xdr_data fields. Uses json_extract_scalar for individual fields, maps actor/action/event fields, and packs vendor-specific metadata into action_evtlog_data_fields as a JSON string using object_create + to_json_string.",
+      "category": "Parsing Rules",
+      "tags": [
+        "cloud",
+        "saas",
+        "audit",
+        "json",
+        "extraction",
+        "action_evtlog",
+        "generic",
+        "pattern"
+      ],
+      "code": "[INGEST:vendor=\"VENDOR\", product=\"PRODUCT\", target_dataset=\"vendor_product_raw\", no_hit=drop]\nalter\n    _event_id = json_extract_scalar(_raw_log, \"$.eventId\"),\n    _event_type = json_extract_scalar(_raw_log, \"$.eventType\"),\n    _timestamp = json_extract_scalar(_raw_log, \"$.timestamp\"),\n    _actor = json_extract_scalar(_raw_log, \"$.actor.email\"),\n    _src_ip = json_extract_scalar(_raw_log, \"$.actor.sourceIp\"),\n    _description = json_extract_scalar(_raw_log, \"$.message\"),\n    _target_name = json_extract_scalar(_raw_log, \"$.target.name\"),\n    _target_type = json_extract_scalar(_raw_log, \"$.target.type\"),\n    _outcome = json_extract_scalar(_raw_log, \"$.outcome\")\n| alter\n    _time = parse_timestamp(_timestamp, \"%Y-%m-%dT%H:%M:%S.%fZ\"),\n    vendor = \"VENDOR\",\n    product = \"PRODUCT\",\n    event_id = _event_id,\n    event_sub_type = _event_type,\n    actor_primary_username = _actor,\n    action_remote_ip = _src_ip,\n    action_evtlog_description = _description,\n    action_evtlog_event_id = _event_id,\n    action_evtlog_data_fields = to_json_string(object_create(\n        \"target_name\", _target_name,\n        \"target_type\", _target_type,\n        \"outcome\", _outcome));",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.user.username",
+        "xdm.event.id",
+        "xdm.event.description"
+      ]
+    },
+    {
+      "id": "epoch-millis-to-time",
+      "title": "Epoch Milliseconds to _time",
+      "description": "Convert epoch milliseconds to _time using parse_epoch with the MILLIS unit. Important: parse_epoch takes a string field (json_extract_scalar returns strings so this works directly). Do NOT wrap in to_integer() and do NOT use from_epoch (which does not exist in XQL).",
+      "category": "Timestamp Handling",
+      "tags": [
+        "timestamp",
+        "epoch",
+        "milliseconds",
+        "parse_epoch",
+        "pitfall",
+        "time"
+      ],
+      "code": "alter\n    _timestamp_ms = json_extract_scalar(_raw_log, \"$.timestamp\"),\n    _time = parse_epoch(_timestamp_ms, \"MILLIS\");",
+      "difficulty": "easy",
+      "relatedFields": []
+    },
+    {
+      "id": "message-regex-sub-extraction",
+      "title": "Message Field Regex Sub-extraction",
+      "description": "Extract structured data (object type, ID, name) from free-text message strings using regextract. Common in audit logs where a single message field contains multiple pieces of information such as 'Policy ID: 12345 name: my-policy was updated'. Remember regextract returns an array so use arrayindex to get the scalar value.",
+      "category": "Field Extraction",
+      "tags": [
+        "regex",
+        "regextract",
+        "message",
+        "audit",
+        "sub-extraction",
+        "pattern"
+      ],
+      "code": "alter\n    _obj_type = regextract(message, \"^(\\\\w+)\\\\s\"),\n    _obj_id = regextract(message, \"ID:\\\\s*(\\\\d+)\"),\n    _obj_name = regextract(message, \"name:\\\\s*([^,]+)\")\n| alter\n    object_type = arrayindex(_obj_type, 0),\n    object_id = arrayindex(_obj_id, 0),\n    object_name = arrayindex(_obj_name, 0);",
+      "difficulty": "medium",
+      "relatedFields": []
+    },
+    {
+      "id": "imperva-ato-parsing-rule",
+      "title": "Imperva ATO Parsing Rule",
+      "description": "Complete validated INGEST rule for Imperva Account Takeover Protection (imperva_ato_raw). Handles two event types (Suspicious successful login, Account takeover login), extracts client IP as actor_remote_ip for security correlation, and builds a composed action_evtlog_message using concat() to combine event type, risk level, and country into a single descriptive string.",
+      "category": "Parsing Rules",
+      "tags": [
+        "imperva",
+        "ato",
+        "account-takeover",
+        "ingest",
+        "complete",
+        "production",
+        "json",
+        "parse_epoch",
+        "concat",
+        "security"
+      ],
+      "code": "[INGEST:vendor=\"Imperva\", product=\"ATO\", target_dataset=\"imperva_ato_raw\", no_hit=drop]\nfilter\n    _raw_log != null\n    and _raw_log contains \"Account\"\n| alter\n    _timestamp_ms = json_extract_scalar(_raw_log, \"$.timestamp\"),\n    _event_type = json_extract_scalar(_raw_log, \"$.eventType\"),\n    _src_ip = json_extract_scalar(_raw_log, \"$.clientIp\"),\n    _user = json_extract_scalar(_raw_log, \"$.username\"),\n    _risk = json_extract_scalar(_raw_log, \"$.riskLevel\"),\n    _country = json_extract_scalar(_raw_log, \"$.country\"),\n    _device_id = json_extract_scalar(_raw_log, \"$.deviceId\"),\n    _session_id = json_extract_scalar(_raw_log, \"$.sessionId\"),\n    _account_id = json_extract_scalar(_raw_log, \"$.accountId\")\n| alter\n    _time = if(_timestamp_ms != null and _timestamp_ms != \"\", parse_epoch(_timestamp_ms, \"MILLIS\"), null),\n    vendor = \"Imperva\",\n    product = \"ATO\",\n    event_id = _event_type,\n    actor_primary_username = _user,\n    actor_remote_ip = _src_ip,\n    action_evtlog_message = concat(_event_type, \" | risk=\", _risk, \" | country=\", _country),\n    action_evtlog_data_fields = to_json_string(object_create(\n        \"device_id\", _device_id,\n        \"session_id\", _session_id,\n        \"account_id\", _account_id,\n        \"risk_level\", _risk,\n        \"country\", _country));",
+      "difficulty": "advanced",
+      "relatedFields": [
+        "xdm.source.user.username",
+        "xdm.source.ipv4",
+        "xdm.event.id"
+      ]
+    },
+    {
+      "id": "composed-summary-concat",
+      "title": "Composed Summary Message with concat",
+      "description": "Build a descriptive action_evtlog_message from multiple fields using concat(). This pattern creates human-readable summary strings that combine event type, severity, location, or other context fields with delimiters. Useful for security events, audit logs, and any log type where a single summary field aids triage and searching.",
+      "category": "Field Extraction",
+      "tags": [
+        "concat",
+        "summary",
+        "message",
+        "composition",
+        "action_evtlog",
+        "pattern",
+        "triage"
+      ],
+      "code": "alter\n    action_evtlog_message = concat(\n        event_type,\n        \" | severity=\", severity_level,\n        \" | src=\", source_ip,\n        \" | user=\", username,\n        \" | outcome=\", result_status);",
+      "difficulty": "easy",
+      "relatedFields": []
+    },
+    {
+      "id": "at-timestamp-bracket-notation",
+      "title": "@timestamp Bracket Notation Extraction",
+      "description": "Extract JSON keys containing special characters like @ using bracket notation. The common $.@timestamp path FAILS in json_extract_scalar — you must use $['@timestamp'] bracket notation instead. This applies to any JSON key with special characters (e.g. @version, @metadata). Without bracket notation, the parser throws a runtime error.",
+      "category": "Field Extraction",
+      "tags": [
+        "@timestamp",
+        "bracket-notation",
+        "json_extract_scalar",
+        "special-characters",
+        "timestamp",
+        "pitfall",
+        "elastic",
+        "elasticsearch"
+      ],
+      "code": "alter\n    _timestamp = json_extract_scalar(_raw_log, \"$['@timestamp']\"),\n    _version = json_extract_scalar(_raw_log, \"$['@version']\"),\n    _metadata_type = json_extract_scalar(_raw_log, \"$['@metadata'].type\")\n| alter\n    _time = if(_timestamp != null and _timestamp != \"\", parse_timestamp(_timestamp, \"%Y-%m-%dT%H:%M:%S.%fZ\"), null);",
+      "difficulty": "easy",
+      "relatedFields": []
+    }
+  ]
+}
