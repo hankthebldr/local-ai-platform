@@ -8230,6 +8230,20 @@ const ComposerView = (function () {
   return { init, updateCanvasEmptyState };
 })();
 
+// The dashboard tab is the *default-active* tab on page load (see the
+// `tab-btn active` on `data-tab="dashboard"` near the top of the body).
+// switchTab() is what wires ComposerView.init() — but switchTab is only
+// fired when the user *clicks* a tab. On first paint nobody clicks, so
+// without this hook the composer renders its static template (palette
+// items as "Loading...", empty canvas) and the JS never runs the fetches
+// that would populate it. Boot it here once DOM is ready.
+document.addEventListener('DOMContentLoaded', () => {
+  const dashboardTab = document.getElementById('tab-dashboard');
+  if (dashboardTab && dashboardTab.classList.contains('active')) {
+    try { ComposerView.init(); } catch (e) { console.warn('ComposerView.init failed:', e); }
+  }
+});
+
 /* ── Workbench tab switcher ─────────────────────────────────────── */
 function composerSwitchBench(bench, el) {
   document.querySelectorAll('.workbench-tab').forEach(b => {
