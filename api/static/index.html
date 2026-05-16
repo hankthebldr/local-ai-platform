@@ -1993,10 +1993,57 @@ details[open] > summary::before { transform: rotate(90deg); }
   .research-layout { grid-template-columns: 1fr; height: auto; }
   .research-left, .research-right { min-height: 300px; }
   .dashboard-grid { grid-template-columns: 1fr; }
-  .header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .inv-grid { grid-template-columns: 1fr; }
   .mem-grid { grid-template-columns: 1fr; }
   .tab-btn { padding: 10px 14px; font-size: 0.65rem; }
+
+  /* Header: the desktop layout is a 1fr/auto two-column grid. On phones
+     collapse it to a single column so brand, status, and breadcrumb
+     stack vertically instead of competing for horizontal space and
+     clipping. Reset child grid placements so the flow falls in source
+     order; wrap the status row and tighten the gap. */
+  .header {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    row-gap: 8px;
+  }
+  .logo { grid-column: 1; grid-row: 1; }
+  .header-status {
+    grid-column: 1; grid-row: 2;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-size: 0.65rem;
+  }
+  .header-status .vsep { display: none; }
+  .header-breadcrumb { grid-column: 1; grid-row: 3; flex-wrap: wrap; }
+  .logo-title { font-size: 1.2rem; letter-spacing: 0.14em; }
+  .logo-sub { flex-wrap: wrap; gap: 4px 8px; }
+
+  /* Footer rail: same problem — the desktop layout is a 3-column grid
+     (auto 1fr auto) with non-wrapping flex sections. On narrow widths
+     the inner labels overflow horizontally. Stack the three sections
+     vertically and let each section's contents wrap. */
+  .footer {
+    grid-template-columns: 1fr;
+    row-gap: 10px;
+    padding: 12px 14px;
+  }
+  .footer-rail-section { flex-wrap: wrap; gap: 8px 12px; }
+  .footer-rail-section[style*="center"] { justify-content: flex-start !important; }
+  .footer-rail-section[style*="flex-end"] { justify-content: flex-start !important; }
+  .footer-rail-vsep { display: none; }
+  .footer-links { flex-wrap: wrap; gap: 8px 12px; }
+}
+
+/* Tighter phone breakpoint — at very small widths even the stacked
+   layouts get cramped. Hide the breadcrumb (the active tab is already
+   visible in the nav above it) and drop the lowest-signal status
+   fields so the essentials stay legible. */
+@media (max-width: 480px) {
+  .header-breadcrumb { display: none; }
+  .header-status .stat-key { display: none; }
+  .footer-rail-stat .k { display: none; }
+  .footer-meta { display: none; }
 }
 
 /* ── Drawflow Composer ─────────────────────────────────────────── */
