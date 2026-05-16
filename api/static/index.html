@@ -2946,11 +2946,11 @@ details[open] > summary::before { transform: rotate(90deg); }
       </div>
       <div class="wf-toolbar">
         <div id="wf-runner-controls" style="display:flex;gap:8px;align-items:center;flex:1">
-          <select id="wf-select" class="model-select" style="min-width:260px">
+          <select id="wf-select" class="model-select" style="min-width:260px"
+                  onchange="loadWorkflowDetail()">
             <option value="">-- select workflow --</option>
           </select>
-          <button class="action-btn" onclick="loadWorkflowDetail()" style="color:var(--cyan);border-color:var(--cyan-dim)">Load</button>
-          <button class="action-btn" onclick="composerLoadByIdAndSwitch()" title="Open this workflow in the Composer">Open in Composer</button>
+          <button class="action-btn" onclick="composerLoadByIdAndSwitch()" title="Open this workflow in the Composer for editing">Open in Composer</button>
           <div style="flex:1"></div>
           <button class="action-btn" onclick="refreshWorkflows()">Refresh</button>
         </div>
@@ -2964,8 +2964,14 @@ details[open] > summary::before { transform: rotate(90deg); }
         <div class="panel-label" id="wf-detail-name">Workflow</div>
         <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:12px" id="wf-detail-desc"></div>
 
-        <!-- Pipeline Visualization -->
-        <div class="wf-pipeline" id="wf-pipeline"></div>
+        <!-- Pipeline Visualization — read-only Drawflow canvas. Mirrors the
+             Composer's node design so the same workflow renders identically
+             in both surfaces. The legacy flat step-row (wf-pipeline) is
+             kept as a fallback container for runtime status overlays
+             during/after a run. -->
+        <div id="runs-pipeline-canvas" class="drawflow"
+             style="height:340px;border:1px solid var(--border);border-radius:3px;background:var(--bg-deep);position:relative;overflow:hidden"></div>
+        <div class="wf-pipeline" id="wf-pipeline" style="margin-top:12px"></div>
 
         <!-- Seed Input -->
         <div style="margin-top:16px">
@@ -5254,6 +5260,11 @@ async function loadWorkflowDetail() {
     const defn = defResp2.ok ? await defResp2.json() : null;
     currentWorkflowDef = defn || { id: opt.dataset.id, name: opt.textContent, steps: [] };
 
+    // Render the Drawflow canvas (mirrors Composer node design + dagre
+    // layout). The legacy flat step-row beneath it carries runtime status
+    // overlays after Run — both stay in sync via the same defn.
+    renderRunsPipeline(defn);
+
     // Build static pipeline visualization showing declared hooks + role_ref.
     const pipeline = document.getElementById('wf-pipeline');
     if (defn && Array.isArray(defn.steps) && defn.steps.length > 0) {
@@ -5268,6 +5279,100 @@ async function loadWorkflowDetail() {
   } catch (e) {
     console.error('Failed to load workflow:', e);
   }
+}
+
+// ── Runs-tab pipeline canvas — read-only Drawflow that mirrors the
+//    Composer's node design. Dagre-laid LR. Connections derived from each
+//    step's inputs that reference an upstream step's id.
+let runsPipelineEditor = null;
+let runsPipelineNodeData = {};
+
+function initRunsPipelineEditor() {
+  const container = document.getElementById('runs-pipeline-canvas');
+  if (!container || runsPipelineEditor) return;
+  if (typeof Drawflow === 'undefined') return;
+  runsPipelineEditor = new Drawflow(container);
+  runsPipelineEditor.reroute = true;
+  runsPipelineEditor.reroute_fix_curvature = true;
+  runsPipelineEditor.start();
+  // Read-only: no node drag, no connect/disconnect. Pan + zoom still work.
+  runsPipelineEditor.editor_mode = 'fixed';
+}
+
+function renderRunsPipeline(defn) {
+  initRunsPipelineEditor();
+  if (!runsPipelineEditor) return;
+  runsPipelineEditor.clear();
+  runsPipelineNodeData = {};
+  if (!defn || !Array.isArray(defn.steps) || !defn.steps.length) return;
+
+  const steps = defn.steps;
+  const stepIds = new Set(steps.map(s => s.id));
+
+  // Dagre layout — LR rank, identical knobs to the composer's import flow.
+  const positions = {};
+  if (typeof dagre !== 'undefined') {
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 80 });
+    g.setDefaultEdgeLabel(() => ({}));
+    steps.forEach(step => g.setNode(step.id, { width: 170, height: 70 }));
+    steps.forEach(step => {
+      const deps = new Set();
+      if (step.depends_on) step.depends_on.forEach(d => deps.add(d));
+      if (step.inputs) step.inputs.forEach(inp => {
+        const ns = String(inp).split('.')[0];
+        if (ns !== 'seed' && ns !== 'shared' && stepIds.has(ns)) deps.add(ns);
+      });
+      deps.forEach(dep => { if (stepIds.has(dep) && dep !== step.id) g.setEdge(dep, step.id); });
+    });
+    dagre.layout(g);
+    steps.forEach(step => {
+      const p = g.node(step.id);
+      if (p) positions[step.id] = { x: p.x - 85, y: p.y - 35 };
+    });
+  }
+
+  // Spawn one Drawflow node per step using the Composer's node HTML —
+  // identical look on both surfaces.
+  const stepToNodeId = {};
+  steps.forEach((step, i) => {
+    const pos = positions[step.id] || { x: 80 + i * 220, y: 80 };
+    const role = step.role
+      || (step.prompt && step.prompt.role_ref)
+      || (defn.defaults && defn.defaults.role)
+      || 'general';
+    const data = {
+      id: step.id,
+      name: step.name || step.id,
+      role: role,
+      outputs: Array.isArray(step.outputs) ? step.outputs : ['result'],
+      output_format: step.output_format || 'text',
+      quality_gates: (step.hooks && step.hooks.validate_output) || [],
+    };
+    try {
+      const nodeId = runsPipelineEditor.addNode(
+        data.id, 1, 1, pos.x, pos.y, data.id, {}, dfNodeHtml(data)
+      );
+      runsPipelineNodeData[nodeId] = data;
+      stepToNodeId[step.id] = nodeId;
+    } catch (e) { console.warn('runs canvas addNode failed:', step.id, e); }
+  });
+
+  // Wire connections upstream→downstream from each step's input refs.
+  steps.forEach(step => {
+    const seen = new Set();
+    (step.inputs || []).forEach(inp => {
+      const ns = String(inp).split('.')[0];
+      if (ns === 'seed' || ns === 'shared' || ns === step.id || seen.has(ns)) return;
+      if (!stepIds.has(ns)) return;
+      seen.add(ns);
+      const fromId = stepToNodeId[ns];
+      const toId = stepToNodeId[step.id];
+      if (fromId && toId) {
+        try { runsPipelineEditor.addConnection(fromId, toId, 'output_1', 'input_1'); } catch (e) {}
+      }
+    });
+  });
 }
 
 function renderStepBox(step, status, result) {
