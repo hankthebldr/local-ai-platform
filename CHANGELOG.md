@@ -5,7 +5,138 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer: [sem
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-05-15
+
+### Licensing — Source-Available Evaluation License
+- `LICENSE` replaced. The prior "Commercial Software License" with Individual /
+  Teams tiers is gone. The new license is source-available: read, study, and
+  security-review the code freely; personal non-production evaluation is
+  permitted; production and commercial use are reserved for a forthcoming
+  commercial license. `README.md`, `docs/pages/index.html`, and the
+  `.github/ISSUE_TEMPLATE/config.yml` contact link all updated in lock-step
+  so every surface tells the same story. The Teams `mailto:contact@ohno.llc`
+  pricing path is replaced with a "join the waitlist" Discussions link.
+
+### Added — Cortex Console rebrand (PR #57)
+- Web console re-skinned to the PANW Cortex product family aesthetic
+  (XSIAM / XDR / XSOAR). Slate-navy canvas, Cortex Green primary, cool-blue
+  secondary, PANW orange reserved for the co-brand chip and critical alerts.
+- Two-row Cortex command bar: brand-mark + health pip, env chip, clock /
+  uptime, theme toggle, caps-tracked breadcrumb (Cortex › Mode › Context).
+- Tabs regrouped into operator phases — BUILD (Composer · Workflow Index ·
+  Agents · Skill Lab) / OPERATE (Runs) / LIBRARY (Models · Context · Memory)
+  / ADMIN. All `data-tab` IDs preserved so `switchTab()` routing stays
+  back-compatible.
+- New status rail at the bottom: env+project / live model + queue + last run
+  / version + co-brand. New element IDs (`rail-env`, `rail-project`,
+  `rail-model`, `rail-queue`, `rail-last-run`, `rail-run-pip`) ready for the
+  follow-up JS wiring; chrome works standalone with placeholders today.
+- Engineered 32px grid + soft radial undertone replaces the bloom-style
+  ambient. Reads as operator console, not dark-UI demo.
+
+### Added — OOTB XQL/XDM bundle (PR #56)
+- Five new workflows under [workflows/](workflows/): `data-model-rules`,
+  `xsiam-data-model-rules`, `xdm-rule-from-log`, `xdm-bulk-onboarding`,
+  `xsiam-normalization-pipeline`. End-to-end pipelines for authoring,
+  validating, and onboarding Cortex XSIAM data model rules from raw vendor
+  logs.
+- Three new agents under [agents/](agents/): `xsiam-analyst`,
+  `xql-data-model-engineer`, `xdm-schema-navigator`.
+- New `xdm-toolkit` plugin under [plugins/xdm-toolkit/](plugins/xdm-toolkit/)
+  with two callable tools (`validate_xql` static rule validator,
+  `lookup_xdm_path` XDM path resolver) and two skills (rule-writer,
+  validator) that auto-inject on XQL/XDM keyword triggers.
+- Knowledge seed under [docs/seed/xql/](docs/seed/xql/) — Modelfile +
+  Markdown knowledge for offline XQL operators.
+- Sample data under [workflows/mock_data/](workflows/mock_data/) — Okta
+  system log, PAN-OS traffic, Windows Security XML for fixture-style runs.
+
+### Added — Documents drop-zone + Cloud Models registry (PR #55)
+- Composer Documents pane accepts drag-drop PDFs and text files; routes
+  through the existing RAG pipeline (Chroma + nomic-embed-text) without a
+  separate upload page. Per-document delete + reindex.
+- Admin → Cloud Models tab. UI to register external OpenAI-compatible
+  providers (OpenAI, Anthropic, Together, OpenRouter, custom endpoint),
+  store API keys on the host in `data/config/cloud_providers.json`
+  (chmod 0600), and use them as workflow steps. The dashboard never echoes
+  keys back; rotate / revoke is one click.
+- "Discover" surface folded into Models — single page lists installed
+  models, pullable models from the registry, and configured cloud
+  providers in one operator view.
+
+### Added — Composer canvas + admin tabs (PR #54)
+- Composer canvas now supports zoom (button + scroll-wheel) and fullscreen.
+  Pan-and-zoom transform is preserved across tab switches.
+- New Admin → Skills tab — list, enable / disable, and preview the skill
+  body of every skill discovered across installed plugins.
+- `plugins/` directory now shipped in the docker image (was missing pre-#54,
+  so the Plugins admin panel was empty in container deployments).
+
+### Added — Composer system-model picker, Agents palette, Project modal (PR #53)
+- Step inspector now exposes a system-model picker that overrides the
+  workflow-level default for a single step. Picker enumerates installed
+  models plus registered cloud providers.
+- Agents palette on the composer: drag an existing agent (YAML-defined
+  persona) onto the canvas as a step. The agent's pinned model and context
+  sources travel with it.
+- Step-engage chat: click a step on the canvas to open an inline chat that
+  uses that step's exact system prompt + model. Lets operators iterate on
+  step prompts without committing them.
+- Project modal: cluster multiple workflows, documents, and runs under a
+  named project. Project bar pinned in the header.
+
+### Added — UI structural test fleet (PR #52)
+- 47-test `pytest` fleet under [tests/ui/test_static_markup.py](tests/ui/test_static_markup.py)
+  asserting structural invariants of the dashboard HTML (composer canvas,
+  palette, admin panels, API keys UI, exports, plugin tool tester,
+  self-hosted vendor libraries — no CDN). Catches regressions without
+  needing a running stack; runs in <1 s.
+
+### Added — Agent reliability (PR #48 + PR #50)
+- Agents with a pinned model now fall back to role-based resolution when
+  the pinned model isn't installed locally, instead of failing the chat.
+  The dashboard surfaces a `model_fallback` banner in agent chat so the
+  operator sees which model actually responded.
+
+### Engine — plugin tool invocation + validator hardening
+- New built-in hook `plugin_tool_invoker` at
+  [api/hooks/builtins/plugin_tool_invoker.py](api/hooks/builtins/plugin_tool_invoker.py).
+  Configurable via YAML `before_step` block — invokes any plugin tool with
+  resolved workflow inputs and stores the result in step workspace.
+  Supports `for_each` iteration with `param_template` substitution
+  (e.g. `{{ item.rule }}`) for batch tool calls. Idempotent across the
+  pre-compose / post-compose dispatch passes.
+- `WorkflowEngine.validate()` now recognizes hook-provided virtual inputs:
+  for every `before_step` hook with a `store_as` key, the resulting
+  `<step_id>.<store_as>` is treated as a valid producer when checking the
+  step's own `inputs:` list. Closes the structural hole that made the OOTB
+  XQL workflows un-runnable.
+- `StepExecutor.execute()` rewritten — `before_step` now dispatches BEFORE
+  input resolution and prompt composition (so hooks like
+  `plugin_tool_invoker` can populate workspace keys the step then reads).
+  Re-dispatched once on attempt 0 post-compose to preserve `token_budget`
+  semantics. All before_step hooks must be idempotent.
+- `ModelResolver.ROLE_PATTERNS` updated: `qwen2.5-coder` is explicitly
+  preferred for `coding` and `reasoning` roles ahead of the older
+  `qwen3.5` / `deepseek-r1` patterns. Workflows declaring `role: coding`
+  or `role: reasoning` now pick up an installed qwen2.5-coder build
+  declaratively, not by accident via the "largest available" fallback.
+
+### Fixed — OOTB workflow runtime parity
+- `workflows/xdm-rule-from-log.yaml`: `before_step` hook renamed from
+  the non-existent `invoke_validate_xql` to the new `plugin_tool_invoker`
+  built-in. The `refuse_if_blockers` `validate_output` hook (also not
+  implemented) is commented out with a forward-looking TODO; the workflow
+  still emits its verdict line from the prompt side.
+- `workflows/xdm-bulk-onboarding.yaml`: same hook rename. Added an
+  `output_schema` to the `write_rules` step (`{rules: [{cluster_id,
+  dataset, rule}]}`) so `JsonSchemaHook` parses the response into a real
+  list — without this, `validate_all` saw a stringified blob and
+  `plugin_tool_invoker for_each` correctly refused to iterate.
+
 ### Fixed — Docker first-boot (PR #42)
+- Ollama healthcheck used `curl`, which isn't in the `ollama/ollama` image,
+  so the check failed forever and blocked `depends_on: service_healthy` for
 - Ollama healthcheck used `curl`, which isn't in the `ollama/ollama` image,
   so the check failed forever and blocked `depends_on: service_healthy` for
   `api` and `webui`. Replaced with `ollama list`.
@@ -57,7 +188,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer: [sem
   `llama3.2:3b` + `nomic-embed-text` via Ollama if available, smoke-imports
   `api.main` as the final gate. Flags: `--venv-only`, `--no-models`.
 
-### Fixed — v1.1.x hotfix bundle (this PR)
+### Fixed — v1.1.x hotfix bundle
 - **Version unification.** Introduced `api/__init__.py:__version__` as the
   single source of truth, wired `api/main.py` to import it (was hardcoded
   to `0.1.0` in four places), and bumped the dashboard footer string from

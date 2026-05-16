@@ -5,7 +5,7 @@
 <h1 align="center">Enclave</h1>
 
 <p align="center">
-  Self-hosted LLM infrastructure with OpenAI-compatible API. CPU-optimized. Buy once, run forever.
+  Self-hosted LLM infrastructure with OpenAI-compatible API. CPU-optimized. Source-available.
 </p>
 
 <p align="center">
@@ -14,12 +14,12 @@
   <a href="https://github.com/hankthebldr/local-ai-platform/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/hankthebldr/local-ai-platform/ci.yml?branch=master&labelColor=1a1a2e&color=00C0E8&style=flat&label=ci" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS%2012%2B-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="macOS">
   <img src="https://img.shields.io/badge/Linux-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="Linux">
-  <img src="https://img.shields.io/badge/license-Commercial-1a1a2e?style=flat&labelColor=1a1a2e&color=888888" alt="License">
+  <img src="https://img.shields.io/badge/license-Source--Available%20%C2%B7%20Evaluation-1a1a2e?style=flat&labelColor=1a1a2e&color=888888" alt="License">
 </p>
 
 ---
 
-Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero cloud dependencies. Individual and Teams licenses.
+Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero cloud dependencies. Source-available for evaluation and security review; a production license is on the roadmap.
 
 ## What it does
 
@@ -170,14 +170,11 @@ Every master merge re-publishes a freshly smoke-tested DMG to the [`nightly`](ht
 
 ## Licensing
 
-Enclave is commercial software by [ohno llc](https://github.com/hankthebldr).
+Enclave is source-available proprietary software by [ohno llc](https://github.com/hankthebldr). The current license permits source review and personal non-production evaluation; production and commercial use require a license that has not yet been published.
 
-| Tier | Model |
-|------|-------|
-| **Individual** | One seat, one-time purchase. All updates included. |
-| **Teams** | Volume discount per seat. Priority support. |
+A commercial production license is on the roadmap. To register interest and be notified when it's available, open a thread on [Discussions](https://github.com/hankthebldr/local-ai-platform/discussions).
 
-See [LICENSE](LICENSE) for terms.
+See [LICENSE](LICENSE) for the full terms.
 
 ## Documentation
 

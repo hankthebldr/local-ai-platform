@@ -1,27 +1,39 @@
-Enclave — Commercial Software License
+Enclave — Source-Available Evaluation License
 
 Copyright (c) 2026 ohno llc. All rights reserved.
 
 This software and its source code are the proprietary property of ohno llc.
+A commercial license for production use will be made available at a later
+date. Until then, the rights granted below are limited to evaluation and
+review.
 
 PERMITTED:
-- Viewing the source code for evaluation and security review
-- Running the software with a valid Individual or Teams license
-- Personal and commercial use within the scope of your license tier
+- Viewing, reading, and studying the source code
+- Independent security review and vulnerability research
+- Personal, non-production evaluation builds run on hardware you own
+- Reporting bugs and submitting issues to the project
 
-NOT PERMITTED:
-- Redistribution of the source code or compiled binaries
+NOT PERMITTED (without a separate written license from ohno llc):
+- Use of the software in any production environment
+- Any commercial use, whether internal, external, or for paid services
+- Hosting the software as a managed or multi-tenant service
+- Redistribution of the source code, compiled binaries, or derivative works
 - Modification and redistribution of the software
-- Sublicensing or resale
-- Removal of license notices or copyright headers
+- Sublicensing, resale, or transfer of any rights granted herein
+- Removal of license notices, copyright headers, or attribution
 
-LICENSE TIERS:
-- Individual: single-seat, one-time purchase, all future updates included
-- Teams: volume pricing per seat, shared infrastructure, priority support
+LICENSING ROADMAP:
+ohno llc intends to publish a commercial production license for Enclave in
+a future release. Until that license is published, no production or
+commercial use is authorized. Watch the project on GitHub or subscribe to
+release notifications to be informed when production licensing becomes
+available.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-OHNO LLC BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY.
+OHNO LLC BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM
+THE USE OR INABILITY TO USE THIS SOFTWARE.
 
-For licensing inquiries: contact ohno llc
+For licensing inquiries and to register interest in production licensing:
+https://github.com/hankthebldr/local-ai-platform/discussions

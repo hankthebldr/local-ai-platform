@@ -160,6 +160,20 @@ steps:
     outputs:
       - rules
     output_format: json
+    output_schema:
+      type: object
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [cluster_id, dataset, rule]
+            properties:
+              cluster_id: {type: string}
+              dataset:    {type: string}
+              rule:       {type: string}
 
   # ── 5. Validate every rule ───────────────────────────────────────
   - id: validate_all
@@ -192,7 +206,7 @@ steps:
     output_format: json
     hooks:
       before_step:
-        - name: invoke_validate_xql_for_each
+        - name: plugin_tool_invoker
           config:
             plugin_id: xdm-toolkit
             tool_id: validate_xql
