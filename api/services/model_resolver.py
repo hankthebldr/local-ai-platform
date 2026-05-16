@@ -17,9 +17,9 @@ from .ollama_service import OllamaService
 # Larger models are preferred when multiple match.
 
 ROLE_PATTERNS: Dict[str, List[str]] = {
-    "reasoning": ["deepseek-r1", "qwen3", "nous-hermes"],
+    "reasoning": ["deepseek-r1", "qwen3", "qwen2.5-coder", "nous-hermes"],
     "fast": ["dolphin3:8b", "mistral", "phi"],
-    "coding": ["qwen3.5", "deepseek-coder", "codellama", "dolphin"],
+    "coding": ["qwen3.5", "qwen2.5-coder", "deepseek-coder", "codellama", "dolphin"],
     "uncensored": ["dolphin", "uncensored", "abliterated", "nous-hermes"],
     "general": ["dolphin", "qwen", "mistral", "llama"],
 }

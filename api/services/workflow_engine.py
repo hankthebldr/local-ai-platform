@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Set
 import yaml
 
 from ..logging_config import logger
-from ..exceptions import WorkflowValidationError, WorkflowExecutionError
+from ..exceptions import WorkflowValidationError
 from ..models.workflow_models import (
     AgentStep,
     WorkflowDefinition,
@@ -73,7 +73,9 @@ class WorkflowEngine:
         except Exception as e:
             raise WorkflowValidationError(f"Invalid workflow YAML: {e}")
 
-        logger.info(f"Loaded workflow '{definition.id}' ({len(definition.steps)} steps)")
+        logger.info(
+            f"Loaded workflow '{definition.id}' ({len(definition.steps)} steps)"
+        )
         return definition
 
     def load_from_dict(self, data: Dict[str, Any]) -> WorkflowDefinition:
@@ -110,6 +112,17 @@ class WorkflowEngine:
         errors = []
 
         for step in definition.steps:
+            # Hook-provided virtual inputs: a before_step plugin_tool_invoker
+            # writes its result to `<step.id>.<store_as>`, which the step is
+            # then allowed to reference as one of its own inputs.
+            hooks_block = getattr(step, "hooks", None)
+            if hooks_block is not None:
+                for spec in getattr(hooks_block, "before_step", []) or []:
+                    if getattr(spec, "name", None) == "plugin_tool_invoker":
+                        store_as = (spec.config or {}).get("store_as")
+                        if store_as:
+                            available_outputs.add(f"{step.id}.{store_as}")
+
             # Check all inputs are available
             for input_ref in step.inputs:
                 if input_ref not in available_outputs:
@@ -297,9 +310,7 @@ class WorkflowEngine:
         # All remaining steps succeeded.
         workflow_run.status = "completed"
         workflow_run.completed_at = datetime.utcnow()
-        total_duration = sum(
-            r.duration_seconds or 0 for r in workflow_run.step_results
-        )
+        total_duration = sum(r.duration_seconds or 0 for r in workflow_run.step_results)
         total_tokens = sum(
             r.token_count.get("total_tokens", 0) for r in workflow_run.step_results
         )
@@ -330,7 +341,13 @@ class WorkflowEngine:
         # YAML-declared per-step hook overrides — safe access (may not be present on v1 steps)
         hooks_block = getattr(step, "hooks", None)
         if hooks_block is not None:
-            for stage_name in ("before_step", "transform_prompt", "after_step", "validate_output", "on_failure"):
+            for stage_name in (
+                "before_step",
+                "transform_prompt",
+                "after_step",
+                "validate_output",
+                "on_failure",
+            ):
                 for spec in getattr(hooks_block, stage_name, []) or []:
                     bus.register(self._instantiate_hook(spec, stage_name))
         # Custom hooks auto-discovered from api/hooks/custom/
@@ -347,6 +364,7 @@ class WorkflowEngine:
         from api.hooks.builtins.token_budget import TokenBudgetHook
         from api.hooks.builtins.output_logger import OutputLoggerHook
         from api.hooks.builtins.few_shot_injector import FewShotInjectorHook
+        from api.hooks.builtins.plugin_tool_invoker import PluginToolInvokerHook
 
         factory = {
             "json_schema": JsonSchemaHook,
@@ -355,6 +373,7 @@ class WorkflowEngine:
             "token_budget": TokenBudgetHook,
             "output_logger": OutputLoggerHook,
             "few_shot_injector": FewShotInjectorHook,
+            "plugin_tool_invoker": PluginToolInvokerHook,
         }.get(spec.name)
         if factory is None:
             raise ValueError(f"Unknown built-in hook: {spec.name}")
@@ -414,30 +433,38 @@ class WorkflowEngine:
         except Exception as e:
             logger.error(f"Failed to persist run {run.run_id}: {e}")
 
-    def _generate_summary(self, run: WorkflowRun, definition: WorkflowDefinition) -> str:
+    def _generate_summary(
+        self, run: WorkflowRun, definition: WorkflowDefinition
+    ) -> str:
         """Generate a markdown summary of a workflow run"""
         lines = [
             f"# Workflow Run: {definition.name}",
-            f"",
+            "",
             f"- **Run ID**: {run.run_id}",
             f"- **Workflow**: {definition.id} v{definition.version or '0.0'}",
             f"- **Status**: {run.status}",
             f"- **Started**: {run.started_at}",
             f"- **Completed**: {run.completed_at}",
-            f"",
-            f"## Steps",
-            f"",
+            "",
+            "## Steps",
+            "",
         ]
 
         for result in run.step_results:
-            step_def = next((s for s in definition.steps if s.id == result.step_id), None)
+            step_def = next(
+                (s for s in definition.steps if s.id == result.step_id), None
+            )
             status_icon = "+" if result.status == "completed" else "x"
             lines.append(
                 f"### [{status_icon}] {result.step_id}"
                 f"{f' -- {step_def.name}' if step_def else ''}"
             )
             lines.append(f"- Model: {result.model_used}")
-            lines.append(f"- Duration: {result.duration_seconds:.1f}s" if result.duration_seconds else "- Duration: N/A")
+            lines.append(
+                f"- Duration: {result.duration_seconds:.1f}s"
+                if result.duration_seconds
+                else "- Duration: N/A"
+            )
             lines.append(f"- Tokens: {result.token_count.get('total_tokens', 0)}")
             if result.error:
                 lines.append(f"- Error: {result.error}")
@@ -460,14 +487,16 @@ class WorkflowEngine:
         for f in sorted(wf_path.glob("*.yaml")):
             try:
                 defn = self.load(str(f))
-                results.append({
-                    "id": defn.id,
-                    "name": defn.name,
-                    "description": defn.description,
-                    "version": defn.version,
-                    "steps": len(defn.steps),
-                    "file": str(f),
-                })
+                results.append(
+                    {
+                        "id": defn.id,
+                        "name": defn.name,
+                        "description": defn.description,
+                        "version": defn.version,
+                        "steps": len(defn.steps),
+                        "file": str(f),
+                    }
+                )
             except Exception as e:
                 logger.warning(f"Skipping invalid workflow {f}: {e}")
 
@@ -495,13 +524,15 @@ class WorkflowEngine:
                     try:
                         with open(run_file) as f:
                             data = json.load(f)
-                        runs.append({
-                            "run_id": data.get("run_id"),
-                            "workflow_id": data.get("workflow_id"),
-                            "status": data.get("status"),
-                            "started_at": data.get("started_at"),
-                            "completed_at": data.get("completed_at"),
-                        })
+                        runs.append(
+                            {
+                                "run_id": data.get("run_id"),
+                                "workflow_id": data.get("workflow_id"),
+                                "status": data.get("status"),
+                                "started_at": data.get("started_at"),
+                                "completed_at": data.get("completed_at"),
+                            }
+                        )
                     except Exception:
                         pass
             if len(runs) >= limit:

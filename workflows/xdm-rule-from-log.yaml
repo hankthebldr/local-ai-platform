@@ -219,17 +219,19 @@ steps:
       # Pre-step: run validate_xql against write_rule.rule and stuff the
       # result into the input as validator_report.
       before_step:
-        - name: invoke_validate_xql
+        - name: plugin_tool_invoker
           config:
             plugin_id: xdm-toolkit
             tool_id: validate_xql
             params_from:
               rule: write_rule.rule
             store_as: validator_report
-      validate_output:
-        - name: refuse_if_blockers
-          config:
-            # Quality gate: fail the workflow run if validator still
-            # reports BLOCKERs after this step.
-            require_field: verdict
-            forbid_value_contains: "REWRITE-RECOMMENDED"
+      # Quality gate (future): once a generic `refuse_if_blockers` /
+      # field-predicate validator is added, re-enable here to fail the
+      # run when the verdict contains REWRITE-RECOMMENDED. For 1.1.1 we
+      # rely on the model-side prompt to emit the right verdict line.
+      # validate_output:
+      #   - name: refuse_if_blockers
+      #     config:
+      #       require_field: verdict
+      #       forbid_value_contains: "REWRITE-RECOMMENDED"

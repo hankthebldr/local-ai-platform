@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Enclave — local sovereign AI</title>
-  <meta name="description" content="Self-hosted LLM infrastructure with OpenAI-compatible API. CPU-optimized. Buy once, run forever.">
+  <meta name="description" content="Self-hosted LLM infrastructure with OpenAI-compatible API. CPU-optimized. Source-available.">
 
   <meta property="og:title" content="Enclave — local sovereign AI">
-  <meta property="og:description" content="Self-hosted AI inference. CPU-optimized. One price. Forever.">
+  <meta property="og:description" content="Self-hosted AI inference. CPU-optimized. Source-available.">
   <meta property="og:image" content="https://hankthebldr.github.io/local-ai-platform/social-preview.png">
   <meta property="og:url" content="https://hankthebldr.github.io/local-ai-platform/">
   <meta property="og:type" content="website">
@@ -193,52 +193,51 @@
         <div class="section-head">
           <div>
             <div class="eyebrow">licensing</div>
-            <h2>Source-available. <em>Pay once.</em> Run forever.</h2>
+            <h2>Source-available. <em>Evaluate freely.</em> Production licensing coming.</h2>
           </div>
           <div class="index">v __ENCLAVE_VERSION__</div>
         </div>
 
-        <pre class="toml-block" aria-hidden="true"><code><span class="c"># Commercial software. Source-available. No subscription.</span>
-<span class="h">[individual]</span>
-<span class="k">price</span>   <span class="eq">=</span> <span class="s">"one-time"</span>
-<span class="k">seats</span>   <span class="eq">=</span> <span class="n">1</span>
-<span class="k">use</span>     <span class="eq">=</span> [<span class="s">"personal"</span>, <span class="s">"commercial"</span>]
-<span class="k">updates</span> <span class="eq">=</span> <span class="s">"all included"</span>
+        <pre class="toml-block" aria-hidden="true"><code><span class="c"># Source-available proprietary software. Production license forthcoming.</span>
+<span class="h">[evaluation]</span>
+<span class="k">read_source</span>     <span class="eq">=</span> <span class="s">"allowed"</span>
+<span class="k">security_review</span> <span class="eq">=</span> <span class="s">"allowed"</span>
+<span class="k">personal_eval</span>   <span class="eq">=</span> <span class="s">"allowed (non-production)"</span>
 
-<span class="h">[teams]</span>
-<span class="k">price</span>   <span class="eq">=</span> <span class="s">"per seat, volume tiers"</span>
-<span class="k">support</span> <span class="eq">=</span> <span class="s">"priority channel"</span>
-<span class="k">extras</span>  <span class="eq">=</span> [<span class="s">"sla"</span>, <span class="s">"deployment"</span>, <span class="s">"private model channels"</span>]</code></pre>
+<span class="h">[restricted]</span>
+<span class="k">production_use</span>  <span class="eq">=</span> <span class="s">"requires future commercial license"</span>
+<span class="k">commercial_use</span>  <span class="eq">=</span> <span class="s">"requires future commercial license"</span>
+<span class="k">redistribution</span> <span class="eq">=</span> <span class="s">"not permitted"</span></code></pre>
 
         <div class="license-grid">
 
           <div class="license">
-            <h3>Individual</h3>
-            <div class="price">One seat &middot; <em>one-time</em></div>
+            <h3>Evaluation &amp; review</h3>
+            <div class="price">Source-available &middot; <em>no fee</em></div>
             <ul>
-              <li>Personal and commercial use</li>
-              <li>All updates included</li>
-              <li>No subscription, no expiry</li>
+              <li>Read and study the full source</li>
+              <li>Independent security review</li>
+              <li>Personal, non-production evaluation builds</li>
               <li>Local-only — no account required</li>
             </ul>
             <div class="cta-row">
-              <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest" class="btn-primary">Download DMG</a>
+              <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest" class="btn-primary">Download evaluation DMG</a>
               <p class="micro">macOS&nbsp;12+ &middot; <a href="https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly">nightly build</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/README.md#quick-start">install guide</a></p>
             </div>
           </div>
 
           <div class="license">
-            <h3>Teams</h3>
-            <div class="price">Volume &middot; <em>per seat</em></div>
+            <h3>Production license</h3>
+            <div class="price">Coming &middot; <em>register interest</em></div>
             <ul>
-              <li>Shared infrastructure deployment</li>
-              <li>Priority support channel</li>
-              <li>SLA and deployment assistance</li>
-              <li>Private model channels</li>
+              <li>Commercial and production use</li>
+              <li>Multi-user and managed deployments</li>
+              <li>Terms and availability TBA</li>
+              <li>Be notified when the license is published</li>
             </ul>
             <div class="cta-row">
-              <a href="mailto:contact@ohno.llc?subject=Enclave%20Teams%20License" class="btn-secondary">Contact for pricing</a>
-              <p class="micro">Reply within 1 business day &middot; <a href="https://github.com/hankthebldr/local-ai-platform/discussions">discussions</a></p>
+              <a href="https://github.com/hankthebldr/local-ai-platform/discussions" class="btn-secondary">Join the waitlist</a>
+              <p class="micro">No pricing yet &middot; <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/LICENSE">read full license</a></p>
             </div>
           </div>
 

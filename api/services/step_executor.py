@@ -65,6 +65,32 @@ class StepExecutor:
             else defaults.retry_delay
         )
 
+        # --- before_step hooks (BEFORE input resolution) ---------------------
+        # before_step runs once per step (not per attempt). This lets a hook
+        # like plugin_tool_invoker populate a workspace key that the step
+        # references as one of its own inputs.
+        pre_ctx = HookContext(
+            workflow=workflow_run,
+            step=step,
+            prompt=None,
+            attempt=0,
+        )
+        pre_results = self.hook_bus.dispatch("before_step", pre_ctx)
+        if self._short_circuit(pre_results):
+            result.status = "failed"
+            result.error = next(
+                (r.feedback for r in pre_results if r.feedback),
+                "before_step hook aborted",
+            )
+            result.completed_at = datetime.utcnow()
+            result.duration_seconds = (
+                result.completed_at - result.started_at
+            ).total_seconds()
+            logger.error(
+                f"Step '{step.id}' aborted by before_step hook: {result.error}"
+            )
+            return result
+
         # --- Compose prompt ---------------------------------------------------
         resolved_inputs = {ref: context.resolve_input(ref) for ref in step.inputs}
         resolved_inputs = {k: v for k, v in resolved_inputs.items() if v is not None}
@@ -103,9 +129,16 @@ class StepExecutor:
                 attempt=attempt,
             )
 
-            # before_step
-            if self._short_circuit(self.hook_bus.dispatch("before_step", ctx)):
-                break
+            # before_step (post-compose re-dispatch for prompt-aware hooks
+            # like token_budget). Hooks that already executed pre-compose
+            # (e.g. plugin_tool_invoker) are idempotent and skip themselves.
+            # First attempt only — subsequent attempts use the snapshot.
+            if attempt == 0:
+                if self._short_circuit(self.hook_bus.dispatch("before_step", ctx)):
+                    break
+                # Refresh originals if before_step mutated the composed prompt
+                _original_user = composed.user
+                _original_system = composed.system
 
             # transform_prompt
             if self._short_circuit(self.hook_bus.dispatch("transform_prompt", ctx)):
