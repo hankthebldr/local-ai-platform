@@ -2,7 +2,7 @@ id: xdm-toolkit
 name: "XDM Toolkit"
 version: "1.0.0"
 description: "Skills + tools for writing Cortex XSIAM data model rules in XQL. Triggers on XQL/XDM keywords and exposes validate + lookup utilities."
-author: "ohno llc"
+author: "enclave"
 
 # Skills auto-inject when the user message contains a trigger keyword.
 # Each skill is a markdown body that the LLM reads as additional context.

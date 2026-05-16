@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 ingest_xql_corpus — One-shot ingestion of docs/seed/xql/ into a dedicated
 ChromaDB collection (`xql_corpus`) for retrieval by XQL/XDM authoring

@@ -1,6 +1,4 @@
 <!--
-SPDX-FileCopyrightText: ohno llc
-SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
 # Provenance — XQL/XDM corpus
@@ -27,7 +25,6 @@ authoring agents.
 ## Licence
 
 The source repository is licensed under **GNU Affero General Public
-License v3.0 or later** (`SPDX-License-Identifier: AGPL-3.0-or-later`).
 All copied files retain that licence. Any downstream code that
 incorporates this corpus — directly or as RAG-indexed text — is bound
 by the same terms.

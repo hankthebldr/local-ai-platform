@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 xdm_snippets — look up XQL/XDM code snippets by category, tag, or
 pattern-family hint.

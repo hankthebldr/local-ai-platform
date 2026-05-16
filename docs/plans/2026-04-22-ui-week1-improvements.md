@@ -202,7 +202,7 @@ And immediately below:
 ```html
 <div class="logo-text">
   <div class="logo-title">EN<span>CLAVE</span></div>
-  <div class="logo-sub">Local sovereign AI &mdash; by ohno llc</div>
+  <div class="logo-sub">Local sovereign AI</div>
 </div>
 ```
 
@@ -211,7 +211,7 @@ And immediately below:
 At `api/static/index.html:1516`:
 
 ```html
-<div class="footer-meta">Enclave v0.1.0 &mdash; by ohno llc</div>
+<div class="footer-meta">Enclave v0.1.0</div>
 ```
 
 - [ ] **Step 5: Spot-check setup.html for the same strings**

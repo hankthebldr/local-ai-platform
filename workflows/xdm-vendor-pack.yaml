@@ -31,7 +31,7 @@ description: |
   gocortex-xql-ide; gated by the 82-rule analyse_xql engine.
 
 metadata:
-  author: "ohno llc"
+  author: "enclave"
   category: "security-engineering"
   tags: ["xsiam", "xdr", "xdm", "xql", "pack", "onboarding"]
   estimated_duration: 480
@@ -154,8 +154,6 @@ steps:
         // <Vendor> <Product> -- XQL Parsing Rule
         // Dataset: <dataset_name>_raw
         //
-        // SPDX-FileCopyrightText: ohno llc
-        // SPDX-License-Identifier: AGPL-3.0-or-later
 
         [INGEST: vendor="<Vendor>", product="<Product>",
                  target_dataset="<dataset_name>_raw", no_hit=drop]

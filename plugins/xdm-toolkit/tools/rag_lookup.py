@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 rag_lookup — retrieve chunks from the Phase 2 `xql_corpus` Chroma
 collection by free-text query and optional metadata filters.

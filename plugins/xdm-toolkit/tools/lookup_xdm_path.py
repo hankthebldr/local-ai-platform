@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 lookup_xdm_path — map a vendor field name (or short description) to
 candidate XDM paths.
