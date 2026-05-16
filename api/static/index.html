@@ -328,35 +328,7 @@ body::after {
 }
 .logo-sub .sep { color: var(--text-faint); }
 
-/* Cortex co-brand chip — small PANW-orange-outlined pill next to the
-   wordmark. Anchors the "by Cortex" partnership without dominating. */
-.brand-cobrand {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 9px 3px 7px;
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-  color: var(--panw-orange);
-  background: var(--panw-orange-ghost);
-  border: 1px solid var(--panw-orange-dim);
-  border-radius: 2px;
-  line-height: 1;
-  position: relative;
-}
-.brand-cobrand::before {
-  content: '';
-  width: 6px; height: 6px;
-  background: var(--panw-orange);
-  box-shadow: var(--glow-orange);
-  transform: rotate(45deg);
-  display: inline-block;
-}
-.brand-cobrand-label { color: var(--text-dim); }
-
-/* Cortex environment chip — shows deployment context (LOCAL / DEV /
+/* Environment chip — shows deployment context (LOCAL / DEV /
    PROD). Green border = trusted / sovereign. Orange = cloud-attached. */
 .env-chip {
   display: inline-flex;
@@ -2262,14 +2234,12 @@ details[open] > summary::before { transform: rotate(90deg); }
       </div>
       <div class="logo-text">
         <div class="logo-title">
-          EN<span>CLAVE</span>
-          <span class="brand-cobrand" aria-label="Cortex co-brand">
-            <span class="brand-cobrand-label">by</span>
-            CORTEX
-          </span>
+          <span>ENCLAVE</span>
         </div>
         <div class="logo-sub">
           <span>Local Sovereign AI</span>
+          <span class="sep">·</span>
+          <span>by Henry Reed</span>
           <span class="sep">·</span>
           <span id="brand-fleet-host">Operator Console</span>
         </div>
@@ -2294,7 +2264,7 @@ details[open] > summary::before { transform: rotate(90deg); }
     <!-- Breadcrumb row — JS updates these spans on tab switch so the
          operator always knows which mode/sub-context they're in. -->
     <div class="header-breadcrumb" id="header-breadcrumb">
-      <span class="crumb">Cortex</span>
+      <span class="crumb">Enclave</span>
       <span class="crumb-sep">›</span>
       <span class="crumb active" id="crumb-mode">Compose</span>
       <span class="crumb-sep">›</span>
@@ -3486,7 +3456,7 @@ details[open] > summary::before { transform: rotate(90deg); }
         <a href="/v1/models">Models</a>
       </div>
       <span class="footer-rail-vsep" aria-hidden="true"></span>
-      <div class="footer-meta" id="footer-version">Enclave v1.1.1 · Cortex Console</div>
+      <div class="footer-meta" id="footer-version">Enclave v1.1.1 · by Henry Reed</div>
     </div>
   </div>
 
