@@ -17,20 +17,20 @@ from ..models.mcp_models import (
 )
 from ..services.mcp_service import get_mcp_service
 
-router = APIRouter(
-    prefix="/api/mcp",
-    tags=["mcp"],
-    dependencies=[Depends(require_master_key)],
-)
+router = APIRouter(prefix="/api/mcp", tags=["mcp"])
+
+# Read-only GETs are open for discoverability (composer palette / MCPs
+# workbench needs them on the default landing). Mutations + invocations
+# still require the master key — declared per-route below.
 
 
 @router.get("/servers")
 async def list_servers():
-    """List all registered MCP servers (secrets masked)."""
+    """List all registered MCP servers (secrets masked). Public read."""
     return get_mcp_service().list_servers()
 
 
-@router.post("/servers")
+@router.post("/servers", dependencies=[Depends(require_master_key)])
 async def create_server(body: MCPServerCreate):
     """Register a new MCP server."""
     try:
@@ -41,14 +41,14 @@ async def create_server(body: MCPServerCreate):
 
 @router.get("/servers/{server_id}")
 async def get_server(server_id: str):
-    """Return a single server's masked configuration."""
+    """Return a single server's masked configuration. Public read."""
     cfg = get_mcp_service().get_server(server_id)
     if cfg is None:
         raise HTTPException(status_code=404, detail="server not found")
     return cfg
 
 
-@router.patch("/servers/{server_id}")
+@router.patch("/servers/{server_id}", dependencies=[Depends(require_master_key)])
 async def update_server(server_id: str, body: MCPServerUpdate):
     """Patch a server's configuration. Refreshes the tools cache."""
     try:
@@ -59,7 +59,7 @@ async def update_server(server_id: str, body: MCPServerUpdate):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.delete("/servers/{server_id}")
+@router.delete("/servers/{server_id}", dependencies=[Depends(require_master_key)])
 async def delete_server(server_id: str):
     """Remove a server registration."""
     removed = get_mcp_service().remove(server_id)
@@ -68,7 +68,7 @@ async def delete_server(server_id: str):
     return {"removed": True, "server_id": server_id}
 
 
-@router.post("/servers/{server_id}/test")
+@router.post("/servers/{server_id}/test", dependencies=[Depends(require_master_key)])
 async def test_server(server_id: str):
     """Perform an MCP initialize+tools/list handshake and return status."""
     try:
@@ -80,7 +80,7 @@ async def test_server(server_id: str):
 
 @router.get("/servers/{server_id}/tools")
 async def list_tools(server_id: str, refresh: bool = False):
-    """List tools advertised by a server."""
+    """List tools advertised by a server. Public read."""
     try:
         tools = get_mcp_service().list_tools(server_id, force_refresh=refresh)
     except KeyError:
@@ -90,7 +90,7 @@ async def list_tools(server_id: str, refresh: bool = False):
     return [t.model_dump(mode="json") for t in tools]
 
 
-@router.post("/servers/{server_id}/invoke")
+@router.post("/servers/{server_id}/invoke", dependencies=[Depends(require_master_key)])
 async def invoke_tool(server_id: str, body: MCPToolCall):
     """Invoke a tool on the server and return its JSON-RPC result."""
     try:

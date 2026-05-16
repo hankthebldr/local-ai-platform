@@ -8291,12 +8291,17 @@ async function loadWorkbenches() {
 
   // Agents — the agent library. Drag-into-canvas spawns an AgentStep
   // pre-filled with the agent's role + model + system_prompt so the
-  // step starts as a faithful clone of the agent.
+  // step starts as a faithful clone of the agent. GET /api/agents is
+  // public (matches plugins/mcp policy) so this should normally render
+  // even without admin signin; the auth-hint path is here only for
+  // pathological 401 cases (legacy stack, custom middleware, etc).
   try {
-    const r = await fetch('/api/agents');
+    const r = await fetch('/api/agents', { headers });
     if (r.ok) {
       const agents = await r.json();
       renderAgentsWorkbench(agents);
+    } else if (r.status === 401 || r.status === 403) {
+      renderWorkbenchAuthHint('bench-agents-list');
     } else {
       renderWorkbenchError('bench-agents-list', `HTTP ${r.status}`);
     }

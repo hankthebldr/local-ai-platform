@@ -16,13 +16,13 @@ plugin_service = PluginService(plugins_dir=_plugins_dir)
 plugin_service.scan_plugins()
 
 
-@router.get("", dependencies=[Depends(require_master_key)])
+@router.get("")
 async def list_plugins():
-    """List all discovered plugins"""
+    """List all discovered plugins — public read (matches PUBLIC_GET_PREFIXES policy)."""
     return plugin_service.list_plugins()
 
 
-@router.get("/{plugin_id}", dependencies=[Depends(require_master_key)])
+@router.get("/{plugin_id}")
 async def get_plugin(plugin_id: str):
     """Get plugin details"""
     plugins = plugin_service.list_plugins()

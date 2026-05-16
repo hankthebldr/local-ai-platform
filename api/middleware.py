@@ -44,6 +44,23 @@ PUBLIC_PATHS = {
 # user can possibly enter an API key — vendor CSS/JS, favicon, fonts).
 PUBLIC_PREFIXES = ("/static/",)
 
+# GET-only prefixes that are open for discoverability. The Composer is the
+# default-active landing tab and surfaces these resources in its palette
+# without requiring a sign-in; mutations (POST/PUT/DELETE) on the same
+# routes still require auth via the per-route Depends or scope check.
+# Aligns with the "Reads are open (mirrors the plugins/agents/etc. policy:
+# discoverable)" comment in api/routers/cloud_providers.py.
+PUBLIC_GET_PREFIXES = (
+    "/api/agents",
+    "/api/plugins",
+    "/api/mcp/servers",
+    "/api/workflows",
+    "/api/workflow-index",
+    "/api/roles",
+    "/api/projects",
+    "/api/info",
+)
+
 
 # ── Scope enforcement ──────────────────────────────────────────────────────
 # Maps URL path prefixes to the scope a key must hold to access them.
@@ -96,6 +113,13 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         # Skip public paths (exact match + prefix allowlist for static assets)
         path = request.url.path
         if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
+            return await call_next(request)
+
+        # Discoverable GETs (the Composer palette + Workflow Index call these
+        # on first paint; gating them behind auth would force every operator
+        # to sign in before they can see what's installed). Mutations on
+        # the same routes still require auth.
+        if request.method == "GET" and path.startswith(PUBLIC_GET_PREFIXES):
             return await call_next(request)
 
         # Extract key from header or query param
