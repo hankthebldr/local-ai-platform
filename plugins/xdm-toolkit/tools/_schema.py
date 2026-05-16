@@ -110,6 +110,92 @@ def known_xql_stages() -> frozenset[str]:
     return frozenset(s["name"] for s in _load("xql_functions")["xqlStages"])
 
 
+# ── XDM type metadata (Task #113) ─────────────────────────────────────
+# Mirrors xdm-schema.ts:getXdmFieldType / getXdmFieldEnum.
+
+_SCALAR_BASE_BY_TYPE: dict[str, str] = {
+    "String": "string",
+    "Boolean": "bool",
+    "Number": "int",
+    "Float": "float",
+    "IPv4": "ipv4",
+    "IPv6": "ipv6",
+    "Timestamp": "timestamp",
+    "EmailAddress": "email",
+    "URL": "url",
+    "MD5": "md5",
+    "SHA256": "sha256",
+}
+
+
+@lru_cache(maxsize=1)
+def _enum_values_by_const() -> dict[str, list[str]]:
+    raw = _load("xdm_schema")["xdmConsts"]
+    m: dict[str, list[str]] = {}
+    for c in raw:
+        tokens: list[str] = []
+        for row in c["values"]:
+            if row.get("value") == "Original" and row.get("description") == "Mapped":
+                continue
+            desc = row.get("description") or ""
+            if desc.startswith("XDM_CONST."):
+                tokens.append(desc)
+            val = row.get("value") or ""
+            if val and not val.startswith("XDM_CONST."):
+                tokens.append(val)
+        # Preserve order, drop duplicates.
+        seen: set[str] = set()
+        uniq: list[str] = []
+        for t in tokens:
+            if t not in seen:
+                seen.add(t)
+                uniq.append(t)
+        m[c["name"]] = uniq
+    return m
+
+
+def _derive_scalar_or_enum(type_str: str) -> dict:
+    if type_str.startswith("XDM_CONST."):
+        values = _enum_values_by_const().get(type_str, [])
+        return {"kind": "enum", "constName": type_str, "values": values}
+    base = _SCALAR_BASE_BY_TYPE.get(type_str, "string")
+    return {"kind": "scalar", "base": base}
+
+
+@lru_cache(maxsize=1)
+def _type_meta_by_path() -> dict[str, dict]:
+    m: dict[str, dict] = {}
+    for f in xdm_fields():
+        name = f["name"]
+        if not name.startswith("xdm."):
+            continue
+        inner = _derive_scalar_or_enum(f.get("type", "String"))
+        if f.get("dataclass") == "Array":
+            m[name] = {"kind": "array", "element": inner}
+        else:
+            m[name] = inner
+    return m
+
+
+def get_xdm_field_type(path: str) -> dict | None:
+    """Return type metadata dict for an xdm.* path: scalar/enum/array."""
+    return _type_meta_by_path().get(path)
+
+
+def get_xdm_field_enum(path: str) -> list[str] | None:
+    """Closed enum vocabulary (XDM_CONST + raw values) for the path, or None."""
+    meta = _type_meta_by_path().get(path)
+    if not meta:
+        return None
+    if meta.get("kind") == "enum":
+        return meta["values"]
+    if meta.get("kind") == "array":
+        elem = meta.get("element", {})
+        if elem.get("kind") == "enum":
+            return elem["values"]
+    return None
+
+
 # Source-of-truth version constants (rules-engine.ts lines 58-60).
 XDM_SCHEMA_VERSION = "2026-04-21"
 XDM_SCHEMA_SOURCE = (
