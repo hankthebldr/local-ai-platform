@@ -43,6 +43,26 @@ tools:
         required: true
         description: "The XQL rule text to validate (full MODEL block including any leading comment)."
 
+  - id: "analyse_xql"
+    file: "tools/analyse_xql.py"
+    function: "execute"
+    description: |
+      High-fidelity XQL rule analyser. Runs the full rules-engine port (75+ rules)
+      against a data model or parsing rule. Returns structured output: violations
+      with rule IDs, line numbers, severities, and recommendations; a quality
+      score; and a one-word verdict (READY-TO-DEPLOY / NEEDS-FIXES /
+      REWRITE-RECOMMENDED). Prefer this over validate_xql for new code — the
+      legacy tool calls this internally but discards the rich structured output.
+    parameters:
+      rule:
+        type: string
+        required: true
+        description: "The XQL rule text to analyse (full MODEL or INGEST block)."
+      kind:
+        type: string
+        default: "modeling"
+        description: "Rule type: 'modeling' (default) or 'parsing'."
+
   - id: "lookup_xdm_path"
     file: "tools/lookup_xdm_path.py"
     function: "execute"
