@@ -17,28 +17,33 @@ def test_index_html_loads(index_soup):
     assert title.text.strip() != ""
 
 
-def test_index_header_brand_is_enclave_with_cortex_cobrand(index_html_text):
-    """Primary wordmark must remain ENCLAVE. CORTEX may appear ONLY as the
-    deliberate co-brand chip (.brand-cobrand) — never as the primary wordmark
-    or page title. The legacy 'LOCAL AI PLATFORM' / 'Mission Control'
-    placeholders must still be absent.
+def test_index_header_brand_is_enclave(index_html_text):
+    """Primary wordmark must read ENCLAVE as a single continuous word, and
+    the user-visible header must NOT contain CORTEX (Cortex is the design
+    language source — not the product brand). Legacy 'LOCAL AI PLATFORM' /
+    'Mission Control' placeholders must still be absent.
     """
-    # ENCLAVE wordmark is still the primary brand.
-    assert "EN<span>CLAVE</span>" in index_html_text, "primary ENCLAVE wordmark missing"
+    # ENCLAVE wordmark is wrapped as a single span (one continuous word).
+    assert "<span>ENCLAVE</span>" in index_html_text, "primary ENCLAVE wordmark missing"
 
-    # If CORTEX appears, every occurrence must be contained inside the
-    # co-brand chip — not in the wordmark, page <title>, or anywhere else.
-    if "CORTEX" in index_html_text:
+    # The author attribution must be present in the header.
+    assert "by Henry Reed" in index_html_text, "author attribution missing"
+
+    # CORTEX must not appear in user-visible markup. CSS comments, HTML
+    # comments, and script strings are fine (design-language descriptors);
+    # the assertion targets only text the user can actually read.
+    title_match = re.search(r"<title>(.*?)</title>", index_html_text, re.I | re.S)
+    if title_match:
         assert (
-            'class="brand-cobrand"' in index_html_text
-        ), "CORTEX is present but not wrapped in the .brand-cobrand chip"
-        # Defence against future regressions: CORTEX must not appear inside
-        # the .logo-title text or the <title> tag.
-        title_match = re.search(r"<title>(.*?)</title>", index_html_text, re.I | re.S)
-        if title_match:
-            assert (
-                "CORTEX" not in title_match.group(1).upper()
-            ), "CORTEX leaked into <title>; primary brand must read ENCLAVE"
+            "CORTEX" not in title_match.group(1).upper()
+        ), "CORTEX leaked into <title>; primary brand must read ENCLAVE"
+    # Strip styles, scripts, and HTML comments before scanning the body.
+    visible = re.sub(r"<style.*?</style>", "", index_html_text, flags=re.I | re.S)
+    visible = re.sub(r"<script.*?</script>", "", visible, flags=re.I | re.S)
+    visible = re.sub(r"<!--.*?-->", "", visible, flags=re.S)
+    assert (
+        "CORTEX" not in visible.upper()
+    ), "CORTEX present in user-visible markup; Cortex is design source, not brand"
 
     # Legacy placeholder guards (unchanged).
     assert (
