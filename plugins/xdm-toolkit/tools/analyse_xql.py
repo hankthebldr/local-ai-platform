@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 analyse_xql — public tool entry. Runs the full rules-engine port against
 an XQL data model or parsing rule and returns the structured analyser

@@ -15,7 +15,3 @@
 - [ ] `pytest tests/` passes
 - [ ] Manual smoke test on local Ollama
 - [ ] No breaking changes to the OpenAI-compatible API surface
-
-## License acknowledgement
-
-- [ ] I understand Enclave is commercial software and I am contributing under the terms of the [LICENSE](../LICENSE)

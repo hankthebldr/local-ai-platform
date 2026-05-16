@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 smoke_crowdstrike — end-to-end smoke test of the XQL/XDM pipeline against
 a real-shape CrowdStrike Falcon DetectionSummaryEvent, focused on stitching
@@ -166,9 +164,6 @@ GOOD_CROWDSTRIKE_RULE = textwrap.dedent("""\
     //                            xdm.source.process.parent_id; agent stitching via
     //                            xdm.observer.unique_identifier (AID); MITRE
     //                            tactic + technique flow into xdm.alert.mitre_*
-    //
-    // SPDX-FileCopyrightText: ohno llc
-    // SPDX-License-Identifier: AGPL-3.0-or-later
 
     [MODEL: dataset = crowdstrike_falcon_raw]
 

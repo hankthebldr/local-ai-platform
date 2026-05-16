@@ -17,5 +17,5 @@
   <text x="40" y="140" font-family="'Space Grotesk','SF Pro Display',sans-serif" font-size="36" font-weight="600" fill="#e8eaf0">Your models.</text>
   <text x="40" y="180" font-family="'Space Grotesk','SF Pro Display',sans-serif" font-size="36" font-weight="600" fill="#00E87B">Your machine.</text>
   <text x="40" y="210" font-family="'SF Pro Text',sans-serif" font-size="12" fill="#6b7689" letter-spacing="1">Drag Enclave.app into Applications to install.</text>
-  <text x="620" y="370" text-anchor="end" font-family="'JetBrains Mono',monospace" font-size="9" fill="#3a4560" letter-spacing="2">v1.0.0 · ohno llc</text>
+  <text x="620" y="370" text-anchor="end" font-family="'JetBrains Mono',monospace" font-size="9" fill="#3a4560" letter-spacing="2">v1.0.0</text>
 </svg>

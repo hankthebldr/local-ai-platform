@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Phase 4 — tests for the analyse_xql_gate hook, xdm_snippets tool, and
 rag_lookup tool.

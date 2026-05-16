@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 VALIDATION_RULES — Port of `validationRules` from server/data/rules-engine.ts.
 

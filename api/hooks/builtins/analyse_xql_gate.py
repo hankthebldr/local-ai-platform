@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 analyse_xql_gate hook — fail the step on parser-conformance BLOCKERs.
 

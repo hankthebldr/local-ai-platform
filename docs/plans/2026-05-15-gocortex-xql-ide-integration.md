@@ -56,9 +56,7 @@ workflow run on any BLOCKER.
 ## Licensing
 
 - Source corpus is AGPL-3.0-or-later. All copied files keep their original
-  `SPDX-FileCopyrightText: GoCortexIO` + `SPDX-License-Identifier: AGPL-3.0-or-later` headers.
 - New Python ports get fresh SPDX headers:
-  `SPDX-FileCopyrightText: ohno llc` + `SPDX-License-Identifier: AGPL-3.0-or-later`,
   with a `# Derived from gocortex-xql-ide/server/data/rules-engine.ts (AGPL-3.0)` provenance line.
 - Enclave's top-level licence stays as-is; AGPL only attaches to the
   derivative files in `plugins/xdm-toolkit/` and the mirrored corpus under

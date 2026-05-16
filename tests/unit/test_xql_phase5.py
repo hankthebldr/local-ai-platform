@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Phase 5 — structural validation tests for the two new agents,
 `xdm-vendor-pack.yaml` workflow, and `vendor-pack-author` skill.

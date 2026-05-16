@@ -1,6 +1,4 @@
 <!--
-SPDX-FileCopyrightText: ohno llc
-SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
 ---
@@ -45,8 +43,6 @@ If the runtime is not available (the user is just asking for the artefacts in ch
 // <Vendor> <Product> -- XQL Parsing Rule
 // Dataset: <vendor>_<product>_raw
 //
-// SPDX-FileCopyrightText: ohno llc
-// SPDX-License-Identifier: AGPL-3.0-or-later
 
 [INGEST: vendor="<Vendor>", product="<Product>",
          target_dataset="<vendor>_<product>_raw", no_hit=drop]
