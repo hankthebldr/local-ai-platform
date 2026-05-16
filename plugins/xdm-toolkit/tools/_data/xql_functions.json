@@ -1,0 +1,1639 @@
+{
+  "_meta": {
+    "source": "gocortex-xql-ide/server/data/xql-functions.ts",
+    "spdx_license": "AGPL-3.0-or-later",
+    "spdx_copyright": "GoCortexIO"
+  },
+  "xqlStages": [
+    {
+      "name": "alter",
+      "syntax": "alter <field1> = <expression1> [, <field2> = <expression2>, ...]",
+      "description": "Changes values of an existing field or creates a new one using functions",
+      "parameters": [
+        "field",
+        "expression"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "alter src_ip = coalesce(action_local_ip, actor_primary_ip)",
+      "category": "Stage"
+    },
+    {
+      "name": "arrayexpand",
+      "syntax": "arrayexpand <array_field> [limit <number>]",
+      "description": "Expands multi-value array fields into separate events",
+      "parameters": [
+        "array_field",
+        "limit"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "arrayexpand dfe_labels",
+      "category": "Stage"
+    },
+    {
+      "name": "bin",
+      "syntax": "bin <field> span = <time> | bins = <number>",
+      "description": "Groups events by quantity (number) or time span (date type)",
+      "parameters": [
+        "field",
+        "span_or_bins"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "bin _time span=5m",
+      "category": "Stage"
+    },
+    {
+      "name": "call",
+      "syntax": "call \"<name>\" [<param> = <value>, ...]",
+      "description": "References a predefined query from the Query Library",
+      "parameters": [
+        "query_name",
+        "parameters"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "call \"my_predefined_query\" param1 = \"value1\"",
+      "category": "Stage"
+    },
+    {
+      "name": "comp",
+      "syntax": "comp <aggregate>(<field>) [as <alias>] [by <field1>, ...]",
+      "description": "Calculates statistics (aggregations) over groups of rows",
+      "parameters": [
+        "aggregate_function",
+        "field",
+        "alias",
+        "group_by"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "comp count() as total by src_ip",
+      "category": "Stage"
+    },
+    {
+      "name": "config",
+      "syntax": "config <function>",
+      "description": "Configures query behaviour (case_sensitive, timeframe, max_runtime_minutes). Must be the first stage",
+      "parameters": [
+        "setting",
+        "value"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "config timeframe = 24h",
+      "category": "Stage"
+    },
+    {
+      "name": "dedup",
+      "syntax": "dedup <field1>[, <field2>, ...] by asc|desc <field>",
+      "description": "Removes records with duplicate values",
+      "parameters": [
+        "fields",
+        "direction",
+        "sort_field"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "dedup src_ip, dst_ip by desc _time",
+      "category": "Stage"
+    },
+    {
+      "name": "fields",
+      "syntax": "fields [-] <field_1> [as <name1>], ...",
+      "description": "Defines fields returned in the result set. Supports wildcards and exclusion with -",
+      "parameters": [
+        "fields"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "fields src_ip, dst_ip, action",
+      "category": "Stage"
+    },
+    {
+      "name": "filter",
+      "syntax": "filter <boolean_expr>",
+      "description": "Narrows down results using boolean expressions",
+      "parameters": [
+        "condition"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "filter action_local_ip != null",
+      "category": "Stage"
+    },
+    {
+      "name": "getrole",
+      "syntax": "getrole <field> [as <alias>]",
+      "description": "Enriches events with roles associated with usernames or endpoints (Asset Roles)",
+      "parameters": [
+        "field",
+        "alias"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "getrole actor_primary_username as user_role",
+      "category": "Stage"
+    },
+    {
+      "name": "iploc",
+      "syntax": "iploc <field>",
+      "description": "Associates IPv4 addresses with geolocation attributes (City, Country, ASN, etc.)",
+      "parameters": [
+        "ip_field"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "iploc action_local_ip",
+      "category": "Stage"
+    },
+    {
+      "name": "join",
+      "syntax": "join [conflict_strategy = both|left|right] [type = inner|left|right] ((<xql_query>) as <name> <boolean_expr>)",
+      "description": "Combines results of two queries",
+      "parameters": [
+        "conflict_strategy",
+        "type",
+        "subquery",
+        "alias",
+        "condition"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "join type=left (dataset=assets | fields ip, owner) as a a.ip = src_ip",
+      "category": "Stage"
+    },
+    {
+      "name": "limit",
+      "syntax": "limit <number>",
+      "description": "Sets the maximum number of records returned",
+      "parameters": [
+        "number"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "limit 100",
+      "category": "Stage"
+    },
+    {
+      "name": "replacenull",
+      "syntax": "replacenull <field> = <text_string>",
+      "description": "Replaces null values with a specified text string",
+      "parameters": [
+        "field",
+        "value"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "replacenull agent_ip_addresses = \"unknown\"",
+      "category": "Stage"
+    },
+    {
+      "name": "search",
+      "syntax": "search \"<free_text1>\"[, \"<free_text2>\", ...]",
+      "description": "Searches for free-text strings across datasets (limited to last 90 days)",
+      "parameters": [
+        "text"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "search \"192.0.2.56\"",
+      "category": "Stage"
+    },
+    {
+      "name": "sort",
+      "syntax": "sort [asc|desc] <field1> [, [asc|desc] <field2>, ...]",
+      "description": "Orders the result set",
+      "parameters": [
+        "direction",
+        "field"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "sort desc _time",
+      "category": "Stage"
+    },
+    {
+      "name": "target",
+      "syntax": "target type=dataset|lookup [append=true|false] <dataset_name>",
+      "description": "Saves query results to a named dataset or lookup. Must be the last stage",
+      "parameters": [
+        "type",
+        "append",
+        "dataset_name"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "target type=dataset my_output_dataset",
+      "category": "Stage"
+    },
+    {
+      "name": "top",
+      "syntax": "top <integer> <field> [by <field1>, ...]",
+      "description": "Returns approximate count and percentage of top elements for a field",
+      "parameters": [
+        "count",
+        "field",
+        "group_by"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "top 10 src_ip",
+      "category": "Stage"
+    },
+    {
+      "name": "transaction",
+      "syntax": "transaction <field_1, ...> [span = <time> | startswith = <cond> endswith = <cond>]",
+      "description": "Finds transactions based on events meeting specific constraints (span, startswith, endswith)",
+      "parameters": [
+        "fields",
+        "span",
+        "startswith",
+        "endswith"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "transaction session_id span = 30m",
+      "category": "Stage"
+    },
+    {
+      "name": "union",
+      "syntax": "union <datasetname> | union (<inner_xql_query>)",
+      "description": "Combines two result sets",
+      "parameters": [
+        "dataset_or_subquery"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "union (dataset = panw_ngfw_traffic_raw)",
+      "category": "Stage"
+    },
+    {
+      "name": "view",
+      "syntax": "view highlight ... | view graph type = <type> ... | view column order = default|populated",
+      "description": "Configures display (highlighting, graphing, or column ordering)",
+      "parameters": [
+        "display_config"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "view column order = populated",
+      "category": "Stage"
+    },
+    {
+      "name": "windowcomp",
+      "syntax": "windowcomp <analytic_function>(<field>) [by <fieldA>, ...] [sort <field1>, ...] [between <range>] [as <alias>]",
+      "description": "Calculates statistics over a window (group) of rows for each row",
+      "parameters": [
+        "function",
+        "field",
+        "by",
+        "sort",
+        "between",
+        "alias"
+      ],
+      "returnType": "stage",
+      "exampleUsage": "windowcomp row_number() by session_id sort _time as rn",
+      "category": "Stage"
+    }
+  ],
+  "xqlFunctions": [
+    {
+      "name": "add",
+      "syntax": "add(<a>, <b>)",
+      "description": "Returns the sum of two numeric values",
+      "parameters": [
+        "a",
+        "b"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter total = add(sent_bytes, recv_bytes)",
+      "category": "Math"
+    },
+    {
+      "name": "approx_count",
+      "syntax": "approx_count(<field>)",
+      "description": "Returns an approximate count of distinct values using HyperLogLog",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp approx_count(src_ip) as unique_sources",
+      "category": "Aggregate"
+    },
+    {
+      "name": "approx_quantiles",
+      "syntax": "approx_quantiles(<field>, <quantile>)",
+      "description": "Returns an approximate quantile value for a numeric field",
+      "parameters": [
+        "field",
+        "quantile"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp approx_quantiles(response_time, 0.95) as p95",
+      "category": "Aggregate"
+    },
+    {
+      "name": "approx_top",
+      "syntax": "approx_top(<field>, <count>)",
+      "description": "Returns the approximate top N most frequent values of a field",
+      "parameters": [
+        "field",
+        "count"
+      ],
+      "returnType": "array",
+      "exampleUsage": "comp approx_top(src_ip, 10) as top_sources",
+      "category": "Aggregate"
+    },
+    {
+      "name": "array_all",
+      "syntax": "array_all(<array>, <condition>)",
+      "description": "Returns true if all elements in the array satisfy the condition",
+      "parameters": [
+        "array",
+        "condition"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "filter array_all(scores, \"@element\" > 0)",
+      "category": "Array"
+    },
+    {
+      "name": "array_any",
+      "syntax": "array_any(<array>, <condition>)",
+      "description": "Returns true if any element in the array satisfies the condition",
+      "parameters": [
+        "array",
+        "condition"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "filter array_any(tags, \"@element\" = \"critical\")",
+      "category": "Array"
+    },
+    {
+      "name": "arrayconcat",
+      "syntax": "arrayconcat(<array1>, <array2>)",
+      "description": "Concatenates two arrays into a single array",
+      "parameters": [
+        "array1",
+        "array2"
+      ],
+      "returnType": "array",
+      "exampleUsage": "alter all_ips = arrayconcat(src_ips, dst_ips)",
+      "category": "Array"
+    },
+    {
+      "name": "arraycreate",
+      "syntax": "arraycreate(<val1>, <val2>, ...)",
+      "description": "Creates an array from the given values",
+      "parameters": [
+        "values"
+      ],
+      "returnType": "array",
+      "exampleUsage": "alter ips = arraycreate(src_ip, dst_ip)",
+      "category": "Array"
+    },
+    {
+      "name": "arraydistinct",
+      "syntax": "arraydistinct(<array>)",
+      "description": "Returns an array with duplicate elements removed",
+      "parameters": [
+        "array"
+      ],
+      "returnType": "array",
+      "exampleUsage": "alter unique_tags = arraydistinct(tags)",
+      "category": "Array"
+    },
+    {
+      "name": "arrayfilter",
+      "syntax": "arrayfilter(<array>, <condition>)",
+      "description": "Filters array elements keeping only those matching the condition",
+      "parameters": [
+        "array",
+        "condition"
+      ],
+      "returnType": "array",
+      "exampleUsage": "alter filtered = arrayfilter(dfe_labels, \"@element\" != null)",
+      "category": "Array"
+    },
+    {
+      "name": "arrayindex",
+      "syntax": "arrayindex(<array>, <index>)",
+      "description": "Returns the element at the specified zero-based index in the array",
+      "parameters": [
+        "array",
+        "index"
+      ],
+      "returnType": "any",
+      "exampleUsage": "alter first_app = arrayindex(action_app_id_transitions, 0)",
+      "category": "Array"
+    },
+    {
+      "name": "arrayindexof",
+      "syntax": "arrayindexof(<array>, <value>)",
+      "description": "Returns the zero-based index of the first occurrence of a value in an array",
+      "parameters": [
+        "array",
+        "value"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter idx = arrayindexof(tags, \"malware\")",
+      "category": "Array"
+    },
+    {
+      "name": "array_length",
+      "syntax": "array_length(<array>)",
+      "description": "Returns the number of elements in an array",
+      "parameters": [
+        "array"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter tag_count = array_length(dfe_labels)",
+      "category": "Array"
+    },
+    {
+      "name": "arraymap",
+      "syntax": "arraymap(<array>, <expression>)",
+      "description": "Applies an expression to each element of an array, returning a new array",
+      "parameters": [
+        "array",
+        "expression"
+      ],
+      "returnType": "array",
+      "exampleUsage": "alter lower_tags = arraymap(tags, lowercase(\"@element\"))",
+      "category": "Array"
+    },
+    {
+      "name": "arraymerge",
+      "syntax": "arraymerge(<field>)",
+      "description": "Merges all values of a field across grouped records into a single array",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "array",
+      "exampleUsage": "comp arraymerge(src_ip) as all_sources by dst_ip",
+      "category": "Array"
+    },
+    {
+      "name": "arrayrange",
+      "syntax": "arrayrange(<start>, <end>, <step>)",
+      "description": "Creates an array of numbers from start to end with the specified step",
+      "parameters": [
+        "start",
+        "end",
+        "step"
+      ],
+      "returnType": "array",
+      "exampleUsage": "alter nums = arrayrange(0, 10, 2)",
+      "category": "Array"
+    },
+    {
+      "name": "arraystring",
+      "syntax": "arraystring(<array>, <delimiter>)",
+      "description": "Joins array elements into a single string separated by the delimiter",
+      "parameters": [
+        "array",
+        "delimiter"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter joined = arraystring(action_app_id_transitions, \";\")",
+      "category": "Array"
+    },
+    {
+      "name": "avg",
+      "syntax": "avg(<field>)",
+      "description": "Returns the average value of a numeric field across grouped records",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp avg(response_time) as avg_response",
+      "category": "Aggregate"
+    },
+    {
+      "name": "coalesce",
+      "syntax": "coalesce(<val1>, <val2>, ...)",
+      "description": "Returns the first non-null value from the arguments",
+      "parameters": [
+        "values"
+      ],
+      "returnType": "any",
+      "exampleUsage": "alter ip = coalesce(src_ip, local_ip, \"unknown\")",
+      "category": "Logic"
+    },
+    {
+      "name": "concat",
+      "syntax": "concat(<str1>, <str2>, ...)",
+      "description": "Concatenates multiple strings together",
+      "parameters": [
+        "strings"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter full_name = concat(first_name, \" \", last_name)",
+      "category": "String"
+    },
+    {
+      "name": "convert_from_base_64",
+      "syntax": "convert_from_base_64(<string>)",
+      "description": "Decodes a base64-encoded string to its original value",
+      "parameters": [
+        "string"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter decoded = convert_from_base_64(encoded_cmd)",
+      "category": "Encoding"
+    },
+    {
+      "name": "count",
+      "syntax": "count(<field>)",
+      "description": "Returns the number of records or non-null values of a field",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp count(event_type) as event_count by _time",
+      "category": "Aggregate"
+    },
+    {
+      "name": "count_distinct",
+      "syntax": "count_distinct(<field>)",
+      "description": "Returns the count of distinct non-null values of a field",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp count_distinct(src_ip) as unique_sources by _time",
+      "category": "Aggregate"
+    },
+    {
+      "name": "current_time",
+      "syntax": "current_time()",
+      "description": "Returns the current timestamp at query execution time",
+      "parameters": [],
+      "returnType": "timestamp",
+      "exampleUsage": "alter now = current_time()",
+      "category": "Time"
+    },
+    {
+      "name": "date_floor",
+      "syntax": "date_floor(<timestamp>, \"<unit>\")",
+      "description": "Rounds a timestamp down to the nearest specified time unit (day, hour, minute, etc.)",
+      "parameters": [
+        "timestamp",
+        "unit"
+      ],
+      "returnType": "timestamp",
+      "exampleUsage": "alter day_start = date_floor(_time, \"DAY\")",
+      "category": "Time"
+    },
+    {
+      "name": "divide",
+      "syntax": "divide(<a>, <b>)",
+      "description": "Returns the result of dividing a by b",
+      "parameters": [
+        "a",
+        "b"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter ratio = divide(failed, total)",
+      "category": "Math"
+    },
+    {
+      "name": "earliest",
+      "syntax": "earliest(<field>)",
+      "description": "Returns the value of a field from the earliest record by time",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "any",
+      "exampleUsage": "comp earliest(action) as first_action by src_ip",
+      "category": "Aggregate"
+    },
+    {
+      "name": "extract_time",
+      "syntax": "extract_time(<timestamp>, \"<component>\")",
+      "description": "Extracts a component (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, DOW) from a timestamp",
+      "parameters": [
+        "timestamp",
+        "component"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter hour = extract_time(_time, \"HOUR\")",
+      "category": "Time"
+    },
+    {
+      "name": "extract_url_host",
+      "syntax": "extract_url_host(<url>)",
+      "description": "Extracts the hostname from a URL string",
+      "parameters": [
+        "url"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter host = extract_url_host(url)",
+      "category": "URL"
+    },
+    {
+      "name": "extract_url_pub_suffix",
+      "syntax": "extract_url_pub_suffix(<url>)",
+      "description": "Extracts the public suffix (e.g. .com, .co.uk) from a URL string",
+      "parameters": [
+        "url"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter tld = extract_url_pub_suffix(url)",
+      "category": "URL"
+    },
+    {
+      "name": "extract_url_registered_domain",
+      "syntax": "extract_url_registered_domain(<url>)",
+      "description": "Extracts the registered domain (e.g. example.com) from a URL string",
+      "parameters": [
+        "url"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter domain = extract_url_registered_domain(url)",
+      "category": "URL"
+    },
+    {
+      "name": "first",
+      "syntax": "first(<field>)",
+      "description": "Returns the first value of a field encountered in the group",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "any",
+      "exampleUsage": "comp first(agent_hostname) as hostname by src_ip",
+      "category": "Aggregate"
+    },
+    {
+      "name": "first_value",
+      "syntax": "first_value(<field>)",
+      "description": "Returns the first value of a field in a window computation ordered set",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "any",
+      "exampleUsage": "windowcomp first_value(action) as first_action order by _time",
+      "category": "Window"
+    },
+    {
+      "name": "floor",
+      "syntax": "floor(<number>)",
+      "description": "Rounds a number down to the nearest integer",
+      "parameters": [
+        "number"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter rounded = floor(score)",
+      "category": "Math"
+    },
+    {
+      "name": "format_string",
+      "syntax": "format_string(\"<format>\", <val1>, <val2>)",
+      "description": "Formats values into a string using printf-style format specifiers (%s, %d, %f)",
+      "parameters": [
+        "format",
+        "values"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter label = format_string(\"%s:%d\", ip, port)",
+      "category": "String"
+    },
+    {
+      "name": "format_timestamp",
+      "syntax": "format_timestamp(<timestamp>, \"<format>\")",
+      "description": "Formats a timestamp into a string using the specified date-time format pattern",
+      "parameters": [
+        "timestamp",
+        "format"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter date_str = format_timestamp(_time, \"%Y-%m-%d\")",
+      "category": "Time"
+    },
+    {
+      "name": "if",
+      "syntax": "if(<condition>, <true_val>, <false_val>)",
+      "description": "Conditional expression returning one of two values based on a boolean condition",
+      "parameters": [
+        "condition",
+        "true_value",
+        "false_value"
+      ],
+      "returnType": "any",
+      "exampleUsage": "alter severity = if(risk_score > 80, \"high\", \"low\")",
+      "category": "Logic"
+    },
+    {
+      "name": "incidr",
+      "syntax": "incidr(<ip>, \"<cidr>\")",
+      "description": "Checks whether an IPv4 address falls within a specified CIDR range",
+      "parameters": [
+        "ip_field",
+        "cidr_range"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "filter incidr(src_ip, \"10.0.0.0/8\")",
+      "category": "Network"
+    },
+    {
+      "name": "incidr6",
+      "syntax": "incidr6(<ip>, \"<cidr>\")",
+      "description": "Checks whether an IPv6 address falls within a specified IPv6 CIDR range",
+      "parameters": [
+        "ip_field",
+        "cidr_range"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "filter incidr6(src_ipv6, \"fd00::/8\")",
+      "category": "Network"
+    },
+    {
+      "name": "incidrlist",
+      "syntax": "incidrlist(<ip>, \"<cidr1>\", \"<cidr2>\", ...)",
+      "description": "Checks whether an IP address falls within any of the specified CIDR ranges",
+      "parameters": [
+        "ip_field",
+        "cidr_ranges"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "filter incidrlist(src_ip, \"10.0.0.0/8\", \"172.16.0.0/12\", \"192.168.0.0/16\")",
+      "category": "Network"
+    },
+    {
+      "name": "int_to_ip",
+      "syntax": "int_to_ip(<integer>)",
+      "description": "Converts an integer representation to an IPv4 address string",
+      "parameters": [
+        "integer"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter ip_str = int_to_ip(ip_int)",
+      "category": "Network"
+    },
+    {
+      "name": "ip_to_int",
+      "syntax": "ip_to_int(<ip>)",
+      "description": "Converts an IPv4 address string to its integer representation",
+      "parameters": [
+        "ip"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter ip_num = ip_to_int(src_ip)",
+      "category": "Network"
+    },
+    {
+      "name": "is_ipv4",
+      "syntax": "is_ipv4(<value>)",
+      "description": "Returns true if the value is a valid IPv4 address",
+      "parameters": [
+        "value"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "filter is_ipv4(action_local_ip)",
+      "category": "Network"
+    },
+    {
+      "name": "is_known_private_ipv4",
+      "syntax": "is_known_private_ipv4(<ip>)",
+      "description": "Returns true if the IPv4 address belongs to a known private/reserved range (RFC 1918)",
+      "parameters": [
+        "ip"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "filter is_known_private_ipv4(src_ip)",
+      "category": "Network"
+    },
+    {
+      "name": "is_ipv6",
+      "syntax": "is_ipv6(<value>)",
+      "description": "Returns true if the value is a valid IPv6 address",
+      "parameters": [
+        "value"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "filter is_ipv6(action_local_ip_v6)",
+      "category": "Network"
+    },
+    {
+      "name": "is_known_private_ipv6",
+      "syntax": "is_known_private_ipv6(<ip>)",
+      "description": "Returns true if the IPv6 address belongs to a known private/reserved range",
+      "parameters": [
+        "ip"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "filter is_known_private_ipv6(src_ipv6)",
+      "category": "Network"
+    },
+    {
+      "name": "json_extract",
+      "syntax": "json_extract(<field>, \"<path>\")",
+      "description": "Extracts a value from a JSON string at the specified path (returns object)",
+      "parameters": [
+        "json_field",
+        "json_path"
+      ],
+      "returnType": "object",
+      "exampleUsage": "alter data = json_extract(raw_json, \"$.event.data\")",
+      "category": "JSON"
+    },
+    {
+      "name": "json_extract_array",
+      "syntax": "json_extract_array(<field>, \"<path>\")",
+      "description": "Extracts an array from a JSON string at the specified path",
+      "parameters": [
+        "json_field",
+        "json_path"
+      ],
+      "returnType": "array",
+      "exampleUsage": "alter ips = json_extract_array(raw_json, \"$.addresses\")",
+      "category": "JSON"
+    },
+    {
+      "name": "json_extract_scalar",
+      "syntax": "json_extract_scalar(<field>, \"<path>\")",
+      "description": "Extracts a scalar value from a JSON string at the specified path",
+      "parameters": [
+        "json_field",
+        "json_path"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter user = json_extract_scalar(raw_json, \"$.user.name\")",
+      "category": "JSON"
+    },
+    {
+      "name": "json_extract_scalar_array",
+      "syntax": "json_extract_scalar_array(<field>, \"<path>\")",
+      "description": "Extracts an array of scalar values from a JSON string at the specified path",
+      "parameters": [
+        "json_field",
+        "json_path"
+      ],
+      "returnType": "array",
+      "exampleUsage": "alter names = json_extract_scalar_array(raw_json, \"$.users[*].name\")",
+      "category": "JSON"
+    },
+    {
+      "name": "lag",
+      "syntax": "lag(<field>, <offset>)",
+      "description": "Returns the value of a field from a previous row in a window computation",
+      "parameters": [
+        "field",
+        "offset"
+      ],
+      "returnType": "any",
+      "exampleUsage": "windowcomp lag(action, 1) as prev_action order by _time",
+      "category": "Window"
+    },
+    {
+      "name": "last",
+      "syntax": "last(<field>)",
+      "description": "Returns the last value of a field encountered in the group",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "any",
+      "exampleUsage": "comp last(agent_hostname) as latest_host by src_ip",
+      "category": "Aggregate"
+    },
+    {
+      "name": "last_value",
+      "syntax": "last_value(<field>)",
+      "description": "Returns the last value of a field in a window computation ordered set",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "any",
+      "exampleUsage": "windowcomp last_value(action) as last_action order by _time",
+      "category": "Window"
+    },
+    {
+      "name": "latest",
+      "syntax": "latest(<field>)",
+      "description": "Returns the value of a field from the most recent record by time",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "any",
+      "exampleUsage": "comp latest(action) as last_action by src_ip",
+      "category": "Aggregate"
+    },
+    {
+      "name": "len",
+      "syntax": "len(<value>)",
+      "description": "Returns the length of a string or the number of elements in an array",
+      "parameters": [
+        "value"
+      ],
+      "returnType": "number",
+      "exampleUsage": "filter len(payload) > 1000",
+      "category": "String"
+    },
+    {
+      "name": "list",
+      "syntax": "list(<field>)",
+      "description": "Aggregates all values of a field into a list across grouped records",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "array",
+      "exampleUsage": "comp list(action) as all_actions by src_ip",
+      "category": "Aggregate"
+    },
+    {
+      "name": "lowercase",
+      "syntax": "lowercase(<string>)",
+      "description": "Converts a string to lower case",
+      "parameters": [
+        "string"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter user_lower = lowercase(username)",
+      "category": "String"
+    },
+    {
+      "name": "ltrim",
+      "syntax": "ltrim(<string>, <chars>)",
+      "description": "Removes specified leading characters (or whitespace if not specified) from a string",
+      "parameters": [
+        "string",
+        "chars"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter clean = ltrim(raw_value, \" \")",
+      "category": "String"
+    },
+    {
+      "name": "rtrim",
+      "syntax": "rtrim(<string>, <chars>)",
+      "description": "Removes specified trailing characters (or whitespace if not specified) from a string",
+      "parameters": [
+        "string",
+        "chars"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter clean = rtrim(raw_value, \" \")",
+      "category": "String"
+    },
+    {
+      "name": "trim",
+      "syntax": "trim(<string>, <chars>)",
+      "description": "Removes specified leading and trailing characters (or whitespace if not specified) from a string",
+      "parameters": [
+        "string",
+        "chars"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter clean = trim(raw_value)",
+      "category": "String"
+    },
+    {
+      "name": "max",
+      "syntax": "max(<field>)",
+      "description": "Returns the maximum value of a numeric field across grouped records",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp max(action_file_size) as max_size by _product",
+      "category": "Aggregate"
+    },
+    {
+      "name": "median",
+      "syntax": "median(<field>)",
+      "description": "Returns the median value of a numeric field across grouped records",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp median(response_time) as median_response",
+      "category": "Aggregate"
+    },
+    {
+      "name": "min",
+      "syntax": "min(<field>)",
+      "description": "Returns the minimum value of a numeric field across grouped records",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp min(action_file_size) as min_size by _product",
+      "category": "Aggregate"
+    },
+    {
+      "name": "multiply",
+      "syntax": "multiply(<a>, <b>)",
+      "description": "Returns the product of two numeric values",
+      "parameters": [
+        "a",
+        "b"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter kb = multiply(bytes, 0.001)",
+      "category": "Math"
+    },
+    {
+      "name": "object_create",
+      "syntax": "object_create(<key1>, <val1>, <key2>, <val2>, ...)",
+      "description": "Creates a JSON object from key-value pairs",
+      "parameters": [
+        "key_value_pairs"
+      ],
+      "returnType": "object",
+      "exampleUsage": "alter info = object_create(\"ip\", src_ip, \"port\", dst_port)",
+      "category": "JSON"
+    },
+    {
+      "name": "object_merge",
+      "syntax": "object_merge(<obj1>, <obj2>)",
+      "description": "Merges two JSON objects into a single object",
+      "parameters": [
+        "obj1",
+        "obj2"
+      ],
+      "returnType": "object",
+      "exampleUsage": "alter merged = object_merge(src_info, dst_info)",
+      "category": "JSON"
+    },
+    {
+      "name": "parse_epoch",
+      "syntax": "parse_epoch(<field>, \"<unit>\")",
+      "description": "Converts an epoch value to a timestamp using the specified time unit (SECONDS, MILLIS, MICROS, NANOS)",
+      "parameters": [
+        "field",
+        "unit"
+      ],
+      "returnType": "timestamp",
+      "exampleUsage": "alter ts = parse_epoch(epoch_field, \"MILLIS\")",
+      "category": "Time"
+    },
+    {
+      "name": "parse_timestamp",
+      "syntax": "parse_timestamp(<field>, \"<format>\")",
+      "description": "Parses a string into a timestamp using the specified date-time format pattern",
+      "parameters": [
+        "field",
+        "format"
+      ],
+      "returnType": "timestamp",
+      "exampleUsage": "alter ts = parse_timestamp(date_str, \"%Y-%m-%dT%H:%M:%SZ\")",
+      "category": "Time"
+    },
+    {
+      "name": "pow",
+      "syntax": "pow(<base>, <exponent>)",
+      "description": "Returns the value of base raised to the specified exponent",
+      "parameters": [
+        "base",
+        "exponent"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter result = pow(2, 10)",
+      "category": "Math"
+    },
+    {
+      "name": "rank",
+      "syntax": "rank()",
+      "description": "Assigns a rank to each row in a window computation, with gaps for ties",
+      "parameters": [],
+      "returnType": "number",
+      "exampleUsage": "windowcomp rank() as rnk order by score desc",
+      "category": "Window"
+    },
+    {
+      "name": "regexcapture",
+      "syntax": "regexcapture(<field>, \"<regex>\")",
+      "description": "Captures all named groups from a regex match and returns them as an object",
+      "parameters": [
+        "field",
+        "regex_pattern"
+      ],
+      "returnType": "object",
+      "exampleUsage": "alter parts = regexcapture(log_line, \"(?P<date>\\d{4}-\\d{2}-\\d{2}) (?P<msg>.*)\")",
+      "category": "String"
+    },
+    {
+      "name": "regextract",
+      "syntax": "regextract(<field>, \"<regex>\")",
+      "description": "Extracts the first capture group from a regex match",
+      "parameters": [
+        "field",
+        "regex_pattern"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter domain = regextract(url, \"https?://([^/]+)\")",
+      "category": "String"
+    },
+    {
+      "name": "replace",
+      "syntax": "replace(<field>, \"<pattern>\", \"<replacement>\")",
+      "description": "Replaces the first occurrence of a literal pattern in a string",
+      "parameters": [
+        "field",
+        "pattern",
+        "replacement"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter cleaned = replace(hostname, \"old\", \"new\")",
+      "category": "String"
+    },
+    {
+      "name": "replex",
+      "syntax": "replex(<field>, \"<regex>\", \"<replacement>\")",
+      "description": "Replaces all occurrences matching a regex pattern in a string",
+      "parameters": [
+        "field",
+        "regex",
+        "replacement"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter masked = replex(log_line, \"\\d{3}-\\d{2}-\\d{4}\", \"XXX-XX-XXXX\")",
+      "category": "String"
+    },
+    {
+      "name": "round",
+      "syntax": "round(<number>, <decimals>)",
+      "description": "Rounds a number to the specified number of decimal places",
+      "parameters": [
+        "number",
+        "decimals"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter pct = round(ratio, 2)",
+      "category": "Math"
+    },
+    {
+      "name": "row_number",
+      "syntax": "row_number()",
+      "description": "Assigns a unique sequential number to each row in a window computation",
+      "parameters": [],
+      "returnType": "number",
+      "exampleUsage": "windowcomp row_number() as rn order by _time",
+      "category": "Window"
+    },
+    {
+      "name": "split",
+      "syntax": "split(<string>, \"<delimiter>\")",
+      "description": "Splits a string into an array by the specified delimiter",
+      "parameters": [
+        "string",
+        "delimiter"
+      ],
+      "returnType": "array",
+      "exampleUsage": "alter parts = split(csv_line, \",\")",
+      "category": "String"
+    },
+    {
+      "name": "stddev_population",
+      "syntax": "stddev_population(<field>)",
+      "description": "Returns the population standard deviation of a numeric field",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp stddev_population(response_time) as stddev_resp",
+      "category": "Aggregate"
+    },
+    {
+      "name": "stddev_sample",
+      "syntax": "stddev_sample(<field>)",
+      "description": "Returns the sample standard deviation of a numeric field",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp stddev_sample(response_time) as stddev_resp",
+      "category": "Aggregate"
+    },
+    {
+      "name": "string_count",
+      "syntax": "string_count(<string>, \"<substring>\")",
+      "description": "Returns the number of occurrences of a substring within a string",
+      "parameters": [
+        "string",
+        "substring"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter dot_count = string_count(ip, \".\")",
+      "category": "String"
+    },
+    {
+      "name": "subtract",
+      "syntax": "subtract(<a>, <b>)",
+      "description": "Returns the result of subtracting b from a",
+      "parameters": [
+        "a",
+        "b"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter duration = subtract(end_time, start_time)",
+      "category": "Math"
+    },
+    {
+      "name": "sum",
+      "syntax": "sum(<field>)",
+      "description": "Returns the sum of a numeric field across grouped records",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp sum(action_file_size) as total_size by _time",
+      "category": "Aggregate"
+    },
+    {
+      "name": "time_frame_end",
+      "syntax": "time_frame_end()",
+      "description": "Returns the end timestamp of the configured query timeframe",
+      "parameters": [],
+      "returnType": "timestamp",
+      "exampleUsage": "alter tf_end = time_frame_end()",
+      "category": "Time"
+    },
+    {
+      "name": "timestamp_diff",
+      "syntax": "timestamp_diff(<ts1>, <ts2>, \"<unit>\")",
+      "description": "Returns the difference between two timestamps in the specified unit (SECOND, MINUTE, HOUR, DAY)",
+      "parameters": [
+        "timestamp1",
+        "timestamp2",
+        "unit"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter age_hours = timestamp_diff(_time, created_at, \"HOUR\")",
+      "category": "Time"
+    },
+    {
+      "name": "timestamp_seconds",
+      "syntax": "timestamp_seconds(<epoch>)",
+      "description": "Converts epoch seconds to a timestamp",
+      "parameters": [
+        "epoch_seconds"
+      ],
+      "returnType": "timestamp",
+      "exampleUsage": "alter ts = timestamp_seconds(epoch_field)",
+      "category": "Time"
+    },
+    {
+      "name": "to_boolean",
+      "syntax": "to_boolean(<value>)",
+      "description": "Converts a value to boolean type",
+      "parameters": [
+        "value"
+      ],
+      "returnType": "boolean",
+      "exampleUsage": "alter is_active = to_boolean(status)",
+      "category": "Conversion"
+    },
+    {
+      "name": "to_epoch",
+      "syntax": "to_epoch(<timestamp>, \"<unit>\")",
+      "description": "Converts a timestamp to an epoch value in the specified unit (SECONDS, MILLIS, MICROS, NANOS)",
+      "parameters": [
+        "timestamp",
+        "unit"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter epoch = to_epoch(_time, \"SECONDS\")",
+      "category": "Conversion"
+    },
+    {
+      "name": "to_float",
+      "syntax": "to_float(<value>)",
+      "description": "Converts a value to a floating-point number",
+      "parameters": [
+        "value"
+      ],
+      "returnType": "float",
+      "exampleUsage": "alter score = to_float(raw_score)",
+      "category": "Conversion"
+    },
+    {
+      "name": "to_integer",
+      "syntax": "to_integer(<value>)",
+      "description": "Converts a value to an integer",
+      "parameters": [
+        "value"
+      ],
+      "returnType": "integer",
+      "exampleUsage": "alter port = to_integer(port_str)",
+      "category": "Conversion"
+    },
+    {
+      "name": "to_json_string",
+      "syntax": "to_json_string(<value>)",
+      "description": "Converts a value (object, array, scalar) to its JSON string representation",
+      "parameters": [
+        "value"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter json_str = to_json_string(data_obj)",
+      "category": "Conversion"
+    },
+    {
+      "name": "to_number",
+      "syntax": "to_number(<value>)",
+      "description": "Converts a value to a number type",
+      "parameters": [
+        "value"
+      ],
+      "returnType": "number",
+      "exampleUsage": "alter port_num = to_number(port_string)",
+      "category": "Conversion"
+    },
+    {
+      "name": "to_string",
+      "syntax": "to_string(<value>)",
+      "description": "Converts a value to a string type",
+      "parameters": [
+        "value"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter port_str = to_string(dst_port)",
+      "category": "Conversion"
+    },
+    {
+      "name": "to_timestamp",
+      "syntax": "to_timestamp(<value>, \"<format>\")",
+      "description": "Converts a value to a timestamp using the given format",
+      "parameters": [
+        "value",
+        "format"
+      ],
+      "returnType": "timestamp",
+      "exampleUsage": "alter ts = to_timestamp(date_str, \"%Y-%m-%dT%H:%M:%S\")",
+      "category": "Conversion"
+    },
+    {
+      "name": "uppercase",
+      "syntax": "uppercase(<string>)",
+      "description": "Converts a string to upper case",
+      "parameters": [
+        "string"
+      ],
+      "returnType": "string",
+      "exampleUsage": "alter action_upper = uppercase(action)",
+      "category": "String"
+    },
+    {
+      "name": "values",
+      "syntax": "values(<field>)",
+      "description": "Aggregates all distinct values of a field into an array across grouped records",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "array",
+      "exampleUsage": "comp values(action) as unique_actions by src_ip",
+      "category": "Aggregate"
+    },
+    {
+      "name": "var",
+      "syntax": "var(<field>)",
+      "description": "Returns the variance of a numeric field across grouped records",
+      "parameters": [
+        "field"
+      ],
+      "returnType": "number",
+      "exampleUsage": "comp var(response_time) as variance_resp",
+      "category": "Aggregate"
+    }
+  ],
+  "xqlOperators": [
+    {
+      "symbol": "=",
+      "description": "Equals",
+      "example": "action = \"allow\""
+    },
+    {
+      "symbol": "!=",
+      "description": "Not equals",
+      "example": "action != \"deny\""
+    },
+    {
+      "symbol": "<",
+      "description": "Less than",
+      "example": "risk_score < 50"
+    },
+    {
+      "symbol": ">",
+      "description": "Greater than",
+      "example": "bytes > 1000000"
+    },
+    {
+      "symbol": "<=",
+      "description": "Less than or equal to",
+      "example": "severity_num <= 3"
+    },
+    {
+      "symbol": ">=",
+      "description": "Greater than or equal to",
+      "example": "count >= 10"
+    },
+    {
+      "symbol": "~=",
+      "description": "Regex match",
+      "example": "url ~= \".*\\.exe$\""
+    },
+    {
+      "symbol": "contains",
+      "description": "String contains substring",
+      "example": "url contains \"login\""
+    },
+    {
+      "symbol": "not contains",
+      "description": "String does not contain substring",
+      "example": "path not contains \"temp\""
+    },
+    {
+      "symbol": "in",
+      "description": "Value is in list",
+      "example": "action in (\"allow\", \"accept\")"
+    },
+    {
+      "symbol": "not in",
+      "description": "Value is not in list",
+      "example": "port not in (80, 443)"
+    },
+    {
+      "symbol": "AND",
+      "description": "Logical AND",
+      "example": "src_ip != null AND dst_ip != null"
+    },
+    {
+      "symbol": "OR",
+      "description": "Logical OR",
+      "example": "action = \"allow\" OR action = \"accept\""
+    },
+    {
+      "symbol": "XOR",
+      "description": "Logical exclusive OR",
+      "example": "has_src XOR has_dst"
+    },
+    {
+      "symbol": "NOT",
+      "description": "Logical negation",
+      "example": "NOT action = \"deny\""
+    },
+    {
+      "symbol": "INCIDR",
+      "description": "Checks if an IP is within a CIDR range",
+      "example": "src_ip INCIDR \"10.0.0.0/8\""
+    },
+    {
+      "symbol": "NOT INCIDR",
+      "description": "Checks if an IP is not within a CIDR range",
+      "example": "src_ip NOT INCIDR \"10.0.0.0/8\""
+    },
+    {
+      "symbol": "INCIDR6",
+      "description": "Checks if an IPv6 is within a CIDR range",
+      "example": "src_ipv6 INCIDR6 \"fd00::/8\""
+    },
+    {
+      "symbol": "NOT INCIDR6",
+      "description": "Checks if an IPv6 is not within a CIDR range",
+      "example": "src_ipv6 NOT INCIDR6 \"fd00::/8\""
+    }
+  ],
+  "xqlDatasets": [
+    {
+      "name": "xdr_data",
+      "description": "Default dataset containing all endpoint, network, and cloud events collected by Cortex XDR/XSIAM agents",
+      "type": "standard"
+    },
+    {
+      "name": "pan_dss_raw",
+      "description": "Raw data from Palo Alto Networks Data Security Service",
+      "type": "standard"
+    },
+    {
+      "name": "alerts",
+      "description": "All alerts generated by Cortex XSIAM analytics and detection rules",
+      "type": "standard"
+    },
+    {
+      "name": "incidents",
+      "description": "Incidents created from correlated alerts",
+      "type": "standard"
+    },
+    {
+      "name": "aws_s3_raw",
+      "description": "Raw AWS S3 access and audit logs",
+      "type": "standard"
+    },
+    {
+      "name": "cloud_audit_logs",
+      "description": "Cloud audit logs from various cloud providers",
+      "type": "standard"
+    },
+    {
+      "name": "auth_logs",
+      "description": "Authentication logs from identity providers",
+      "type": "standard"
+    },
+    {
+      "name": "MSFT_Azure_raw",
+      "description": "Raw Microsoft Azure activity and audit logs",
+      "type": "standard"
+    },
+    {
+      "name": "beyondtrust_privilege_management_raw",
+      "description": "Raw BeyondTrust privilege management logs",
+      "type": "standard"
+    },
+    {
+      "name": "box_admin_logs_raw",
+      "description": "Raw Box admin activity logs",
+      "type": "standard"
+    },
+    {
+      "name": "cisco_asa_raw",
+      "description": "Raw Cisco ASA firewall logs",
+      "type": "standard"
+    },
+    {
+      "name": "collection_auditing",
+      "description": "Auditing data for data collection processes",
+      "type": "standard"
+    },
+    {
+      "name": "correlations_auditing",
+      "description": "Auditing data for correlation rule execution",
+      "type": "standard"
+    },
+    {
+      "name": "panw_xdrc_raw",
+      "description": "Raw Palo Alto Networks XDR Collector data",
+      "type": "standard"
+    },
+    {
+      "name": "host_firewall_events",
+      "description": "Host-based firewall event logs",
+      "type": "standard"
+    },
+    {
+      "name": "it_metrics",
+      "description": "IT infrastructure metrics data",
+      "type": "standard"
+    },
+    {
+      "name": "login_logs",
+      "description": "Login activity logs",
+      "type": "standard"
+    },
+    {
+      "name": "msft_defender_raw",
+      "description": "Raw Microsoft Defender for Endpoint logs",
+      "type": "standard"
+    },
+    {
+      "name": "parsing_rules_errors",
+      "description": "Errors from parsing rule execution",
+      "type": "standard"
+    },
+    {
+      "name": "google_cloud_logging_raw",
+      "description": "Raw Google Cloud Logging data",
+      "type": "standard"
+    },
+    {
+      "name": "google_workspace_admin_console_raw",
+      "description": "Raw Google Workspace admin console logs",
+      "type": "standard"
+    },
+    {
+      "name": "microsoft_windows_raw",
+      "description": "Raw Microsoft Windows event logs",
+      "type": "standard"
+    },
+    {
+      "name": "panw_ngfw_traffic_raw",
+      "description": "Raw Palo Alto Networks Next-Gen Firewall traffic logs",
+      "type": "standard"
+    },
+    {
+      "name": "network_story",
+      "description": "Preset combining network-related events across datasets",
+      "type": "preset"
+    },
+    {
+      "name": "authentication_story",
+      "description": "Preset combining authentication events across datasets",
+      "type": "preset"
+    },
+    {
+      "name": "file_story",
+      "description": "Preset combining file-related events across datasets",
+      "type": "preset"
+    },
+    {
+      "name": "process_story",
+      "description": "Preset combining process-related events across datasets",
+      "type": "preset"
+    },
+    {
+      "name": "host_inventory",
+      "description": "Preset for host inventory data",
+      "type": "preset"
+    },
+    {
+      "name": "host_inventory_applications",
+      "description": "Preset for installed applications per host",
+      "type": "preset"
+    },
+    {
+      "name": "host_inventory_services",
+      "description": "Preset for running services per host",
+      "type": "preset"
+    },
+    {
+      "name": "host_inventory_users",
+      "description": "Preset for user accounts per host",
+      "type": "preset"
+    },
+    {
+      "name": "metrics_view",
+      "description": "Preset for data ingestion metrics",
+      "type": "preset"
+    }
+  ]
+}
