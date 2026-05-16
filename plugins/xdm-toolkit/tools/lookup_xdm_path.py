@@ -1,154 +1,188 @@
+# SPDX-FileCopyrightText: ohno llc
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
-lookup_xdm_path — fuzzy-match a vendor field name or NL description to
+lookup_xdm_path — map a vendor field name (or short description) to
 candidate XDM paths.
 
-Reads the shipped XDM schema reference from
-docs/seed/xql/xql-xdm-knowledge.md (§2). Returns the top-K matches with
-confidence + the companion-pair partner when applicable.
+Phase 3 rewrite: replaces the Phase 0 30-row seed catalogue with a real
+synonym index derived from `docs/seed/xql/field_anchors.json` (375 XDM
+paths, each with vendor-field synonyms collected from the corpus and
+frequency counts).
 
-Confidence:
-  HIGH   — exact substring match on the leaf field name
-  MEDIUM — token overlap on the full path or label
-  LOW    — fallback fuzzy match, surfaced only if no HIGH/MEDIUM hit
+Confidence model:
+  HIGH    exact synonym match (case-insensitive) on the query token
+  MEDIUM  substring match on a synonym, OR exact leaf-name match on the
+          xdm path
+  LOW     fuzzy fallback (token-overlap heuristic)
+
+Companion-pair partners and XDM_CONST enum values are still served from
+the typed schema (plugins/xdm-toolkit/tools/_data/xdm_schema.json) so
+the results stay consistent with the analyse_xql tool.
 
 Heuristic, not a real semantic embedding lookup — the agent
 xdm-schema-navigator handles ambiguous cases with full LLM context. This
 tool is the fast path for obvious matches during agentic loops.
 """
-
 from __future__ import annotations
 
+import json
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-KNOWLEDGE_PATH = Path("docs/seed/xql/xql-xdm-knowledge.md")
+_ANCHORS_PATH = Path(__file__).resolve().parents[3] / "docs" / "seed" / "xql" / "field_anchors.json"
 
-# Tiny seed catalogue extracted from §2 — covers the most common vendor
-# field names. Real lookups still fall back to scanning the full file.
-SEED_CATALOGUE: List[Tuple[str, str, List[str]]] = [
-    # (xdm_path, label, alias keywords)
-    ("xdm.source.ipv4", "Source IPv4 address (scalar)", ["src.ip", "src_ip", "source_ip", "client_ip", "saddr"]),
-    ("xdm.source.host.ipv4_addresses", "Source host IPv4 addresses (array)", ["src.ip.list", "src_ips"]),
-    ("xdm.target.ipv4", "Target IPv4 address (scalar)", ["dst.ip", "dst_ip", "dest_ip", "daddr", "destination_ip"]),
-    ("xdm.target.host.ipv4_addresses", "Target host IPv4 addresses (array)", ["dst.ip.list"]),
-    ("xdm.source.port", "Source TCP/UDP port", ["src.port", "src_port", "sport"]),
-    ("xdm.target.port", "Target TCP/UDP port", ["dst.port", "dst_port", "dport", "destination_port"]),
-    ("xdm.event.outcome", "Event outcome (XDM_CONST)", ["status", "result", "outcome"]),
-    ("xdm.event.outcome_reason", "Event outcome reason (free text)", ["reason", "message", "status_msg"]),
-    ("xdm.event.type", "Event type (XDM_CONST)", ["event.kind", "event_type", "category"]),
-    ("xdm.event.original_event_type", "Original raw event type string", ["event.action", "raw_event_type"]),
-    ("xdm.network.application_protocol", "Application protocol name", ["proto", "protocol", "app_proto"]),
-    ("xdm.network.application_protocol_category", "Application protocol category (XDM_CONST)", ["proto_category"]),
-    ("xdm.auth.outcome", "Auth attempt outcome (XDM_CONST)", ["auth.status", "login_result"]),
-    ("xdm.auth.outcome_reason", "Auth outcome reason text", ["auth.reason", "login_message"]),
-    ("xdm.alert.severity", "Alert severity (XDM_CONST)", ["sev", "severity", "priority"]),
-    ("xdm.alert.name", "Alert / signature name", ["sig_name", "rule_name", "alert.name"]),
-    ("xdm.source.user.username", "Source user account name", ["user", "username", "src_user", "account"]),
-    ("xdm.target.user.username", "Target user account name", ["target_user", "dst_user"]),
-    ("xdm.source.process.name", "Source process name", ["process.name", "proc_name", "image"]),
-    ("xdm.source.process.command_line", "Source process command line", ["process.cmd", "cmdline", "command_line"]),
-    ("xdm.source.process.parent.command_line", "Parent process command line", ["parent.cmd", "ppid_cmdline"]),
-    ("xdm.event.description", "Free-text event description", ["description", "msg", "details"]),
-    ("xdm.observer.name", "Observer / sensor name", ["host", "hostname", "device_name"]),
-    ("xdm.observer.vendor", "Observer vendor", ["vendor"]),
-    ("xdm.observer.product", "Observer product", ["product", "device_product"]),
+# Companion pairs whose strict-subset partners trigger ERR when only one
+# side is mapped (per Phase 0 operator decision: IP / MAC / port / user /
+# host pairs are ERR-grade, the rest are WARN).
+_COMPANION_PAIRS: List[Tuple[str, str]] = [
+    ("xdm.source.ipv4", "xdm.source.host.ipv4_addresses"),
+    ("xdm.target.ipv4", "xdm.target.host.ipv4_addresses"),
+    ("xdm.source.host.mac_addresses", "xdm.source.host.hostname"),
+    ("xdm.target.host.mac_addresses", "xdm.target.host.hostname"),
+    ("xdm.source.port", "xdm.target.port"),
+    ("xdm.source.user.username", "xdm.source.user.upn"),
+    ("xdm.target.user.username", "xdm.target.user.upn"),
+    ("xdm.source.host.hostname", "xdm.source.host.fqdn"),
+    ("xdm.target.host.hostname", "xdm.target.host.fqdn"),
+    ("xdm.network.application_protocol", "xdm.network.application_protocol_category"),
+    ("xdm.auth.outcome", "xdm.auth.outcome_reason"),
+    ("xdm.event.outcome", "xdm.event.outcome_reason"),
 ]
 
 
-# Companion-pair lookup — mirrors validate_xql.py.
-COMPANION_PAIRS: Dict[str, str] = {
-    "xdm.source.ipv4": "xdm.source.host.ipv4_addresses",
-    "xdm.source.host.ipv4_addresses": "xdm.source.ipv4",
-    "xdm.target.ipv4": "xdm.target.host.ipv4_addresses",
-    "xdm.target.host.ipv4_addresses": "xdm.target.ipv4",
-    "xdm.network.application_protocol": "xdm.network.application_protocol_category",
-    "xdm.network.application_protocol_category": "xdm.network.application_protocol",
-    "xdm.auth.outcome": "xdm.auth.outcome_reason",
-    "xdm.event.outcome": "xdm.event.outcome_reason",
-}
+@lru_cache(maxsize=1)
+def _anchors() -> Dict[str, Any]:
+    """Load the anchor DB once; cache it."""
+    if not _ANCHORS_PATH.is_file():
+        return {"anchors": {}, "anchor_count": 0}
+    return json.loads(_ANCHORS_PATH.read_text(encoding="utf-8"))
 
 
-def _normalize(s: str) -> str:
-    """lowercase + non-alphanum → space; useful for fuzzy match."""
-    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+@lru_cache(maxsize=1)
+def _synonym_index() -> List[Tuple[str, str, int, int]]:
+    """Return [(synonym_lower, xdm_path, synonym_count, path_frequency), ...]."""
+    out: List[Tuple[str, str, int, int]] = []
+    for path, meta in _anchors().get("anchors", {}).items():
+        freq = int(meta.get("frequency", 0))
+        for syn in meta.get("synonyms", []):
+            name = syn.get("synonym", "")
+            if not name:
+                continue
+            out.append((name.lower(), path, int(syn.get("count", 1)), freq))
+    return out
 
 
-def _score(query_tokens: List[str], path: str, label: str, aliases: List[str]) -> Tuple[str, int]:
-    """Score one catalogue entry against the query. Returns (confidence, score)."""
-    q = " ".join(query_tokens)
-    norm_alias_blob = " ".join(_normalize(a) for a in aliases)
-    norm_label = _normalize(label)
-    norm_path = _normalize(path)
+@lru_cache(maxsize=1)
+def _all_paths() -> List[str]:
+    return sorted(_anchors().get("anchors", {}).keys())
 
-    # HIGH: substring of the leaf field, or any alias matches the query verbatim.
-    leaf = path.rsplit(".", 1)[-1].lower()
-    if q == leaf or q in (a.lower() for a in aliases):
-        return ("HIGH", 100)
-    if q and q in norm_path:
-        return ("HIGH", 95)
 
-    # MEDIUM: token overlap with aliases or label.
-    overlap = sum(1 for t in query_tokens if t and (t in norm_alias_blob or t in norm_label))
-    if overlap >= max(1, len(query_tokens) // 2):
-        return ("MEDIUM", 60 + overlap * 5)
+def _xdm_const_for(path: str) -> List[str] | None:
+    """Best-effort XDM_CONST enum lookup against the local schema JSON."""
+    try:
+        from ._schema import xdm_field_enum  # local relative import works at runtime
+        return xdm_field_enum(path)
+    except Exception:
+        return None
 
-    # LOW: any token appears in the path.
-    if any(t for t in query_tokens if t and t in norm_path):
-        return ("LOW", 30)
 
-    return ("NONE", 0)
+def _companion_partner(path: str) -> str | None:
+    for a, b in _COMPANION_PAIRS:
+        if path == a:
+            return b
+        if path == b:
+            return a
+    return None
+
+
+def _normalise(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+
+def _score_matches(query: str) -> List[Dict[str, Any]]:
+    """Return ranked candidate matches with confidence labels."""
+    q = _normalise(query)
+    if not q:
+        return []
+    q_tokens = set(q.split("_"))
+    syn_idx = _synonym_index()
+
+    # path -> (confidence, raw_score)
+    best: Dict[str, Tuple[str, float]] = {}
+
+    def consider(path: str, confidence: str, score: float) -> None:
+        order = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
+        prev = best.get(path)
+        if prev is None or order[confidence] > order[prev[0]] or (
+            order[confidence] == order[prev[0]] and score > prev[1]
+        ):
+            best[path] = (confidence, score)
+
+    # Pass 1: exact synonym match (HIGH).
+    for syn_lower, path, count, freq in syn_idx:
+        syn_norm = _normalise(syn_lower)
+        if syn_norm == q:
+            consider(path, "HIGH", count * 1000 + freq)
+
+    # Pass 2: substring on synonym OR exact leaf name (MEDIUM).
+    for syn_lower, path, count, freq in syn_idx:
+        syn_norm = _normalise(syn_lower)
+        if q in syn_norm or syn_norm in q:
+            consider(path, "MEDIUM", count * 10 + freq * 0.1)
+    for path in _all_paths():
+        leaf = path.rsplit(".", 1)[-1].lower()
+        if leaf == q:
+            consider(path, "MEDIUM", 50.0)
+
+    # Pass 3: token overlap fallback (LOW).
+    if not best:
+        for path in _all_paths():
+            path_tokens = set(re.split(r"[._]", path.lower()))
+            overlap = len(q_tokens & path_tokens)
+            if overlap > 0:
+                consider(path, "LOW", overlap)
+
+    ranked = sorted(best.items(), key=lambda item: (
+        {"HIGH": 3, "MEDIUM": 2, "LOW": 1}[item[1][0]],
+        item[1][1],
+    ), reverse=True)
+
+    out: List[Dict[str, Any]] = []
+    for path, (confidence, score) in ranked:
+        enum = _xdm_const_for(path)
+        out.append({
+            "xdm_path": path,
+            "confidence": confidence,
+            "score": round(score, 2),
+            "companion": _companion_partner(path),
+            "xdm_const_values": enum,
+        })
+    return out
 
 
 def execute(query: str = "", top_k: int = 5, **_unused) -> Dict[str, Any]:
-    """Plugin tool entrypoint — kwargs match the manifest's `parameters:` block.
+    """Plugin entrypoint.
 
-    The plugin runtime spreads params as kwargs via `func(**params)`, so each
-    declared parameter must appear here as a typed kwarg. Extras (sandbox,
-    future fields) are accepted via **_unused.
-    """
-    query = (query or "").strip()
-    top_k = max(1, min(int(top_k or 5), 10))
-    if not query:
-        return {"query": query, "matches": [], "advice": "empty query"}
+    Args:
+        query: vendor field name (e.g. "src_ip") or short description
+               (e.g. "source IP address").
+        top_k: 1..10. Defaults to 5.
 
-    query_tokens = _normalize(query).split()
-
-    scored = []
-    for path, label, aliases in SEED_CATALOGUE:
-        conf, score = _score(query_tokens, path, label, aliases)
-        if conf == "NONE":
-            continue
-        scored.append(
-            {
-                "xdm_path": path,
-                "label": label,
-                "confidence": conf,
-                "score": score,
-                "companion": COMPANION_PAIRS.get(path),
-                "xdm_const": "xdm" in path
-                and any(
-                    path.endswith(suffix)
-                    for suffix in (".outcome", ".type", ".severity", ".application_protocol_category")
-                ),
-            }
-        )
-
-    # If seed catalogue gave nothing useful, suggest the navigator agent.
-    if not scored:
-        return {
-            "query": query,
-            "matches": [],
-            "advice": (
-                "no HIGH/MEDIUM match in the seed catalogue — try the "
-                "xdm-schema-navigator agent for a full §2 scan, or "
-                "consult docs/seed/xql/xql-xdm-knowledge.md directly."
-            ),
+    Returns:
+        {
+            "query": str,
+            "matches": [{xdm_path, confidence, score, companion, xdm_const_values}],
+            "total_anchors": int,
         }
-
-    scored.sort(key=lambda x: x["score"], reverse=True)
+    """
+    if not isinstance(query, str) or not query.strip():
+        return {"query": query, "matches": [], "total_anchors": _anchors().get("anchor_count", 0)}
+    k = max(1, min(int(top_k or 5), 10))
+    matches = _score_matches(query.strip())[:k]
     return {
         "query": query,
-        "matches": scored[:top_k],
-        "advice": None,
+        "matches": matches,
+        "total_anchors": _anchors().get("anchor_count", 0),
     }
