@@ -1,0 +1,122 @@
+{
+  "_meta": {
+    "purpose": "Canonical one-per-family few-shot exemplars for XQL data model rule authoring. Each example pairs a representative raw log input with a gold-standard MODEL block output, sourced verbatim from the docs/seed/xql/packs/ mirror.",
+    "spdx_license": "AGPL-3.0-or-later",
+    "spdx_copyright": "GoCortexIO",
+    "source_repo": "gocortex-xql-ide",
+    "source_sha": "b2e7f3936dca67647a6eeb365741ae6d85d9a584",
+    "selection_rationale": {
+      "A": "imperva_account_takeover — clean json_extract_scalar dominance (18 calls, 103 lines), real-world production rule, full SPDX header.",
+      "B": "cisco_wsa_access_log — canonical Squid-style space-delimited positional split with syslog wrapper-strip stage. Demonstrates the regextract → split → arrayindex idiom.",
+      "C": "efficientip_ddi — most comprehensive regextract corpus in the mirror (638 lines, 68 regextract calls). Covers RFC 3164 and RFC 5424 envelope variants, named/DNSGuardian/DHCP queue traffic. Real sample logs available in baselines/sample_logs.txt.",
+      "D": "aws_guardduty — canonical arrow-operator exemplar (121 arrow uses, 387 lines). PascalCase/camelCase normalisation in Stage 1, six action-type sub-objects in Stage 2. _raw_log is null because XSIAM pre-parses the finding JSON into top-level columns."
+    },
+    "notes": "Each example's 'output' shows the rule's first ~3 stages — enough to demonstrate the pattern without bloating context. For the full rule body see the cited pack path."
+  },
+  "examples": [
+    {
+      "pattern": "A",
+      "name": "JSON field extraction via json_extract_scalar",
+      "source_pack": "packs/imperva_account_takeover",
+      "decision_signal": "_raw_log contains a JSON string that the parser has placed into a string-typed column (here: 'imperva'). Use json_extract_scalar with a JSONPath expression for each field.",
+      "input": {
+        "vendor": "Imperva",
+        "product": "Account Takeover Protection",
+        "dataset": "imperva_accounttakeover_raw",
+        "raw_columns": {
+          "client": "{\"ip\":\"203.0.113.45\"}",
+          "imperva": "{\"event_type\":\"LOGIN_FAILURE\",\"risk_level\":\"high\",\"risk_reason\":\"credential_stuffing\",\"country\":\"US\",\"request_id\":\"req-7f3a2b\",\"request_user\":\"alice@example.com\",\"declared_client\":\"Mozilla/5.0\",\"classified_client\":\"bot\",\"path\":\"/login\",\"referrer\":\"/\",\"failed_logins_last_24h\":42,\"successful_logins_last_24h\":0,\"credentials_leaked\":true,\"additional_factors\":\"impossible_travel,leaked_password\",\"ids\":{\"site_name\":\"app.example.com\"}}"
+        }
+      },
+      "output_excerpt": "// Imperva Account Takeover Protection -- XDM Data Model Rule\n// Dataset: imperva_accounttakeover_raw\n// Vendor: Imperva | Product: Account Takeover Protection\n//\n// SPDX-FileCopyrightText: GoCortexIO\n// SPDX-License-Identifier: AGPL-3.0-or-later\n\n[MODEL: dataset = imperva_accounttakeover_raw]\n\n// -- Stage 1: Extract all fields from parsed columns ------------------------\nalter\n    _client_ip = json_extract_scalar(to_string(client), \"$.ip\"),\n    _risk_reason = json_extract_scalar(to_string(imperva), \"$.risk_reason\"),\n    _risk_level = coalesce(_risk_level, json_extract_scalar(to_string(imperva), \"$.risk_level\")),\n    _country = json_extract_scalar(to_string(imperva), \"$.country\"),\n    _request_id = json_extract_scalar(to_string(imperva), \"$.request_id\"),\n    _event_type = coalesce(_event_type, json_extract_scalar(to_string(imperva), \"$.event_type\")),\n    _request_user = json_extract_scalar(to_string(imperva), \"$.request_user\"),\n    _failed_logins = json_extract_scalar(to_string(imperva), \"$.failed_logins_last_24h\"),\n    _successful_logins = json_extract_scalar(to_string(imperva), \"$.successful_logins_last_24h\"),\n    _site_name = json_extract_scalar(to_string(imperva), \"$.ids.site_name\")\n\n// -- Stage 2: Build description summary string -----------------------------\n| alter\n    _description = concat(\n        \"Classified client: \", coalesce(_classified_client, \"unknown\"),\n        \" | Failed logins (24h): \", coalesce(_failed_logins, \"0\"),\n        \" | Successful logins (24h): \", coalesce(_successful_logins, \"0\"))\n\n// -- Stage 3: Map to XDM fields -------------------------------------------\n| alter\n    xdm.observer.vendor = \"Imperva\",\n    xdm.observer.product = \"Account Takeover Protection\",\n    xdm.source.ipv4 = _client_ip,\n    xdm.source.host.ipv4_addresses = arraycreate(coalesce(_client_ip)),\n    xdm.source.user.username = _request_user,\n    xdm.event.id = _request_id,\n    xdm.alert.original_alert_id = _request_id;",
+      "key_idioms": [
+        "json_extract_scalar(to_string(column), \"$.path.to.field\") — always wrap the column in to_string() to defensively handle JSON typed as struct.",
+        "coalesce(_existing_temp, json_extract_scalar(...)) — keep-in-both anchor pattern: parser.xql may stamp a column at ingest; the model-side fallback runs only for legacy/replayed rows.",
+        "Numeric counters extracted as strings; cast on the XDM assignment side (e.g. to_number()) not in the temp."
+      ],
+      "common_failures": [
+        "ERR-006: forgetting to_string() wrapper when the source column is sometimes-typed as object.",
+        "WARN-014: leaving a temp variable defined but never consumed in the XDM assignment stage.",
+        "WARN-019: missing companion pair — xdm.source.ipv4 mapped but xdm.source.host.ipv4_addresses omitted."
+      ]
+    },
+    {
+      "pattern": "B",
+      "name": "Syslog / positional parsing via split + arrayindex on _raw_log",
+      "source_pack": "packs/cisco_wsa_access_log",
+      "decision_signal": "_raw_log contains a syslog-wrapped, space-delimited text record. Strip the syslog envelope first with regextract, then split() on space and pull positions by arrayindex.",
+      "input": {
+        "vendor": "Cisco",
+        "product": "Secure Web Appliance",
+        "dataset": "cisco_websecurityappliance_raw",
+        "raw_log": "<134>Apr 28 14:22:11 wsa01.example.com accesslogs/info: 1714312931.045 233 10.10.5.42 TCP_DENIED/403 0 GET http://malware.example.org/payload.exe \"EXAMPLE\\\\bob\" DEFAULT_PARENT/proxy-out.example.com - DEFAULT_CASE_12-DefaultGroup-WBRS_REPUTATION-NONE-NONE-NONE-DefaultGroup <\"IW_mal\",-9.5,0,\"-\",0,0,0,-,\"-\",-,-,-,\"-\",-,-,\"-\",\"-\",\"Unknown\",\"-\",\"-\",0.00,0,-,\"-\",\"-\">"
+      },
+      "output_excerpt": "// Cisco Web Security Appliance (WSA) -- XDM Data Model Rule\n// Dataset: cisco_websecurityappliance_raw\n//\n// SPDX-FileCopyrightText: GoCortexIO\n// SPDX-License-Identifier: AGPL-3.0-or-later\n\n[MODEL: dataset = cisco_websecurityappliance_raw]\n\n// -- Stage 1: Strip syslog wrapper and extract the WSA log portion ----------\nalter\n    _wsa_log = arrayindex(regextract(_raw_log, \"Info:\\\\s+(.+)$\"), 0),\n    _syslog_fqdn = arrayindex(regextract(_raw_log, \">\\\\w+\\\\s+\\\\d+\\\\s+[\\\\d:]+\\\\s+(\\\\S+)\\\\s+accesslogs\"), 0)\n\n// -- Stage 2: Split positional fields from the WSA log ----------------------\n| alter\n    _parts = split(_wsa_log, \" \")\n| alter\n    _elapsed_ms = arrayindex(_parts, 1),\n    _client_ip = arrayindex(_parts, 2),\n    _result_status = arrayindex(_parts, 3),\n    _sc_bytes = arrayindex(_parts, 4),\n    _http_method = coalesce(_wsa_http_method, arrayindex(_parts, 5)),\n    _url = arrayindex(_parts, 6),\n    _user_raw = arrayindex(_parts, 7)\n\n// -- Stage 3: Decompose composite fields ------------------------------------\n| alter\n    _cache_result = arrayindex(split(to_string(_result_status), \"/\"), 0),\n    _http_status_str = arrayindex(split(to_string(_result_status), \"/\"), 1),\n    _user_username = if(\n        _user_raw != \"-\" and _user_raw != null,\n        arrayindex(regextract(to_string(_user_raw), \"\\\\\\\\\\\\\\\\([^\\\"]+)\"), 0),\n        null)",
+      "key_idioms": [
+        "Stage-isolated chain: each derived temp lives in its own | alter stage so downstream temps reference only prior-stage values (per rules-engine SUG-017).",
+        "split on a single character is safe; regextract on a captured group returns an array — always wrap with arrayindex(_, 0) for a scalar.",
+        "Defensive '-' sentinel handling: WSA emits literal '-' for unset fields. Always guard with `_x != \"-\" and _x != null` before casting."
+      ],
+      "common_failures": [
+        "ERR-009: positional index off-by-one (Squid format puts client IP at index 2, not 1).",
+        "WARN-022: forgetting to_string() on _result_status before split() — composite fields are sometimes typed as object after the first split.",
+        "ERR-012: unescaped backslash in the username regex — XQL needs four backslashes to match a literal one inside a string literal."
+      ]
+    },
+    {
+      "pattern": "C",
+      "name": "Label/value array extraction via regextract on structured arrays",
+      "source_pack": "packs/efficientip_ddi",
+      "decision_signal": "_raw_log contains key=value pairs or named-field structured arrays inside a syslog body. Use regextract with named captures per field (one regex per field, not a global split).",
+      "input": {
+        "vendor": "EfficientIP",
+        "product": "DDI",
+        "dataset": "efficientip_ddi_raw",
+        "raw_log": "<30>Apr 28 06:59:22 ho2kygdds33 named[33020]: client @0x17a0992fb2d0 10.111.72.9#38677 (cdn.samsungcloudsolution.com): answer: cdn.samsungcloudsolution.com IN A + (10.107.255.193) -> NOERROR cdn.samsungcloudsolution.com. 55 CNAME cdn.samsungcloudsolution.com.edgesuite.net."
+      },
+      "output_excerpt": "// EfficientIP DDI -- XDM Data Model Rule (Pattern C exemplar)\n// Dataset: efficientip_ddi_raw\n//\n// SPDX-FileCopyrightText: GoCortexIO\n// SPDX-License-Identifier: AGPL-3.0-or-later\n\n[MODEL: dataset = efficientip_ddi_raw]\n\n// -- Stage 1: Identify daemon and operation from named/dhcpd/DNS Guardian --\nalter\n    _pri = arrayindex(regextract(_raw_log, \"^<(\\\\d+)>\"), 0),\n    _daemon = arrayindex(regextract(_raw_log, \"\\\\s(named|dhcpd|DNSGuardian|kernel)\\\\[\"), 0),\n    _pid = arrayindex(regextract(_raw_log, \"\\\\[(\\\\d+)\\\\]:\"), 0),\n    _op = arrayindex(regextract(_raw_log, \"\\\\]:\\\\s+(\\\\w+)\"), 0)\n\n// -- Stage 2: Named-resolver fields (client + query + verdict) -------------\n| alter\n    _client_addr = arrayindex(regextract(_raw_log, \"client\\\\s+@0x[0-9a-f]+\\\\s+(\\\\d{1,3}(?:\\\\.\\\\d{1,3}){3})#\\\\d+\"), 0),\n    _client_port = arrayindex(regextract(_raw_log, \"client\\\\s+@0x[0-9a-f]+\\\\s+\\\\d{1,3}(?:\\\\.\\\\d{1,3}){3}#(\\\\d+)\"), 0),\n    _query_name = arrayindex(regextract(_raw_log, \"\\\\((\\\\S+)\\\\):\\\\s+(?:answer|query)\"), 0),\n    _query_type = arrayindex(regextract(_raw_log, \"\\\\sIN\\\\s+(\\\\S+)\\\\s+\"), 0),\n    _rcode = arrayindex(regextract(_raw_log, \"->\\\\s+(NOERROR|NXDOMAIN|SERVFAIL|REFUSED|FORMERR)\"), 0)\n\n// -- Stage 3: Map to XDM ---------------------------------------------------\n| alter\n    xdm.observer.vendor = \"EfficientIP\",\n    xdm.observer.product = \"DDI\",\n    xdm.source.ipv4 = _client_addr,\n    xdm.source.host.ipv4_addresses = arraycreate(coalesce(_client_addr)),\n    xdm.source.port = to_integer(to_number(_client_port)),\n    xdm.network.dns.query_name = _query_name,\n    xdm.network.dns.response_code = _rcode;",
+      "key_idioms": [
+        "One regex per field (not a global split) — each capture group is independently authored and easy to revise.",
+        "Double-escape every backslash AND every character class inside a string literal: `\\\\d{1,3}` for one decimal digit run.",
+        "RFC 3164 vs RFC 5424 envelope: split detection into Stage 1 so downstream stages can branch on _daemon."
+      ],
+      "common_failures": [
+        "ERR-013: missing arrayindex wrapper on regextract — returns array, can't be assigned to a scalar XDM field.",
+        "WARN-027: too many regex passes over _raw_log — refactor to share captures via Stage 1 split + Stage 2 per-component regex.",
+        "INFO-008: regex anchors missing — without `^` or word boundaries the capture group may match elsewhere in the line."
+      ]
+    },
+    {
+      "pattern": "D",
+      "name": "Arrow operator on parsed JSON objects (field -> Key.SubKey)",
+      "source_pack": "packs/aws_guardduty",
+      "decision_signal": "_raw_log is null because the XSIAM ingestion parser has already projected the JSON into top-level columns. Use the `->` arrow operator to descend into nested objects, with `coalesce(PascalCase, camelCase)` to handle parser-versioning differences.",
+      "input": {
+        "vendor": "AWS",
+        "product": "GuardDuty",
+        "dataset": "aws_guardduty_generic_alert_raw",
+        "raw_columns": {
+          "Resource": "{\"ResourceType\":\"Instance\",\"InstanceDetails\":{\"InstanceId\":\"i-0abc123def456\"}}",
+          "Service": "{\"Action\":{\"NetworkConnectionAction\":{\"RemoteIpDetails\":{\"IpAddressV4\":\"203.0.113.7\",\"GeoLocation\":{\"Lat\":51.5,\"Lon\":-0.1}}}}}",
+          "Severity": 7.5,
+          "Type": "UnauthorizedAccess:EC2/MaliciousIPCaller.Custom",
+          "AccountId": "123456789012",
+          "Region": "us-east-1",
+          "Id": "9bc01a3f8b...",
+          "Title": "EC2 instance i-0abc123def456 communicating with a known malicious IP."
+        }
+      },
+      "output_excerpt": "// AWS GuardDuty -- XDM Data Model Rule\n// Dataset: aws_guardduty_generic_alert_raw\n//\n// SPDX-FileCopyrightText: GoCortexIO\n// SPDX-License-Identifier: AGPL-3.0-or-later\n\n[MODEL: dataset = aws_guardduty_generic_alert_raw ]\n\n// -- Stage 1: Initialise root-level aliases ---------------------------------\n// Normalise the Resource and Service JSON objects to support both PascalCase\n// and camelCase field naming conventions from the XSIAM parser.\nalter\n    finding_resource = coalesce(Resource, resource),\n    finding_service = coalesce(Service, service)\n\n// -- Stage 2: Extract action-specific sub-objects ---------------------------\n| alter\n    finding_network = coalesce(finding_service -> Action.NetworkConnectionAction{}, finding_service -> action.networkConnectionAction{}),\n    finding_aws_api = coalesce(finding_service -> Action.AwsApiCallAction{}, finding_service -> action.awsApiCallAction{})\n\n// -- Stage 3: Extract common finding fields --------------------------------\n| alter\n    finding_account_id = coalesce(AccountId, accountId),\n    finding_id = coalesce(Id, id),\n    finding_region = coalesce(Region, region),\n    finding_severity = to_float(coalesce(Severity, severity)),\n    finding_severity_band = coalesce(\n        _severity_band,\n        if(to_float(coalesce(Severity, severity)) < 4.0, \"LOW\",\n           to_float(coalesce(Severity, severity)) < 7.0, \"MEDIUM\",\n           to_float(coalesce(Severity, severity)) < 9.0, \"HIGH\")),\n    finding_type = coalesce(Type, type)",
+      "key_idioms": [
+        "PascalCase/camelCase coalesce at every level — XSIAM parser versions differ; never assume one casing.",
+        "`-> Key.SubKey` for scalars, `-> Key.SubKey{}` to bind the sub-object for further descent (note the trailing braces).",
+        "Severity banding via if-chain with XDM_CONST defaults at the end (LOW/MEDIUM/HIGH/Critical → null) — never a raw string."
+      ],
+      "common_failures": [
+        "ERR-016: bound a nested object directly to an XDM target (must descend with `->` to a scalar leaf first).",
+        "WARN-031: forgot the `{}` suffix when binding an intermediate object for further `->` traversal.",
+        "ERR-024: if-chain default value is a raw string rather than another XDM_CONST or null."
+      ]
+    }
+  ]
+}

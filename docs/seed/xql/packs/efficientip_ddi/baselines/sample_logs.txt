@@ -1,0 +1,99 @@
+# EfficientIP DDI -- representative redacted syslog samples
+#
+# Captured during Task #86 (RFC 3164 envelope) and Task #89
+# (RFC 5424-in-kernel envelope) from the user's production
+# corpus. The appliance ships syslog in two envelope shapes:
+#
+#   1. RFC 3164:           <PRI>MMM DD HH:MM:SS [HOST] daemon[PID]: BODY
+#   2. RFC 5424-in-kernel: <PRI>MMM DD HH:MM:SS kernel: ISO_TS HOST daemon PID - - BODY
+#      (the appliance forwards a minimal RFC 5424 record wrapped
+#      inside an RFC 3164 envelope; the two `- -` tokens are the
+#      RFC 5424 NILVALUE placeholders for MSGID and STRUCTURED-DATA)
+#
+# EfficientIP appliances usually omit the syslog hostname in the
+# RFC 3164 shape (15 of 16 production samples have no host token
+# between the timestamp and daemon[pid]:); the kernel-wrapped
+# shape always carries a hostname inside the inner RFC 5424
+# record. The shared header rule handles both shapes and silently
+# nulls when a token is absent.
+#
+# Each daemon (named, dhcpd, sshd, sudo) emits its own wire format.
+# The four stanzas in the rule cover them in order. devd[],
+# ipmserver[], and unwrapped kernel: ipfw lines are appliance-
+# internal noise and are dropped by the allow-list filter at the
+# head of the shared header rule before they reach any stanza body.
+
+# -- named (BIND DNS) -- query (with and without hostname) ----------------
+<30>Apr 28 06:29:52 named[67652]: client @0x24da0c7a350 10.96.137.144#39023 (sas-050-2531550752.simondomain.com.au): query: sas-050-2531550752.simondomain.com.au IN A + (10.96.236.53)
+<30>Apr 28 04:00:55 simonserver named[18760]: client @0x10590c05710 10.101.96.134#64011 (sigre123.sigre.com.au): query: sigre123.sigre.com.au IN A + (10.101.139.193)
+
+# -- named -- answer (recursive resolver response with rcode) -------------
+<30>Apr 28 06:59:22 ho2kygdds33 named[33020]: client @0x17a0992fb2d0 10.111.72.9#38677 (cdn.samsungcloudsolution.com): answer: cdn.samsungcloudsolution.com IN A + (10.107.255.193) -> NOERROR cdn.samsungcloudsolution.com. 55 CNAME cdn.samsungcloudsolution.com.edgesuite.net. cdn.simoncloudsolutions.com.edgesuite.net. 15405 CNAME a1963.d.akamai.net. a1963.d.akamai.net. 20 A 23.62.8.107  A 23.62.8.144
+
+# -- named -- dynamic update (RFC 2136) -- adding / denied ----------------
+<30>Apr 28 09:59:07 named[31522]: client @0x21dafb594910 111.16.121.200#39206: updating zone 'simon.com.au/IN': adding an RR at 'cd189252.simondomain.com.au' A 172.27.2.18
+<27>Apr 28 09:59:07 named[31522]: client @0x21daf49429d0 10.8.36.1#56531: update '_msdcs.simondomain.com.au/IN' denied
+
+# -- named -- zone transfer IXFR (incremental) and AXFR (full) -----------
+<30>Apr 28 16:54:41 named[31522]: client @0x21daf95c7310 111.16.121.200#12960 (simondomain.com.au): transfer of 'simondomain.com.au/IN': IXFR started (serial 2150543386 -> 2150543387)
+<30>Apr 28 16:55:02 named[31522]: client @0x21daf95c7c40 111.16.121.201#13344 (simondomain.com.au): transfer of 'simondomain.com.au/IN': AXFR started (serial 2150543388)
+
+# -- named -- transferred serial (zone transfer completion) ---------------
+<30>Apr 28 07:02:41 named[31209]: zone 10.in-addr.arpa/IN: transferred serial 18121600
+
+# -- named -- lame server resolving ---------------------------------------
+<30>Apr 28 17:02:54 named[31491]: lame server resolving 'internetproxy.k8s.au.simogroup.net' (in 'k8s.au.simonsigre.net'?): 111.16.22.113#53
+
+# -- named -- sending notifies --------------------------------------------
+<30>Apr 28 17:02:55 named[31491]: zone simon.com.au/IN: sending notifies (serial 2150543647)
+
+# -- named -- response rate limiting (RRL) -- slip / drop / NXDOMAIN -----
+<30>Apr 28 17:01:33 named[32554]: client @0x1511d8cf1a50 10.222.200.16#41146 (vision-nginx-prod-vision.apps.prd1.aws.k8s.au.simonsigre.net): would rate limit slip response to 10.120.200.0/24 for vision-apache-prod-vision.apps.prd1.aws.k8s.au.simonsigre.net IN A  (138956d9)
+<30>Apr 28 17:00:18 named[32554]: client @0x1511defce510 10.120.200.15#57040 (vision-nginx-prod-vision.apps.prd1.aws.k8s.au.imonsigre.net): would rate limit drop response to 10.99.99.0/24 for vision-apache-prod-vision.apps.prd1.aws.k8s.au.imonsigre.net IN A  (138956d9)
+<30>Apr 28 17:00:18 named[32554]: client @0x1511dd1591d0 10.22.34.1#38040 (ebpgnpdbsa002-front.simonsigre.com.au.asd.au.simonsigre.net): would rate limit slip NXDOMAIN response to 10.222.127.0/24 for ayrowa.au.simonsigre.net  (b4d98c7b)
+
+# -- dhcpd (ISC DHCP) -- DHCPACK / DHCPREQUEST / DHCPDISCOVER -------------
+<30>Apr 28 14:52:47 h22rrgdds33 dhcpd[33036]: DHCPREQUEST for 10.111.99.207 from 2a:d8:b4:25:e9:d0 via 10.111.196.1
+<30>Apr 28 14:52:47 dhcpd[98948]: DHCPREQUEST for 10.14.99.215 from 00:c8:00:a0:ba:18 (CD197342) via 10.19.8.1
+<30>Apr 28 14:52:47 h22rrgdds33 dhcpd[33036]: DHCPACK on 10.21.196.207 to 2a:00:b4:00:e9:d0 via 10.111.196.1 [14400]
+<30>Apr 28 17:00:44 dhcpd[98948]: DHCPACK on 10.99.18.8 to b0:2f:13:f6:67:0c (CD183462) via vmx1 [3600]
+<30>Apr 28 14:53:07 dhcpd[98948]: DHCPDISCOVER from 00:00:f8:00:00:0e via 172.99.225.252: unknown network segment
+<30>Apr 28 17:00:18 dhcpd[30107]: DHCPREQUEST for 172.22.81.216 (161.43.151.7) from 08:00:1b:2a:1c:b8 via 172.99.99.253: ignored (unknown subnet).
+
+# -- sshd (OpenSSH) -- accepted publickey, failed password, disconnect ---
+<86>Apr 28 09:14:22 ddi-mgmt sshd[44512]: Accepted publickey for opadmin from 10.10.0.7 port 50642 ssh2: ED25519 SHA256:abc...
+<86>Apr 28 09:14:24 ddi-mgmt sshd[44512]: pam_unix(sshd:session): session opened for user opadmin by (uid=0)
+<86>Apr 28 09:21:01 ddi-mgmt sshd[44513]: Failed password for invalid user root from 198.51.100.42 port 51022 ssh2
+<86>Apr 28 09:21:09 ddi-mgmt sshd[44513]: Connection closed by invalid user root 198.51.100.42 port 51022 [preauth]
+<86>Apr 28 09:30:11 ddi-mgmt sshd[44512]: Disconnected from user opadmin 10.10.0.7 port 50642
+
+# -- sudo -- privileged command audit -------------------------------------
+<85>Apr 28 11:02:47 ddi-mgmt sudo[51331]: opadmin : TTY=pts/0 ; PWD=/home/opadmin ; USER=root ; COMMAND=/usr/sbin/service named restart
+<85>Apr 28 11:05:13 ddi-mgmt sudo[51344]: opadmin : TTY=pts/0 ; PWD=/var/log ; USER=root ; COMMAND=/bin/cat /var/log/messages
+
+# =========================================================================
+# RFC 5424-in-kernel envelope -- the same four daemons in the
+# alternate envelope shape introduced in Task #89.
+# =========================================================================
+
+# -- dhcpd -- kernel-wrapped DHCPREQUEST / DHCPACK / DHCPDISCOVER ---------
+<118>Apr 29 01:41:23 kernel: 2026-04-29T01:41:23.397651+10:00 ho2kasdad34.au.simonsigre.net dhcpd 2722 - - DHCPREQUEST for 10.44.235.110 from ec:f4:a7:d4:b5:7f via vmx1
+<118>Apr 29 01:41:23 kernel: 2026-04-29T01:41:23.401120+10:00 ho2kasdad34.au.simonsigre.net dhcpd 2722 - - DHCPACK on 10.44.235.110 to ec:f4:a7:d4:b5:7f (CD200713) via vmx1 [3600]
+<118>Apr 29 01:41:24 kernel: 2026-04-29T01:41:24.502410+10:00 ho2kasdad34.au.simonsigre.net dhcpd 2722 - - DHCPDISCOVER from 00:50:56:00:1a:7c via 172.99.225.252: unknown network segment
+
+# -- named -- kernel-wrapped query (one daemon-agnostic fixture) ----------
+<30>Apr 29 02:15:08 kernel: 2026-04-29T02:15:08.123456+10:00 ho2kygdds33.au.simonsigre.net named 31522 - - client @0x21daf4942000 10.96.137.144#39024 (sas-050-2531550753.simondomain.com.au): query: sas-050-2531550753.simondomain.com.au IN A + (10.96.236.53)
+
+# -- sshd -- kernel-wrapped accepted publickey ----------------------------
+<86>Apr 29 02:18:42 kernel: 2026-04-29T02:18:42.998877+10:00 ddi-mgmt.au.simonsigre.net sshd 44520 - - Accepted publickey for opadmin from 10.10.0.7 port 50643 ssh2: ED25519 SHA256:def...
+
+# -- sudo -- kernel-wrapped privileged command ----------------------------
+<85>Apr 29 02:20:11 kernel: 2026-04-29T02:20:11.112233+10:00 ddi-mgmt.au.simonsigre.net sudo 51399 - - opadmin : TTY=pts/0 ; PWD=/home/opadmin ; USER=root ; COMMAND=/usr/sbin/service named restart
+
+# -- noise that the allow-list filter drops ------------------------------
+<14>Apr 28 16:54:35 devd[14570]: Processing event '!system=CAM subsystem=periph type=error device=cd0 serial="00000000000000000001" cam_status="0x4cc" scsi_status=2 scsi_sense="70 02 3a 00" CDB="00 00 00 00 00 00 " '
+<15>Apr 28 16:58:31 devd[14964]: Pushing table
+<15>Apr 28 17:07:08 devd[14964]: Popping table
+<15>Apr 28 07:00:21 devd[14570]: Processing notify event
+<142>Apr 28 17:06:16 ipmserver[32561]: [10.106.60.218] Exit 'local_member_refresh'
+<110>Apr 28 07:08:28 kernel: ipfw: 14 Accept P:112 10.8.122.202 224.0.0.18 in via vmx1

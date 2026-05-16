@@ -1,0 +1,30 @@
+{
+  "violations": [
+    {
+      "ruleId": "WARN-025",
+      "ruleName": "xdm.session_context_id may not be in the selected data model",
+      "severity": "warning",
+      "category": "Data Model Compatibility",
+      "message": "xdm.session_context_id is known to cause Cortex IDE internal validation errors on _gc_raw datasets",
+      "recommendation": "This field exists in the XDM schema but is not part of the selected data model on some datasets (e.g. trend_micro_vision_one_gc_raw). Remove it or verify availability on your target dataset",
+      "line": 128
+    }
+  ],
+  "suggestions": [
+    {
+      "ruleId": "INFO-011",
+      "ruleName": "One-sided source/target field mapping",
+      "severity": "suggestion",
+      "category": "Field Coverage",
+      "message": "xdm.source.ipv4 is mapped but xdm.target.ipv4 is not. If the payload has only one IP address, consider mirroring to both sides for correlation coverage",
+      "recommendation": "Add xdm.target.ipv4 = <same_value> to ensure XSIAM correlation queries match regardless of which side is searched"
+    }
+  ],
+  "score": 89,
+  "summary": {
+    "errors": 0,
+    "warnings": 1,
+    "info": 0,
+    "suggestions": 1
+  }
+}

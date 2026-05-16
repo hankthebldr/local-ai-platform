@@ -1,0 +1,264 @@
+---
+swagger: "2.0"
+info:
+  description: "View a log of actions performed in your account by account users, system processes, and Imperva system administrators and support. For full feature documentation, see [Audit Trail](https://docs.imperva.com/bundle/cloud-application-security/page/audit-trail.htm)"
+  version: "1.0.0"
+  title: "Imperva audit-trail"
+  license:
+    name: "The terms in the absence of an applicable signed agreement between you\
+      \ and Imperva"
+    url: "https://www.imperva.com/legal/license-agreement/"
+host: "api.imperva.com"
+basePath: "/audit-trail"
+tags:
+- name: "Audit Trail"
+- name: "Audit Trail v1 (retired)"
+schemes:
+- "https"
+security:
+- api_id: []
+  api_key: []
+paths:
+  /v1/events:
+    get:
+      tags:
+      - "Audit Trail v1 (retired)"
+      summary: "Get account audit events"
+      description: "This api is deprecated. This is a list of audit events of the\
+        \ specified account"
+      operationId: "getAuditEvents"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "assume"
+        in: "query"
+        description: "Is the action performed by Imperva Support logged in as an account\
+          \ user"
+        required: false
+        type: "boolean"
+      - name: "caid"
+        in: "query"
+        description: "Numeric identifier of the account to operate on. If not specified,\
+          \ operation will be performed on the account identified by the authentication\
+          \ parameters."
+        required: false
+        type: "integer"
+        format: "int64"
+      - name: "end"
+        in: "query"
+        description: "Latest time boundary (in milliseconds)"
+        required: false
+        type: "integer"
+        format: "int64"
+      - name: "limit"
+        in: "query"
+        description: "The number of objects to return in the response. Defaults to\
+          \ 50. Maximum is 100"
+        required: false
+        type: "integer"
+        format: "int32"
+      - name: "offset"
+        in: "query"
+        description: "Offset is the position of a particular record in the dataset.\
+          \ You can retrieve a subset of records starting with the offset value. The\
+          \ offset and limit parameters work together. Valid values for the offset\
+          \ parameter are multiples of the limit. For example, if you define limit\
+          \ as 50, you can define offset as either 0, 50, 100, 150, or any multiple\
+          \ of 50."
+        required: false
+        type: "integer"
+        format: "int32"
+      - name: "start"
+        in: "query"
+        description: "Earliest time boundary (in milliseconds)"
+        required: true
+        type: "integer"
+        format: "int64"
+      - name: "type"
+        in: "query"
+        description: "The action that was performed in the account, such as ACCOUNT_LOGIN"
+        required: false
+        type: "string"
+      responses:
+        200:
+          description: "Legal response"
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/audit_record"
+        500:
+          description: "Error response"
+          schema:
+            $ref: "#/definitions/error_response_wrapper"
+      deprecated: true
+  /v2/events:
+    get:
+      tags:
+      - "Audit Trail"
+      summary: "Get account audit events"
+      description: "This is a list of audit events of the specified account"
+      operationId: "getAuditEventsV2"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "assume"
+        in: "query"
+        description: "Is the action performed by Imperva Support logged in as an account\
+          \ user"
+        required: false
+        type: "boolean"
+      - name: "caid"
+        in: "query"
+        description: "Numeric identifier of the account to operate on. If not specified,\
+          \ operation will be performed on the account identified by the authentication\
+          \ parameters."
+        required: false
+        type: "integer"
+        format: "int64"
+      - name: "end"
+        in: "query"
+        description: "Latest time boundary (in milliseconds)"
+        required: false
+        type: "integer"
+        format: "int64"
+      - name: "limit"
+        in: "query"
+        description: "The number of objects to return in the response. Defaults to\
+          \ 50. Maximum is 100"
+        required: false
+        type: "integer"
+        format: "int32"
+      - name: "offset"
+        in: "query"
+        description: "Offset is the position of a particular record in the dataset.\
+          \ You can retrieve a subset of records starting with the offset value. The\
+          \ offset and limit parameters work together. Valid values for the offset\
+          \ parameter are multiples of the limit. For example, if you define limit\
+          \ as 50, you can define offset as either 0, 50, 100, 150, or any multiple\
+          \ of 50."
+        required: false
+        type: "integer"
+        format: "int32"
+      - name: "start"
+        in: "query"
+        description: "Earliest time boundary (in milliseconds)"
+        required: true
+        type: "integer"
+        format: "int64"
+      - name: "type"
+        in: "query"
+        description: "The action that was performed in the account, such as ACCOUNT_LOGIN"
+        required: false
+        type: "string"
+      responses:
+        200:
+          description: "Legal response"
+          schema:
+            $ref: "#/definitions/audit_record_response"
+        500:
+          description: "Error response"
+          schema:
+            $ref: "#/definitions/error_response_wrapper"
+securityDefinitions:
+  api_id:
+    description: "An API ID created and managed in the Imperva Cloud Security Console\
+      \ and used for authentication"
+    type: "apiKey"
+    name: "x-API-Id"
+    in: "header"
+  api_key:
+    description: "An API key created and managed in the Imperva Cloud Security Console\
+      \ and used for authentication"
+    type: "apiKey"
+    name: "x-API-Key"
+    in: "header"
+definitions:
+  audit_record:
+    type: "object"
+    properties:
+      time:
+        type: "integer"
+        format: "int64"
+        example: 1591860030099
+        description: "Time of the audit event"
+      type_key:
+        type: "string"
+        example: "API_UPDATED"
+        description: "The name of the action that was performed in the account, such\
+          \ as ACCOUNT_LOGIN or SITE_ORIGIN_SERVERS_SETTINGS_CHANGED."
+      type_description:
+        type: "string"
+        example: "API updated"
+        description: "A description of the action that was performed in the account,\
+          \ such as logging in or changing site settings."
+      user_id:
+        type: "string"
+        example: "1234"
+        description: "ID of the user who performed the action"
+      user_details:
+        type: "string"
+        example: "user@test.com"
+        description: "Email of the user who performed the action"
+      account_id:
+        type: "string"
+        example: "285"
+        description: "ID of the account that the action was done in"
+      resource_type_key:
+        type: "string"
+        example: "API"
+        description: "The type of the resource that the action was done on"
+      resource_id:
+        type: "string"
+        example: "4389"
+        description: "ID of the resource that the action was done on"
+      message:
+        type: "string"
+        example: "API (4389) updated"
+        description: "Detailed description of the audit event"
+      context_key:
+        type: "string"
+        example: "UI"
+        description: "The audit activity context. Can be one of the following: UI,\
+          \ API, INTERNAL_API, JOB, NA"
+      assumed_by_user:
+        type: "string"
+        example: "Imperva support"
+        description: "The user who performed the action on behalf of an account user"
+    description: "A single audit record"
+  audit_record_response:
+    type: "object"
+    properties:
+      total:
+        type: "integer"
+        format: "int64"
+        example: 1
+        description: "The total number of audit trail entries during the requested\
+          \ time range"
+      elements:
+        type: "array"
+        description: "collection of audit elements"
+        items:
+          $ref: "#/definitions/audit_record"
+    description: "A object contains collection of audit record"
+  error_response_wrapper:
+    type: "object"
+    properties:
+      code:
+        type: "integer"
+        format: "int32"
+        example: 1001
+        description: "Internal response code"
+      message:
+        type: "string"
+        example: "Required parameter 'start' is missing"
+        description: "Response message"
+      id:
+        type: "string"
+        example: "Xu09cHAb"
+        description: "Unique id to identify the error in the logs"
+        readOnly: true
+    description: "Object that describes a non valid response"

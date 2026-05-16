@@ -80,6 +80,14 @@ context:
     value: "docs/seed/xql/xql-xdm-knowledge.md"
     label: "XQL/XDM knowledge: language reference, schema, patterns, pitfalls"
 
+  - type: file
+    value: "docs/seed/xql/few_shot_examples.json"
+    label: "Canonical pattern-A/B/C/D few-shot exemplars (gold-standard packs)"
+
+  - type: file
+    value: "docs/seed/xql/packs_index.md"
+    label: "Index of 17 production vendor packs available for reference. Ask the operator for the pack path when a vendor matches; the full datamodel.xql + parser.xql + documentation.md sit at docs/seed/xql/packs/<name>/."
+
 starters:
   - "Here's a sample log from <vendor>. Write the XDM data model rule."
   - "Map this JSON event to XDM and flag any fields without canonical paths."

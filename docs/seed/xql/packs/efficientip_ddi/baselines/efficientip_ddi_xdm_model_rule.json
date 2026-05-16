@@ -1,0 +1,48 @@
+{
+  "violations": [
+    {
+      "ruleId": "INFO-006",
+      "ruleName": "Missing fields cleanup",
+      "severity": "info",
+      "category": "Best Practices",
+      "message": "Rule uses alter to create intermediary fields but does not include a fields - statement to clean up unused variables",
+      "recommendation": "Add | fields - <intermediary_fields> at the end to remove fields that are not needed in the final output",
+      "codeSnippet": "| fields -tmp_field1, tmp_field2"
+    },
+    {
+      "ruleId": "WARN-035",
+      "ruleName": "XDM field type mismatch",
+      "severity": "warning",
+      "category": "Data Quality",
+      "message": "'xdm.network.protocol_layers' is a scalar XDM field but is being assigned the result of array-producing function 'arraycreate()'. Wrap with arrayindex() or arraystring() to extract a scalar",
+      "recommendation": "Convert to a scalar: xdm.network.protocol_layers = arrayindex(arraycreate(...), 0) or arraystring(arraycreate(...), \",\")",
+      "line": 466
+    },
+    {
+      "ruleId": "WARN-035",
+      "ruleName": "XDM field type mismatch",
+      "severity": "warning",
+      "category": "Data Quality",
+      "message": "'xdm.network.protocol_layers' is a scalar XDM field but is being assigned the result of array-producing function 'arraycreate()'. Wrap with arrayindex() or arraystring() to extract a scalar",
+      "recommendation": "Convert to a scalar: xdm.network.protocol_layers = arrayindex(arraycreate(...), 0) or arraystring(arraycreate(...), \",\")",
+      "line": 579
+    },
+    {
+      "ruleId": "WARN-035",
+      "ruleName": "XDM field type mismatch",
+      "severity": "warning",
+      "category": "Data Quality",
+      "message": "'xdm.network.protocol_layers' is a scalar XDM field but is being assigned the result of array-producing function 'arraycreate()'. Wrap with arrayindex() or arraystring() to extract a scalar",
+      "recommendation": "Convert to a scalar: xdm.network.protocol_layers = arrayindex(arraycreate(...), 0) or arraystring(arraycreate(...), \",\")",
+      "line": 629
+    }
+  ],
+  "suggestions": [],
+  "score": 67,
+  "summary": {
+    "errors": 0,
+    "warnings": 3,
+    "info": 1,
+    "suggestions": 0
+  }
+}

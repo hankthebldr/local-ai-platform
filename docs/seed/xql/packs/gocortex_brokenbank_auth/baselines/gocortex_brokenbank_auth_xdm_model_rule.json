@@ -1,0 +1,28 @@
+{
+  "violations": [],
+  "suggestions": [
+    {
+      "ruleId": "INFO-011",
+      "ruleName": "One-sided source/target field mapping",
+      "severity": "suggestion",
+      "category": "Field Coverage",
+      "message": "xdm.source.ipv4 is mapped but xdm.target.ipv4 is not. If the payload has only one IP address, consider mirroring to both sides for correlation coverage",
+      "recommendation": "Add xdm.target.ipv4 = <same_value> to ensure XSIAM correlation queries match regardless of which side is searched"
+    },
+    {
+      "ruleId": "INFO-011",
+      "ruleName": "One-sided source/target field mapping",
+      "severity": "suggestion",
+      "category": "Field Coverage",
+      "message": "xdm.source.user.username is mapped but xdm.target.user.username is not. If the payload has only one user, consider mirroring to both sides for correlation coverage",
+      "recommendation": "Add xdm.target.user.username = <same_value> to ensure XSIAM correlation queries match regardless of which side is searched"
+    }
+  ],
+  "score": 98,
+  "summary": {
+    "errors": 0,
+    "warnings": 0,
+    "info": 0,
+    "suggestions": 2
+  }
+}

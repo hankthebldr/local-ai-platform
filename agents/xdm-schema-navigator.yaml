@@ -49,6 +49,10 @@ context:
     value: "docs/seed/xql/xql-xdm-knowledge.md"
     label: "XDM schema + XDM_CONST reference"
 
+  - type: file
+    value: "docs/seed/xql/packs_index.md"
+    label: "Pack index — names + datasets + dominant pattern family for the 17 mirrored vendor packs. Route the operator to the closest pack when they ask for a worked example."
+
 starters:
   - "What's the XDM path for source IPv4 address?"
   - "Maps to xdm.auth.outcome — what XDM_CONST values are legal?"
