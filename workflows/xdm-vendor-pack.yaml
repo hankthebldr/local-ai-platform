@@ -1,0 +1,373 @@
+# ── XDM Vendor Pack — Full Onboarding Workflow ──────────────────────────
+#
+# Generates the gold-standard three-artefact pack from a vendor name +
+# sample log, matching the shape of the 17 mirrored packs in
+# docs/seed/xql/packs/:
+#
+#   <vendor>/
+#     parser.xql          — INGEST block (schema-on-write to XQL Schema)
+#     datamodel.xql       — MODEL block  (schema-on-read to XDM Schema)
+#     documentation.md    — operator-facing pack documentation
+#
+# Both rules are gated by analyse_xql (82-rule engine). BLOCKER findings
+# trigger retry-with-feedback; persistent failures surface the top-3
+# findings to the operator.
+#
+# DAG:
+#
+#     analyse_log_structure ─┬─→ curate_pack ─┬─→ write_parser ──┬─→ write_datamodel ──┬─→ write_documentation
+#                            │                │                  │                     │
+#                            └────────────────┴──────────────────┴─────────────────────┴─→ assemble_pack
+#
+
+id: xdm-vendor-pack
+name: "XDM Vendor Pack Generator"
+version: "1.0"
+schema_version: 1
+description: |
+  Multi-agent pipeline producing the full three-artefact vendor pack
+  (parser.xql + datamodel.xql + documentation.md) from a vendor name +
+  raw log sample. Modelled on the 17 mirrored packs from
+  gocortex-xql-ide; gated by the 82-rule analyse_xql engine.
+
+metadata:
+  author: "ohno llc"
+  category: "security-engineering"
+  tags: ["xsiam", "xdr", "xdm", "xql", "pack", "onboarding"]
+  estimated_duration: 480
+
+defaults:
+  role: reasoning
+  temperature: 0.3
+  max_tokens: 8192
+  retries: 2
+  retry_delay: 5
+  timeout: 600
+
+# Up to 2 steps in parallel where the DAG allows.
+max_parallel: 2
+
+# Expected seed shape:
+#   vendor        — vendor name (e.g. "Cisco")
+#   product       — product name (e.g. "Secure Web Appliance")
+#   raw_log       — full raw log sample (single event preferred)
+#   dataset_name  — optional; derived from vendor + product if omitted
+context:
+  description: |
+    Required seed keys: vendor, product, raw_log.
+    Optional: dataset_name (derived from vendor + product if absent).
+
+steps:
+  # ── Step 1: log structure analysis ───────────────────────────────────
+  - id: analyse_log_structure
+    name: "Analyse log structure and pattern family"
+    role: reasoning
+    depends_on: []
+    system_prompt: |
+      You are a Cortex XSIAM log-structure analyser. Given a raw log
+      sample, identify:
+
+        - pattern_family (A | B | C | D — see attached knowledge §3)
+        - raw_format (JSON | syslog | labelled-values | key=value | csv | other)
+        - candidate_fields (the high-signal source fields, up to 30)
+        - timestamp_format (strptime-compatible if discernible)
+
+      Output ONLY a JSON object with these keys. Do not write XQL.
+    inputs:
+      - seed.vendor
+      - seed.product
+      - seed.raw_log
+    outputs:
+      - pattern_family
+      - raw_format
+      - candidate_fields
+      - timestamp_format
+    output_format: json
+    output_schema:
+      type: object
+      required: [pattern_family, raw_format, candidate_fields]
+      properties:
+        pattern_family: {type: string, enum: [A, B, C, D]}
+        raw_format: {type: string}
+        candidate_fields:
+          type: array
+          items:
+            type: object
+            required: [vendor_field, type_hint]
+        timestamp_format: {type: string}
+
+  # ── Step 2: corpus grounding via snippet curator ─────────────────────
+  - id: curate_pack
+    name: "Curate nearest pack + snippets"
+    role: fast
+    description: "Retrieve nearest of the 17 vendor packs + relevant snippets via the agentic loop"
+    depends_on:
+      - analyse_log_structure
+    system_prompt: |
+      You are grounding this run in the corpus before authoring. Use
+      the rag_lookup and xdm_snippets tools to find:
+
+        1. The closest matching pack from the 17-pack corpus.
+        2. 3-5 relevant snippets for the identified pattern family.
+        3. Any companion-pair gotchas the closest pack documents.
+
+      Return JSON:
+        {
+          "closest_pack":    "packs/<name>" | null,
+          "closest_score":   <0.0..1.0>,
+          "snippet_ids":     [<id>, ...],
+          "watch_outs":      [<one-line note>, ...]
+        }
+
+      If no pack scores above 0.3, set closest_pack to null and
+      proceed — the engineer will author from scratch.
+    inputs:
+      - seed.vendor
+      - seed.product
+      - analyse_log_structure.pattern_family
+      - analyse_log_structure.raw_format
+    outputs:
+      - closest_pack
+      - closest_score
+      - snippet_ids
+      - watch_outs
+    output_format: json
+    config:
+      temperature: 0.2
+      max_tokens: 2048
+
+  # ── Step 3: parser.xql (INGEST block) ────────────────────────────────
+  - id: write_parser
+    name: "Write the parser.xql INGEST block"
+    role: reasoning
+    depends_on:
+      - analyse_log_structure
+      - curate_pack
+    system_prompt: |
+      You are authoring the parser.xql artefact for a Cortex XSIAM vendor
+      pack. Emit a complete INGEST block that extracts the candidate
+      fields from the raw log and sets the four required INGEST headers:
+      vendor=, product=, target_dataset=, _time=.
+
+      Output format (this exact shape, no preamble):
+
+        // <Vendor> <Product> -- XQL Parsing Rule
+        // Dataset: <dataset_name>_raw
+        //
+        // SPDX-FileCopyrightText: ohno llc
+        // SPDX-License-Identifier: AGPL-3.0-or-later
+
+        [INGEST: vendor="<Vendor>", product="<Product>",
+                 target_dataset="<dataset_name>_raw", no_hit=drop]
+        <field extraction + _time assignment>
+
+      Rules:
+      - Use ONLY XQL functions documented in the attached knowledge §1.
+      - The pattern_family dictates the extraction idiom:
+          A: json_extract_scalar
+          B: split + arrayindex
+          C: regextract (one per field)
+          D: arrow operator (->) on pre-parsed columns
+      - _time MUST be set explicitly (ERR-005 will block otherwise).
+      - End the rule body cleanly; no trailing comma before the
+        semicolon, no trailing pipe.
+    inputs:
+      - seed.vendor
+      - seed.product
+      - seed.raw_log
+      - analyse_log_structure.pattern_family
+      - analyse_log_structure.raw_format
+      - analyse_log_structure.candidate_fields
+      - analyse_log_structure.timestamp_format
+      - curate_pack.closest_pack
+      - curate_pack.snippet_ids
+      - curate_pack.watch_outs
+    outputs:
+      - parser_rule
+    output_format: text
+    hooks:
+      # Validate against the 82-rule engine (parsing kind) and retry
+      # with feedback on any BLOCKER.
+      validate_output:
+        - name: analyse_xql_gate
+          config:
+            kind: parsing
+            max_errors: 0
+            max_warnings: 99
+            retryable: true
+            store_as: parser_analysis_report
+
+  # ── Step 4: datamodel.xql (MODEL block) ──────────────────────────────
+  - id: write_datamodel
+    name: "Write the datamodel.xql MODEL block"
+    role: reasoning
+    depends_on:
+      - write_parser
+    system_prompt: |
+      You are authoring the datamodel.xql artefact for a Cortex XSIAM
+      vendor pack. The parser.xql has just been generated and is
+      available as write_parser.parser_rule — its target_dataset is
+      what this MODEL block reads from.
+
+      Emit a complete MODEL block mapping the parser's output columns
+      onto XDM paths. Begin with the strict 9-line MAPPED-HEADER
+      comment block (vendor / product / dataset / pattern / xdm_const /
+      companion_pairs_complete / omitted / raw_log / notes), per the
+      canonical format decided at Phase 0 of this integration.
+
+      Rules:
+      - Use ONLY XDM paths from the schema (§2 of attached knowledge).
+      - Use the same pattern family the parser used.
+      - For each companion-pair partner (IP, MAC, port, user, host):
+        if you map one side, you MUST map the other. ERR severity.
+      - Wrap array fields (ipv4_addresses, mac_addresses, MITRE) with
+        arraycreate(coalesce(...)) per the §9 rules.
+      - XDM_CONST defaults must themselves be XDM_CONST values.
+      - One assignment per xdm.* field — never duplicate.
+      - End with the 10-item pre-flight checklist (PASS / FAIL each).
+    inputs:
+      - seed.vendor
+      - seed.product
+      - analyse_log_structure.pattern_family
+      - analyse_log_structure.candidate_fields
+      - curate_pack.closest_pack
+      - curate_pack.watch_outs
+      - write_parser.parser_rule
+    outputs:
+      - datamodel_rule
+    output_format: text
+    hooks:
+      validate_output:
+        - name: analyse_xql_gate
+          config:
+            kind: modeling
+            max_errors: 0
+            max_warnings: 99
+            retryable: true
+            store_as: datamodel_analysis_report
+
+  # ── Step 5: documentation.md ─────────────────────────────────────────
+  - id: write_documentation
+    name: "Write the documentation.md operator brief"
+    role: reasoning
+    depends_on:
+      - write_parser
+      - write_datamodel
+    system_prompt: |
+      You are authoring the documentation.md artefact for a Cortex XSIAM
+      vendor pack. The parser.xql and datamodel.xql are both already
+      generated. Produce an operator-facing markdown brief that mirrors
+      the documentation.md shape used in the 17 mirrored packs.
+
+      Required sections (in this order, ASCII headers only):
+
+        # <Vendor> <Product>
+
+        ## Overview
+        One paragraph: what the data source is, why a Cortex SOC cares,
+        which detection use cases it enables.
+
+        ## Source Format
+        Pattern family applied. Envelope (syslog framing, JSON shape,
+        etc.). Timestamp format string. Anything peculiar about the
+        vendor's emission shape.
+
+        ## Field Mapping
+        Table: vendor_field | xdm_path | notes. Every mapping in the
+        datamodel.xql gets one row. Group by XDM category (event /
+        source / target / network / etc.) with a comment header per group.
+
+        ## NOT MAPPED
+        Vendor fields deliberately omitted, with reason (no XDM
+        path / tenant implicit / Cortex sets _time automatically /
+        XDM_CONST not available).
+
+        ## Companion Pairs Completed
+        Table: pair_a | pair_b | status. One row per IP / MAC / port /
+        user / host companion pair the datamodel touches.
+
+        ## Detection Use Cases
+        2-4 bullet points: what this pack enables (e.g. "Brute-force
+        login detection via xdm.event.outcome timeseries", "Lateral
+        movement via stitching on xdm.source.user.username +
+        xdm.target.host.hostname").
+
+      Style: British English, ASCII characters only, professional and
+      factual. No marketing language. No emoji. No bold or italic.
+    inputs:
+      - seed.vendor
+      - seed.product
+      - analyse_log_structure.pattern_family
+      - analyse_log_structure.raw_format
+      - write_parser.parser_rule
+      - write_datamodel.datamodel_rule
+    outputs:
+      - documentation_md
+    output_format: text
+    config:
+      temperature: 0.4
+      max_tokens: 8192
+
+  # ── Step 6: assemble pack ────────────────────────────────────────────
+  - id: assemble_pack
+    name: "Assemble the three-artefact pack"
+    role: coding
+    depends_on:
+      - write_parser
+      - write_datamodel
+      - write_documentation
+    system_prompt: |
+      You are the pack assembler. The three artefacts are all generated
+      and validated. Your job is to produce the final delivery shape:
+
+        {
+          "pack_name":           "<vendor>_<product>" (snake_case),
+          "dataset_name":        "<vendor>_<product>_raw",
+          "files": {
+            "parser.xql":        <write_parser.parser_rule verbatim>,
+            "datamodel.xql":     <write_datamodel.datamodel_rule verbatim>,
+            "documentation.md":  <write_documentation.documentation_md verbatim>
+          },
+          "validation": {
+            "parser_verdict":    <"READY-TO-DEPLOY" | "NEEDS-FIXES" | "REWRITE-RECOMMENDED">,
+            "datamodel_verdict": <"READY-TO-DEPLOY" | "NEEDS-FIXES" | "REWRITE-RECOMMENDED">,
+            "parser_score":      <0..100>,
+            "datamodel_score":   <0..100>
+          },
+          "ready_to_deploy":     <bool — true iff both verdicts are READY-TO-DEPLOY>
+        }
+
+      Read the analyse_xql reports stored under the parser and datamodel
+      steps' workspace keys (parser_analysis_report and
+      datamodel_analysis_report) and pull the verdict + score from each.
+
+      Output: ONLY the JSON. No commentary.
+    inputs:
+      - seed.vendor
+      - seed.product
+      - write_parser.parser_rule
+      - write_datamodel.datamodel_rule
+      - write_documentation.documentation_md
+    outputs:
+      - pack_name
+      - dataset_name
+      - files
+      - validation
+      - ready_to_deploy
+    output_format: json
+    output_schema:
+      type: object
+      required: [pack_name, dataset_name, files, validation, ready_to_deploy]
+      properties:
+        pack_name: {type: string}
+        dataset_name: {type: string}
+        files:
+          type: object
+          required: [parser.xql, datamodel.xql, documentation.md]
+        validation:
+          type: object
+          required: [parser_verdict, datamodel_verdict, parser_score, datamodel_score]
+        ready_to_deploy: {type: boolean}
+    config:
+      temperature: 0.2
+      max_tokens: 16384

@@ -26,6 +26,17 @@ skills:
       - keyword: "review my rule"
       - manual: true
 
+  - id: "vendor-pack-author"
+    file: "skills/vendor-pack-author.md"
+    triggers:
+      - keyword: "vendor pack"
+      - keyword: "onboard vendor"
+      - keyword: "new data source"
+      - keyword: "XSIAM pack"
+      - keyword: "three-artefact pack"
+      - keyword: "parser and datamodel"
+      - manual: true
+
 # Tools are callable from any step's agentic loop. Each is a Python file
 # implementing an `execute(params: dict) -> dict` entrypoint.
 tools:
