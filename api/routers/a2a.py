@@ -45,7 +45,6 @@ from ..models.a2a_models import (
 )
 from ..services.a2a_service import A2AService
 
-
 router = APIRouter(tags=["a2a"])
 
 # Lazily constructed by api/main.py via init_a2a_service(); see that module
@@ -91,16 +90,14 @@ async def agent_card(request: Request) -> JSONResponse:
             "Exposes chat and YAML-defined workflows as A2A skills."
         ),
         url=f"{base_url}/a2a",
-        provider=AgentProvider(organization="ohno llc"),
+        provider=AgentProvider(organization="enclave"),
         version=version,
         capabilities=AgentCapabilities(
             streaming=True,
             pushNotifications=False,
             stateTransitionHistory=True,
         ),
-        authentication=(
-            {"schemes": ["bearer"]} if auth_enabled else None
-        ),
+        authentication=({"schemes": ["bearer"]} if auth_enabled else None),
         defaultInputModes=["text"],
         defaultOutputModes=["text", "data"],
         skills=skills,
@@ -199,9 +196,7 @@ async def _handle_send(rpc_id, params: dict[str, Any]):
     try:
         parse_skill_id(skill)
     except ValueError as exc:
-        return _error_response(
-            rpc_id, A2AErrorCode.INVALID_PARAMS, str(exc)
-        )
+        return _error_response(rpc_id, A2AErrorCode.INVALID_PARAMS, str(exc))
 
     svc = _get_service()
     task = await svc.send(

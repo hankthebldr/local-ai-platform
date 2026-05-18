@@ -217,7 +217,10 @@ steps:
     output_format: text
     hooks:
       # Pre-step: run validate_xql against write_rule.rule and stuff the
-      # result into the input as validator_report.
+      # result into the input as validator_report. The validator now
+      # delegates to the 82-rule analyse_xql engine (Phases 3a+3b), so
+      # the LLM sees structured rule-ID + recommendation feedback rather
+      # than generic prose.
       before_step:
         - name: plugin_tool_invoker
           config:
@@ -226,12 +229,17 @@ steps:
             params_from:
               rule: write_rule.rule
             store_as: validator_report
-      # Quality gate (future): once a generic `refuse_if_blockers` /
-      # field-predicate validator is added, re-enable here to fail the
-      # run when the verdict contains REWRITE-RECOMMENDED. For 1.1.1 we
-      # rely on the model-side prompt to emit the right verdict line.
-      # validate_output:
-      #   - name: refuse_if_blockers
-      #     config:
-      #       require_field: verdict
-      #       forbid_value_contains: "REWRITE-RECOMMENDED"
+      # Quality gate: re-run the analyser against the revised rule the
+      # LLM produced. Any BLOCKER (severity=error) in the 82-rule engine
+      # triggers a retry with the structured feedback. The retry_with_
+      # feedback hook then re-runs the step with the analyser report
+      # appended to the prompt; if the second attempt still fails the
+      # workflow surfaces the failure with the top-3 findings.
+      validate_output:
+        - name: analyse_xql_gate
+          config:
+            kind: modeling
+            max_errors: 0
+            max_warnings: 99
+            retryable: true
+            store_as: analyse_xql_report

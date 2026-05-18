@@ -365,6 +365,7 @@ class WorkflowEngine:
         from api.hooks.builtins.output_logger import OutputLoggerHook
         from api.hooks.builtins.few_shot_injector import FewShotInjectorHook
         from api.hooks.builtins.plugin_tool_invoker import PluginToolInvokerHook
+        from api.hooks.builtins.analyse_xql_gate import AnalyseXqlGateHook
 
         factory = {
             "json_schema": JsonSchemaHook,
@@ -374,6 +375,7 @@ class WorkflowEngine:
             "output_logger": OutputLoggerHook,
             "few_shot_injector": FewShotInjectorHook,
             "plugin_tool_invoker": PluginToolInvokerHook,
+            "analyse_xql_gate": AnalyseXqlGateHook,
         }.get(spec.name)
         if factory is None:
             raise ValueError(f"Unknown built-in hook: {spec.name}")

@@ -162,7 +162,7 @@ cat > "${CONTENTS}/Info.plist" << PLIST
     <key>CFBundleDisplayName</key>
     <string>Enclave</string>
     <key>CFBundleIdentifier</key>
-    <string>com.ohno.enclave</string>
+    <string>com.enclave.app</string>
     <key>CFBundleVersion</key>
     <string>${BUILD_VERSION}</string>
     <key>CFBundleShortVersionString</key>

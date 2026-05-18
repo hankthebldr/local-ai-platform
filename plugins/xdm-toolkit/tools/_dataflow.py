@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 # Derived from gocortex-xql-ide/server/data/rules-engine.ts (AGPL-3.0).
 """
 Shared dataflow helpers (analyse_dataflow, stage-statement collector,

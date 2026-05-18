@@ -7,16 +7,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer: [sem
 
 ## [1.1.1] — 2026-05-15
 
-### Licensing — Source-Available Evaluation License
-- `LICENSE` replaced. The prior "Commercial Software License" with Individual /
-  Teams tiers is gone. The new license is source-available: read, study, and
-  security-review the code freely; personal non-production evaluation is
-  permitted; production and commercial use are reserved for a forthcoming
-  commercial license. `README.md`, `docs/pages/index.html`, and the
-  `.github/ISSUE_TEMPLATE/config.yml` contact link all updated in lock-step
-  so every surface tells the same story. The Teams `mailto:contact@ohno.llc`
-  pricing path is replaced with a "join the waitlist" Discussions link.
-
 ### Added — Cortex Console rebrand (PR #57)
 - Web console re-skinned to the PANW Cortex product family aesthetic
   (XSIAM / XDR / XSOAR). Slate-navy canvas, Cortex Green primary, cool-blue
@@ -169,8 +159,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer: [sem
   `Theme` controller persisting choice to `localStorage`, and a synchronous
   `<head>` bootstrap to resolve theme before paint (no flash of wrong
   theme). Initial precedence: localStorage > `prefers-color-scheme` > dark.
-- Header subtitle no longer duplicates the footer attribution. The footer
-  retains `Enclave vX.Y.Z — by ohno llc`.
+- Header subtitle no longer duplicates the footer attribution.
 - Latent state bug fixed: `AdminMenu.showPanel()` set inline `display:block`
   on admin subtab panels, but `switchTab()` never reset the inline display.
   Once you opened an admin subtab, that panel bled through under every

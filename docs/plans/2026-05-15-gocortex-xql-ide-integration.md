@@ -1,5 +1,26 @@
 # GoCortex XQL IDE → Enclave integration plan
 
+**Status:** Complete. All five gates signed off; PRs #59 + #60 + #62 + #64 + #66 merged to master between 2026-05-15 and 2026-05-16.
+
+**Final merge order on master:**
+
+  | Phase | PR | Merge commit | Description |
+  |---|---|---|---|
+  | 1+2 | #59 | `7888dcb` | corpus mirror + grounding (17 packs + 706 KB anchors + 112 snippets + few-shot exemplars + RAG ingestion script) |
+  | 3a  | #60 | `6df1fbe` | validator framework + 9 rules + 17 fixtures + lookup_xdm_path rewrite |
+  | 3b  | #62 | `259e72f` | bulk validator port (75 rules + analyseDataflow + scaffold_xql + 29 more fixtures) |
+  | 4   | #64 | `39afbf2` | analyse_xql_gate hook + xdm_snippets + rag_lookup tools + workflow rewire |
+  | 5   | #66 | `3ead572` | vendor-pack workflow + curator/reviewer agents + vendor-pack-author skill + CrowdStrike smoke |
+
+**Smoke verification (post-merge):**
+- 63/63 XQL unit tests passing (`test_xql_rules.py` + `test_xql_phase5.py`)
+- CrowdStrike Falcon DetectionSummaryEvent end-to-end: good rule `READY-TO-DEPLOY` (score 41, 0 BLOCKERs); broken rule `NEEDS-FIXES` with both planted defects caught (ERR-016 + ERR-020)
+- RAG corpus: 5,833 chunks across all 17 packs, full metadata, retrieves semantically-relevant chunks for process-tree queries
+
+**Original status preserved below for history.**
+
+---
+
 **Status:** Gate 0 signed off 2026-05-15. Phase 1 in flight.
 
 **Operator decisions:**
@@ -56,9 +77,7 @@ workflow run on any BLOCKER.
 ## Licensing
 
 - Source corpus is AGPL-3.0-or-later. All copied files keep their original
-  `SPDX-FileCopyrightText: GoCortexIO` + `SPDX-License-Identifier: AGPL-3.0-or-later` headers.
 - New Python ports get fresh SPDX headers:
-  `SPDX-FileCopyrightText: ohno llc` + `SPDX-License-Identifier: AGPL-3.0-or-later`,
   with a `# Derived from gocortex-xql-ide/server/data/rules-engine.ts (AGPL-3.0)` provenance line.
 - Enclave's top-level licence stays as-is; AGPL only attaches to the
   derivative files in `plugins/xdm-toolkit/` and the mirrored corpus under

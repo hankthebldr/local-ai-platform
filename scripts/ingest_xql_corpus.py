@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 ingest_xql_corpus — One-shot ingestion of docs/seed/xql/ into a dedicated
 ChromaDB collection (`xql_corpus`) for retrieval by XQL/XDM authoring
@@ -49,19 +47,40 @@ DEFAULT_CORPUS = REPO_ROOT / "docs" / "seed" / "xql"
 
 
 def file_metadata(path: Path, corpus_root: Path) -> dict:
-    """Build per-chunk metadata derived from the file's location in the corpus tree."""
+    """Build per-chunk metadata derived from the file's location in the corpus tree.
+
+    Robust to two ways of invoking ingest:
+      (a) --corpus-dir docs/seed/xql        (rel paths start with packs/ or reference/)
+      (b) --corpus-dir docs/seed/xql/packs  (rel paths start with <pack_name>/)
+
+    In case (b) the parts[0] == "packs" guard would otherwise skip the
+    pack_name / pack_role / category metadata. We detect this by checking
+    whether the corpus_root itself is named "packs" or "reference".
+    """
     rel = path.relative_to(corpus_root)
     parts = rel.parts
+    root_name = corpus_root.name
     meta = {
         "source_path": str(rel),
         "filename": path.name,
         "ext": path.suffix.lower(),
     }
-    if parts[0] == "packs" and len(parts) >= 2:
+
+    # Normalised parts that ALWAYS start with packs/ or reference/ when the
+    # file sits inside one of those subtrees, regardless of which dir was
+    # passed as --corpus-dir.
+    if root_name == "packs":
+        norm_parts = ("packs", *parts)
+    elif root_name == "reference":
+        norm_parts = ("reference", *parts)
+    else:
+        norm_parts = parts
+
+    if norm_parts[0] == "packs" and len(norm_parts) >= 2:
         meta["category"] = "pack"
-        meta["pack_name"] = parts[1]
+        meta["pack_name"] = norm_parts[1]
         meta["pack_role"] = path.stem  # parser / datamodel / documentation
-    elif parts[0] == "reference":
+    elif norm_parts[0] == "reference":
         meta["category"] = "reference"
         meta["doc_name"] = path.stem
     elif path.name == "snippets.json":

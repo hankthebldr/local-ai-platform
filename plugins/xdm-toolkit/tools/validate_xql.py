@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 validate_xql — Legacy-shape shim over analyse_xql.
 

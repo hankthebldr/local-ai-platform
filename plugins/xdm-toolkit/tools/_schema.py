@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Schema loader — loads the upstream JSON snapshots into Python sets/maps
 that mirror the TypeScript module-level state in rules-engine.ts.

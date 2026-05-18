@@ -52,7 +52,7 @@ useful for the editorial headline) and update the window size accordingly.
    empty at those positions except a faint green radial vignette centered at
    (330, 220), 2.5% opacity, to add depth behind the icons.
 6. **Footer** — bottom-right at (620, 370), JetBrains Mono 9px, `#3a4560`,
-   letter-spacing 2: `v{VERSION} · ohno llc`.
+   letter-spacing 2: `v{VERSION}`.
 
 ### Palette
 
