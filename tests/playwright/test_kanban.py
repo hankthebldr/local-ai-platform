@@ -104,12 +104,12 @@ def test_projects_tasks_endpoints_exist(base_url, api_headers):
         )
 
 
-def test_kanban_board_renders_in_workflow_index(signed_in_page):
-    """The Kanban board markup must be visible when the Workflow Index
-    tab is active."""
+def test_kanban_board_renders_in_projects_tab(signed_in_page):
+    """The Kanban board (relocated from Workflow Index to its own
+    Projects tab) must be visible when the Projects tab is active."""
     page = signed_in_page
-    page.click('button[data-tab="workflow-index"]')
-    page.wait_for_selector("#tab-workflow-index", state="visible", timeout=5_000)
+    page.click('button[data-tab="projects"]')
+    page.wait_for_selector("#tab-projects", state="visible", timeout=5_000)
     page.wait_for_selector("#kanban-board", state="visible", timeout=5_000)
     cols = page.locator(".kanban-col[data-column]")
     assert cols.count() == 3
@@ -122,7 +122,7 @@ def test_kanban_board_renders_in_workflow_index(signed_in_page):
 def test_kanban_project_select_populates(signed_in_page, base_url, api_headers):
     """The project dropdown must list every project /api/projects returns."""
     page = signed_in_page
-    page.click('button[data-tab="workflow-index"]')
+    page.click('button[data-tab="projects"]')
     page.wait_for_selector("#kanban-project-select", state="visible", timeout=5_000)
     page.wait_for_function(
         """() => {
@@ -155,7 +155,7 @@ def test_kanban_card_renders_on_drag(signed_in_page, base_url, api_headers):
 
     try:
         page = signed_in_page
-        page.click('button[data-tab="workflow-index"]')
+        page.click('button[data-tab="projects"]')
         page.wait_for_selector("#kanban-board", state="visible", timeout=5_000)
 
         # Click refresh first so the new project is in the dropdown.

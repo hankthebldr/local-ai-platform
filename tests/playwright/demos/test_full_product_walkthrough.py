@@ -131,8 +131,12 @@ def test_demo_full_product_walkthrough(signed_in_page, base_url, api_headers):
     page.click('.workstream-tab[data-ws="step"]')
     _settle(page, 1000)
 
-    # 4. Skills Lab — synthetic research output + capture-as-artifact
-    page.evaluate("() => window.switchTab && window.switchTab('research')")
+    # 4. Skills Lab — synthetic research output + capture-as-artifact.
+    # The Skill Lab tab was retired in the IA refresh; its content
+    # (Knowledge Graph + Deep Research) moved into the Context tab.
+    # Route through 'documents' so the walkthrough reads as the
+    # production IA — the legacy 'research' wrapper is kept hidden.
+    page.evaluate("() => window.switchTab && window.switchTab('documents')")
     _settle(page, 1400)
     _scene(page, "4 · Skills Lab — research + capture")
     page.evaluate(

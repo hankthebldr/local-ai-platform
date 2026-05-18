@@ -6330,7 +6330,12 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
           <div class="panel-label">Knowledge Graph</div>
           <div class="graph-controls">
             <button onclick="rebuildGraph()" title="Rebuild from exports">Rebuild</button>
-            <button onclick="resetGraphZoom()" title="Reset zoom">Reset</button>
+            <!-- Manual zoom — explicit + / − so the operator doesn't
+                 have to scroll-wheel over the graph (which competes
+                 with page scroll on long Context pages). -->
+            <button onclick="graphZoomOut()" title="Zoom out">−</button>
+            <button onclick="resetGraphZoom()" title="Reset zoom + re-center">⟲</button>
+            <button onclick="graphZoomIn()" title="Zoom in">+</button>
             <button onclick="toggleGraphConfigPanel()" id="graph-config-toggle"
                     title="Open visual settings (node size, link width, forces)">⚙</button>
           </div>
@@ -8936,13 +8941,28 @@ function updateResCount() {
 }
 
 function resetGraphZoom() {
-  if (!graphSim) return;
+  if (!graphSim || !window._graphZoomBehavior) return;
   const svg = d3.select('#graph-svg');
-  svg.transition().duration(500).call(
-    d3.zoom().transform,
+  svg.transition().duration(400).call(
+    window._graphZoomBehavior.transform,
     d3.zoomIdentity
   );
 }
+// Manual +/- zoom — bound to explicit buttons. Mouse-wheel zoom on
+// the graph is disabled (it was capturing page scroll); these are
+// the only way to change zoom programmatically along with the
+// reset button.
+function graphZoomIn()  { _stepGraphZoom(1.3); }
+function graphZoomOut() { _stepGraphZoom(1 / 1.3); }
+function _stepGraphZoom(factor) {
+  if (!window._graphZoomBehavior) return;
+  const svg = d3.select('#graph-svg');
+  svg.transition().duration(200).call(
+    window._graphZoomBehavior.scaleBy, factor
+  );
+}
+window.graphZoomIn = graphZoomIn;
+window.graphZoomOut = graphZoomOut;
 
 // Graph config — lives across renders so the user's toggle choices
 // survive a rebuild. Sliders + toggles are persisted to localStorage
@@ -9206,8 +9226,21 @@ function renderGraph(data) {
   // Zoom + pan. The zoom level also drives label fade-out — session
   // labels (cluttering at fully-zoomed-in views) hide below the
   // labelFadeZoom threshold from the config panel.
+  //
+  // IMPORTANT: wheel-zoom is filtered OUT. d3.zoom() defaults to
+  // capturing the mouse wheel — that competes with page scroll
+  // when the user wants to scroll past the graph on the Context
+  // page. Operators zoom via the explicit +/− buttons in the
+  // controls toolbar instead.
   const zoom = d3.zoom()
     .scaleExtent([0.2, 4])
+    .filter(e => {
+      // Disable wheel-driven zoom (lets the page scroll naturally
+      // when the cursor passes over the graph). Still allow drag-
+      // to-pan + the programmatic zoom-via-button path.
+      if (e.type === 'wheel') return false;
+      return !e.ctrlKey && !e.button;
+    })
     .on('zoom', (e) => {
       g.attr('transform', e.transform);
       const fade = (window.graphConfig && graphConfig.labelFadeZoom) || 1.0;
@@ -9215,6 +9248,10 @@ function renderGraph(data) {
         .attr('opacity', e.transform.k >= fade ? 1 : 0);
     });
   svg.call(zoom);
+  // Expose the zoom behavior so the explicit +/− buttons can call
+  // .scaleBy / .transform against it. Stored on window so it
+  // survives across renderGraph() invocations.
+  window._graphZoomBehavior = zoom;
 
   const nodeColor = (d) => {
     if (d.type === 'session')      return 'var(--cyan)';
@@ -16069,24 +16106,49 @@ async function composerLoadById(wfId) {
     // every dependency becomes an edge from upstream.output_1 →
     // downstream.input_1. dfEditor.addConnection expects DRAWFLOW ids
     // (integers), not logical step ids, so we route through idMap.
+    //
+    // If the YAML doesn't declare any depends_on at all, infer a
+    // linear chain from step order — that matches what the engine
+    // actually executes for unordered step lists and keeps the
+    // visual "this is a flow" rather than a pile of disconnected
+    // boxes the operator has to wire manually.
+    const allSteps = defn.steps || [];
+    const anyDepsDeclared = allSteps.some(s => {
+      const d = s.depends_on;
+      return (Array.isArray(d) && d.length > 0) || (typeof d === 'string' && d);
+    });
     let edgesAdded = 0;
-    (defn.steps || []).forEach((step) => {
-      const downstreamId = idMap[step.id];
-      if (downstreamId == null) return;
-      const deps = Array.isArray(step.depends_on) ? step.depends_on
-                 : (step.depends_on ? [step.depends_on] : []);
-      deps.forEach((depStepId) => {
-        const upstreamId = idMap[depStepId];
-        if (upstreamId == null) return;
+    if (anyDepsDeclared) {
+      allSteps.forEach((step) => {
+        const downstreamId = idMap[step.id];
+        if (downstreamId == null) return;
+        const deps = Array.isArray(step.depends_on) ? step.depends_on
+                   : (step.depends_on ? [step.depends_on] : []);
+        deps.forEach((depStepId) => {
+          const upstreamId = idMap[depStepId];
+          if (upstreamId == null) return;
+          try {
+            dfEditor.addConnection(upstreamId, downstreamId, 'output_1', 'input_1');
+            edgesAdded += 1;
+          } catch (e) {
+            console.warn(`Connection ${depStepId}→${step.id} failed:`, e && e.message);
+          }
+        });
+      });
+    } else {
+      // Inferred linear chain: step[i-1] → step[i].
+      for (let i = 1; i < allSteps.length; i++) {
+        const upstreamId = idMap[allSteps[i - 1].id];
+        const downstreamId = idMap[allSteps[i].id];
+        if (upstreamId == null || downstreamId == null) continue;
         try {
           dfEditor.addConnection(upstreamId, downstreamId, 'output_1', 'input_1');
           edgesAdded += 1;
         } catch (e) {
-          // Duplicate or invalid — non-fatal, keep wiring the rest.
-          console.warn(`Connection ${depStepId}→${step.id} failed:`, e && e.message);
+          console.warn(`Inferred chain ${allSteps[i - 1].id}→${allSteps[i].id} failed:`, e && e.message);
         }
-      });
-    });
+      }
+    }
 
     // Auto-layout AFTER edges exist so dagre's topological sort actually
     // has a graph to lay out (with no edges it stacked everything at
@@ -16342,6 +16404,12 @@ const WorkflowIndex = (function () {
           }
         });
       });
+      // If no depends_on edges are declared the engine still runs
+      // the steps sequentially by their YAML order — mirror that in
+      // the preview by falling back to the linear chain rendering.
+      // Otherwise dagre collapses every node onto the same rank and
+      // the operator sees a vertical stack of dots.
+      if (!edges.length) return _renderChainDag(steps);
       try { dagre.layout(g); } catch (e) { return _renderChainDag(steps); }
       // Project dagre's coords into the SVG viewbox.
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
