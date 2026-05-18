@@ -12224,7 +12224,113 @@ function dfAddNodeFromImportedStep(step, x, y) {
 let _activeAgentId = null;
 let _agentHistory = [];
 
+// ── Chat persistence ────────────────────────────────────────────────
+// User feedback (post-#71): "change tabs and the chat has been cleared
+// without intentionally clearing it." The chat panel DOM technically
+// survived tab switches, but (a) page reloads wiped _agentHistory, and
+// (b) when the agents grid re-rendered above the chat panel, the
+// active conversation slid below the fold and felt "lost." Persist
+// the conversation to localStorage and restore it on every
+// loadAgentsTab so navigating tabs (or reloading) leaves the
+// conversation exactly where the operator left it.
+const _CHAT_LS_KEY = 'enclave.agentChat.v1';
+
+function _persistAgentChat() {
+  try {
+    if (!_activeAgentId) {
+      localStorage.removeItem(_CHAT_LS_KEY);
+      return;
+    }
+    const headerName = document.getElementById('agent-chat-name')?.textContent || '';
+    const headerModel = document.getElementById('agent-chat-model')?.textContent || '';
+    localStorage.setItem(_CHAT_LS_KEY, JSON.stringify({
+      activeAgentId: _activeAgentId,
+      history: _agentHistory,
+      headerName,
+      headerModel,
+      savedAt: Date.now(),
+    }));
+  } catch (_) { /* quota / private-mode — non-fatal */ }
+}
+
+function _restoreAgentChat() {
+  try {
+    const raw = localStorage.getItem(_CHAT_LS_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed.activeAgentId || !Array.isArray(parsed.history)) return false;
+    _activeAgentId = parsed.activeAgentId;
+    _agentHistory = parsed.history;
+    // Rebuild the chat panel UI without re-fetching the agent. The
+    // header model/name we cached at last persist is good enough; if
+    // the agent has been edited since, openAgentChat will refresh on
+    // next click.
+    const nameEl = document.getElementById('agent-chat-name');
+    const modelEl = document.getElementById('agent-chat-model');
+    const panel = document.getElementById('agent-chat-panel');
+    const msgEl = document.getElementById('agent-chat-messages');
+    if (!nameEl || !modelEl || !panel || !msgEl) return false;
+    nameEl.textContent = parsed.headerName || _activeAgentId;
+    modelEl.textContent = parsed.headerModel || '';
+    panel.style.display = 'block';
+    // Rebuild the bubbles. Use createElement + textContent to keep
+    // the security_reminder_hook happy on hardcoded restored content.
+    msgEl.replaceChildren();
+    for (const m of _agentHistory) {
+      const bubble = document.createElement('div');
+      if (m.role === 'user') {
+        bubble.style.cssText =
+          'align-self:flex-end;background:var(--bg-panel);border:1px solid var(--border);'
+          + 'border-radius:6px;padding:7px 11px;max-width:80%;font-size:0.82rem;white-space:pre-wrap;';
+      } else {
+        bubble.style.cssText =
+          'align-self:flex-start;background:var(--bg-deep);border:1px solid var(--border);'
+          + 'border-radius:6px;padding:7px 11px;max-width:85%;font-size:0.82rem;white-space:pre-wrap;';
+      }
+      bubble.textContent = m.content || '';
+      msgEl.appendChild(bubble);
+    }
+    msgEl.scrollTop = msgEl.scrollHeight;
+    return true;
+  } catch (_) { return false; }
+}
+
+// Insert a small "↓ Active chat with X" badge at the top of the agents
+// list when a chat is already running, so the operator sees it
+// immediately on tab return and can jump straight to it.
+function _renderActiveChatPill() {
+  const list = document.getElementById('agents-list');
+  if (!list) return;
+  // Drop any prior pill first.
+  list.querySelector('.agent-active-chat-pill')?.remove();
+  if (!_activeAgentId) return;
+  const name = document.getElementById('agent-chat-name')?.textContent || _activeAgentId;
+  const pill = document.createElement('button');
+  pill.className = 'agent-active-chat-pill';
+  pill.type = 'button';
+  pill.style.cssText =
+    'grid-column:1/-1;display:flex;gap:8px;align-items:center;justify-content:flex-start;'
+    + 'padding:7px 12px;background:rgba(0,220,240,0.06);border:1px solid var(--cyan-dim);'
+    + 'border-radius:6px;color:var(--text);font-size:0.75rem;cursor:pointer;font-family:var(--mono);';
+  const arrow = document.createElement('span');
+  arrow.style.cssText = 'color:var(--cyan);';
+  arrow.textContent = '↓';
+  const label = document.createElement('span');
+  label.append('Active chat with ',
+    Object.assign(document.createElement('strong'), {textContent: name, style: 'color:var(--cyan)'}),
+    ' — click to jump');
+  pill.append(arrow, label);
+  pill.addEventListener('click', () => {
+    document.getElementById('agent-chat-panel')?.scrollIntoView({behavior: 'smooth', block: 'center'});
+  });
+  list.prepend(pill);
+}
+
 async function loadAgentsTab() {
+  // Try to restore a persisted chat BEFORE rendering the agents grid
+  // so the active-chat pill can show up at the top of the list.
+  _restoreAgentChat();
+
   const listEl = document.getElementById('agents-list');
   const emptyEl = document.getElementById('agents-empty');
   listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">Loading…</div>';
@@ -12284,11 +12390,15 @@ async function loadAgentsTab() {
         </div>` : ''}
     </div>`;
   }).join('');
+  // After the grid renders, surface the "active chat" jump pill so a
+  // restored conversation is visually obvious at the top of the page.
+  _renderActiveChatPill();
 }
 
 async function openAgentChat(agentId) {
   _activeAgentId = agentId;
   _agentHistory = [];
+  _persistAgentChat();
   let agent;
   try {
     const r = await fetch(`/api/agents/${agentId}`);
@@ -12326,7 +12436,10 @@ function openAgentChatWithStarter(agentId, starter) {
 function closeAgentChat() {
   _activeAgentId = null;
   _agentHistory = [];
+  _persistAgentChat();  // clears the localStorage slot
   document.getElementById('agent-chat-panel').style.display = 'none';
+  // Drop the "active chat" jump pill from the agents grid.
+  document.querySelector('.agent-active-chat-pill')?.remove();
 }
 
 async function sendAgentMessage() {
@@ -12337,6 +12450,10 @@ async function sendAgentMessage() {
   input.value = '';
 
   _agentHistory.push({ role: 'user', content: text });
+  // Persist the user's message immediately — if the agent times out
+  // (Ollama's 300s read timeout on slow CPU prefill) the operator's
+  // typed message still survives navigation/reload.
+  _persistAgentChat();
 
   const msgEl = document.getElementById('agent-chat-messages');
   const userBubble = `<div style="align-self:flex-end;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:80%;font-size:0.82rem;white-space:pre-wrap;">${esc(text)}</div>`;
@@ -12381,6 +12498,10 @@ async function sendAgentMessage() {
   msgEl.insertAdjacentHTML('beforeend',
     `<div style="align-self:flex-start;background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:7px 11px;max-width:85%;font-size:0.82rem;white-space:pre-wrap;">${esc(content)}</div>`);
   msgEl.scrollTop = msgEl.scrollHeight;
+  // Persist the conversation now that we have a complete turn. The
+  // localStorage write survives tab switches AND page reloads, so the
+  // operator's chat history is durable across the whole session.
+  _persistAgentChat();
 }
 
 async function deleteAgent(agentId) {
