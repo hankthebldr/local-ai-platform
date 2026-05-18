@@ -358,6 +358,37 @@ async def resume_run(run_id: str):
     }
 
 
+@router.post("/runs/{run_id}/cancel")
+async def cancel_run(run_id: str):
+    """Request cancellation of an in-flight workflow run.
+
+    Cooperative: the engine checks for cancellation at each step
+    boundary, so an LLM call already in flight will complete before
+    the run terminates. Calling this on a terminal run is a no-op
+    (returns the current status).
+    """
+    engine = get_engine()
+    # Surface 404 for runs we've never seen; let other errors propagate.
+    snapshot = engine.get_run(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    current = (snapshot.get("status") or "").lower()
+    if current in {"completed", "failed", "canceled", "error"}:
+        return {
+            "run_id": run_id,
+            "status": current,
+            "accepted": False,
+            "reason": f"run already terminal: {current}",
+        }
+    newly_marked = engine.request_cancel(run_id)
+    return {
+        "run_id": run_id,
+        "status": "cancel_requested",
+        "accepted": newly_marked,
+        "reason": None if newly_marked else "cancel already pending",
+    }
+
+
 @router.get("/runs/{run_id}/artifacts/{step_id}")
 async def get_artifact(run_id: str, step_id: str):
     """Get a specific step's output artifacts"""

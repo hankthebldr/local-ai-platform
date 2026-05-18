@@ -2700,6 +2700,42 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 }
 .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
 
+/* Link-kind filter + sizing-mode picker — sit just under the graph
+   legend. Chips toggle visibility / change the sizing formula. */
+.graph-link-filter, .graph-sizing-picker {
+  position: absolute; left: 14px; z-index: 2;
+  display: flex; flex-wrap: wrap; gap: 4px;
+  font-family: var(--mono);
+}
+.graph-link-filter   { bottom: 36px; }
+.graph-sizing-picker { bottom: 62px; }
+.legend-row-label {
+  font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted); align-self: center; margin-right: 4px;
+}
+.link-kind-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(6, 10, 16, 0.78);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--mono); font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  padding: 2px 7px; border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, opacity 0.15s, background 0.15s;
+}
+.link-kind-chip:hover { border-color: var(--cyan-dim); color: var(--text); }
+.link-kind-chip.on     { color: var(--text); border-color: var(--cyan-dim); background: rgba(0, 220, 240, 0.06); }
+.link-kind-chip.off    { opacity: 0.42; }
+.link-kind-chip.reset  { color: var(--text-muted); }
+.link-kind-chip .link-kind-swatch {
+  width: 10px; height: 3px; border-radius: 1px;
+}
+.link-kind-chip .link-kind-count {
+  color: var(--text-muted); font-size: 0.5rem;
+  background: var(--bg); padding: 0 4px; border-radius: 999px;
+}
+
 /* Node tooltip */
 .graph-tooltip {
   position: fixed; z-index: 100; pointer-events: none;
@@ -2795,9 +2831,39 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   max-height: 240px;
   overflow-y: auto;
   display: none;
+  transition: max-height 0.28s ease, flex-grow 0.28s ease, padding 0.18s ease;
+  position: relative;
 }
 .session-detail-panel.open { display: block; }
+/* Expand state: the detail panel claims half the research-left column,
+   the graph panel shrinks to make room. Triggered by the user's
+   "expand" button in the detail head. */
+.session-detail-panel.is-expanded {
+  flex: 1 1 0;
+  max-height: none;
+  min-height: 0;
+}
+.research-left.detail-expanded .graph-panel {
+  flex: 0 0 38%;
+  min-height: 140px;
+}
 .session-detail-panel .panel-label { margin-bottom: 0; }
+.session-detail-expand-btn {
+  position: absolute;
+  top: 10px; right: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--mono); font-size: 0.55rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.session-detail-expand-btn:hover {
+  border-color: var(--cyan-dim); color: var(--cyan);
+  background: rgba(0, 220, 240, 0.05);
+}
 .session-meta { font-size: 0.68rem; color: var(--text-dim); margin-bottom: 8px; }
 .session-topics { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
 .session-topic {
@@ -3655,10 +3721,115 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 }
 .skills-discover-toolbar .search-input { flex: 1; min-width: 160px; }
 .skills-discover-toolbar .model-select { width: auto; min-width: 130px; }
+.skills-discover-viewtoggle {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+}
+.skills-disc-view {
+  background: var(--bg); border: none; color: var(--text-muted);
+  padding: 4px 9px; cursor: pointer; font-size: 0.85rem;
+  transition: background 0.15s, color 0.15s;
+}
+.skills-disc-view:hover { color: var(--text); }
+.skills-disc-view.active { color: var(--accent); background: rgba(0, 204, 102, 0.08); }
 .skills-discover-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 8px;
 }
+/* Icon explorer view — taller grouped tiles instead of dense cards. */
+.skills-discover-grid.view-icons {
+  display: flex; flex-direction: column; gap: 16px;
+}
+.skill-icon-group {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: rgba(6, 10, 16, 0.4);
+}
+.skill-icon-group-head {
+  display: flex; align-items: center; gap: 9px;
+  padding-bottom: 6px; border-bottom: 1px dashed var(--border);
+}
+.skill-icon-group-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px;
+  border: 1px solid var(--border);
+  background: rgba(0, 220, 240, 0.06);
+}
+.skill-icon-group-icon > svg { width: 14px; height: 14px; }
+.skill-icon-group-icon.tone-cyan   { color: var(--cyan);   background: rgba(0, 220, 240, 0.08); }
+.skill-icon-group-icon.tone-amber  { color: var(--amber);  background: rgba(255, 165, 0, 0.10); }
+.skill-icon-group-icon.tone-purple { color: var(--purple); background: rgba(179, 136, 255, 0.10); }
+.skill-icon-group-icon.tone-green  { color: var(--green,  #5fd49b); background: rgba(95, 212, 155, 0.10); }
+.skill-icon-group-icon.tone-accent { color: var(--accent); background: rgba(0, 204, 102, 0.08); }
+.skill-icon-group-name {
+  flex: 1; font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+  color: var(--text); letter-spacing: 0.04em;
+}
+.skill-icon-group-count {
+  font-size: 0.55rem; color: var(--text-muted);
+  background: var(--bg); padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.skill-icon-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.skill-tile {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 12px 10px 9px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: default;
+  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+.skill-tile:hover {
+  border-color: var(--cyan-dim);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 220, 240, 0.10);
+}
+.skill-tile-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 8px;
+  background: rgba(0, 220, 240, 0.06);
+  border: 1px solid var(--border);
+  color: var(--cyan);
+}
+.skill-tile-icon > svg { width: 22px; height: 22px; }
+.skill-tile-icon.tone-cyan   { color: var(--cyan);   background: rgba(0, 220, 240, 0.10); }
+.skill-tile-icon.tone-amber  { color: var(--amber);  background: rgba(255, 165, 0, 0.12); }
+.skill-tile-icon.tone-purple { color: var(--purple); background: rgba(179, 136, 255, 0.12); }
+.skill-tile-icon.tone-green  { color: var(--green,  #5fd49b); background: rgba(95, 212, 155, 0.12); }
+.skill-tile-icon.tone-accent { color: var(--accent); background: rgba(0, 204, 102, 0.10); }
+.skill-tile-label {
+  font-family: var(--mono); font-size: 0.62rem; color: var(--text);
+  text-align: center; line-height: 1.2; word-break: break-word;
+}
+.skill-tile-state {
+  font-size: 0.48rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.skill-tile.installed .skill-tile-state { color: var(--accent); }
+.skill-tile.available .skill-tile-state { color: var(--amber); }
+.skill-tile.bundled   .skill-tile-state { color: var(--cyan); }
+.skill-tile-action {
+  position: absolute; top: 4px; right: 4px;
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85rem; line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, border-color 0.15s, color 0.15s, background 0.15s;
+}
+.skill-tile:hover .skill-tile-action { opacity: 1; }
+.skill-tile-action.install:hover { color: var(--accent); border-color: var(--accent-dim); background: rgba(0, 204, 102, 0.10); }
+.skill-tile-action.uninstall:hover { color: var(--red, #ff5252); border-color: rgba(255, 80, 80, 0.45); background: rgba(255, 80, 80, 0.08); }
 .skill-disc-card { gap: 6px; padding: 10px 12px; }
 .skill-disc-card .agent-card-title { font-size: 0.72rem; }
 .skill-disc-card .agent-card-subtitle { -webkit-line-clamp: 2; font-size: 0.6rem; }
@@ -4818,13 +4989,25 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
             <button onclick="resetGraphZoom()" title="Reset zoom">Reset</button>
           </div>
           <svg id="graph-svg"></svg>
-          <div class="graph-legend">
+          <div class="graph-legend" id="graph-legend">
+            <!-- Node-type swatches (informational) -->
             <span><span class="legend-dot" style="background:var(--cyan)"></span>Session</span>
             <span><span class="legend-dot" style="background:var(--amber)"></span>Topic</span>
             <span><span class="legend-dot" style="background:var(--purple)"></span>Source</span>
+            <span><span class="legend-dot" style="background:var(--accent)"></span>Agent</span>
+            <span><span class="legend-dot" style="background:var(--cyan)"></span>Run</span>
           </div>
+          <!-- Link-type toggle row — clicking a chip filters the link
+               kinds visible in the simulation. Empty selection = all. -->
+          <div class="graph-link-filter" id="graph-link-filter" role="toolbar" aria-label="Filter link kinds"></div>
+          <!-- Sizing-mode picker — switches the nodeRadius formula. -->
+          <div class="graph-sizing-picker" id="graph-sizing-picker"></div>
         </div>
         <div class="session-detail-panel" id="session-detail">
+          <button type="button" class="session-detail-expand-btn"
+                  id="session-detail-expand-btn"
+                  onclick="toggleSessionDetailExpand()"
+                  title="Expand the detail panel to fit the content; click again to collapse back to the peek view">⤢ expand</button>
           <div class="detail-head">
             <span class="detail-kind-chip" id="session-detail-kind">node</span>
             <div class="panel-label" id="session-detail-title">Session</div>
@@ -4877,6 +5060,15 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
               <select class="model-select" id="skills-discover-cat" onchange="SkillsDiscover.render()">
                 <option value="">All categories</option>
               </select>
+              <!-- View-mode toggle: dense list (existing) vs. icon-explorer
+                   grid (new). Icon-explorer leads with persona glyphs so the
+                   operator can browse by feel instead of reading every line. -->
+              <div class="skills-discover-viewtoggle" role="tablist" aria-label="View mode">
+                <button type="button" class="skills-disc-view active" data-view="list"
+                        onclick="SkillsDiscover.setView('list')" title="List view">≡</button>
+                <button type="button" class="skills-disc-view" data-view="icons"
+                        onclick="SkillsDiscover.setView('icons')" title="Icon explorer">▦</button>
+              </div>
               <button class="action-btn" onclick="SkillsDiscover.load(true)" title="Refresh the catalog">⟲</button>
             </div>
             <div class="skills-discover-grid" id="skills-discover-grid">
@@ -6793,6 +6985,9 @@ async function loadGraphData() {
   try {
     const r = await fetch('/api/graph');
     graphData = await r.json();
+    // Expose the dataset to window so the legend toggle handlers can
+    // re-render without a network round-trip.
+    window.graphData = graphData;
     renderGraph(graphData);
     updateResCount();
   } catch (e) {
@@ -6823,6 +7018,77 @@ function resetGraphZoom() {
     d3.zoomIdentity
   );
 }
+
+// Graph config — lives across renders so the user's toggle choices
+// survive a rebuild.
+window.graphConfig = window.graphConfig || {
+  // Set<string> of enabled link types; empty = show all
+  linkKinds: new Set(),
+  // 'importance' | 'content' | 'hybrid'
+  sizingMode: 'importance',
+};
+
+function _renderGraphLegendToggles(data) {
+  // Safety: every interpolated value below is either (a) escaped via
+  // esc(), (b) sourced from the hardcoded LINK_STYLE map, or (c) a
+  // numeric count. No raw user input reaches innerHTML.
+  const row = document.getElementById('graph-link-filter');
+  const picker = document.getElementById('graph-sizing-picker');
+  if (!row || !picker) return;
+  const counts = {};
+  (data.links || []).forEach(l => { counts[l.type] = (counts[l.type] || 0) + 1; });
+  const present = Object.keys(counts).sort();
+  if (!present.length) {
+    row.textContent = '';
+    picker.textContent = '';
+    return;
+  }
+  const active = window.graphConfig.linkKinds;
+  const chips = present.map(kind => {
+    const s = (typeof LINK_STYLE !== 'undefined' && LINK_STYLE[kind]) || { label: kind, tone: 'amber', color: '#ff8c0040' };
+    const on = (!active.size || active.has(kind));
+    return `<button type="button" class="link-kind-chip tone-${esc(s.tone)} ${on ? 'on' : 'off'}"
+              data-kind="${esc(kind)}"
+              onclick="toggleGraphLinkKind('${esc(kind)}')"
+              title="${esc(kind)} — ${counts[kind]} link${counts[kind] === 1 ? '' : 's'}">
+      <span class="link-kind-swatch" style="background:${esc(s.color)}"></span>
+      <span>${esc(s.label || kind)}</span>
+      <span class="link-kind-count">${counts[kind]}</span>
+    </button>`;
+  });
+  row.innerHTML = '<span class="legend-row-label">Show</span>' + chips.join('') +
+    ' <button type="button" class="link-kind-chip reset" onclick="resetGraphLinkFilter()" title="Show all link kinds">All</button>';
+
+  const modes = [
+    ['importance', 'Importance', 'Size by reference count / citations / tag count'],
+    ['content',    'Content',    'Size by artifact byte budget (description + prompt + outputs)'],
+    ['hybrid',     'Hybrid',     'Mix of importance + content, capped'],
+  ];
+  picker.innerHTML = '<span class="legend-row-label">Size by</span>' + modes.map(([k, label, help]) =>
+    `<button type="button" class="link-kind-chip ${graphConfig.sizingMode === k ? 'on' : 'off'}"
+       data-mode="${esc(k)}"
+       onclick="setGraphSizingMode('${esc(k)}')"
+       title="${esc(help)}">${esc(label)}</button>`
+  ).join('');
+}
+
+function toggleGraphLinkKind(kind) {
+  const s = window.graphConfig.linkKinds;
+  if (s.has(kind)) s.delete(kind);
+  else s.add(kind);
+  if (window.graphData) renderGraph(window.graphData);
+}
+function resetGraphLinkFilter() {
+  window.graphConfig.linkKinds = new Set();
+  if (window.graphData) renderGraph(window.graphData);
+}
+function setGraphSizingMode(mode) {
+  window.graphConfig.sizingMode = mode;
+  if (window.graphData) renderGraph(window.graphData);
+}
+window.toggleGraphLinkKind   = toggleGraphLinkKind;
+window.resetGraphLinkFilter  = resetGraphLinkFilter;
+window.setGraphSizingMode    = setGraphSizingMode;
 
 function renderGraph(data) {
   const svgEl = document.getElementById('graph-svg');
@@ -6860,30 +7126,71 @@ function renderGraph(data) {
     return 'var(--text-dim)';
   };
 
+  // Node "weight" — used to size each node by its importance/artifact
+  // size. Choose one of three strategies via graphConfig.sizingMode:
+  //   'importance' : count + reference-driven (default)
+  //   'content'    : artifact-byte-driven (description + prompts + outputs)
+  //   'hybrid'     : a + b, capped
+  // The actual radius formula is: base + sqrt(weight) * k, clamped.
+  function _nodeWeight(d) {
+    const mode = (window.graphConfig && graphConfig.sizingMode) || 'importance';
+    let importance = 0;
+    let content = 0;
+    if (d.type === 'session')      importance = (d.topics || []).length + (d.sources || []).length;
+    if (d.type === 'topic')        importance = d.session_count || 1;
+    if (d.type === 'source')       importance = d.citation_count || 1;
+    if (d.type === 'agent')        importance = (d.tags || []).length + 1;
+    if (d.type === 'workflow_run') importance = (d.tokens ? Math.log10(d.tokens + 1) : 0) + (d.duration || 0) / 30;
+    // Approximate content size in characters.
+    const desc = d.description || d.preview || '';
+    const name = d.name || d.label || '';
+    content = (desc.length + name.length) / 80;
+    if (mode === 'content')   return content;
+    if (mode === 'hybrid')    return Math.min(importance + content * 0.4, 30);
+    return importance;
+  }
+
+  function _nodeBaseRadius(t) {
+    return ({ session: 8, topic: 6, source: 6, agent: 8, workflow_run: 6 })[t] || 5;
+  }
+  const NODE_R_MAX = 22;
+
   const nodeRadius = (d) => {
-    if (d.type === 'session')      return 10;
-    if (d.type === 'topic')        return 7 + Math.min((d.session_count || 1) * 1.5, 10);
-    if (d.type === 'source')       return 6 + Math.min((d.citation_count || 1) * 1.5, 8);
-    if (d.type === 'agent')        return 9;
-    if (d.type === 'workflow_run') return 7;
-    return 6;
+    const w = Math.max(0, _nodeWeight(d));
+    const r = _nodeBaseRadius(d.type) + Math.sqrt(w) * 2.4;
+    return Math.min(r, NODE_R_MAX);
   };
 
-  const linkColor = (d) => {
-    if (d.type === 'related')        return '#00CC6630';
-    if (d.type === 'cites')          return '#b388ff30';
-    if (d.type === 'mentions')       return '#ff8c0028';
-    if (d.type === 'uses')           return '#00cc6628';
-    if (d.type === 'produced')       return '#00C0E830';
-    if (d.type === 'shares_tag')     return '#00cc6638';
-    if (d.type === 'shares_role')    return '#00cc6622';
-    if (d.type === 'same_workflow')  return '#00C0E838';
-    if (d.type === 'ran_role')       return '#b388ff38';
-    return '#ff8c0025';
+  // Link palette + filter. graphConfig.linkKinds is a Set of enabled
+  // link types; an empty/undefined Set means "show all". The "kind"
+  // also feeds an above-the-graph legend with toggleable chips.
+  const LINK_STYLE = {
+    related:       { color: '#00CC6660', label: 'related', tone: 'green'  },
+    cites:         { color: '#b388ff60', label: 'cites',    tone: 'purple' },
+    mentions:      { color: '#ff8c0050', label: 'mentions', tone: 'amber',  dash: '3,3' },
+    uses:          { color: '#00cc6650', label: 'uses',     tone: 'green' },
+    produced:      { color: '#00C0E860', label: 'produced', tone: 'cyan' },
+    shares_tag:    { color: '#00cc6660', label: 'tag',      tone: 'green' },
+    shares_role:   { color: '#00cc6640', label: 'role',     tone: 'green',  dash: '2,4' },
+    same_workflow: { color: '#00C0E866', label: 'workflow', tone: 'cyan' },
+    ran_role:      { color: '#b388ff66', label: 'ran',      tone: 'purple' },
   };
+  function _linkStyle(d) {
+    return LINK_STYLE[d.type] || { color: '#ff8c0040', label: d.type || '?', tone: 'amber' };
+  }
+  const linkColor = (d) => _linkStyle(d).color;
+  function _linkVisible(d) {
+    const kinds = window.graphConfig && graphConfig.linkKinds;
+    if (!kinds || !kinds.size) return true;
+    return kinds.has(d.type);
+  }
+
+  // Build the toggleable legend FIRST so the filter set is ready before
+  // we filter the working links array.
+  _renderGraphLegendToggles(data);
 
   const nodes = data.nodes.map(d => ({ ...d }));
-  const links = data.links.map(d => ({ ...d }));
+  const links = data.links.map(d => ({ ...d })).filter(_linkVisible);
 
   // Build an id → node map + a neighbor index so click highlight is O(1).
   // Links may carry source/target as strings (post-clone) until the sim
@@ -6910,6 +7217,9 @@ function renderGraph(data) {
     .force('center', d3.forceCenter(W / 2, H / 2))
     .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 6));
   graphSim = sim;
+  // Expose for the detail-expand handler so it can nudge the
+  // force-center when the SVG viewport resizes.
+  window.graphSim = sim;
 
   // Links
   const link = g.append('g').selectAll('line')
@@ -6967,10 +7277,46 @@ function renderGraph(data) {
   svg.on('click', () => clearGraphSelection());
 }
 
+// Expand toggle for the session-detail panel. Flips classes on both
+// the panel AND its parent .research-left so the graph above shrinks
+// proportionally — gives the operator a half-canvas drilldown view.
+function toggleSessionDetailExpand(force) {
+  const panel = document.getElementById('session-detail');
+  const left  = panel ? panel.parentElement : null;
+  const btn   = document.getElementById('session-detail-expand-btn');
+  if (!panel || !left) return;
+  const willExpand = force === undefined
+    ? !panel.classList.contains('is-expanded')
+    : !!force;
+  panel.classList.toggle('is-expanded', willExpand);
+  left.classList.toggle('detail-expanded', willExpand);
+  if (btn) btn.textContent = willExpand ? '⇲ collapse' : '⤢ expand';
+  // The graph SVG uses clientWidth/Height for its force-center; when
+  // the panel grows the SVG shrinks, so kick the simulation so nodes
+  // settle in the new viewport center.
+  if (window.graphSim) {
+    try {
+      const svgEl = document.getElementById('graph-svg');
+      const W = svgEl.clientWidth || 600;
+      const H = svgEl.clientHeight || 400;
+      window.graphSim.force('center', d3.forceCenter(W / 2, H / 2));
+      window.graphSim.alpha(0.4).restart();
+    } catch (_) {}
+  }
+}
+window.toggleSessionDetailExpand = toggleSessionDetailExpand;
+
 function clearGraphSelection() {
   selectedNode = null;
   const panel = document.getElementById('session-detail');
-  if (panel) panel.classList.remove('open');
+  if (panel) {
+    panel.classList.remove('open');
+    // Also drop the expand state — otherwise the panel stays large
+    // and empty when the user clicks away.
+    if (panel.classList.contains('is-expanded')) {
+      toggleSessionDetailExpand(false);
+    }
+  }
   const st = window._graphState;
   if (!st) return;
   st.nodeSel.attr('fill-opacity', 0.85).attr('stroke-width', 1.5).attr('stroke-opacity', 0.4);
@@ -10946,17 +11292,36 @@ window.ComposerWorkstream = (function () {
   // operator can clear out a finished run's output without leaving
   // stale step rows on screen.
   function clearRun() {
+    // If there's a live run we know about, ask the engine to cancel it
+    // before tearing down the local view. Best-effort: a 404 just
+    // means the engine never saw it, which is fine.
+    const last = window._lastRunSummary;
+    const liveId = last && last.run_id &&
+      !['completed', 'failed', 'canceled', 'error'].includes((last.status || '').toLowerCase())
+      ? last.run_id : null;
+    if (liveId) {
+      fetch(`/api/workflows/runs/${encodeURIComponent(liveId)}/cancel`, { method: 'POST' })
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+          if (window.Toast && j && j.accepted) {
+            Toast.info('Run cancel requested', 'Engine will stop after the current step.');
+          }
+        })
+        .catch(() => { /* non-fatal */ });
+    }
     stopPolling();
     window._lastRunSummary = null;
     const body = document.getElementById('ws-run-body');
     if (body) {
       EmptyState.render(body, {
-        title: 'Run cleared',
-        detail: 'Trigger a workflow to populate this pane again.',
+        title: liveId ? 'Cancel requested' : 'Run cleared',
+        detail: liveId
+          ? 'The engine will stop at the next step boundary. In-flight LLM calls finish first.'
+          : 'Trigger a workflow to populate this pane again.',
         glyph: '▶',
       });
     }
-    _setRunMeta('idle');
+    _setRunMeta(liveId ? 'canceling…' : 'idle');
     // Also wipe canvas overlays so the visual carries no leftover state.
     if (typeof window.dfClearRunState === 'function') {
       try { window.dfClearRunState(); } catch (_) {}
@@ -12721,6 +13086,9 @@ function renderMcpsWorkbench(servers) {
 const SkillsDiscover = (function () {
   let _data = null;
   let _loaded = false;
+  // View mode — 'list' is the original dense card view, 'icons' is the
+  // icon-explorer grid that leads with persona glyphs.
+  let _view = 'list';
 
   async function load(force) {
     if (_loaded && !force) { render(); return; }
@@ -12770,7 +13138,12 @@ const SkillsDiscover = (function () {
       grid.innerHTML = '<div class="model-empty">No skills match the filter.</div>';
       return;
     }
-    grid.innerHTML = items.map(_card).join('');
+    // View-mode router. Both renderers know how to handle the
+    // already-filtered item list.
+    grid.classList.toggle('view-icons', _view === 'icons');
+    grid.innerHTML = _view === 'icons'
+      ? _renderIconExplorer(items)
+      : items.map(_card).join('');
   }
 
   function _card(s) {
@@ -12860,7 +13233,57 @@ const SkillsDiscover = (function () {
     } catch { return []; }
   }
 
-  return { load, render, install, uninstall };
+  function setView(v) {
+    if (v !== 'list' && v !== 'icons') return;
+    _view = v;
+    document.querySelectorAll('.skills-disc-view').forEach(b => {
+      b.classList.toggle('active', b.dataset.view === v);
+    });
+    render();
+  }
+
+  // Icon-explorer renderer — groups skills by persona (their primary
+  // visual axis), with a large icon tile per skill. Each tile carries
+  // an install/uninstall affordance.
+  function _renderIconExplorer(items) {
+    const groups = {};
+    items.forEach(s => {
+      const persona = s.persona ||
+        (window.AgentIcons ? AgentIcons.resolve({ name: s.name, description: s.description }) : 'general');
+      (groups[persona] = groups[persona] || []).push(s);
+    });
+    const order = Object.keys(groups).sort();
+    return order.map(p => {
+      const tone = (window.AgentIcons ? AgentIcons.tone(p) : 'accent');
+      const skillsIn = groups[p].sort((a, b) => a.id.localeCompare(b.id));
+      const tiles = skillsIn.map(s => {
+        const icon = (window.AgentIcons ? AgentIcons.svg(p) : '');
+        const action = s.installed
+          ? `<button class="skill-tile-action uninstall" onclick="event.stopPropagation();SkillsDiscover.uninstall('${esc(s.id)}','${esc((s.installed_in || [])[0] || '')}')" title="Uninstall this skill">−</button>`
+          : (s.has_body
+              ? `<button class="skill-tile-action install" onclick="event.stopPropagation();SkillsDiscover.install('${esc(s.id)}')" title="Install this skill">+</button>`
+              : '');
+        const stateClass = s.installed ? 'installed' : (s.has_body ? 'available' : 'bundled');
+        return `<div class="skill-tile ${stateClass}" data-skill-id="${esc(s.id)}"
+                     title="${esc(s.name)} — ${esc(s.description || '')}">
+          <span class="skill-tile-icon tone-${esc(tone)}">${icon}</span>
+          <span class="skill-tile-label">${esc(s.name)}</span>
+          <span class="skill-tile-state">${esc(stateClass)}</span>
+          ${action}
+        </div>`;
+      }).join('');
+      return `<div class="skill-icon-group">
+        <div class="skill-icon-group-head">
+          <span class="skill-icon-group-icon tone-${esc(tone)}">${window.AgentIcons ? AgentIcons.svg(p) : ''}</span>
+          <span class="skill-icon-group-name">${esc(p)}</span>
+          <span class="skill-icon-group-count">${skillsIn.length}</span>
+        </div>
+        <div class="skill-icon-tiles">${tiles}</div>
+      </div>`;
+    }).join('');
+  }
+
+  return { load, render, install, uninstall, setView };
 })();
 window.SkillsDiscover = SkillsDiscover;
 

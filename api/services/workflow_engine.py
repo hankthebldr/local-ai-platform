@@ -56,6 +56,42 @@ class WorkflowEngine:
         )
         # Hook bus default is built per-step in _build_step_bus()
         self._project_root = project_root
+        # Cancel set — run_ids that have received a cancel request. The
+        # execution loop checks this between steps; in-flight LLM calls
+        # complete normally (cooperative cancel, not pre-emptive). This
+        # is a process-local set, so a multi-worker uvicorn deployment
+        # needs to honour cancels via the persisted run.status field
+        # instead — the loop checks both.
+        self._cancel_set: set = set()
+
+    def request_cancel(self, run_id: str) -> bool:
+        """Mark a run for cancellation. Returns True if newly added."""
+        if not run_id:
+            return False
+        if run_id in self._cancel_set:
+            return False
+        self._cancel_set.add(run_id)
+        return True
+
+    def _should_cancel(self, run_id: str) -> bool:
+        """Cancel check — honors process-local set OR persisted status."""
+        if run_id in self._cancel_set:
+            return True
+        # Cross-worker channel: a sibling worker may have written
+        # status="canceled" to the run.json checkpoint.
+        try:
+            from pathlib import Path
+
+            cp = self._project_root / "data" / "workflows" / run_id / "run.json"
+            if cp.exists():
+                import json as _json
+
+                with open(cp) as f:
+                    d = _json.load(f)
+                return (d.get("status") or "").lower() == "canceled"
+        except Exception:
+            pass
+        return False
 
     # ── Load Phase ─────────────────────────────────────────────────────
 
@@ -252,6 +288,22 @@ class WorkflowEngine:
         Checkpoints to disk after every step.
         """
         for step in steps:
+            # Cooperative cancel point — checked at every step boundary.
+            # In-flight LLM calls always complete, which keeps the engine
+            # state model simple and the partial run useful (every
+            # completed step's output is still in workflow_run).
+            if self._should_cancel(workflow_run.run_id):
+                workflow_run.status = "canceled"
+                workflow_run.completed_at = datetime.utcnow()
+                workflow_run.error = f"Run canceled by operator before step '{step.id}'"
+                self._checkpoint(workflow_run)
+                logger.info(
+                    f"Workflow '{definition.id}' canceled before step '{step.id}'"
+                )
+                # Drop the marker now that we've honored it.
+                self._cancel_set.discard(workflow_run.run_id)
+                return
+
             logger.info(f"Executing step '{step.id}' ({step.name})")
 
             try:
