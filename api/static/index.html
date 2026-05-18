@@ -5158,22 +5158,23 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 .wfi-category-chip { padding: 3px 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); font-size: 0.62rem; font-family: var(--mono); letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; border-radius: 2px; }
 .wfi-category-chip.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-ghost); }
 .wfi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.wfi-card { padding: 12px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
+.wfi-card { padding: 12px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; gap: 6px; }
 .wfi-card:hover { border-color: var(--accent-dim); }
-/* Inline DAG preview — the "connected composer view" on every card.
+/* Inline DAG preview — read-only visual of the workflow's wiring.
    Lazy-fetched per card; mini-step circles are cyan, mini-decision
-   are purple, edges use the same cyan-dim stroke as the composer. */
+   are purple, edges use the same cyan-dim stroke as the composer.
+   Compact (50px) so cards stay roughly the same height as before. */
 .wfi-card-dag {
   position: relative;
   background: var(--bg-deep);
   border: 1px solid var(--border);
   border-radius: 3px;
-  padding: 4px;
+  padding: 3px 4px;
   margin: 2px 0;
-  min-height: 60px;
+  min-height: 50px;
   display: flex; align-items: center; justify-content: center;
 }
-.wfi-card-dag-svg { width: 100%; height: 70px; display: block; }
+.wfi-card-dag-svg { width: 100%; height: 48px; display: block; }
 .wfi-card-dag-svg line { stroke: var(--cyan-dim); stroke-width: 1.2; }
 .wfi-card-dag-svg .mini-step { fill: var(--cyan); stroke: var(--bg-panel); stroke-width: 1.2; }
 .wfi-card-dag-svg .mini-decision { fill: var(--purple); stroke: var(--bg-panel); stroke-width: 1.2; }
@@ -16247,7 +16248,11 @@ const WorkflowIndex = (function () {
       const sourceChip = w.source === 'private'
         ? `<span class="wfi-card-source" title="Loaded from workflows-private/ overlay — never pushed to git">internal</span>`
         : '';
-      return `<div class="wfi-card" onclick="WorkflowIndex.openInComposer('${esc(w.id)}')">
+      // Card is NOT whole-clickable any more — that triggered
+      // composerNewWorkflow() on every stray click (description text,
+      // tags, mini-DAG) and silently wiped unsaved composer state.
+      // Explicit buttons stay as the only action affordance.
+      return `<div class="wfi-card">
         <div class="wfi-card-head">
           <span class="wfi-card-icon tone-${esc(tone)}" data-cat="${esc(w.category)}">${iconSvg}</span>
           <span class="wfi-card-title">${esc(w.name)}</span>
@@ -16256,8 +16261,8 @@ const WorkflowIndex = (function () {
         </div>
         <div class="wfi-card-desc">${esc(w.description || '—')}</div>
         <!-- Inline DAG preview — populated by _renderWorkflowMiniDag()
-             lazily after the cards mount. Click the whole card to
-             open in composer (above) or use the explicit buttons. -->
+             lazily after the cards mount. Read-only visual; use the
+             buttons below to act. -->
         <div class="wfi-card-dag" data-wf-id="${esc(w.id)}">
           <div class="wfi-card-dag-empty">loading preview…</div>
         </div>
@@ -16267,7 +16272,7 @@ const WorkflowIndex = (function () {
           <span style="flex:1;text-align:right;color:var(--text-muted)">${esc(w.id)}</span>
         </div>
         <div class="wfi-card-refs">${refTags.map(t => `<span class="wfi-card-tag">${esc(t)}</span>`).join('')}</div>
-        <div class="wfi-card-actions" onclick="event.stopPropagation()">
+        <div class="wfi-card-actions">
           <button class="action-btn" onclick="WorkflowIndex.openInComposer('${esc(w.id)}')">Compose</button>
           <button class="action-btn" onclick="WorkflowIndex.run('${esc(w.id)}')">Run</button>
           <button class="action-btn" onclick="WorkflowIndex.exportBundle('${esc(w.id)}')">Export</button>
