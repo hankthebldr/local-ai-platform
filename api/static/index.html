@@ -4283,6 +4283,117 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* ── External Discovery sections (System page) ──────────────────── */
+.ext-prov {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  background: var(--bg-deep);
+  overflow: hidden;
+}
+.ext-prov[data-stub="1"] { opacity: 0.78; }
+.ext-prov[open] { background: var(--bg-panel); }
+.ext-prov-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+}
+.ext-prov-summary::-webkit-details-marker { display: none; }
+.ext-prov-name { color: var(--text); font-weight: 600; }
+.ext-prov-status {
+  font-size: 0.5rem; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 2px;
+  border: 1px solid var(--border); color: var(--text-muted);
+}
+.ext-prov-status.live { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-ghost); }
+.ext-prov-status.stub { color: var(--amber); border-color: rgba(255, 165, 0, 0.4); background: rgba(255, 165, 0, 0.06); }
+.ext-prov-kind {
+  font-size: 0.5rem; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 2px;
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--cyan-dim);
+}
+.ext-prov-desc {
+  color: var(--text-muted); font-size: 0.62rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 38ch;
+}
+.ext-prov-link {
+  color: var(--text-muted); text-decoration: none;
+  font-size: 0.85rem; padding: 0 4px;
+}
+.ext-prov-link:hover { color: var(--cyan); }
+.ext-prov-body {
+  padding: 8px 14px 14px;
+  border-top: 1px dashed var(--border);
+}
+.ext-feed-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+  font-family: var(--mono); font-size: 0.58rem;
+  color: var(--text-muted);
+}
+.ext-feed-count { color: var(--text); }
+.ext-feed-error {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 165, 0, 0.06);
+  border: 1px solid rgba(255, 165, 0, 0.32);
+  border-radius: 3px;
+  font-size: 0.65rem; color: var(--text-dim);
+  font-family: var(--mono);
+}
+.ext-feed-error-icon {
+  flex-shrink: 0;
+  width: 16px; height: 16px; line-height: 16px;
+  text-align: center; font-weight: 700;
+  background: rgba(255, 165, 0, 0.18);
+  border-radius: 50%; color: var(--amber);
+}
+.ext-item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+.ext-item {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 9px 11px;
+  display: flex; flex-direction: column; gap: 5px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.ext-item:hover { border-color: var(--cyan-dim); transform: translateY(-1px); }
+.ext-item-head { display: flex; align-items: center; gap: 6px; }
+.ext-item-kind {
+  font-size: 0.5rem; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 2px;
+  border: 1px solid var(--border); color: var(--text-muted);
+}
+.ext-item-kind-mcp     { color: var(--cyan);   border-color: var(--cyan-dim); }
+.ext-item-kind-prompt  { color: var(--amber);  border-color: rgba(255, 165, 0, 0.4); }
+.ext-item-kind-plugin  { color: var(--purple); border-color: rgba(179, 136, 255, 0.4); }
+.ext-item-kind-tool    { color: var(--accent); border-color: var(--accent-dim); }
+.ext-item-kind-skill   { color: var(--green, #5fd49b); border-color: rgba(95, 212, 155, 0.4); }
+.ext-item-name { flex: 1; color: var(--text); font-size: 0.66rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ext-item-version { font-size: 0.52rem; color: var(--text-muted); }
+.ext-item-desc {
+  font-size: 0.6rem; color: var(--text-dim); line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+}
+.ext-item-foot {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.55rem; color: var(--text-muted);
+}
+.ext-item-id { color: var(--accent); font-size: 0.55rem; flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-item-toolcount { color: var(--text-dim); }
+.ext-item-link { color: var(--cyan-dim); text-decoration: none; padding: 0 4px; }
+.ext-item-link:hover { color: var(--cyan); }
+
 /* Skills Discover panel — Skills Lab right-rail browse + install UI. */
 .skills-discover-panel { padding: 0; margin-top: 12px; }
 .skills-discover-summary {
@@ -4866,7 +4977,10 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
     <button class="tab-btn" data-tab="runs" onclick="switchTab('runs', this)">Runs<span class="tab-count" id="runs-tab-count"></span></button>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
-    <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Skill Lab<span class="tab-count" id="res-count"></span></button>
+    <!-- Skill Lab folded into the Skills tab + Context tab. The
+         knowledge graph + deep-research panel live in Context now;
+         the Skills tab is the unified skill management page. -->
+
     <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
     <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">Context</button>
     <button class="tab-btn" data-tab="admin-plugins" onclick="switchTab('admin-plugins', this)">Plugins<span class="tab-count" id="plugins-count"></span></button>
@@ -5655,6 +5769,33 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
         </div>
       </div>
     </details>
+
+    <!-- External sources — unified ingestion from upstream registries.
+         One <details> per provider (MCP Registry, Smithery, GitHub
+         .prompt.yaml, Composio, etc). Each provider's `implemented`
+         flag drives whether the section shows real items or a
+         "coming soon" placeholder. -->
+    <details class="panel" style="margin-top:16px;padding:14px 16px" id="ext-discover-section">
+      <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--cyan);font-family:var(--mono);letter-spacing:0.04em;">
+        <span>// Discover — External Sources</span>
+        <span class="tab-count" id="ext-discover-count" style="color:var(--text-muted);font-size:0.7rem"></span>
+        <span style="flex:1"></span>
+        <span style="font-size:0.62rem;color:var(--text-muted);font-weight:normal">MCP · Prompts · Plugins</span>
+      </summary>
+      <div style="margin-top:14px">
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:12px">
+          Unified ingestion from upstream registries. Items map into the platform's
+          <code style="color:var(--cyan)">DiscoveryItem</code> shape (tools / resources / prompts) so a
+          legacy plugin, an MCP server, and a system prompt all install through the same surface.
+          See <a href="/api/discover/sources" style="color:var(--cyan)" target="_blank">/api/discover/sources</a>
+          for the provider list, or
+          <a href="/docs#tag/discover" style="color:var(--cyan)" target="_blank">the OpenAPI docs</a>.
+        </div>
+        <div id="ext-discover-providers">
+          <div class="model-empty">Loading providers…</div>
+        </div>
+      </div>
+    </details>
   </div>
 
   <!-- ═══ TAB: RUNS ════════════════════════════════════════════════
@@ -5770,7 +5911,12 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   </div>
 
   <!-- ═══ TAB: RESEARCH ════════════════════════════════════════════ -->
-  <div class="tab-content" id="tab-research">
+  <!-- Skill Lab tab — preserved as a wrapper but the nav button is
+       removed. The research-layout (Knowledge Graph + Deep Research)
+       has moved into the Context tab. Anything that programmatically
+       activates this tab still works; users just won't see it in the
+       nav anymore. -->
+  <div class="tab-content" id="tab-research" hidden>
 
     <div class="research-layout">
 
@@ -6606,7 +6752,11 @@ function switchTab(name, el) {
     if (sect) sect.open = true;
     if (!discoverLoaded) loadDiscovery();
   }
+  // Skill Lab tab is gone from nav; Context now hosts the graph +
+  // research panels. initResearch() runs from BOTH tab entries (the
+  // hidden 'research' fallback is harmless).
   if (name === 'research') initResearch();
+  if (name === 'documents') { try { initResearch(); } catch (_) {} }
   if (name === 'workflows') loadWorkflowsTab();
   if (name === 'documents') loadDocumentsTab();
   if (name === 'agents') loadAgentsTab();
@@ -7328,6 +7478,7 @@ async function loadCatalog() {
     if (window.SkillsDiscover) SkillsDiscover.load();
     loadPluginsDiscover();
     loadMcpsDiscover();
+    loadExternalDiscover();
   } catch(e) {
     document.getElementById('inv-grid').innerHTML =
       `<div class="model-empty" style="color:var(--red)">Failed to load catalog: ${e.message}</div>`;
@@ -7380,6 +7531,141 @@ async function loadMcpsDiscover() {
     grid.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed to load MCP servers: ${esc(e.message)}</div>`;
   }
 }
+
+// ── External Discovery loader ───────────────────────────────────────
+// Lists every registered provider with a per-provider <details>
+// section. Each section fetches its items lazily on open via the
+// toggle handler so we don't fan out on every page load. The header
+// chip shows the implementation status (✓ live, · stub).
+async function loadExternalDiscover() {
+  const host = document.getElementById('ext-discover-providers');
+  if (!host) return;
+  try {
+    const r = await fetch('/api/discover/sources');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const providers = d.providers || [];
+    const countEl = document.getElementById('ext-discover-count');
+    if (countEl) {
+      const live = providers.filter(p => p.implemented).length;
+      countEl.textContent = providers.length ? `(${live}/${providers.length})` : '';
+    }
+    host.innerHTML = providers.map(_renderExternalProviderShell).join('');
+  } catch (e) {
+    host.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed: ${esc(e.message)}</div>`;
+  }
+}
+
+function _renderExternalProviderShell(p) {
+  // Each provider gets its own <details>. The first open triggers
+  // a lazy fetch; the result body lives inside .ext-prov-items.
+  const status = p.implemented
+    ? `<span class="ext-prov-status live" title="Real ingestion wired">live</span>`
+    : `<span class="ext-prov-status stub" title="Provider registered but ingestion pipeline not yet wired — see api/services/discovery_providers">stub</span>`;
+  const kindChips = (p.kinds || [])
+    .map(k => `<span class="ext-prov-kind">${esc(k)}</span>`)
+    .join('');
+  return `<details class="ext-prov" data-source="${esc(p.source)}"
+                   ${p.implemented ? '' : 'data-stub="1"'}
+                   ontoggle="ExtDiscover._toggle(this)">
+    <summary class="ext-prov-summary">
+      <span class="ext-prov-name">${esc(p.name)}</span>
+      ${status}
+      ${kindChips}
+      <span class="ext-prov-desc">${esc(p.description || '')}</span>
+      <span style="flex:1"></span>
+      <a href="${esc(p.homepage || '#')}" target="_blank" rel="noopener"
+         onclick="event.stopPropagation()"
+         class="ext-prov-link" title="Open the upstream homepage">↗</a>
+    </summary>
+    <div class="ext-prov-body" id="ext-prov-body-${esc(p.source)}">
+      <div class="model-empty">Click to fetch from ${esc(p.name)}…</div>
+    </div>
+  </details>`;
+}
+
+const ExtDiscover = (function () {
+  async function _toggle(detailsEl) {
+    if (!detailsEl.open) return;
+    const source = detailsEl.dataset.source;
+    if (!source) return;
+    const body = document.getElementById('ext-prov-body-' + source);
+    if (!body) return;
+    // Cache the fetch in-memory per session — re-clicking doesn't
+    // re-hit the network unless the operator explicitly refreshes.
+    if (body.dataset.loaded === '1') return;
+    body.innerHTML = `<div class="model-empty">Fetching…</div>`;
+    try {
+      const r = await fetch(`/api/discover/${encodeURIComponent(source)}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const feed = await r.json();
+      body.innerHTML = _renderFeedBody(feed, source);
+      body.dataset.loaded = '1';
+    } catch (e) {
+      body.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function refresh(source) {
+    const body = document.getElementById('ext-prov-body-' + source);
+    if (!body) return;
+    body.innerHTML = `<div class="model-empty">Refreshing…</div>`;
+    delete body.dataset.loaded;
+    try {
+      const r = await fetch(`/api/discover/${encodeURIComponent(source)}?force=true`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const feed = await r.json();
+      body.innerHTML = _renderFeedBody(feed, source);
+      body.dataset.loaded = '1';
+    } catch (e) {
+      body.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function _renderFeedBody(feed, source) {
+    const head = `<div class="ext-feed-head">
+      <span class="ext-feed-count">${feed.count || 0} items</span>
+      ${feed.last_synced
+        ? `<span class="ext-feed-synced">synced ${new Date(feed.last_synced * 1000).toLocaleTimeString()}</span>`
+        : ''}
+      <span style="flex:1"></span>
+      <button class="action-btn xs ghost" onclick="ExtDiscover.refresh('${esc(source)}')">⟲ Refresh</button>
+    </div>`;
+    if (feed.error) {
+      return `${head}
+        <div class="ext-feed-error">
+          <span class="ext-feed-error-icon">!</span>
+          <span>${esc(feed.error)}</span>
+        </div>`;
+    }
+    if (!feed.items || !feed.items.length) {
+      return `${head}<div class="model-empty">Provider returned no items.</div>`;
+    }
+    const items = feed.items.slice(0, 50).map(_renderItem).join('');
+    return `${head}<div class="ext-item-grid">${items}</div>`;
+  }
+
+  function _renderItem(it) {
+    const kindClass = `ext-item-kind-${esc(it.kind || 'other')}`;
+    const toolCount = (it.tools || []).length;
+    return `<div class="ext-item">
+      <div class="ext-item-head">
+        <span class="ext-item-kind ${kindClass}">${esc(it.kind || 'item')}</span>
+        <span class="ext-item-name">${esc(it.name)}</span>
+        <span class="ext-item-version">${esc(it.version || '')}</span>
+      </div>
+      <div class="ext-item-desc">${esc(it.description || '')}</div>
+      <div class="ext-item-foot">
+        <code class="ext-item-id">${esc(it.id)}</code>
+        ${toolCount ? `<span class="ext-item-toolcount">${toolCount} tools</span>` : ''}
+        ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" class="ext-item-link">↗</a>` : ''}
+      </div>
+    </div>`;
+  }
+
+  return { _toggle, refresh };
+})();
+window.ExtDiscover = ExtDiscover;
 
 function setFilter(f, el) {
   activeFilter = f;
@@ -9875,6 +10161,28 @@ async function uploadDocument() {
 
 // Drag-and-drop wiring for the Documents drop zone. Mirrors the visual
 // state class `.is-dragging` so the zone highlights under the cursor.
+// IA shuffle (2026-05-18): the Knowledge Graph + Deep Research panel
+// used to live in the now-removed "Skill Lab" tab. Move them into the
+// Context tab once on boot — preserves IDs, listeners, and the
+// existing initResearch() lifecycle without any per-call DOM lookup
+// changes elsewhere.
+document.addEventListener('DOMContentLoaded', () => {
+  const layout = document.querySelector('#tab-research .research-layout');
+  const ctxTab = document.getElementById('tab-documents');
+  if (layout && ctxTab) {
+    // Prepend so the graph + research are at the top of the Context
+    // tab; existing documents/search panels follow.
+    ctxTab.insertBefore(layout, ctxTab.firstChild);
+    // Add a thin header separating the new content from the legacy
+    // documents UI below.
+    const sep = document.createElement('div');
+    sep.className = 'panel-label';
+    sep.style.cssText = 'margin: 18px 0 10px; padding-top: 8px; border-top: 1px dashed var(--border)';
+    sep.textContent = '// Documents + RAG';
+    layout.after(sep);
+  }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   const zone = document.getElementById('doc-drop-zone');
   if (!zone) return;
