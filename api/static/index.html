@@ -2232,6 +2232,22 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 }
 .chat-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 8px #00CC6610; }
 .chat-input::placeholder { color: var(--text-muted); }
+/* Composer description textarea — auto-grows up to 7 rows then
+   scrolls. Inline padding matches the other meta-row fields so the
+   field aligns with the Role / Category selects above it. The
+   `oninput` JS sets height inline; this CSS just clamps the visual
+   defaults. */
+textarea.composer-desc-area {
+  padding: 8px 12px;
+  min-height: 36px;
+  max-height: 156px;
+  line-height: 1.45;
+  font-size: 0.78rem;
+  resize: none;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .send-btn {
   background: transparent;
@@ -5484,8 +5500,16 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
         </div>
         <div class="composer-meta-field composer-meta-grow">
           <label>Description</label>
-          <input type="text" id="df-wf-desc" class="chat-input"
-                 placeholder="What does this workflow do?" />
+          <!-- Auto-sizing textarea — single-row by default but expands
+               to fit multi-paragraph workflow descriptions without
+               horizontally truncating. The oninput handler grows the
+               box up to a 7-row cap; scrollbars take over past that.
+               .value still works for save/load (same property as the
+               previous <input type="text">), so no callers needed
+               changes. -->
+          <textarea id="df-wf-desc" class="chat-input composer-desc-area"
+                    rows="1" placeholder="What does this workflow do?"
+                    oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight, 156) + 'px';"></textarea>
         </div>
       </div>
       <div class="composer-actions-row">
@@ -12111,7 +12135,13 @@ function dfDoImport() {
   dfNodeData = {};
   if (parsed.id)   document.getElementById('df-wf-id').value   = parsed.id;
   if (parsed.name) document.getElementById('df-wf-name').value  = parsed.name;
-  if (parsed.description) document.getElementById('df-wf-desc').value = typeof parsed.description === 'string' ? parsed.description.trim() : '';
+  if (parsed.description) {
+    const descEl = document.getElementById('df-wf-desc');
+    descEl.value = typeof parsed.description === 'string' ? parsed.description.trim() : '';
+    // Fire the inline oninput handler so the textarea auto-sizes to
+    // fit the imported description (handler bumps height up to 156px).
+    descEl.dispatchEvent(new Event('input'));
+  }
   if (parsed.defaults && parsed.defaults.role) document.getElementById('df-wf-role').value = parsed.defaults.role;
 
   if (typeof dagre === 'undefined') {
@@ -16080,7 +16110,10 @@ async function composerLoadById(wfId) {
     // accepts a definition object directly via the same path.
     document.getElementById('df-wf-id').value = defn.id || wfId;
     document.getElementById('df-wf-name').value = defn.name || '';
-    document.getElementById('df-wf-desc').value = defn.description || '';
+    const _descEl = document.getElementById('df-wf-desc');
+    _descEl.value = defn.description || '';
+    // Auto-size the description textarea to fit the loaded text.
+    _descEl.dispatchEvent(new Event('input'));
     if (defn.defaults && defn.defaults.role) {
       const r = document.getElementById('df-wf-role'); if (r) r.value = defn.defaults.role;
     }
