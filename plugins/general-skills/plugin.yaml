@@ -1,0 +1,39 @@
+id: general-skills
+name: "General Skills"
+version: "1.0.0"
+description: "Baseline writing + reasoning skills that auto-inject on common keywords. Demo content shipped with every Enclave install."
+author: "enclave"
+
+# Skills auto-inject when the user message contains a trigger keyword.
+# Each is a markdown body the LLM consumes as additional system context.
+skills:
+  - id: "concise-writer"
+    file: "skills/concise-writer.md"
+    triggers:
+      - keyword: "summarize"
+      - keyword: "tighten"
+      - keyword: "shorter"
+      - keyword: "concise"
+      - keyword: "tl;dr"
+      - manual: true
+
+  - id: "code-explainer"
+    file: "skills/code-explainer.md"
+    triggers:
+      - keyword: "explain this code"
+      - keyword: "walk me through"
+      - keyword: "what does this do"
+      - keyword: "explain the function"
+      - manual: true
+
+  - id: "structured-summarizer"
+    file: "skills/structured-summarizer.md"
+    triggers:
+      - keyword: "summarize this"
+      - keyword: "key points"
+      - keyword: "executive summary"
+      - keyword: "brief me"
+      - manual: true
+
+# This plugin ships skills only — no tools.
+tools: []

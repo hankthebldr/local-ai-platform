@@ -26,7 +26,6 @@ from ..logging_config import logger
 
 KNOWN_CATEGORIES: List[str] = [
     "security",
-    "security-engineering",
     "devops",
     "data",
     "code",
@@ -64,20 +63,27 @@ _TAG_TO_CATEGORY = {
 
 
 def _categorize(workflow: Dict[str, Any]) -> str:
-    # Check top-level category, then metadata.category (where most YAMLs declare it).
-    explicit = workflow.get("category") or (workflow.get("metadata") or {}).get(
-        "category"
+    # Look at top-level AND nested metadata.* — workflows shipped over
+    # time have used both shapes interchangeably.
+    metadata = workflow.get("metadata") or {}
+    explicit = workflow.get("category") or (
+        metadata.get("category") if isinstance(metadata, dict) else None
     )
     if isinstance(explicit, str) and explicit in KNOWN_CATEGORIES:
         return explicit
-    tags = workflow.get("tags") or []
-    if isinstance(tags, list):
-        for t in tags:
-            if not isinstance(t, str):
-                continue
-            cat = _TAG_TO_CATEGORY.get(t.lower())
-            if cat:
-                return cat
+    candidate_tags: List[Any] = []
+    for src in (
+        workflow.get("tags"),
+        metadata.get("tags") if isinstance(metadata, dict) else None,
+    ):
+        if isinstance(src, list):
+            candidate_tags.extend(src)
+    for t in candidate_tags:
+        if not isinstance(t, str):
+            continue
+        cat = _TAG_TO_CATEGORY.get(t.lower())
+        if cat:
+            return cat
     wfid = (workflow.get("id") or "").lower()
     for token, cat in _TAG_TO_CATEGORY.items():
         if token in wfid:
@@ -153,8 +159,17 @@ def _extract_references(workflow: Dict[str, Any]) -> Dict[str, Set[str]]:
 class WorkflowIndexService:
     """Catalogue + import/export for workflows/."""
 
-    def __init__(self, workflows_dir: Optional[str] = None):
+    def __init__(
+        self,
+        workflows_dir: Optional[str] = None,
+        private_dir: Optional[str] = None,
+    ):
         self._dir = Path(workflows_dir or os.getenv("WORKFLOWS_DIR", "./workflows"))
+        # Private overlay — same convention WorkflowEngine uses. When the
+        # same id exists in both, the private copy wins (loaded second).
+        self._private_dir = Path(
+            private_dir or os.getenv("WORKFLOWS_PRIVATE_DIR", "./workflows-private")
+        )
 
     # ── catalogue ───────────────────────────────────────────────────
 
@@ -168,6 +183,7 @@ class WorkflowIndexService:
                 continue
             cat = _categorize(workflow)
             refs = _extract_references(workflow)
+            source = self._source_for(entry)
             summary = {
                 "id": workflow.get("id") or entry.stem,
                 "name": workflow.get("name") or workflow.get("id") or entry.stem,
@@ -181,6 +197,7 @@ class WorkflowIndexService:
                     if entry.is_relative_to(self._dir.parent)
                     else str(entry)
                 ),
+                "source": source,
                 "references": {k: sorted(v) for k, v in refs.items()},
             }
             items.append(summary)
@@ -210,7 +227,10 @@ class WorkflowIndexService:
         """
         if not _safe_id(workflow_id):
             raise ValueError("invalid workflow id")
-        target = self._dir / f"{workflow_id}.yaml"
+        # Honor the overlay: prefer private if both exist.
+        private_target = self._private_dir / f"{workflow_id}.yaml"
+        public_target = self._dir / f"{workflow_id}.yaml"
+        target = private_target if private_target.exists() else public_target
         if not target.exists():
             raise FileNotFoundError(workflow_id)
         workflow = _read_yaml(target)
@@ -298,11 +318,29 @@ class WorkflowIndexService:
     # ── helpers ────────────────────────────────────────────────────
 
     def _iter_workflow_files(self):
-        if not self._dir.exists():
-            return
-        for child in sorted(self._dir.iterdir()):
-            if child.suffix in (".yaml", ".yml") and child.is_file():
-                yield child
+        """Yield workflow files from public + private overlay.
+
+        When the same stem exists in both directories, the private copy
+        wins — matching the WorkflowEngine.resolve_workflow_path contract.
+        """
+        seen: Dict[str, Path] = {}
+        # Public first so private can override by stem.
+        for root in (self._dir, self._private_dir):
+            if not root.exists():
+                continue
+            for child in sorted(root.iterdir()):
+                if child.suffix in (".yaml", ".yml") and child.is_file():
+                    seen[child.stem] = child
+        for stem in sorted(seen):
+            yield seen[stem]
+
+    def _source_for(self, path: Path) -> str:
+        try:
+            if path.is_relative_to(self._private_dir):
+                return "private"
+        except (AttributeError, ValueError):
+            pass
+        return "public"
 
 
 # ── classify a discovered HF model into workflow roles ──────────────────

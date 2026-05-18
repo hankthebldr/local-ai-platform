@@ -1,0 +1,174 @@
+id: research-brief
+name: "Research brief on a topic"
+description: |
+  Build a structured research brief in four stages:
+
+    1. frame      — restate the question, name the audience, list
+                    success criteria for a "good answer".
+    2. decompose  — split into 3-5 investigative sub-questions.
+    3. investigate— for each sub-question, surface key claims +
+                    evidence pointers (URLs / source titles passed
+                    in via seed, OR claim-only when no sources).
+    4. synthesize — produce the final 1-page brief: TL;DR, key
+                    findings, open questions, recommended next reads.
+
+  Output is plain Markdown intended to be a hand-off document.
+
+version: "1.0"
+schema_version: 1
+
+metadata:
+  author: "Enclave OOTB"
+  category: "research"
+  tags: ["research", "brief", "synthesis"]
+  estimated_duration: 180
+
+defaults:
+  role: reasoning
+  temperature: 0.35
+  max_tokens: 4096
+  retries: 1
+
+context:
+  description: |
+    Required seed keys:
+      topic     — the research topic (string)
+      audience  — who the brief is for (default: "technical reader")
+      sources   — optional list of {url, title, excerpt} source snippets
+      depth     — "scan" | "standard" | "deep" (default standard)
+
+steps:
+  - id: frame
+    name: "1. Frame the question"
+    role: reasoning
+    depends_on: []
+    system_prompt: |
+      Frame the research question so the rest of the workflow has a
+      tight target.
+
+      Output ONLY JSON:
+        {
+          "restated_question": "<one sentence>",
+          "audience": "<who the answer is for>",
+          "success_criteria": ["<criterion 1>", "<criterion 2>", ...],
+          "out_of_scope": ["<thing we will NOT cover>", ...]
+        }
+
+      Rules:
+      - 2-4 success_criteria. They should be testable ("includes
+        latency numbers", "names ≥3 alternatives") not vague.
+      - out_of_scope is the discipline of what we'll cut.
+    inputs:
+      - seed.topic
+      - seed.audience
+      - seed.depth
+    outputs:
+      - restated_question
+      - audience
+      - success_criteria
+      - out_of_scope
+    output_format: json
+
+  - id: decompose
+    name: "2. Decompose into sub-questions"
+    role: reasoning
+    depends_on: [frame]
+    system_prompt: |
+      Split the framed question into 3–5 sub-questions that, answered
+      well, would together satisfy the success criteria.
+
+      Output ONLY JSON:
+        { "sub_questions": ["<q1>", "<q2>", "<q3>", ...] }
+
+      Rules:
+      - Each sub-question must be independently investigable.
+      - Avoid overlap — sub-questions should partition the space, not
+        rephrase each other.
+    inputs:
+      - frame.restated_question
+      - frame.success_criteria
+    outputs:
+      - sub_questions
+    output_format: json
+
+  - id: investigate
+    name: "3. Investigate each sub-question"
+    role: reasoning
+    depends_on: [decompose]
+    system_prompt: |
+      For each sub-question, surface the strongest claims you can
+      support, plus evidence pointers.
+
+      Output ONLY JSON:
+        {
+          "investigations": [
+            {
+              "sub_question": "...",
+              "claims": [
+                {
+                  "claim": "<one sentence>",
+                  "evidence": "<paraphrased evidence or NULL>",
+                  "source_hint": "<source title/url if given, else null>",
+                  "confidence": "high|medium|low"
+                }
+              ]
+            }
+          ]
+        }
+
+      Rules:
+      - Max 3 claims per sub-question. Pick the highest-signal.
+      - If seed.sources are given, anchor claims to them in source_hint.
+      - If no sources are available, you may still produce claims
+        but mark confidence=low and source_hint=null.
+      - Never fabricate URLs.
+    inputs:
+      - decompose.sub_questions
+      - seed.sources
+    outputs:
+      - investigations
+    output_format: json
+
+  - id: synthesize
+    name: "4. Synthesize the brief"
+    role: reasoning
+    temperature: 0.3
+    depends_on: [frame, investigate]
+    system_prompt: |
+      Produce a 1-page Markdown research brief.
+
+      Required structure:
+
+        # <topic>
+        **TL;DR:** <2-sentence answer>
+
+        ## Question (as framed)
+        > <restated_question>
+
+        ## Key findings
+        <numbered list, one per sub-question, 1-2 sentences each>
+
+        ## Evidence
+        <bulleted, "claim — source_hint (confidence)" per row>
+
+        ## Open questions
+        <bullets — what's still unknown or contested>
+
+        ## Recommended next reads
+        <bullets pulled from source_hints, OR "None — no sources provided">
+
+      Rules:
+      - TL;DR must commit to a position, not hedge.
+      - If a finding rests on low-confidence claims only, prefix it
+        with "*(tentative)*".
+      - Cut any section that would be empty; do not write "None"
+        except in Recommended next reads.
+    inputs:
+      - seed.topic
+      - frame.restated_question
+      - frame.success_criteria
+      - frame.out_of_scope
+      - investigate.investigations
+    outputs:
+      - brief
+    output_format: text

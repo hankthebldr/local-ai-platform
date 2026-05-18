@@ -37,6 +37,8 @@ from .routers import (
     roles,
     a2a,
     agents,
+    feedback,  # noqa: F401 — used below via app.include_router
+    skills,  # noqa: F401 — used below via app.include_router
 )
 from .services.ollama_service import OllamaService
 from .services.workflow_engine import WorkflowEngine
@@ -218,6 +220,8 @@ app.include_router(documents.router)
 app.include_router(roles.router)
 app.include_router(a2a.router)
 app.include_router(agents.router)
+app.include_router(feedback.router)
+app.include_router(skills.router)
 from .routers import projects as _projects_router  # noqa: E402
 
 app.include_router(_projects_router.router)

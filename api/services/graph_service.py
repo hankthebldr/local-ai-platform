@@ -18,24 +18,123 @@ import yaml
 from ..logging_config import logger
 
 EXPORTS_DIR = Path(__file__).parent.parent.parent / "data" / "exports"
-GRAPH_CACHE = Path(__file__).parent.parent.parent / "data" / "graph" / "knowledge_graph.json"
+GRAPH_CACHE = (
+    Path(__file__).parent.parent.parent / "data" / "graph" / "knowledge_graph.json"
+)
 GRAPH_TTL = 300  # seconds before cache is stale
 AGENTS_DIR = Path(__file__).parent.parent.parent / "agents"
 WORKFLOWS_DIR = Path(__file__).parent.parent.parent / "data" / "workflows"
 
 STOP_WORDS = {
-    "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her",
-    "was", "one", "our", "out", "day", "get", "has", "him", "his", "how", "its",
-    "let", "may", "now", "old", "say", "see", "two", "who", "did", "does", "from",
-    "have", "been", "that", "this", "they", "with", "will", "which", "what", "when",
-    "where", "than", "then", "here", "also", "into", "some", "could", "would",
-    "should", "about", "more", "very", "just", "like", "your", "most", "over",
-    "come", "even", "back", "chat", "session", "model", "user", "assistant",
-    "local", "message", "field", "value", "total", "tokens", "duration",
-    "messages", "enabled", "disabled", "based", "search", "using", "these",
-    "there", "their", "other", "after", "before", "between", "through", "each",
-    "only", "such", "both", "many", "much", "well", "also", "while", "being",
-    "given", "make", "made", "give", "take", "used", "use", "new", "need",
+    "the",
+    "and",
+    "for",
+    "are",
+    "but",
+    "not",
+    "you",
+    "all",
+    "can",
+    "had",
+    "her",
+    "was",
+    "one",
+    "our",
+    "out",
+    "day",
+    "get",
+    "has",
+    "him",
+    "his",
+    "how",
+    "its",
+    "let",
+    "may",
+    "now",
+    "old",
+    "say",
+    "see",
+    "two",
+    "who",
+    "did",
+    "does",
+    "from",
+    "have",
+    "been",
+    "that",
+    "this",
+    "they",
+    "with",
+    "will",
+    "which",
+    "what",
+    "when",
+    "where",
+    "than",
+    "then",
+    "here",
+    "also",
+    "into",
+    "some",
+    "could",
+    "would",
+    "should",
+    "about",
+    "more",
+    "very",
+    "just",
+    "like",
+    "your",
+    "most",
+    "over",
+    "come",
+    "even",
+    "back",
+    "chat",
+    "session",
+    "model",
+    "user",
+    "assistant",
+    "local",
+    "message",
+    "field",
+    "value",
+    "total",
+    "tokens",
+    "duration",
+    "messages",
+    "enabled",
+    "disabled",
+    "based",
+    "search",
+    "using",
+    "these",
+    "there",
+    "their",
+    "other",
+    "after",
+    "before",
+    "between",
+    "through",
+    "each",
+    "only",
+    "such",
+    "both",
+    "many",
+    "much",
+    "well",
+    "also",
+    "while",
+    "being",
+    "given",
+    "make",
+    "made",
+    "give",
+    "take",
+    "used",
+    "use",
+    "new",
+    "need",
 }
 
 
@@ -109,9 +208,7 @@ def _parse_session(filepath: Path) -> Dict[str, Any]:
 # ── Agent & Workflow Helpers ───────────────────────────────────────────────
 
 
-def _build_agent_nodes(
-    nodes: List[Dict], links: List[Dict], topic_set: set
-) -> None:
+def _build_agent_nodes(nodes: List[Dict], links: List[Dict], topic_set: set) -> None:
     """Scan agents/*.yaml and add agent nodes + uses links to matching topics."""
     if not AGENTS_DIR.is_dir():
         return
@@ -129,6 +226,7 @@ def _build_agent_nodes(
                 "description": agent.get("description", ""),
                 "icon": agent.get("icon", ""),
                 "model": agent.get("model", ""),
+                "role": agent.get("role", ""),
                 "tags": agent.get("tags", []),
             }
             nodes.append(node)
@@ -148,22 +246,24 @@ def _build_agent_nodes(
             for word in match_words:
                 topic_id = f"topic:{word}"
                 if topic_id in topic_set:
-                    links.append({
-                        "source": f"agent:{agent_id}",
-                        "target": topic_id,
-                        "type": "uses",
-                    })
+                    links.append(
+                        {
+                            "source": f"agent:{agent_id}",
+                            "target": topic_id,
+                            "type": "uses",
+                        }
+                    )
         except Exception as e:
             logger.warning(f"Failed to parse agent {filepath.name}: {e}")
 
 
-def _build_workflow_nodes(
-    nodes: List[Dict], links: List[Dict], topic_set: set
-) -> None:
+def _build_workflow_nodes(nodes: List[Dict], links: List[Dict], topic_set: set) -> None:
     """Scan data/workflows/*/run.json and add workflow_run nodes + produced links."""
     if not WORKFLOWS_DIR.is_dir():
         return
-    run_files = sorted(WORKFLOWS_DIR.glob("*/run.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    run_files = sorted(
+        WORKFLOWS_DIR.glob("*/run.json"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
 
     for filepath in run_files[:20]:
         try:
@@ -205,13 +305,107 @@ def _build_workflow_nodes(
                         l["source"] == link_key[0] and l["target"] == link_key[1]
                         for l in links
                     ):
-                        links.append({
-                            "source": f"run:{run_id[:12]}",
-                            "target": topic_id,
-                            "type": "produced",
-                        })
+                        links.append(
+                            {
+                                "source": f"run:{run_id[:12]}",
+                                "target": topic_id,
+                                "type": "produced",
+                            }
+                        )
         except Exception as e:
             logger.warning(f"Failed to parse workflow run {filepath}: {e}")
+
+
+def _build_structural_links(nodes: List[Dict], links: List[Dict]) -> None:
+    """Add agent↔agent, run↔run, agent↔run links that don't depend on
+    session-derived topics. Keeps the knowledge graph readable on a
+    fresh install (no sessions yet) so the operator can still see
+    relationships between the agents and workflow runs they have.
+
+    Link kinds:
+      - "shares_tag"   : two agents share any tag
+      - "shares_role"  : two agents have the same role
+      - "same_workflow": two runs of the same workflow_id
+      - "ran_role"     : an agent and a run that used that agent's role
+    """
+    agents = [n for n in nodes if n.get("type") == "agent"]
+    runs = [n for n in nodes if n.get("type") == "workflow_run"]
+
+    # Agent ↔ Agent — share tag / role
+    for i, a in enumerate(agents):
+        a_tags = {t for t in (a.get("tags") or []) if isinstance(t, str)}
+        a_role = (a.get("role") or "").strip()
+        for b in agents[i + 1 :]:
+            b_tags = {t for t in (b.get("tags") or []) if isinstance(t, str)}
+            shared = a_tags & b_tags
+            if shared:
+                links.append(
+                    {
+                        "source": a["id"],
+                        "target": b["id"],
+                        "type": "shares_tag",
+                        "weight": len(shared),
+                        "shared": sorted(shared)[:5],
+                    }
+                )
+                continue
+            b_role = (b.get("role") or "").strip()
+            if a_role and a_role == b_role:
+                links.append(
+                    {
+                        "source": a["id"],
+                        "target": b["id"],
+                        "type": "shares_role",
+                        "weight": 1,
+                        "shared": [a_role],
+                    }
+                )
+
+    # Workflow_run ↔ Workflow_run — same workflow_id
+    runs_by_wf: Dict[str, List[Dict]] = defaultdict(list)
+    for r in runs:
+        wf = r.get("name") or r.get("workflow_id")
+        if wf:
+            runs_by_wf[wf].append(r)
+    for wf_id, group in runs_by_wf.items():
+        # Chain rather than fully connect (avoids N^2 visual clutter
+        # for workflows with many runs); the dataset can still walk
+        # them via the chain.
+        for prev, cur in zip(group, group[1:]):
+            links.append(
+                {
+                    "source": prev["id"],
+                    "target": cur["id"],
+                    "type": "same_workflow",
+                    "weight": 1,
+                    "shared": [wf_id],
+                }
+            )
+
+    # Agent ↔ Run — agent's role matched a step in the run. We don't
+    # have step-level role data in the run node summary, so this is
+    # tag-based: if the run's workflow_id (treated as name) contains
+    # any of the agent's tags, link them. Cheap heuristic that
+    # surfaces meaningful relationships without re-reading run.json.
+    for a in agents:
+        a_tags = [t.lower() for t in (a.get("tags") or []) if isinstance(t, str)]
+        if not a_tags:
+            continue
+        for r in runs:
+            hay = (r.get("name") or "").lower()
+            if not hay:
+                continue
+            hits = [t for t in a_tags if t and t in hay]
+            if hits:
+                links.append(
+                    {
+                        "source": a["id"],
+                        "target": r["id"],
+                        "type": "ran_role",
+                        "weight": len(hits),
+                        "shared": hits[:3],
+                    }
+                )
 
 
 # ── Graph Builder ──────────────────────────────────────────────────────────
@@ -236,7 +430,11 @@ def build_graph(force: bool = False) -> Dict[str, Any]:
                 topic_sessions[topic].append(session["id"])
             for src in session["sources"]:
                 source_sessions[src["domain"]].append(
-                    {"session_id": session["id"], "url": src["url"], "title": src["title"]}
+                    {
+                        "session_id": session["id"],
+                        "url": src["url"],
+                        "title": src["title"],
+                    }
                 )
         except Exception as e:
             logger.warning(f"Failed to parse {filepath.name}: {e}")
@@ -247,12 +445,14 @@ def build_graph(force: bool = False) -> Dict[str, Any]:
         if len(session_ids) >= 2 or len(topic) > 8:
             node_id = f"topic:{topic}"
             if node_id not in topic_nodes_added:
-                nodes.append({
-                    "id": node_id,
-                    "type": "topic",
-                    "label": topic,
-                    "session_count": len(session_ids),
-                })
+                nodes.append(
+                    {
+                        "id": node_id,
+                        "type": "topic",
+                        "label": topic,
+                        "session_count": len(session_ids),
+                    }
+                )
                 topic_nodes_added.add(node_id)
             for sid in session_ids:
                 links.append({"source": sid, "target": node_id, "type": "mentions"})
@@ -264,17 +464,21 @@ def build_graph(force: bool = False) -> Dict[str, Any]:
             continue
         node_id = f"source:{domain}"
         if node_id not in source_nodes_added:
-            nodes.append({
-                "id": node_id,
-                "type": "source",
-                "label": domain,
-                "citation_count": len(refs),
-            })
+            nodes.append(
+                {
+                    "id": node_id,
+                    "type": "source",
+                    "label": domain,
+                    "citation_count": len(refs),
+                }
+            )
             source_nodes_added.add(node_id)
         seen_sids: set = set()
         for ref in refs:
             if ref["session_id"] not in seen_sids:
-                links.append({"source": ref["session_id"], "target": node_id, "type": "cites"})
+                links.append(
+                    {"source": ref["session_id"], "target": node_id, "type": "cites"}
+                )
                 seen_sids.add(ref["session_id"])
 
     # Session ↔ session similarity edges (shared topics)
@@ -285,20 +489,27 @@ def build_graph(force: bool = False) -> Dict[str, Any]:
 
     session_ids = list(session_topic_sets.keys())
     for i, sid_a in enumerate(session_ids):
-        for sid_b in session_ids[i + 1:]:
+        for sid_b in session_ids[i + 1 :]:
             shared = session_topic_sets[sid_a] & session_topic_sets[sid_b]
             if len(shared) >= 2:
-                links.append({
-                    "source": sid_a,
-                    "target": sid_b,
-                    "type": "related",
-                    "weight": len(shared),
-                    "shared_topics": list(shared)[:5],
-                })
+                links.append(
+                    {
+                        "source": sid_a,
+                        "target": sid_b,
+                        "type": "related",
+                        "weight": len(shared),
+                        "shared_topics": list(shared)[:5],
+                    }
+                )
 
     # Agent and workflow run nodes (linked to existing topic nodes)
     _build_agent_nodes(nodes, links, topic_nodes_added)
     _build_workflow_nodes(nodes, links, topic_nodes_added)
+
+    # Structural links — added regardless of whether session exports
+    # exist. Ensures the graph reads as connected even on a fresh
+    # install (no sessions yet) so the operator can still drill in.
+    _build_structural_links(nodes, links)
 
     # Count agent and workflow_run nodes
     agent_count = sum(1 for n in nodes if n.get("type") == "agent")
@@ -349,9 +560,9 @@ def search_nodes(query: str) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     for node in graph.get("nodes", []):
         searchable = " ".join(
-            str(v) for k, v in node.items()
-            if k in ("name", "label", "description", "tags")
-            and v
+            str(v)
+            for k, v in node.items()
+            if k in ("name", "label", "description", "tags") and v
         )
         if q in searchable.lower():
             results.append(node)

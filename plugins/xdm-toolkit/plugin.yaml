@@ -26,6 +26,15 @@ skills:
       - keyword: "review my rule"
       - manual: true
 
+  - id: "rag-query-crafter"
+    file: "skills/rag-query-crafter.md"
+    triggers:
+      - keyword: "rag"
+      - keyword: "knowledge base"
+      - keyword: "look up document"
+      - keyword: "retrieve from docs"
+      - manual: true
+
   - id: "vendor-pack-author"
     file: "skills/vendor-pack-author.md"
     triggers:
@@ -53,6 +62,26 @@ tools:
         type: string
         required: true
         description: "The XQL rule text to validate (full MODEL block including any leading comment)."
+
+  - id: "analyse_xql"
+    file: "tools/analyse_xql.py"
+    function: "execute"
+    description: |
+      High-fidelity XQL rule analyser. Runs the full rules-engine port (75+ rules)
+      against a data model or parsing rule. Returns structured output: violations
+      with rule IDs, line numbers, severities, and recommendations; a quality
+      score; and a one-word verdict (READY-TO-DEPLOY / NEEDS-FIXES /
+      REWRITE-RECOMMENDED). Prefer this over validate_xql for new code — the
+      legacy tool calls this internally but discards the rich structured output.
+    parameters:
+      rule:
+        type: string
+        required: true
+        description: "The XQL rule text to analyse (full MODEL or INGEST block)."
+      kind:
+        type: string
+        default: "modeling"
+        description: "Rule type: 'modeling' (default) or 'parsing'."
 
   - id: "lookup_xdm_path"
     file: "tools/lookup_xdm_path.py"
@@ -97,24 +126,6 @@ tools:
         type: string
         default: "product_name"
         description: "Product name used in rule identifiers (e.g. 'asa', 'falcon')."
-
-  - id: "analyse_xql"
-    file: "tools/analyse_xql.py"
-    function: "execute"
-    description: |
-      Run the full 82-rule XQL/XDM analyser against a rule body. Returns
-      a structured report with rule IDs, severities, line numbers, and
-      recommendations. Use this directly for high-fidelity validation;
-      validate_xql is the legacy-shape shim.
-    parameters:
-      rule:
-        type: string
-        required: true
-        description: "The XQL rule body (full MODEL or INGEST block)."
-      kind:
-        type: string
-        default: "modeling"
-        description: "Either 'modeling' or 'parsing'. Defaults to modeling."
 
   - id: "xdm_snippets"
     file: "tools/xdm_snippets.py"
