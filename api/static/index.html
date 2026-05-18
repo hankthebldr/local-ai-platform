@@ -7265,7 +7265,20 @@ function switchTab(name, el) {
     _refreshProjectsCount();
   }
   if (name === 'runs' && window.RunsTab) RunsTab.init();
-  if (name === 'inventory' && !catalogLoaded) loadCatalog();
+  if (name === 'inventory') {
+    // Move the shared inventory DOM back from the Catalog mount so
+    // the Models tab actually renders. Idempotent if it's already home.
+    if (window.CatalogModelsShare) CatalogModelsShare.showInModelsTab();
+    if (!catalogLoaded) loadCatalog();
+  }
+  // Catalog (legacy `workflows` data-tab): pull the shared inventory
+  // DOM into the Catalog Models mount on demand. Only happens when
+  // the Catalog is actually being shown, so the Models tab stays
+  // populated on first load.
+  if (name === 'workflows') {
+    if (window.CatalogModelsShare) CatalogModelsShare.showInCatalog();
+    if (!catalogLoaded) loadCatalog();
+  }
   if (name === 'memory') { loadMemory(); loadMemoryTab(); }
   // Discover was promoted-then-demoted into Models tab as a collapsible
   // sub-section. Legacy switchTab('discover', ...) calls (from old links
@@ -11057,19 +11070,60 @@ document.addEventListener('DOMContentLoaded', () => {
         dest.appendChild(src);
       }
     });
-    // Models section — also pulls the inventory grid + hardware
-    // profile + the HuggingFace discover. We rebuild a slim wrapper
-    // so the Catalog reads as a single page, not a sub-tab.
-    const modelsMount = document.getElementById('catalog-models-mount');
-    if (modelsMount) {
-      modelsMount.innerHTML = '';
-      const hw = document.querySelector('#tab-inventory > .panel');     // hardware profile
-      const tb = document.querySelector('#tab-inventory > .inv-toolbar');// toolbar
-      const stats = document.getElementById('inv-stats');
-      const grid = document.getElementById('inv-grid');
-      const disc = document.getElementById('discover-section');
-      [hw, tb, stats, grid, disc].forEach(el => { if (el) modelsMount.appendChild(el); });
-    }
+    // Models section — keep the canonical inventory DOM IN PLACE
+    // (inside #tab-inventory) so the Models tab still renders, and
+    // have the Catalog Models section LAZILY relocate when active.
+    // window.CatalogModelsShare is the move-back-and-forth manager;
+    // _relocateInventoryToCatalog / _relocateInventoryBack swap the
+    // shared DOM between the two homes on tab activation.
+    //
+    // (The previous version ran modelsMount.innerHTML = '' + a single
+    // appendChild loop here at DOMContentLoaded, which permanently
+    // ripped the inventory grid out of #tab-inventory — the Models
+    // tab rendered empty thereafter. Bug surfaced in PR #71 review.)
+    window.CatalogModelsShare = (function () {
+      let inCatalog = false;
+      const ids = ['inv-stats', 'inv-grid', 'discover-section'];
+      const sel = ['.panel', '.inv-toolbar'];
+      function _nodes() {
+        const arr = [];
+        // Hardware profile + toolbar are sibling elements of
+        // #tab-inventory; grab them by selector. The grid + stats +
+        // discover have stable ids.
+        sel.forEach(s => {
+          const home = document.getElementById('tab-inventory');
+          const owned = document.getElementById('catalog-models-mount');
+          (home?.querySelector(s) || owned?.querySelector(s))
+            && arr.push(home?.querySelector(s) || owned.querySelector(s));
+        });
+        ids.forEach(id => { const n = document.getElementById(id); if (n) arr.push(n); });
+        return arr;
+      }
+      function _moveTo(host) {
+        if (!host) return;
+        _nodes().forEach(n => { try { host.appendChild(n); } catch (_) {} });
+      }
+      return {
+        showInCatalog() {
+          if (inCatalog) return;
+          const mount = document.getElementById('catalog-models-mount');
+          if (!mount) return;
+          // Drop the "Loading model catalog…" placeholder before we
+          // move the real grid in.
+          mount.replaceChildren();
+          _moveTo(mount);
+          inCatalog = true;
+        },
+        showInModelsTab() {
+          if (!inCatalog) return;
+          const home = document.getElementById('tab-inventory');
+          if (!home) return;
+          _moveTo(home);
+          inCatalog = false;
+        },
+        get isInCatalog() { return inCatalog; },
+      };
+    })();
   }
 
   // IA shuffle (cont.): Projects + Kanban relocates from inside the
