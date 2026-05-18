@@ -5171,10 +5171,13 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   border-radius: 3px;
   padding: 3px 4px;
   margin: 2px 0;
-  min-height: 50px;
+  min-height: 64px;
   display: flex; align-items: center; justify-content: center;
 }
-.wfi-card-dag-svg { width: 100%; height: 48px; display: block; }
+/* Bumped from 48 → 60 so the vertical-stack mini-DAG has room to
+   distinguish fan-out widths (4-wide rank needs ~50px of vertical
+   space at card scale to be legible). */
+.wfi-card-dag-svg { width: 100%; height: 60px; display: block; }
 .wfi-card-dag-svg line { stroke: var(--cyan-dim); stroke-width: 1.2; }
 .wfi-card-dag-svg .mini-step { fill: var(--cyan); stroke: var(--bg-panel); stroke-width: 1.2; }
 .wfi-card-dag-svg .mini-decision { fill: var(--purple); stroke: var(--bg-panel); stroke-width: 1.2; }
@@ -16443,16 +16446,60 @@ const WorkflowIndex = (function () {
     return _renderRankSilhouette(sortedRanks.map(r => buckets.get(r)));
   }
 
-  // Draw a left-to-right row of rank-slots. Each slot is a circle for
-  // a single step or a pill+×N badge for a parallel rank. Connecting
-  // edges are straight horizontal segments between adjacent slots —
-  // good enough at 48px to communicate "pipeline shape."
+  // Draw a left-to-right rank silhouette where parallel siblings within
+  // a rank are STACKED VERTICALLY inside their slot (rather than
+  // collapsed to a single pill) so fan-in / fan-out shapes are visually
+  // unmistakable even at card scale. Earlier versions used a `pill+×N`
+  // badge — geometrically compact but visually identical to a single
+  // dot at 48px tall, which made every workflow card read as a flat
+  // row of dots. Stacking the parallel nodes is what dagre does on the
+  // composer canvas; this is just the compressed twin.
   function _renderRankSilhouette(rankBuckets) {
+    const W = 280, H = 84, pad = 16;
+    const NODE_R = 4;
+    const n = rankBuckets.length;
+    const xs = rankBuckets.map((_, i) => pad + (i / Math.max(1, n - 1)) * (W - 2 * pad));
+    const midY = H / 2;
+    // Compute the y-coordinate for the k-th node within a bucket of
+    // size m — evenly distributed across the slot height, centered.
+    const SLOT_INNER = H - 2 * pad;
+    const yFor = (k, m) => {
+      if (m === 1) return midY;
+      const span = Math.min(SLOT_INNER, m * 14);  // 14 px per stacked node max
+      return midY - span / 2 + (k * span) / (m - 1);
+    };
+    // Edges between rank i and rank i+1: connect every upstream node
+    // to every downstream node. At card scale this draws the fan
+    // outlines cleanly without needing real edge-by-edge dep tracking.
+    const lines = [];
+    for (let i = 0; i < rankBuckets.length - 1; i++) {
+      const aBucket = rankBuckets[i], bBucket = rankBuckets[i + 1];
+      const x1 = xs[i], x2 = xs[i + 1];
+      aBucket.forEach((_, ai) => {
+        const y1 = yFor(ai, aBucket.length);
+        bBucket.forEach((_, bi) => {
+          const y2 = yFor(bi, bBucket.length);
+          lines.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`);
+        });
+      });
+    }
+    const nodes = rankBuckets.flatMap((bucket, i) => bucket.map((s, k) => {
+      const cx = xs[i];
+      const cy = yFor(k, bucket.length);
+      const cls = s.is_decision ? 'mini-decision' : 'mini-step';
+      return `<circle cx="${cx}" cy="${cy}" r="${NODE_R}" class="${cls}"><title>${esc(s.id)}</title></circle>`;
+    }));
+    return `<svg class="wfi-card-dag-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${lines.join('')}${nodes.join('')}</svg>`;
+  }
+
+  // ── obsolete pill helpers kept as no-op shims so any inline call
+  //    sites that survived the migration don't crash; remove once
+  //    git-grep is clean. ────────────────────────────────────────────
+  function _renderRankSilhouette_legacy_pill(rankBuckets) {
     const W = 280, H = 70, pad = 14;
     const n = rankBuckets.length;
     const xs = rankBuckets.map((_, i) => pad + (i / Math.max(1, n - 1)) * (W - 2 * pad));
     const y = H / 2;
-    // Edges first (under nodes).
     const lines = xs.slice(1).map((x, i) =>
       `<line x1="${xs[i]}" y1="${y}" x2="${x}" y2="${y}" />`
     ).join('');
@@ -16464,7 +16511,6 @@ const WorkflowIndex = (function () {
       if (bucket.length === 1) {
         return `<circle cx="${cx}" cy="${y}" r="5" class="${cls}"><title>${esc(title)}</title></circle>`;
       }
-      // Parallel rank — render a pill + ×N badge.
       const pillW = 18, pillH = 10;
       const rx = cx - pillW / 2, ry = y - pillH / 2;
       return `<g><title>${esc(title)}</title>` +

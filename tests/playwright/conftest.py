@@ -120,6 +120,13 @@ def signed_in_page(page, base_url, license_key):
     page.evaluate(
         """(key) => {
             window.localStorage.setItem('enclave.licenseKey', key);
+            // Force dark theme for every Playwright session. The SPA's
+            // theme bootstrap (top of index.html) reads
+            // localStorage['enclave.theme'] BEFORE checking
+            // prefers-color-scheme, so this overrides any headless-
+            // browser light-mode default — recordings + screenshots
+            // all render the operator-facing dark theme consistently.
+            window.localStorage.setItem('enclave.theme', 'dark');
             window.sessionStorage.removeItem('enclave.admin.masterKey');
         }""",
         license_key,
