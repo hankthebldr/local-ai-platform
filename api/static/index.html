@@ -3863,13 +3863,17 @@ textarea.composer-desc-area {
   color: var(--green, #5fd49b);
 }
 .drawflow .drawflow-node.is-failed {
-  box-shadow: 0 0 0 1px rgba(255, 80, 80, 0.7), 0 0 18px rgba(255, 80, 80, 0.25);
+  /* Softer than the previous rgba(255,80,80,0.7) — that read as a
+     near-pure-red blast against the dark canvas. Muted crimson keeps
+     "this failed" obvious without burning the operator's eyes. */
+  box-shadow: 0 0 0 1px rgba(217, 119, 119, 0.55), 0 0 14px rgba(217, 119, 119, 0.18);
 }
 .drawflow .drawflow-node.is-failed .df-node-body::after {
   content: '!';
   position: absolute; top: 4px; right: 9px;
   font-size: 0.85rem; line-height: 1; font-weight: 700;
-  color: var(--red, #ff5252);
+  /* #d65555 — muted red instead of the harsh #ff5252 fallback */
+  color: var(--red, #d65555);
 }
 .drawflow .drawflow-node.is-skipped { opacity: 0.45; filter: saturate(0.4); }
 .drawflow .drawflow-node.is-skipped .df-node-body::after {
@@ -11305,7 +11309,12 @@ const dfStepTemplates = [
   { key: 'custom',      persona: 'general',   name: 'Custom Step',    role: 'general',     prompt: 'You are a helpful assistant.',                              outputs: ['result'],         format: 'raw',  color: '#6b7780' },
 ];
 
-const dfRoleColors = { reasoning: '#00C0E8', coding: '#00cc66', fast: '#8a98a0', general: '#6b7780', uncensored: '#ff5252' };
+// Role-tinted top bar painted via inset box-shadow on .df-node-body.
+// `uncensored` was `#ff5252` — pure-red and abrasive at the band size.
+// Softened to a muted salmon (`#d97777`) so it still reads as the
+// "spicy" tier without dominating the canvas. The other roles keep
+// their canonical brand hues.
+const dfRoleColors = { reasoning: '#00C0E8', coding: '#00cc66', fast: '#8a98a0', general: '#6b7780', uncensored: '#d97777' };
 const dfFmtDescs = { raw: 'Full LLM text as-is', json: 'Parse as JSON object', json_array: 'Parse as JSON array', markdown_sections: 'Split by ## headings', key_value: 'Parse key: value lines', csv: 'Parse CSV/TSV', regex: 'Extract via regex' };
 
 function setWfMode(mode) {
