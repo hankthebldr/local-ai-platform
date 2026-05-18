@@ -3699,7 +3699,169 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 }
 .runs-tab-progress-chip[hidden] { display: none; }
 .runs-tab-steps {
-  max-height: 30vh; overflow-y: auto; padding: 10px 12px;
+  max-height: 36vh; overflow-y: auto; padding: 10px 12px;
+}
+/* Two-column floor: step results + context trace side by side. On
+   narrow viewports they stack. */
+.runs-tab-floor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+}
+@media (max-width: 1100px) {
+  .runs-tab-floor-grid { grid-template-columns: 1fr; }
+}
+.runs-tab-context {
+  max-height: 36vh; overflow-y: auto; padding: 10px 12px;
+}
+
+/* Top-of-pane run-level error banner (shown for failed runs). */
+.run-error-banner {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: rgba(255, 80, 80, 0.08);
+  border: 1px solid rgba(255, 80, 80, 0.32);
+  border-radius: 4px;
+  padding: 8px 10px; margin-bottom: 10px;
+  font-family: var(--mono); font-size: 0.66rem;
+  color: var(--red, #ff5252);
+}
+.run-error-banner-icon {
+  flex-shrink: 0;
+  width: 18px; height: 18px; line-height: 18px;
+  text-align: center; font-weight: 700;
+  background: rgba(255, 80, 80, 0.15);
+  border-radius: 50%;
+}
+.run-error-banner-text { color: var(--text); }
+
+/* Cascade summary — shows root failure + starved downstream. */
+.run-cascade-summary {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  align-items: center;
+  padding: 7px 10px; margin-bottom: 10px;
+  background: rgba(255, 165, 0, 0.06);
+  border: 1px dashed rgba(255, 165, 0, 0.4);
+  border-radius: 4px;
+  font-size: 0.62rem; color: var(--text-dim);
+  font-family: var(--mono);
+}
+.run-cascade-summary code { color: var(--amber); }
+.run-cascade-label {
+  font-size: 0.5rem; letter-spacing: 0.12em;
+  color: var(--amber); font-weight: 700;
+  padding: 2px 6px; border: 1px solid rgba(255, 165, 0, 0.4); border-radius: 2px;
+}
+
+/* Step row — expandable; the head is clickable and toggles. */
+.ws-run-step-head {
+  display: grid;
+  grid-template-columns: 14px minmax(110px, auto) minmax(100px, auto) auto 1fr auto auto;
+  gap: 8px; align-items: center;
+  cursor: pointer;
+  padding: 6px 4px; border-radius: 3px;
+  transition: background 0.15s;
+}
+.ws-run-step-head:hover { background: rgba(0, 220, 240, 0.04); }
+.run-step-caret { color: var(--text-muted); font-size: 0.65rem; }
+.ws-run-step-err-preview {
+  font-size: 0.58rem; color: var(--red, #ff5252);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-align: right;
+}
+.ws-run-step.is-root-fail { border-left-color: var(--red, #ff5252); border-left-width: 3px; }
+.ws-run-step.is-starved {
+  border-left-color: var(--amber);
+  background: rgba(255, 165, 0, 0.03);
+}
+.run-step-badge {
+  font-size: 0.5rem; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 2px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.run-step-badge.fail    { color: var(--red, #ff5252); border-color: rgba(255,80,80,0.4); background: rgba(255,80,80,0.08); }
+.run-step-badge.starved { color: var(--amber); border-color: rgba(255,165,0,0.4); background: rgba(255,165,0,0.06); }
+.run-step-badge.dim     { color: var(--text-muted); }
+
+.run-step-expanded {
+  margin: 0 4px 8px 26px;
+  padding: 9px 12px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.run-step-row-kv {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 8px; align-items: start;
+  font-size: 0.62rem;
+}
+.run-step-row-kv.error .run-step-row-k { color: var(--red, #ff5252); }
+.run-step-row-k {
+  font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted);
+  padding-top: 2px;
+}
+.run-step-error-text {
+  margin: 0; padding: 6px 8px;
+  background: rgba(255, 80, 80, 0.06);
+  border-left: 2px solid rgba(255, 80, 80, 0.5);
+  color: var(--text); font-family: var(--mono); font-size: 0.6rem;
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 160px; overflow: auto;
+}
+.run-step-warn { color: var(--amber); }
+
+/* Context-field chips — one per workspace key, hover shows JSON. */
+.ctx-field-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.ctx-field-chip {
+  display: inline-flex; gap: 4px; align-items: baseline;
+  font-size: 0.56rem; font-family: var(--mono);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 2px 7px; border-radius: 2px;
+  max-width: 220px;
+}
+.ctx-field-k { color: var(--cyan); }
+.ctx-field-v { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-field-more { font-size: 0.5rem; color: var(--text-muted); align-self: center; }
+
+/* Reconstructed-step marker on the DAG node — dashed border so the
+   operator knows the node was synthesised from a result, not loaded
+   from the YAML definition. */
+.drawflow .drawflow-node.is-reconstructed { border-style: dashed; }
+
+/* Context Trace pane — producer rows showing step → workspace keys. */
+.ctx-section-head {
+  font-size: 0.5rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--cyan);
+  padding-bottom: 6px; margin-bottom: 8px;
+  border-bottom: 1px dashed var(--border);
+}
+.ctx-row {
+  display: grid;
+  grid-template-columns: minmax(110px, auto) 12px minmax(0, 1fr);
+  gap: 6px; align-items: start;
+  padding: 4px 0; border-bottom: 1px dashed transparent;
+  font-size: 0.62rem;
+}
+.ctx-row + .ctx-row { border-top: 1px dashed var(--border); }
+.ctx-row-step {
+  font-family: var(--mono); color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ctx-row-seed { color: var(--accent); }
+.ctx-row-fail .ctx-row-step { color: var(--red, #ff5252); }
+.ctx-row-pending .ctx-row-step { color: var(--amber); }
+.ctx-row-arrow { color: var(--text-muted); text-align: center; }
+.ctx-row-keys { display: flex; flex-wrap: wrap; gap: 4px; }
+.ctx-key-chip {
+  font-family: var(--mono); font-size: 0.55rem;
+  background: var(--bg-deep);
+  color: var(--cyan-dim);
+  border: 1px solid var(--cyan-dim);
+  padding: 1px 6px; border-radius: 2px;
 }
 
 /* Floating Step Config popup — primary edit surface, opens on node
@@ -5443,11 +5605,24 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
               <span class="df-run-progress-bar"><span class="df-run-progress-bar-fill" id="runs-tab-bar" style="width:0%"></span></span>
             </div>
           </div>
-          <!-- Step output strip (re-uses the workstream styling) -->
-          <div class="runs-tab-steps panel" id="runs-tab-steps">
-            <div class="panel-label">Step Results</div>
-            <div id="runs-tab-steps-body">
-              <div class="model-empty">No run selected.</div>
+          <!-- Step output strip + context trace. The runs-tab-steps
+               pane lists every step result (expandable to show error,
+               retries, tokens, and the workspace fields each step
+               wrote). The runs-tab-context pane shows the producer
+               graph — which step wrote which workspace key — so the
+               operator can audit context handoff. -->
+          <div class="runs-tab-floor-grid">
+            <div class="runs-tab-steps panel" id="runs-tab-steps">
+              <div class="panel-label">Step Results</div>
+              <div id="runs-tab-steps-body">
+                <div class="model-empty">No run selected.</div>
+              </div>
+            </div>
+            <div class="runs-tab-context panel" id="runs-tab-context">
+              <div class="panel-label">Context Trace</div>
+              <div id="runs-tab-context-body">
+                <div class="model-empty">Pick a run to inspect its workspace handoffs.</div>
+              </div>
             </div>
           </div>
         </div>
@@ -14745,6 +14920,9 @@ const RunsTab = (function () {
   let _editor = null;          // separate drawflow instance for this tab
   let _idMap = {};             // logical step id → drawflow node id
   let _pollHandle = null;
+  let _currentRun = null;      // last fetched run (for cascade / context analysis)
+  let _currentSteps = [];      // step list used for the rendered DAG
+  const _expandedSteps = new Set();  // step_ids the user clicked to expand
 
   function init() {
     if (!_editor) _initEditor();
@@ -14829,9 +15007,16 @@ const RunsTab = (function () {
           if (dr.ok) defn = await dr.json();
         } catch (_) {}
       }
-      _renderRunGraph(defn || { steps: [] });
+      // Pass the run into the graph builder so it can reconstruct
+      // the scaffold from step_results when the workflow definition
+      // is missing or stale. Cache the run so other helpers
+      // (cascade detection, context trace) can read it without a
+      // round-trip.
+      _currentRun = run;
+      _renderRunGraph(defn, run);
       _applyStatus(run);
       _renderSteps(run);
+      _renderContextTrace(run);
       _toggleActionButtons(run);
       // Live poll while running.
       if (['running', 'queued'].includes((run.status || '').toLowerCase())) {
@@ -14840,8 +15025,10 @@ const RunsTab = (function () {
             const r2 = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}`);
             if (!r2.ok) return;
             const run2 = await r2.json();
+            _currentRun = run2;
             _applyStatus(run2);
             _renderSteps(run2);
+            _renderContextTrace(run2);
             _toggleActionButtons(run2);
             if (['completed', 'failed', 'canceled', 'error'].includes((run2.status || '').toLowerCase())) {
               clearInterval(_pollHandle); _pollHandle = null;
@@ -14867,16 +15054,59 @@ const RunsTab = (function () {
     _editor.start();
   }
 
-  function _renderRunGraph(defn) {
+  function _renderRunGraph(defn, run) {
     if (!_editor) _initEditor();
     if (!_editor) return;
     // Wipe any previous render.
     try { _editor.clear(); } catch (_) {}
     _idMap = {};
+
+    // Build the step list. If we have a workflow definition use it;
+    // otherwise reconstruct the scaffold from the run's step_results
+    // (preserves the agent process layout even when the workflow YAML
+    // has been deleted, renamed, or changed since the run executed).
+    let steps = (defn && Array.isArray(defn.steps) && defn.steps.length)
+      ? defn.steps.map(s => ({ ...s }))
+      : [];
+
+    // Merge: ensure every step_id from results exists as a step. Adds
+    // any "phantom" steps the run actually executed but that aren't
+    // in the current definition (e.g. dynamically inserted steps).
+    const resultsById = new Map();
+    (run && run.step_results || []).forEach(r => {
+      if (r && r.step_id) resultsById.set(r.step_id, r);
+    });
+    const knownIds = new Set(steps.map(s => s.id));
+    Array.from(resultsById.keys()).forEach(id => {
+      if (!knownIds.has(id)) {
+        const r = resultsById.get(id);
+        steps.push({
+          id, name: id,
+          role: r.role || 'general',
+          // Marker so we can label "reconstructed" nodes in the UI.
+          _reconstructed: true,
+        });
+      }
+    });
+
+    // Determine the depends_on linkage. If the definition supplies it,
+    // use it. Otherwise infer a linear chain from the order step_results
+    // were appended (which is the engine's execution order).
+    const hasDefDeps = (defn && Array.isArray(defn.steps) &&
+      defn.steps.some(s => Array.isArray(s.depends_on) ? s.depends_on.length : !!s.depends_on));
+    if (!hasDefDeps && run && Array.isArray(run.step_results)) {
+      const ordered = run.step_results.map(r => r.step_id).filter(Boolean);
+      const byId = new Map(steps.map(s => [s.id, s]));
+      for (let i = 1; i < ordered.length; i++) {
+        const cur = byId.get(ordered[i]);
+        if (cur && !cur.depends_on) cur.depends_on = [ordered[i - 1]];
+      }
+    }
+
     // Spawn a node per step using the composer's same dfNodeHtml so the
     // visual is identical. We use logical positions; auto-layout below
     // re-flows via dagre.
-    (defn.steps || []).forEach((step, i) => {
+    steps.forEach((step, i) => {
       const data = {
         id: step.id, name: step.name || step.id,
         role: step.role || 'general',
@@ -14888,15 +15118,21 @@ const RunsTab = (function () {
         persona: step.persona ||
           (window.AgentIcons ? AgentIcons.resolve({ role: step.role, name: step.name }) : 'general'),
         skills: step.skills || [], tools: step.tools || [],
+        _reconstructed: !!step._reconstructed,
       };
       const x = 80 + (i % 4) * 220;
       const y = 60 + Math.floor(i / 4) * 140;
       const numOut = data.outputs.length > 1 && data.is_decision ? data.outputs.length : 1;
       const dfId = _editor.addNode(data.id, 1, numOut, x, y, data.id, {}, dfNodeHtml(data));
       _idMap[data.id] = dfId;
+      // Tag the wrapper for reconstructed-step markers in CSS.
+      if (data._reconstructed) {
+        const el = document.querySelector(`#runs-tab-canvas #node-${dfId}`);
+        if (el) el.classList.add('is-reconstructed');
+      }
     });
-    // Connect via depends_on.
-    (defn.steps || []).forEach((step) => {
+    // Connect via depends_on (definition or inferred linear chain).
+    steps.forEach((step) => {
       const tgt = _idMap[step.id];
       if (!tgt) return;
       const deps = Array.isArray(step.depends_on) ? step.depends_on
@@ -14907,6 +15143,8 @@ const RunsTab = (function () {
         try { _editor.addConnection(src, tgt, 'output_1', 'input_1'); } catch (_) {}
       });
     });
+    // Stash the resolved step list for cascade detection.
+    _currentSteps = steps;
     // Auto-layout. We reuse the composer's dagre helper but target our
     // separate editor — swap dfEditor pointer temporarily.
     try { _runTabAutoLayout(); } catch (e) { console.warn('runs auto-layout:', e); }
@@ -14992,20 +15230,194 @@ const RunsTab = (function () {
     const body = document.getElementById('runs-tab-steps-body');
     if (!body) return;
     const results = run.step_results || [];
+    // Compute cascade markers. A "root failure" is a step whose
+    // status is failed/error. A "starved" step is one that depended
+    // on a root failure and either didn't run (no result) or whose
+    // workspace input was the failed step's output.
+    const cascade = _computeCascade(run);
+
+    // Top-level header — root error line first if any.
+    const errorBanner = (run.status || '').toLowerCase() === 'failed' && run.error
+      ? `<div class="run-error-banner">
+           <span class="run-error-banner-icon">!</span>
+           <span class="run-error-banner-text">${esc(run.error)}</span>
+         </div>`
+      : '';
+
     if (!results.length) {
-      body.innerHTML = '<div class="model-empty">No step results yet.</div>';
+      body.innerHTML = errorBanner + '<div class="model-empty">No step results yet.</div>';
       return;
     }
-    body.innerHTML = results.map(s => {
+
+    const rows = results.map(s => {
       const dur = s.duration_seconds != null ? Math.round(s.duration_seconds) + 's' : '?';
-      const cls = s.status === 'completed' ? 'ok' : (['failed','error'].includes(s.status) ? 'fail' : 'pending');
-      return `<div class="ws-run-step ws-run-step-${cls}">
-        <span class="ws-run-step-id">${esc(s.step_id)}</span>
-        <span class="ws-run-step-model">${esc(s.model_used || '?')}</span>
-        <span class="ws-run-step-dur">${dur}</span>
-        <span class="ws-run-step-status">${esc(s.status)}</span>
+      const status = (s.status || '').toLowerCase();
+      const cls = status === 'completed' ? 'ok' : (['failed', 'error'].includes(status) ? 'fail' : 'pending');
+      const isExpanded = _expandedSteps.has(s.step_id);
+      const isRoot = cascade.roots.has(s.step_id);
+      const isStarved = cascade.starved.has(s.step_id);
+      const retries = s.retries || 0;
+      const tokens = (s.token_count || {}).total_tokens || 0;
+
+      // One-line preview of the error, full text revealed in the
+      // expanded section.
+      const errOneLine = s.error ? esc(String(s.error).split('\n')[0].slice(0, 90)) : '';
+      const errFull = s.error ? esc(s.error) : '';
+
+      const badges = [];
+      if (isRoot)     badges.push(`<span class="run-step-badge fail">root</span>`);
+      if (isStarved)  badges.push(`<span class="run-step-badge starved" title="Downstream step couldn't get its expected context from an upstream failure">starved</span>`);
+      if (retries)    badges.push(`<span class="run-step-badge dim">${retries}× retry</span>`);
+
+      const expandedBody = isExpanded ? `
+        <div class="run-step-expanded">
+          ${s.error ? `<div class="run-step-row-kv error">
+            <span class="run-step-row-k">error</span>
+            <pre class="run-step-error-text">${errFull}</pre>
+          </div>` : ''}
+          ${tokens ? `<div class="run-step-row-kv">
+            <span class="run-step-row-k">tokens</span>
+            <span>${tokens.toLocaleString()}</span>
+          </div>` : ''}
+          ${s.model_used ? `<div class="run-step-row-kv">
+            <span class="run-step-row-k">model</span>
+            <span>${esc(s.model_used)}</span>
+          </div>` : ''}
+          ${s.started_at ? `<div class="run-step-row-kv">
+            <span class="run-step-row-k">started</span>
+            <span>${esc(s.started_at)}</span>
+          </div>` : ''}
+          ${_renderStepOutputs(run, s.step_id)}
+        </div>` : '';
+
+      return `<div class="ws-run-step ws-run-step-${cls} ${isRoot ? 'is-root-fail' : ''} ${isStarved ? 'is-starved' : ''}"
+                   data-step-id="${esc(s.step_id)}">
+        <div class="ws-run-step-head"
+             onclick="RunsTab.toggleStepExpand('${esc(s.step_id)}')">
+          <span class="run-step-caret">${isExpanded ? '▾' : '▸'}</span>
+          <span class="ws-run-step-id">${esc(s.step_id)}</span>
+          <span class="ws-run-step-model">${esc(s.model_used || '—')}</span>
+          ${badges.join('')}
+          <span style="flex:1"></span>
+          ${errOneLine ? `<span class="ws-run-step-err-preview">${errOneLine}</span>` : ''}
+          <span class="ws-run-step-dur">${dur}</span>
+          <span class="ws-run-step-status">${esc(s.status)}</span>
+        </div>
+        ${expandedBody}
       </div>`;
     }).join('');
+
+    // Cascade summary if there's a root failure.
+    let cascadeSummary = '';
+    if (cascade.roots.size) {
+      const rootList = Array.from(cascade.roots).slice(0, 3).join(', ');
+      const starvedList = Array.from(cascade.starved);
+      cascadeSummary = `<div class="run-cascade-summary">
+        <span class="run-cascade-label">CASCADE</span>
+        <span>Root failure${cascade.roots.size > 1 ? 's' : ''}: <code>${esc(rootList)}</code>.</span>
+        ${starvedList.length
+          ? `<span>Starved downstream: <code>${esc(starvedList.slice(0, 5).join(', '))}</code>${starvedList.length > 5 ? ` +${starvedList.length - 5}` : ''}.</span>`
+          : '<span>No downstream steps were starved (run halted at root).</span>'}
+      </div>`;
+    }
+
+    body.innerHTML = errorBanner + cascadeSummary + rows;
+  }
+
+  // Inspect run.context.workspace for the step's outputs. Returns
+  // HTML showing what fields the step wrote (so the operator can
+  // trace context handoff). Empty when the step has nothing in
+  // workspace (e.g. it failed before producing output).
+  function _renderStepOutputs(run, stepId) {
+    const ws = (run && run.context && run.context.workspace) || {};
+    const slot = ws[stepId];
+    if (!slot) {
+      return `<div class="run-step-row-kv">
+        <span class="run-step-row-k">workspace</span>
+        <span class="run-step-warn">No output written (step did not complete successfully).</span>
+      </div>`;
+    }
+    const keys = Object.keys(slot);
+    if (!keys.length) {
+      return `<div class="run-step-row-kv">
+        <span class="run-step-row-k">workspace</span>
+        <span style="color:var(--text-muted)">(empty object)</span>
+      </div>`;
+    }
+    const chips = keys.slice(0, 12).map(k => {
+      const v = slot[k];
+      const sample = typeof v === 'string'
+        ? v.slice(0, 50) + (v.length > 50 ? '…' : '')
+        : (v === null ? 'null' : typeof v);
+      return `<span class="ctx-field-chip" title="${esc(JSON.stringify(v).slice(0, 200))}">
+        <span class="ctx-field-k">${esc(k)}</span>
+        <span class="ctx-field-v">${esc(String(sample))}</span>
+      </span>`;
+    }).join('');
+    return `<div class="run-step-row-kv">
+      <span class="run-step-row-k">workspace</span>
+      <div class="ctx-field-chips">${chips}${keys.length > 12 ? `<span class="ctx-field-more">+${keys.length - 12}</span>` : ''}</div>
+    </div>`;
+  }
+
+  // Cascade detection — given a run, identify the root failure(s) and
+  // the downstream "starved" steps. Approach:
+  //   1. Walk step_results in order. Any failed/error step is a root.
+  //   2. Any step in _currentSteps that comes AFTER a root in the DAG
+  //      (via depends_on transitively) AND either didn't run OR ran
+  //      but couldn't find its expected input in workspace, is starved.
+  function _computeCascade(run) {
+    const roots = new Set();
+    const starved = new Set();
+    const resultsById = new Map();
+    (run.step_results || []).forEach(r => {
+      if (!r || !r.step_id) return;
+      resultsById.set(r.step_id, r);
+      if (['failed', 'error'].includes((r.status || '').toLowerCase())) roots.add(r.step_id);
+    });
+    if (!roots.size) return { roots, starved };
+
+    // Reachability: iterative BFS from each root through reverse
+    // depends_on edges. Iterative + visited set is safe even if the
+    // depends_on graph has a cycle (shouldn't, but defensive).
+    const reverseEdges = new Map();  // from id → Set<children>
+    _currentSteps.forEach(s => {
+      const deps = Array.isArray(s.depends_on) ? s.depends_on
+                 : (s.depends_on ? [s.depends_on] : []);
+      deps.forEach(dep => {
+        if (!reverseEdges.has(dep)) reverseEdges.set(dep, new Set());
+        reverseEdges.get(dep).add(s.id);
+      });
+    });
+    function descendants(rootId) {
+      const out = new Set();
+      const queue = Array.from(reverseEdges.get(rootId) || []);
+      while (queue.length) {
+        const cur = queue.shift();
+        if (out.has(cur)) continue;
+        out.add(cur);
+        (reverseEdges.get(cur) || []).forEach(c => { if (!out.has(c)) queue.push(c); });
+      }
+      return out;
+    }
+    roots.forEach(r => {
+      descendants(r).forEach(d => {
+        const result = resultsById.get(d);
+        // A starved step is one that either didn't run at all OR
+        // failed because its input wasn't available. We mark both —
+        // the run-step row's badge surfaces it.
+        if (!result || ['failed', 'error', 'skipped'].includes((result.status || '').toLowerCase())) {
+          starved.add(d);
+        }
+      });
+    });
+    return { roots, starved };
+  }
+
+  function toggleStepExpand(stepId) {
+    if (_expandedSteps.has(stepId)) _expandedSteps.delete(stepId);
+    else _expandedSteps.add(stepId);
+    if (_currentRun) _renderSteps(_currentRun);
   }
 
   function _toggleActionButtons(run) {
@@ -15026,7 +15438,47 @@ const RunsTab = (function () {
     await fetch(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/cancel`, { method: 'POST' });
   }
 
-  return { init, load, render, setFilter, select, resumeCurrent, cancelCurrent };
+  // Context-trace panel — shows the run.context.workspace as a
+  // producer/consumer map so the operator can see exactly which step
+  // wrote which key, and which downstream step couldn't read it.
+  function _renderContextTrace(run) {
+    const box = document.getElementById('runs-tab-context-body');
+    if (!box) return;
+    const ws = (run && run.context && run.context.workspace) || {};
+    const seed = (run && run.context && run.context.seed) || {};
+    const stepIds = Object.keys(ws);
+    if (!stepIds.length && !Object.keys(seed).length) {
+      box.innerHTML = '<div class="model-empty">No workspace context recorded for this run.</div>';
+      return;
+    }
+
+    // Producers — every step_id in workspace, with the keys it wrote.
+    const producerRows = stepIds.map(stepId => {
+      const keys = Object.keys(ws[stepId] || {});
+      const result = (run.step_results || []).find(r => r.step_id === stepId);
+      const status = (result && result.status) || 'unknown';
+      const cls = status === 'completed' ? 'ok' : (['failed', 'error'].includes(status) ? 'fail' : 'pending');
+      return `<div class="ctx-row ctx-row-${cls}">
+        <span class="ctx-row-step">${esc(stepId)}</span>
+        <span class="ctx-row-arrow">→</span>
+        <span class="ctx-row-keys">${keys.length
+          ? keys.map(k => `<span class="ctx-key-chip">${esc(k)}</span>`).join('')
+          : '<span style="color:var(--text-muted)">no output</span>'}</span>
+      </div>`;
+    }).join('');
+
+    const seedKeys = Object.keys(seed);
+    const seedBlock = seedKeys.length ? `<div class="ctx-row ctx-row-ok">
+      <span class="ctx-row-step ctx-row-seed">seed</span>
+      <span class="ctx-row-arrow">→</span>
+      <span class="ctx-row-keys">${seedKeys.map(k => `<span class="ctx-key-chip">${esc(k)}</span>`).join('')}</span>
+    </div>` : '';
+
+    box.innerHTML = `<div class="ctx-section-head">Producers (steps → workspace keys)</div>
+      ${seedBlock}${producerRows || '<div class="model-empty">No producers yet.</div>'}`;
+  }
+
+  return { init, load, render, setFilter, select, resumeCurrent, cancelCurrent, toggleStepExpand };
 })();
 window.RunsTab = RunsTab;
 
