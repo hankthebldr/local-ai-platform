@@ -357,12 +357,23 @@ def test_admin_dropdown_present(index_soup):
 
 
 def test_admin_menu_has_three_items(index_soup):
-    """Admin menu must list API Keys, Plugins, Exports."""
+    """Admin dropdown is intentionally lean after the IA reorg
+    (PR #69): System (which is the Memory hub) · Cloud Models · Exports.
+
+    License Keys + Plugins + Skills + MCP Servers were promoted out of
+    the dropdown — License Keys is now a sub-tab under System, and
+    Plugins/Skills/MCP became top-level tabs in the main nav. This
+    test asserts the new shape so a future regression that re-stuffs
+    the dropdown gets flagged."""
     menu = index_soup.find(id="admin-menu")
     assert menu is not None
     items = menu.find_all(attrs={"role": "menuitem"})
     panels = {i.get("data-panel") for i in items}
-    assert {"admin-keys", "admin-plugins", "admin-exports"}.issubset(panels)
+    expected = {"memory", "admin-cloud", "admin-exports"}
+    assert expected.issubset(panels), (
+        f"admin dropdown drifted from the System · Cloud · Exports shape.\n"
+        f"  expected: {sorted(expected)}\n  actual:   {sorted(panels)}"
+    )
 
 
 def test_admin_panel_containers_exist(index_soup):

@@ -1,0 +1,41 @@
+# Enclave — Open WebUI (opt-in)
+#
+# Open WebUI is a generic OpenAI-compatible chat client. It was bundled
+# into the default compose previously, but it duplicates the Enclave
+# SPA's chat surface and its own signup screen confuses operators
+# expecting the Enclave UI. Use this override only when you specifically
+# want Open WebUI's chat affordances alongside the Enclave SPA.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.webui.yml up -d
+#   # then visit http://localhost:8081/   (Open WebUI is now on :8081)
+#
+# Default port moved from 8080 → 8081 to avoid common-port collisions
+# and to make the "Enclave at 8000, Open WebUI at 8081" mental model
+# unambiguous. Override with WEBUI_PORT=… if you prefer.
+
+services:
+  webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: local-ai-webui
+    ports:
+      - "${WEBUI_PORT:-8081}:8080"
+    environment:
+      # Connect to the Enclave API (OpenAI-compatible surface).
+      - OPENAI_API_BASE_URL=http://api:8000/v1
+      - OPENAI_API_KEY=${API_KEY:-sk-local}
+      # Also connect directly to Ollama for native features.
+      - OLLAMA_BASE_URL=http://ollama:11434
+      # WEBUI_AUTH=false disables Open WebUI's own signup gate — fine
+      # for trusted single-operator local-only setups.
+      - WEBUI_AUTH=${WEBUI_AUTH:-false}
+    volumes:
+      - webui_data:/app/backend/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  webui_data:
+    name: local-ai-webui-data

@@ -38,6 +38,11 @@ PUBLIC_PATHS = {
     # A2A discovery — the Agent Card is intentionally public per spec.
     # The JSON-RPC method endpoint at /a2a is still scope-gated below.
     "/.well-known/agent.json",
+    # Local-license auto-delivery — the SPA fetches this on first boot so
+    # the operator doesn't have to copy-paste the first-run key. The route
+    # itself enforces a localhost-only client check before returning the
+    # key. Placeholder for the future paid-license activation flow.
+    "/api/setup/local-license",
 }
 
 # Prefixes that skip authentication (assets the dashboard needs before the

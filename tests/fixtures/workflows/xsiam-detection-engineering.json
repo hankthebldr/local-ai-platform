@@ -1,0 +1,18 @@
+{
+  "_comment": "Execution fixture for the 6-stage XSIAM detection engineering workflow. Picked up automatically by tests/playwright/test_all_workflows.py::test_workflow_executes_with_fixture_seed when -m slow is selected. Add a similar file under tests/fixtures/workflows/<workflow_id>.json to enable end-to-end execution testing for any workflow.",
+  "timeout_seconds": 600,
+  "seed": {
+    "alert_id": "PLAYWRIGHT-FIXTURE-001",
+    "raw_log": "May 17 03:42:18 sso-edge AcmeAuth[2031]: AUTH_FAIL src_ip=185.220.101.45 user=alice@example.com host=workstation-07 reason=invalid_credentials attempts=14 user_agent=\"Mozilla/5.0 Firefox/115.0\" geoip_country=RU session_id=9c8f4a21-b6e3-4d77-92e3-7c9c4d7b2e10",
+    "asset_info": {
+      "hostname": "workstation-07",
+      "owner": "alice@example.com",
+      "criticality": "high",
+      "department": "engineering"
+    },
+    "timeframe": {
+      "start": "2026-05-18T03:00:00Z",
+      "end": "2026-05-18T04:00:00Z"
+    }
+  }
+}

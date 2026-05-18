@@ -4164,9 +4164,6 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
    palette; center is the drawflow canvas (was sharing space with a 320px
    right rail — that rail's Step Config panel relocated to live BELOW the
    agent-chat-dock so the canvas can dominate). */
-/* Composer grid — left workbench (fluid 200-260px) + canvas (fills the
-   rest). min-height scales with viewport so the canvas grows on large
-   monitors instead of staying capped at 480. */
 /* Composer grid: keeps the left workbench compact and lets the canvas
    claim the rest. The min-height pins the canvas to the available
    viewport so the composer no longer gets cut off near the bottom —
@@ -8160,6 +8157,22 @@ function initResearch() {
       if (disc.open && window.SkillsDiscover) SkillsDiscover.load();
     });
   }
+}
+
+function _renderResearchInFlight(state) {
+  const out = document.getElementById('research-output');
+  if (!out) return;
+  out.innerHTML = `
+    <div class="research-steps" id="res-steps">
+      <div class="research-step ${state.stage === 'decompose' ? 'active' : state.passed.includes('decompose') ? 'done' : ''}"><span class="step-icon">🔬</span> Decomposing topic into sub-questions…</div>
+      <div class="research-step ${state.stage === 'search' ? 'active' : state.passed.includes('search') ? 'done' : ''}"><span class="step-icon">🌐</span> Searching each angle…</div>
+      <div class="research-step ${state.stage === 'synth' ? 'active' : state.passed.includes('synth') ? 'done' : ''}"><span class="step-icon">🧠</span> Synthesizing report…</div>
+    </div>
+    <div style="margin-top:10px;font-size:0.7rem;color:var(--text-muted)">
+      Research running in the background for: <strong>${esc(state.topic)}</strong>.
+      Safe to switch tabs — results will be here when you return.
+    </div>
+  `;
 }
 
 function _renderResearchInFlight(state) {

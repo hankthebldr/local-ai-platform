@@ -22,7 +22,10 @@ DEFAULT_MODEL="${ENCLAVE_DEFAULT_MODEL:-llama3.2:3b}"
 DEFAULT_EMBED_MODEL="${ENCLAVE_DEFAULT_EMBED_MODEL:-nomic-embed-text}"
 FIRST_RUN_MARKER="$PROJECT_ROOT/data/.docker-first-run-complete"
 DASHBOARD_URL="http://localhost:8000"
-WEBUI_URL="http://localhost:8080"
+# Open WebUI moved to an opt-in compose override (docker-compose.webui.yml,
+# port 8081). It's only printed below if the operator has explicitly
+# brought up that override.
+WEBUI_URL="http://localhost:8081"
 
 if [ -t 1 ]; then
     BOLD=$'\e[1m'; DIM=$'\e[2m'; GREEN=$'\e[32m'; YELLOW=$'\e[33m'; RED=$'\e[31m'; CYAN=$'\e[36m'; RESET=$'\e[0m'
@@ -128,9 +131,12 @@ echo ""
 echo "${BOLD}${GREEN}Enclave is running.${RESET}"
 echo ""
 echo "  ${BOLD}Open in your browser:${RESET}"
-echo "      Dashboard      ${CYAN}${DASHBOARD_URL}${RESET}"
-echo "      Chat (WebUI)   ${CYAN}${WEBUI_URL}${RESET}"
+echo "      Enclave SPA    ${CYAN}${DASHBOARD_URL}${RESET}"
 echo "      API docs       ${DIM}${DASHBOARD_URL}/docs${RESET}"
+# Only mention :8081 if Open WebUI is actually running.
+if "${DC[@]}" ps --services 2>/dev/null | grep -q '^webui$'; then
+  echo "      Open WebUI     ${DIM}${WEBUI_URL}  (opt-in override)${RESET}"
+fi
 echo ""
 echo "  ${BOLD}Manage:${RESET}"
 echo "      Status         ${DIM}${DC[*]} ps${RESET}"

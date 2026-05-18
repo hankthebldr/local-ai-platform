@@ -1,0 +1,49 @@
+# Enclave — GPU acceleration override
+#
+# Use on hosts with NVIDIA hardware (e.g. BD790i + PNY RTX 4000 Blackwell):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Or set the convenience alias once:
+#
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+#   docker compose up -d
+#
+# Prereqs on the host:
+#   1. NVIDIA driver installed and visible via `nvidia-smi`.
+#   2. `nvidia-container-toolkit` installed (apt: nvidia-container-toolkit).
+#   3. Docker daemon configured with the nvidia runtime:
+#        sudo nvidia-ctk runtime configure --runtime=docker
+#        sudo systemctl restart docker
+#   4. Verify with: docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+#
+# This override only patches the `ollama` service; the API and WebUI don't
+# benefit from GPU acceleration on their own.
+
+services:
+  ollama:
+    # GPU device reservation (Compose v3.10+ standard).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              # `all` exposes every visible GPU. Pin a specific UUID via
+              # CUDA_VISIBLE_DEVICES in environment: below if you want to
+              # carve out specific cards in a multi-GPU host.
+              count: all
+              capabilities: [gpu]
+    environment:
+      # Ollama auto-detects CUDA when it's available, but these env vars
+      # make the behaviour explicit and surface tuning knobs:
+      #   OLLAMA_NUM_PARALLEL — concurrent generations per model
+      #   OLLAMA_KEEP_ALIVE   — how long to keep a model resident in VRAM
+      #   OLLAMA_GPU_LAYERS   — -1 = offload all layers (default when GPU present)
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-4}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
+      - OLLAMA_GPU_LAYERS=${OLLAMA_GPU_LAYERS:--1}
+      - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
+      # Surface the host's CUDA visibility so the operator can audit
+      # which cards Ollama is actually using.
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}

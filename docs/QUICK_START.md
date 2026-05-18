@@ -79,13 +79,26 @@ curl http://localhost:8000/v1/chat/completions \
   }'
 ```
 
-### Option 3: Web UI (Coming Soon)
+### Option 3: Enclave SPA (the application)
 
-```bash
-./webui/launch.sh
+The full Enclave UI is served by the API itself at the same origin:
+
+```
+http://localhost:8000
 ```
 
-Then open: http://localhost:8080
+It auto-fetches the first-run license key on boot and lands on the
+Composer. No separate launcher needed.
+
+### Optional: Open WebUI (third-party chat client)
+
+If you specifically want Open WebUI's chat surface alongside the Enclave
+SPA, opt in via the override file:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.webui.yml up -d
+# Open WebUI is now on http://localhost:8081
+```
 
 ## Recommended Models
 

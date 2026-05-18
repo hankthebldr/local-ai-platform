@@ -171,3 +171,22 @@ desktop/build/
 .claude/worktrees/
 .worktrees/
 .superpowers/
+
+# ── Playwright artifacts (PNG screenshots + WebM videos + traces) ───
+# Per-run, intentionally not committed; reproducible by running
+# scripts/run-playwright.sh or scripts/record-demos.sh.
+playwright-results/
+
+# ── Runtime data captured locally (feedback + per-project tasks) ────
+data/feedback/
+data/projects/
+
+# ── Private overlay (IP-grade content kept out of the public repo) ──
+# The workflow engine, agent service, and plugin loader all scan an
+# optional *-private/ directory alongside the public one. Drop methodology-
+# heavy YAMLs / markdown / Python here to keep them off GitHub while
+# still loadable by the local stack. See docs/PRIVATE_OVERLAY.md.
+workflows-private/
+agents-private/
+plugins-private/
+docs/seed-private/
