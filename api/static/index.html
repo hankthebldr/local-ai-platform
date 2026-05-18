@@ -2905,6 +2905,30 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   background: var(--bg); border: 1px solid var(--border);
   padding: 0 5px; border-radius: 999px;
 }
+.detail-conn-group-block { margin-bottom: 6px; }
+.detail-conn-kind.tone-cyan   { color: var(--cyan); }
+.detail-conn-kind.tone-amber  { color: var(--amber); }
+.detail-conn-kind.tone-purple { color: var(--purple); }
+.detail-conn-kind.tone-green  { color: var(--green, #5fd49b); }
+.conn-shared-chip {
+  font-size: 0.5rem; letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  padding: 1px 5px; margin-left: 3px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.detail-conn-shared { display: inline-flex; gap: 2px; margin-left: 6px; flex-wrap: wrap; }
+.detail-conn-expand {
+  background: none; border: none;
+  color: var(--cyan); font-family: var(--mono); font-size: 0.55rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 6px; cursor: pointer;
+  margin-left: 14px;
+}
+.detail-conn-expand:hover { color: var(--text); }
+
 .detail-conn-row {
   display: flex; align-items: center; gap: 8px;
   width: 100%; text-align: left;
@@ -3233,12 +3257,56 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 
 #drawflow-canvas { width: 100%; height: 100%; min-height: 440px; }
 #drawflow-canvas .drawflow { background: var(--bg-deep); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
-#drawflow-canvas .drawflow .drawflow-node { background: var(--bg); border: 1.5px solid var(--border); border-radius: 6px; min-width: 160px; color: var(--text); font-family: var(--mono); font-size: 0.72rem; }
-#drawflow-canvas .drawflow .drawflow-node.selected { border-color: var(--cyan); box-shadow: var(--glow-cyan); }
+#drawflow-canvas .drawflow .drawflow-node {
+  /* Solid panel — the canvas gridded background is what was making
+     nodes feel translucent. Use the lighter panel shade and a subtle
+     drop shadow so cards sit clearly *above* the grid. */
+  background: var(--bg-panel);
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  min-width: 200px;
+  max-width: 280px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+  /* Containment — no descendant body text can leak past the card edge. */
+  overflow: hidden;
+}
+#drawflow-canvas .drawflow .drawflow-node.selected {
+  border-color: var(--cyan);
+  box-shadow: 0 4px 18px rgba(0, 220, 240, 0.35), var(--glow-cyan);
+}
 #drawflow-canvas .drawflow .drawflow-node:hover { border-color: var(--cyan-dim); }
-#drawflow-canvas .drawflow .drawflow-node .input, #drawflow-canvas .drawflow .drawflow-node .output { background: var(--border); border: 2px solid var(--text-muted); }
+/* Pad the connector dots so they don't get clipped by the new
+   overflow:hidden on the wrapper. */
+#drawflow-canvas .drawflow .drawflow-node .inputs,
+#drawflow-canvas .drawflow .drawflow-node .outputs {
+  position: relative;
+  z-index: 3;
+}
+#drawflow-canvas .drawflow .drawflow-node .input, #drawflow-canvas .drawflow .drawflow-node .output {
+  background: var(--bg);
+  border: 2px solid var(--cyan-dim);
+  width: 12px; height: 12px;
+}
 #drawflow-canvas .drawflow .drawflow-node .input:hover, #drawflow-canvas .drawflow .drawflow-node .output:hover { background: var(--cyan); border-color: var(--cyan); }
-#drawflow-canvas .drawflow .connection .main-path { stroke: var(--text-muted); stroke-width: 2; }
+/* The connector line — drawflow renders each one as a single <svg> with
+   one .main-path. Make it a high-contrast cyan so it reads against the
+   grid, with a brighter selected state. */
+#drawflow-canvas .drawflow .connection {
+  position: absolute;
+  z-index: 1;
+}
+#drawflow-canvas .drawflow .connection .main-path {
+  stroke: var(--cyan-dim);
+  stroke-width: 2;
+  fill: none;
+  pointer-events: stroke;
+  transition: stroke 0.18s ease, stroke-width 0.18s ease;
+}
+#drawflow-canvas .drawflow .connection .main-path:hover { stroke: var(--cyan); stroke-width: 2.6; }
 #drawflow-canvas .drawflow .connection .main-path.selected { stroke: var(--cyan); stroke-width: 3; }
 
 .df-palette { display: flex; flex-direction: column; gap: 4px; padding: 6px; overflow-y: auto; }
@@ -3278,9 +3346,13 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
    classes below for the active-workflow visualization. */
 .df-node-body {
   border-top: 3px solid var(--role-color, var(--border));
-  padding: 7px 10px 8px;
+  padding: 8px 12px 10px;
   display: flex; gap: 9px; align-items: flex-start;
-  position: relative; min-width: 180px;
+  position: relative;
+  /* Important: width inherits the wrapper's min/max so descendants
+     ellipsis instead of pushing the card wider than the canvas
+     can accommodate. */
+  width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
 }
 .df-node-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -3297,11 +3369,16 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 .df-node-icon.tone-purple { color: var(--purple); background: rgba(179, 136, 255, 0.08); }
 .df-node-icon.tone-green  { color: var(--green,  #5fd49b); background: rgba(95, 212, 155, 0.08); }
 .df-node-icon.tone-accent { color: var(--accent); background: rgba(0, 204, 102, 0.07); }
-.df-node-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.df-node-meta {
+  flex: 1; min-width: 0; max-width: 100%;
+  display: flex; flex-direction: column; gap: 3px;
+  overflow: hidden;
+}
 .df-node-title {
-  font-size: 0.68rem; font-weight: 600; color: var(--text);
-  line-height: 1.2; letter-spacing: 0.01em;
+  font-size: 0.7rem; font-weight: 600; color: var(--text);
+  line-height: 1.25; letter-spacing: 0.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
 .df-node-gate { font-size: 0.5rem; color: var(--amber); margin-left: 4px; }
 .df-node-subline { display: flex; align-items: center; gap: 7px; }
@@ -3430,6 +3507,139 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 }
 
 /* Floating progress chip — pinned over the canvas while a run is live. */
+/* ── Runs tab — dedicated workflow run monitor ─────────────────── */
+.runs-tab-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: clamp(540px, calc(100vh - 200px), 1600px);
+}
+@media (max-width: 980px) {
+  .runs-tab-layout { grid-template-columns: 1fr; min-height: 0; }
+}
+.runs-tab-list { display: flex; flex-direction: column; min-height: 0; padding: 12px 12px 0; }
+.runs-tab-list-head { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; }
+.runs-tab-filter-row { display: flex; gap: 4px; padding: 0 0 8px; border-bottom: 1px solid var(--border); }
+.runs-tab-filter {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted); font-family: var(--mono); font-size: 0.55rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 3px; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.runs-tab-filter:hover { color: var(--text); border-color: var(--cyan-dim); }
+.runs-tab-filter.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-ghost); }
+.runs-tab-rows { flex: 1; overflow-y: auto; padding: 8px 0; display: flex; flex-direction: column; gap: 4px; }
+.runs-tab-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 2px 8px;
+  padding: 7px 9px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.runs-tab-row:hover { border-color: var(--cyan-dim); transform: translateX(2px); }
+.runs-tab-row.selected { border-color: var(--cyan); background: rgba(0, 220, 240, 0.04); }
+.runs-tab-row-title { color: var(--text); font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.runs-tab-row-status {
+  font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 2px;
+  align-self: start;
+}
+.runs-tab-row-status.completed { color: var(--accent); border: 1px solid var(--accent-dim); }
+.runs-tab-row-status.failed    { color: var(--red,#ff5252); border: 1px solid rgba(255,80,80,0.4); }
+.runs-tab-row-status.running   { color: var(--cyan); border: 1px solid var(--cyan-dim); animation: dfRunPulse 1.4s ease-in-out infinite; }
+.runs-tab-row-status.queued    { color: var(--amber); border: 1px solid rgba(255,165,0,0.4); }
+.runs-tab-row-status.canceled  { color: var(--text-muted); border: 1px solid var(--border); }
+.runs-tab-row-meta { grid-column: 1 / -1; font-family: var(--mono); font-size: 0.55rem; color: var(--text-muted); }
+
+.runs-tab-detail { display: flex; flex-direction: column; min-height: 0; padding: 12px; }
+.runs-tab-detail-head { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.runs-tab-floor { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.runs-tab-graph {
+  flex: 1; min-height: 280px; position: relative;
+  background: var(--bg-deep);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 20px 20px;
+  border: 1px solid var(--border); border-radius: 6px;
+  overflow: hidden;
+}
+#runs-tab-canvas { width: 100%; height: 100%; }
+.runs-tab-graph-empty {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 6px;
+  color: var(--text-muted); pointer-events: none;
+}
+.runs-tab-progress-chip {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 10px;
+  background: rgba(6, 10, 16, 0.92);
+  border: 1px solid var(--cyan-dim); border-radius: 999px;
+  padding: 6px 14px 6px 8px;
+  font-family: var(--mono); font-size: 0.66rem; color: var(--text);
+}
+.runs-tab-progress-chip[hidden] { display: none; }
+.runs-tab-steps {
+  max-height: 30vh; overflow-y: auto; padding: 10px 12px;
+}
+
+/* Floating Step Config popup — primary edit surface, opens on node
+   select. Position is initial (top-right) and persisted across reloads
+   via localStorage when dragged. */
+.df-config-popup {
+  position: absolute;
+  top: 56px;
+  right: 14px;
+  width: clamp(320px, 30vw, 420px);
+  max-height: calc(100% - 80px);
+  z-index: 25;
+  display: flex; flex-direction: column;
+  background: rgba(6, 10, 16, 0.96);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  font-family: var(--mono);
+}
+.df-config-popup[hidden] { display: none; }
+.df-config-popup.is-dragging { cursor: grabbing; user-select: none; }
+.df-config-popup-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 220, 240, 0.04);
+  border-radius: 7px 7px 0 0;
+  cursor: grab;
+}
+.df-config-popup.is-dragging .df-config-popup-head { cursor: grabbing; }
+.df-config-popup-grip {
+  color: var(--text-muted); font-size: 0.7rem; line-height: 1;
+  letter-spacing: -2px;
+}
+.df-config-popup-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--mono); font-size: 0.7rem;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.df-config-popup-btn:hover { color: var(--cyan); border-color: var(--cyan-dim); background: rgba(0, 220, 240, 0.06); }
+.df-config-popup-body {
+  flex: 1; min-height: 0;
+  overflow: auto;
+  padding: 0 14px 12px;
+}
+
 .df-run-progress {
   position: absolute; top: 8px; left: 50%;
   transform: translateX(-50%);
@@ -3528,11 +3738,16 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 /* Composer grid — left workbench (fluid 200-260px) + canvas (fills the
    rest). min-height scales with viewport so the canvas grows on large
    monitors instead of staying capped at 480. */
+/* Composer grid: keeps the left workbench compact and lets the canvas
+   claim the rest. The min-height pins the canvas to the available
+   viewport so the composer no longer gets cut off near the bottom —
+   we subtract the headers + top toolbar + project bar + workstream
+   strip and clamp to a minimum that still works on a small laptop. */
 .composer-grid {
   display: grid;
   grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
   gap: 12px;
-  min-height: max(480px, calc(100vh - 420px));
+  min-height: clamp(520px, calc(100vh - 240px), 1600px);
   width: 100%;
   box-sizing: border-box;
 }
@@ -3542,10 +3757,10 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
     min-height: 0;
   }
 }
-.composer-canvas-panel { min-height: max(480px, calc(100vh - 460px)) !important; }
-.composer-left, .composer-center, .composer-right { display: flex; flex-direction: column; gap: 10px; }
-.composer-left-panel { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-.composer-canvas-panel { flex: 1; min-height: 480px; position: relative; padding: 0; overflow: hidden; }
+.composer-canvas-panel { min-height: clamp(520px, calc(100vh - 320px), 1600px) !important; }
+.composer-left, .composer-center, .composer-right { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.composer-left-panel { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; min-height: 0; }
+.composer-canvas-panel { flex: 1; min-height: 520px; position: relative; padding: 0; overflow: hidden; }
 
 /* Floating canvas controls (zoom + fullscreen). Top-right, over the canvas. */
 .composer-canvas-controls {
@@ -4267,6 +4482,7 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   <div class="tab-nav" role="tablist">
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Composer</button>
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
+    <button class="tab-btn" data-tab="runs" onclick="switchTab('runs', this)">Runs<span class="tab-count" id="runs-tab-count"></span></button>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Skill Lab<span class="tab-count" id="res-count"></span></button>
     <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
@@ -4477,6 +4693,24 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
             <span class="df-run-progress-bar"><span class="df-run-progress-bar-fill" id="df-run-progress-bar-fill" style="width:0%"></span></span>
           </div>
           <div id="drawflow-canvas"></div>
+          <!-- Step Config popup — auto-opens on node select. Same body
+               that powers the workstream's Step Config tab; this is just
+               a floating mount so the operator can edit without losing
+               canvas context. Drag from the header to reposition. -->
+          <div id="df-config-popup" class="df-config-popup" hidden role="dialog" aria-labelledby="df-config-popup-title">
+            <div class="df-config-popup-head" id="df-config-popup-head">
+              <span class="df-config-popup-grip" aria-hidden="true">⋮⋮</span>
+              <span class="panel-label" id="df-config-popup-title" style="margin:0;flex:1">Step Config</span>
+              <button type="button" class="df-config-popup-btn" id="df-config-popup-dock"
+                      onclick="toggleStepConfigDock()"
+                      title="Dock to the bottom workstream tab instead of floating">⤓</button>
+              <button type="button" class="df-config-popup-btn" onclick="closeStepConfigPopup()"
+                      title="Close (Esc)">✕</button>
+            </div>
+            <div class="df-config-popup-body" id="df-config-popup-body">
+              <div class="composer-config-empty">No node selected.</div>
+            </div>
+          </div>
           <div class="composer-canvas-empty" id="composer-canvas-empty">
             <div class="composer-canvas-empty-inner">
               <div class="composer-canvas-empty-title">Compose a workflow</div>
@@ -4972,6 +5206,140 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
         </div>
       </div>
     </details>
+
+    <!-- Skills Discover — relocated from the Skills Lab so all install-
+         surfaces live in one place. Same SkillsDiscover module powers it. -->
+    <details class="panel skills-discover-panel" style="margin-top:16px;padding:14px 16px" id="skills-discover-panel">
+      <summary class="skills-discover-summary" style="cursor:pointer;display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--cyan);font-family:var(--mono);letter-spacing:0.04em;">
+        <span>// Discover — Skills catalog</span>
+        <span class="skills-discover-meta" id="skills-discover-meta">tap to load…</span>
+        <span style="flex:1"></span>
+        <span class="skills-discover-arrow" aria-hidden="true">▾</span>
+      </summary>
+      <div class="skills-discover-body" id="skills-discover-body" style="margin-top:14px">
+        <div class="skills-discover-toolbar">
+          <input class="search-input" type="text" id="skills-discover-search"
+                 placeholder="Filter discovered skills…" oninput="SkillsDiscover.render()" />
+          <select class="model-select" id="skills-discover-cat" onchange="SkillsDiscover.render()">
+            <option value="">All categories</option>
+          </select>
+          <div class="skills-discover-viewtoggle" role="tablist" aria-label="View mode">
+            <button type="button" class="skills-disc-view active" data-view="list"
+                    onclick="SkillsDiscover.setView('list')" title="List view">≡</button>
+            <button type="button" class="skills-disc-view" data-view="icons"
+                    onclick="SkillsDiscover.setView('icons')" title="Icon explorer">▦</button>
+          </div>
+          <button class="action-btn" onclick="SkillsDiscover.load(true)" title="Refresh the catalog">⟲</button>
+        </div>
+        <div class="skills-discover-grid" id="skills-discover-grid">
+          <div class="model-empty">Loading discoverable skills…</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Plugins overview — installed plugin packs + their tools. Local
+         discovery only; remote plugin registry isn't shipped yet. -->
+    <details class="panel" style="margin-top:16px;padding:14px 16px" id="plugins-discover-section">
+      <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--cyan);font-family:var(--mono);letter-spacing:0.04em;">
+        <span>// Discover — Plugins (installed)</span>
+        <span class="tab-count" id="plugins-disc-count" style="color:var(--text-muted);font-size:0.7rem"></span>
+        <span style="flex:1"></span>
+        <span style="font-size:0.62rem;color:var(--text-muted);font-weight:normal">click to expand</span>
+      </summary>
+      <div style="margin-top:14px">
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:10px">
+          Plugins live under <code>plugins/&lt;id&gt;/plugin.yaml</code>. Add a new one by dropping a manifest there and reloading.
+        </div>
+        <div id="plugins-discover-grid">
+          <div class="model-empty">Loading…</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- MCP Servers overview — registered MCP endpoints. -->
+    <details class="panel" style="margin-top:16px;padding:14px 16px" id="mcps-discover-section">
+      <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--cyan);font-family:var(--mono);letter-spacing:0.04em;">
+        <span>// Discover — MCP Servers</span>
+        <span class="tab-count" id="mcps-disc-count" style="color:var(--text-muted);font-size:0.7rem"></span>
+        <span style="flex:1"></span>
+        <span style="font-size:0.62rem;color:var(--text-muted);font-weight:normal">click to expand</span>
+      </summary>
+      <div style="margin-top:14px">
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:10px">
+          Register new servers under <a href="#" onclick="AdminMenu.select('admin-mcp');return false" style="color:var(--cyan)">Admin → MCP</a>. This view mirrors the composer workbench but lives alongside the other discover surfaces.
+        </div>
+        <div id="mcps-discover-grid">
+          <div class="model-empty">Loading…</div>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <!-- ═══ TAB: RUNS ════════════════════════════════════════════════
+       Dedicated surface for monitoring workflow runs. Left rail lists
+       recent runs (auto-refreshed); right pane renders the run's DAG
+       with the same status overlays the composer uses. Selecting a
+       row in-flight starts live polling. -->
+  <div class="tab-content" id="tab-runs" style="display:none">
+    <div class="runs-tab-layout">
+      <!-- LEFT: filterable list of recent runs -->
+      <div class="runs-tab-list panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="runs-tab-list-head">
+          <div class="panel-label" style="margin:0;flex:1">Recent Runs</div>
+          <input type="text" class="search-input" id="runs-tab-search" placeholder="Filter…"
+                 oninput="RunsTab.render()" style="max-width:120px;font-size:0.66rem" />
+          <button class="action-btn xs ghost" onclick="RunsTab.load()" title="Refresh">⟲</button>
+        </div>
+        <div class="runs-tab-filter-row">
+          <button type="button" class="runs-tab-filter active" data-filter="all" onclick="RunsTab.setFilter('all')">All</button>
+          <button type="button" class="runs-tab-filter" data-filter="running" onclick="RunsTab.setFilter('running')">Running</button>
+          <button type="button" class="runs-tab-filter" data-filter="completed" onclick="RunsTab.setFilter('completed')">Completed</button>
+          <button type="button" class="runs-tab-filter" data-filter="failed" onclick="RunsTab.setFilter('failed')">Failed</button>
+        </div>
+        <div id="runs-tab-rows" class="runs-tab-rows">
+          <div class="model-empty">Loading…</div>
+        </div>
+      </div>
+
+      <!-- RIGHT: DAG view + per-step output -->
+      <div class="runs-tab-detail panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="runs-tab-detail-head" id="runs-tab-detail-head">
+          <div class="panel-label" style="margin:0;flex:1">Run Detail</div>
+          <span class="ws-run-meta" id="runs-tab-detail-meta">Pick a run on the left</span>
+          <button class="action-btn xs" id="runs-tab-resume-btn"
+                  onclick="RunsTab.resumeCurrent()" hidden>Resume</button>
+          <button class="action-btn xs ghost" id="runs-tab-cancel-btn"
+                  onclick="RunsTab.cancelCurrent()" hidden>Cancel</button>
+        </div>
+
+        <div class="runs-tab-floor">
+          <!-- Mini DAG — same dfNodeHtml / status classes as the composer,
+               but rendered into its own drawflow instance + read-only. -->
+          <div class="runs-tab-graph">
+            <div id="runs-tab-canvas"></div>
+            <div class="runs-tab-graph-empty" id="runs-tab-graph-empty">
+              <div class="composer-canvas-empty-title">Workflow Progress</div>
+              <div class="composer-canvas-empty-sub">Select a run on the left to see its DAG with live status overlays.</div>
+            </div>
+            <div class="runs-tab-progress-chip" id="runs-tab-progress-chip" hidden>
+              <span class="df-run-progress-spinner" id="runs-tab-spinner"></span>
+              <span class="df-run-progress-current" id="runs-tab-current">—</span>
+              <span class="df-run-progress-count" id="runs-tab-chip-count">0/0</span>
+              <span class="df-run-progress-bar"><span class="df-run-progress-bar-fill" id="runs-tab-bar" style="width:0%"></span></span>
+            </div>
+          </div>
+          <!-- Step output strip (re-uses the workstream styling) -->
+          <div class="runs-tab-steps panel" id="runs-tab-steps">
+            <div class="panel-label">Step Results</div>
+            <div id="runs-tab-steps-body">
+              <div class="model-empty">No run selected.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ═══ TAB: RESEARCH ════════════════════════════════════════════ -->
@@ -5046,36 +5414,9 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
           </div>
         </div>
 
-        <!-- Skills Discover — curated skill catalog, install into a plugin. -->
-        <details class="panel skills-discover-panel" id="skills-discover-panel">
-          <summary class="skills-discover-summary">
-            <span class="panel-label" style="margin:0">Discover Skills</span>
-            <span class="skills-discover-meta" id="skills-discover-meta">tap to load…</span>
-            <span class="skills-discover-arrow" aria-hidden="true">▾</span>
-          </summary>
-          <div class="skills-discover-body" id="skills-discover-body">
-            <div class="skills-discover-toolbar">
-              <input class="search-input" type="text" id="skills-discover-search"
-                     placeholder="Filter discovered skills…" oninput="SkillsDiscover.render()" />
-              <select class="model-select" id="skills-discover-cat" onchange="SkillsDiscover.render()">
-                <option value="">All categories</option>
-              </select>
-              <!-- View-mode toggle: dense list (existing) vs. icon-explorer
-                   grid (new). Icon-explorer leads with persona glyphs so the
-                   operator can browse by feel instead of reading every line. -->
-              <div class="skills-discover-viewtoggle" role="tablist" aria-label="View mode">
-                <button type="button" class="skills-disc-view active" data-view="list"
-                        onclick="SkillsDiscover.setView('list')" title="List view">≡</button>
-                <button type="button" class="skills-disc-view" data-view="icons"
-                        onclick="SkillsDiscover.setView('icons')" title="Icon explorer">▦</button>
-              </div>
-              <button class="action-btn" onclick="SkillsDiscover.load(true)" title="Refresh the catalog">⟲</button>
-            </div>
-            <div class="skills-discover-grid" id="skills-discover-grid">
-              <div class="model-empty">Loading discoverable skills…</div>
-            </div>
-          </div>
-        </details>
+        <!-- Skills Discover moved to the Models tab (System page) so all
+             discover surfaces (models, skills, plugins, MCPs) live in one
+             place. The Skills Lab keeps the graph + research output here. -->
       </div>
 
     </div>
@@ -5807,6 +6148,7 @@ function switchTab(name, el) {
 
   if (name === 'dashboard') ComposerView.init();
   if (name === 'workflow-index') { WorkflowIndex.load(); if (window.Kanban) Kanban.refresh(); }
+  if (name === 'runs' && window.RunsTab) RunsTab.init();
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
   if (name === 'memory') { loadMemory(); loadMemoryTab(); }
   // Discover was promoted-then-demoted into Models tab as a collapsible
@@ -6536,9 +6878,61 @@ async function loadCatalog() {
     document.getElementById('inv-count').textContent = `(${d.installed_count}/${d.total})`;
 
     renderCatalog();
+    // Skills / Plugins / MCPs Discover live under this same tab now,
+    // so kick their loaders. Idempotent if the operator never expands.
+    if (window.SkillsDiscover) SkillsDiscover.load();
+    loadPluginsDiscover();
+    loadMcpsDiscover();
   } catch(e) {
     document.getElementById('inv-grid').innerHTML =
       `<div class="model-empty" style="color:var(--red)">Failed to load catalog: ${e.message}</div>`;
+  }
+}
+
+// Plugins / MCPs discover sections under the Models tab — small loaders
+// that reuse the workbench renderers but mount into the System-page
+// grids. Counts surface in the section header.
+async function loadPluginsDiscover() {
+  const grid = document.getElementById('plugins-discover-grid');
+  if (!grid) return;
+  try {
+    const r = await fetch('/api/plugins');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const list = Array.isArray(data) ? data : (data.plugins || []);
+    const countEl = document.getElementById('plugins-disc-count');
+    if (countEl) countEl.textContent = list.length ? `(${list.length})` : '';
+    // Re-use the workbench renderer; it expects to write to
+    // #bench-plugins-list, so we swap the id-target by temporarily
+    // pointing the helper at our grid.
+    const tmpId = 'bench-plugins-list';
+    const original = document.getElementById(tmpId);
+    grid.id = tmpId;
+    renderPluginsWorkbench(list);
+    grid.id = 'plugins-discover-grid';
+    if (original) original.id = tmpId;
+  } catch (e) {
+    grid.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed to load plugins: ${esc(e.message)}</div>`;
+  }
+}
+async function loadMcpsDiscover() {
+  const grid = document.getElementById('mcps-discover-grid');
+  if (!grid) return;
+  try {
+    const r = await fetch('/api/mcp/servers');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const list = Array.isArray(data) ? data : (data.servers || []);
+    const countEl = document.getElementById('mcps-disc-count');
+    if (countEl) countEl.textContent = list.length ? `(${list.length})` : '';
+    const tmpId = 'bench-mcps-list';
+    const original = document.getElementById(tmpId);
+    grid.id = tmpId;
+    renderMcpsWorkbench(list);
+    grid.id = 'mcps-discover-grid';
+    if (original) original.id = tmpId;
+  } catch (e) {
+    grid.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed to load MCP servers: ${esc(e.message)}</div>`;
   }
 }
 
@@ -7306,6 +7700,18 @@ function toggleSessionDetailExpand(force) {
 }
 window.toggleSessionDetailExpand = toggleSessionDetailExpand;
 
+// Per-link-kind expand state — Set<kind> grows/shrinks as the operator
+// clicks "+N more" / "↑ collapse" buttons. Re-rendering selectNode
+// reflects the current expand state.
+window._connExpand = window._connExpand || new Set();
+function toggleConnGroupExpand(kind) {
+  if (window._connExpand.has(kind)) window._connExpand.delete(kind);
+  else window._connExpand.add(kind);
+  // Re-render the current selection so the expand state takes effect.
+  if (window.selectedNode) selectNode(window.selectedNode);
+}
+window.toggleConnGroupExpand = toggleConnGroupExpand;
+
 function clearGraphSelection() {
   selectedNode = null;
   const panel = document.getElementById('session-detail');
@@ -7369,6 +7775,7 @@ function hideTooltip() {
 
 function selectNode(d) {
   selectedNode = d;
+  window.selectedNode = d;  // expose so re-render helpers can re-call selectNode
   const panel = document.getElementById('session-detail');
   if (!panel) return;
   panel.classList.add('open');
@@ -7420,7 +7827,8 @@ function selectNode(d) {
     previewEl.textContent = bits[0] || '';
   }
 
-  // ── Connections drilldown — click to re-select ─────────────────
+  // ── Connections drilldown — group by link kind, show shared
+  //    attributes inline (tag/role/workflow), expand for >5. ─────────
   const connEl = document.getElementById('session-detail-connections');
   const st = window._graphState;
   if (connEl && st) {
@@ -7428,26 +7836,62 @@ function selectNode(d) {
     if (!neighbors.length) {
       connEl.innerHTML = `<div class="detail-conn-empty">No connections.</div>`;
     } else {
-      // Group by neighbor type for legibility.
-      const groups = { session: [], topic: [], source: [], other: [] };
-      neighbors.forEach(nid => {
+      // Build a per-neighbor record with the link kind + shared evidence.
+      // The linkPairs map is keyed "a||b" so either direction resolves.
+      const recs = neighbors.map(nid => {
+        const link = st.linkPairs.get(`${d.id}||${nid}`) ||
+                     st.linkPairs.get(`${nid}||${d.id}`);
         const n = st.nodeById.get(nid);
-        if (!n) return;
-        (groups[n.type] || groups.other).push(n);
-      });
-      const order = ['session', 'topic', 'source', 'other'];
-      const rows = order.flatMap(kind => {
-        const items = groups[kind] || [];
-        if (!items.length) return [];
-        return [`<div class="detail-conn-group"><span class="detail-conn-kind kind-${esc(kind)}">${esc(kind)}</span><span class="detail-conn-count">${items.length}</span></div>`,
-          ...items.slice(0, 12).map(n =>
-            `<button type="button" class="detail-conn-row" data-node-id="${esc(n.id)}" onclick="selectNodeById('${esc(n.id)}')" title="Drill in to ${esc(n.label || n.id)}">
-               <span class="detail-conn-dot kind-${esc(n.type)}"></span>
-               <span class="detail-conn-label">${esc((n.label || n.id).slice(0, 60))}</span>
-             </button>`),
-          items.length > 12 ? `<div class="detail-conn-more">+ ${items.length - 12} more</div>` : ''];
-      });
-      connEl.innerHTML = `<div class="detail-conn-title">Connections · ${neighbors.length}</div>${rows.join('')}`;
+        return {
+          nid, node: n,
+          kind: link ? (link.type || 'related') : 'related',
+          shared: (link && Array.isArray(link.shared)) ? link.shared : [],
+          weight: (link && link.weight) || 1,
+        };
+      }).filter(r => r.node);
+      // Group by link KIND (the relationship type), not the neighbor's
+      // node type — that's the question the user is actually asking:
+      // "why are these two connected?"
+      const groups = {};
+      recs.forEach(r => { (groups[r.kind] = groups[r.kind] || []).push(r); });
+      const kindOrder = Object.keys(groups).sort((a, b) =>
+        (groups[b].length) - (groups[a].length)
+      );
+      const html = kindOrder.map(kind => {
+        const items = groups[kind].sort((a, b) => (b.weight || 1) - (a.weight || 1));
+        const style = (typeof LINK_STYLE !== 'undefined' && LINK_STYLE[kind]) || { label: kind, tone: 'amber' };
+        const showAll = (window._connExpand && window._connExpand.has(kind));
+        const visible = showAll ? items : items.slice(0, 5);
+        const moreCount = items.length - visible.length;
+        const rows = visible.map(r => {
+          const n = r.node;
+          const sharedChips = (r.shared || []).slice(0, 4)
+            .map(s => `<span class="conn-shared-chip">${esc(String(s).slice(0, 20))}</span>`)
+            .join('');
+          return `<button type="button" class="detail-conn-row" data-node-id="${esc(n.id)}"
+                          onclick="selectNodeById('${esc(n.id)}')"
+                          title="Drill into ${esc(n.label || n.id)} — connected by ${esc(kind)}">
+            <span class="detail-conn-dot kind-${esc(n.type)}"></span>
+            <span class="detail-conn-label">${esc((n.label || n.id).slice(0, 60))}</span>
+            <span class="detail-conn-shared">${sharedChips}</span>
+          </button>`;
+        }).join('');
+        const expandBtn = items.length > 5
+          ? `<button type="button" class="detail-conn-expand"
+                onclick="toggleConnGroupExpand('${esc(kind)}')">
+                ${showAll ? '↑ collapse' : `+${moreCount} more`}
+             </button>`
+          : '';
+        return `<div class="detail-conn-group-block">
+          <div class="detail-conn-group">
+            <span class="detail-conn-kind tone-${esc(style.tone)}">${esc(style.label || kind)}</span>
+            <span class="detail-conn-count">${items.length}</span>
+          </div>
+          ${rows}
+          ${expandBtn}
+        </div>`;
+      }).join('');
+      connEl.innerHTML = `<div class="detail-conn-title">Why connected · ${neighbors.length} link${neighbors.length === 1 ? '' : 's'}</div>${html}`;
     }
   }
 
@@ -9199,10 +9643,15 @@ function dfNodeHtml(data) {
 
 function dfRenderConfigPanel(nodeId) {
   const data = dfNodeData[nodeId];
+  // Two target surfaces share one HTML body: the popup (primary, auto-
+  // opens on node select) and the workstream tab (dock fallback).
   const panel = document.getElementById('df-config-panel');
+  const popupBody = document.getElementById('df-config-popup-body');
+  const popupTitle = document.getElementById('df-config-popup-title');
   const title = document.getElementById('df-config-title');
-  if (!data || !panel) return;
-  title.textContent = data.id;
+  if (!data || (!panel && !popupBody)) return;
+  if (title) title.textContent = data.id;
+  if (popupTitle) popupTitle.textContent = data.id;
   const gateOps = ['not_empty','contains','not_contains','matches','has_key','all_keys','gt','lt','gte','lte','equals','not_equals','length_gt','length_lt','is_type'];
   let gatesHtml = (data.quality_gates || []).map((gate, idx) => `
     <div class="df-gate-row">
@@ -9212,7 +9661,7 @@ function dfRenderConfigPanel(nodeId) {
       <button onclick="dfRemoveGate(${nodeId},${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;padding:2px 4px">✕</button>
     </div>`).join('');
   const fmtOptions = Object.keys(dfFmtDescs).map(f => `<option value="${f}"${data.output_format===f?' selected':''}>${f}</option>`).join('');
-  panel.innerHTML = `
+  const html = `
     <div style="display:flex;flex-direction:column;gap:0">
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Identity</div>
@@ -9279,7 +9728,104 @@ function dfRenderConfigPanel(nodeId) {
         </div>
       </div>
     </div>`;
+  // Write the same body to both targets. Popup is the primary surface
+  // (opens automatically on node-select); workstream tab is the dock
+  // fallback for operators who prefer a stationary panel.
+  if (panel)     panel.innerHTML     = html;
+  if (popupBody) popupBody.innerHTML = html;
+  // Auto-open the popup unless the operator has docked it.
+  if (!window._stepConfigDocked) openStepConfigPopup();
 }
+
+// ── Step Config popup controls ─────────────────────────────────────
+function openStepConfigPopup() {
+  const pop = document.getElementById('df-config-popup');
+  if (!pop) return;
+  pop.removeAttribute('hidden');
+}
+function closeStepConfigPopup() {
+  const pop = document.getElementById('df-config-popup');
+  if (!pop) return;
+  pop.setAttribute('hidden', '');
+}
+function toggleStepConfigDock() {
+  // Docked → the popup stays closed even on node-select; the operator
+  // works from the workstream Step Config tab instead. Toggling back
+  // restores the auto-open behaviour.
+  window._stepConfigDocked = !window._stepConfigDocked;
+  const btn = document.getElementById('df-config-popup-dock');
+  if (btn) {
+    btn.textContent = window._stepConfigDocked ? '⤴' : '⤓';
+    btn.title = window._stepConfigDocked
+      ? 'Undock: floating popup auto-opens on node select'
+      : 'Dock to the bottom workstream tab instead of floating';
+  }
+  if (window._stepConfigDocked) closeStepConfigPopup();
+}
+window.openStepConfigPopup   = openStepConfigPopup;
+window.closeStepConfigPopup  = closeStepConfigPopup;
+window.toggleStepConfigDock  = toggleStepConfigDock;
+
+// Drag-to-reposition. Persist position to localStorage so the popup
+// stays where the operator left it across reloads.
+(function bindStepConfigDrag() {
+  let dragging = false;
+  let startX = 0, startY = 0, baseLeft = 0, baseTop = 0;
+  document.addEventListener('mousedown', (e) => {
+    const head = e.target.closest('#df-config-popup-head');
+    if (!head) return;
+    if (e.target.closest('.df-config-popup-btn')) return; // skip close/dock clicks
+    const pop = document.getElementById('df-config-popup');
+    if (!pop) return;
+    dragging = true;
+    const r = pop.getBoundingClientRect();
+    startX = e.clientX; startY = e.clientY;
+    baseLeft = r.left; baseTop = r.top;
+    pop.classList.add('is-dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const pop = document.getElementById('df-config-popup');
+    if (!pop) return;
+    const x = baseLeft + (e.clientX - startX);
+    const y = baseTop  + (e.clientY - startY);
+    // Constrain to viewport so the head stays grabable.
+    const W = window.innerWidth, H = window.innerHeight;
+    pop.style.left  = Math.max(8, Math.min(x, W - 80)) + 'px';
+    pop.style.top   = Math.max(8, Math.min(y, H - 80)) + 'px';
+    pop.style.right = 'auto';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    const pop = document.getElementById('df-config-popup');
+    if (pop) {
+      pop.classList.remove('is-dragging');
+      try {
+        localStorage.setItem('enclave.stepConfigPos', JSON.stringify({
+          left: pop.style.left, top: pop.style.top,
+        }));
+      } catch (_) {}
+    }
+  });
+  // Restore last-saved position on first paint.
+  try {
+    const saved = localStorage.getItem('enclave.stepConfigPos');
+    if (saved) {
+      const pos = JSON.parse(saved);
+      const pop = document.getElementById('df-config-popup');
+      if (pop && pos.left) { pop.style.left = pos.left; pop.style.top = pos.top; pop.style.right = 'auto'; }
+    }
+  } catch (_) {}
+})();
+
+// Escape key closes the popup (matches every other modal in the SPA).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const pop = document.getElementById('df-config-popup');
+  if (pop && !pop.hasAttribute('hidden')) closeStepConfigPopup();
+});
 
 // Debounce timers per node — the live-edit path fires on every
 // keystroke for text fields, but we batch the canvas re-render to one
@@ -9459,8 +10005,15 @@ async function dfRunWorkflow() {
 function dfClearConfigPanel() {
   const panel = document.getElementById('df-config-panel');
   const title = document.getElementById('df-config-title');
-  if (panel) panel.innerHTML = '<div style="padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.64rem">Drag a step from the palette to begin. Click a node to configure it.</div>';
-  if (title) title.textContent = 'Config';
+  const popupBody = document.getElementById('df-config-popup-body');
+  const popupTitle = document.getElementById('df-config-popup-title');
+  const emptyHtml = '<div style="padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.64rem">Drag a step from the palette to begin. Click a node to configure it.</div>';
+  if (panel)      panel.innerHTML      = emptyHtml;
+  if (popupBody)  popupBody.innerHTML  = emptyHtml;
+  if (title)      title.textContent    = 'Config';
+  if (popupTitle) popupTitle.textContent = 'Step Config';
+  // Close the popup so it doesn't linger empty after a deselect.
+  closeStepConfigPopup();
 }
 
 /* ── Canvas controls: zoom + fullscreen ─────────────────────────── */
@@ -13551,6 +14104,9 @@ async function composerLoadById(wfId) {
       const c = document.getElementById('df-wf-category'); if (c) c.value = defn.category;
     }
     // Place steps on the canvas via the existing palette template hook.
+    // Track step.id → drawflow node id so we can wire depends_on edges
+    // after every node exists.
+    const idMap = {};
     (defn.steps || []).forEach((step, i) => {
       const tmplKey = (step.role && dfStepTemplates.find(t => t.role === step.role)) ? step.role : 'custom';
       const tmpl = dfStepTemplates.find(t => t.key === tmplKey) || dfStepTemplates.find(t => t.key === 'custom');
@@ -13569,9 +14125,46 @@ async function composerLoadById(wfId) {
         d.tools = step.tools || [];
         d.skills = step.skills || [];
         dfUpdateNodeData(nodeId, 'name', d.name);
+        idMap[d.id] = nodeId;
       }
     });
-    setTimeout(() => { try { dfAutoLayout(); } catch (e) {} }, 50);
+
+    // Wire the DAG. Each step's `depends_on` is the upstream step id(s);
+    // every dependency becomes an edge from upstream.output_1 →
+    // downstream.input_1. dfEditor.addConnection expects DRAWFLOW ids
+    // (integers), not logical step ids, so we route through idMap.
+    let edgesAdded = 0;
+    (defn.steps || []).forEach((step) => {
+      const downstreamId = idMap[step.id];
+      if (downstreamId == null) return;
+      const deps = Array.isArray(step.depends_on) ? step.depends_on
+                 : (step.depends_on ? [step.depends_on] : []);
+      deps.forEach((depStepId) => {
+        const upstreamId = idMap[depStepId];
+        if (upstreamId == null) return;
+        try {
+          dfEditor.addConnection(upstreamId, downstreamId, 'output_1', 'input_1');
+          edgesAdded += 1;
+        } catch (e) {
+          // Duplicate or invalid — non-fatal, keep wiring the rest.
+          console.warn(`Connection ${depStepId}→${step.id} failed:`, e && e.message);
+        }
+      });
+    });
+
+    // Auto-layout AFTER edges exist so dagre's topological sort actually
+    // has a graph to lay out (with no edges it stacked everything at
+    // top-left). Then ComposerView refreshes the empty-state flag.
+    setTimeout(() => {
+      try { dfAutoLayout(); } catch (e) { console.warn('auto-layout failed', e); }
+    }, 50);
+    if (window.Toast) {
+      Toast.info(
+        `Loaded ${defn.id}`,
+        `${(defn.steps || []).length} steps, ${edgesAdded} edges`,
+        { ttl: 2400 }
+      );
+    }
     ComposerView.updateCanvasEmptyState();
   } catch (e) { alert('Load error: ' + e.message); }
 }
@@ -13792,6 +14385,303 @@ const WorkflowIndex = (function () {
 
   return { load, refresh, setCategory, openInComposer, run, exportBundle, openImportDialog };
 })();
+
+// ── Runs tab ────────────────────────────────────────────────────────
+// A read-only mirror of the composer canvas, populated with whichever
+// workflow run the operator selects. Per-step status overlays come from
+// the same `is-running / is-completed / is-failed` classes the composer
+// uses, so live runs animate identically here.
+const RunsTab = (function () {
+  let _rows = [];
+  let _activeFilter = 'all';
+  let _selectedId = null;
+  let _editor = null;          // separate drawflow instance for this tab
+  let _idMap = {};             // logical step id → drawflow node id
+  let _pollHandle = null;
+
+  function init() {
+    if (!_editor) _initEditor();
+    load();
+  }
+
+  async function load() {
+    const box = document.getElementById('runs-tab-rows');
+    if (!box) return;
+    try {
+      const r = await fetch('/api/workflows/runs?limit=40');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      _rows = Array.isArray(data) ? data : (data.runs || []);
+      // Single tab-strip counter — appears next to "Runs" in the nav.
+      const chip = document.getElementById('runs-tab-count');
+      if (chip) chip.textContent = _rows.length ? `(${_rows.length})` : '';
+      render();
+    } catch (e) {
+      box.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function setFilter(f) {
+    _activeFilter = f;
+    document.querySelectorAll('.runs-tab-filter').forEach(b => {
+      b.classList.toggle('active', b.dataset.filter === f);
+    });
+    render();
+  }
+
+  function render() {
+    const box = document.getElementById('runs-tab-rows');
+    if (!box) return;
+    const q = (document.getElementById('runs-tab-search') || {}).value || '';
+    const ql = q.toLowerCase();
+    const filtered = _rows.filter(r => {
+      const s = (r.status || '').toLowerCase();
+      if (_activeFilter === 'running'   && !['running', 'queued'].includes(s)) return false;
+      if (_activeFilter === 'completed' && s !== 'completed') return false;
+      if (_activeFilter === 'failed'    && !['failed', 'error'].includes(s)) return false;
+      if (!ql) return true;
+      const hay = [r.workflow_id, r.run_id, r.status].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(ql);
+    });
+    if (!filtered.length) {
+      box.innerHTML = '<div class="model-empty">No runs match.</div>';
+      return;
+    }
+    box.innerHTML = filtered.map(r => {
+      const s = (r.status || 'unknown').toLowerCase();
+      const ts = r.started_at || r.created_at || '';
+      const sel = r.run_id === _selectedId ? ' selected' : '';
+      return `<div class="runs-tab-row${sel}" data-run-id="${esc(r.run_id)}"
+                   onclick="RunsTab.select('${esc(r.run_id)}')">
+        <span class="runs-tab-row-title">${esc(r.workflow_id || '?')}</span>
+        <span class="runs-tab-row-status ${esc(s)}">${esc(s)}</span>
+        <span class="runs-tab-row-meta">${esc((r.run_id || '').slice(0, 12))} · ${esc(ts)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  async function select(runId) {
+    _selectedId = runId;
+    render();
+    // Detail head + buttons.
+    const meta = document.getElementById('runs-tab-detail-meta');
+    if (meta) meta.textContent = `run_id ${runId.slice(0, 16)}…`;
+    document.getElementById('runs-tab-graph-empty').setAttribute('hidden', '');
+    // Stop any prior poller.
+    if (_pollHandle) { clearInterval(_pollHandle); _pollHandle = null; }
+    // Fetch the run + the workflow definition so we can lay out the DAG.
+    try {
+      const r = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const run = await r.json();
+      const wfId = run.workflow_id;
+      let defn = null;
+      if (wfId) {
+        try {
+          const dr = await fetch(`/api/workflows/${encodeURIComponent(wfId)}`);
+          if (dr.ok) defn = await dr.json();
+        } catch (_) {}
+      }
+      _renderRunGraph(defn || { steps: [] });
+      _applyStatus(run);
+      _renderSteps(run);
+      _toggleActionButtons(run);
+      // Live poll while running.
+      if (['running', 'queued'].includes((run.status || '').toLowerCase())) {
+        _pollHandle = setInterval(async () => {
+          try {
+            const r2 = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}`);
+            if (!r2.ok) return;
+            const run2 = await r2.json();
+            _applyStatus(run2);
+            _renderSteps(run2);
+            _toggleActionButtons(run2);
+            if (['completed', 'failed', 'canceled', 'error'].includes((run2.status || '').toLowerCase())) {
+              clearInterval(_pollHandle); _pollHandle = null;
+              // Refresh the list so the row shows the new status.
+              load();
+            }
+          } catch (_) { /* keep trying */ }
+        }, 1500);
+      }
+    } catch (e) {
+      const meta2 = document.getElementById('runs-tab-detail-meta');
+      if (meta2) meta2.textContent = `Error: ${e.message}`;
+    }
+  }
+
+  function _initEditor() {
+    const container = document.getElementById('runs-tab-canvas');
+    if (!container || typeof Drawflow === 'undefined') return;
+    _editor = new Drawflow(container);
+    _editor.reroute = true;
+    _editor.reroute_fix_curvature = true;
+    _editor.editor_mode = 'fixed';   // read-only
+    _editor.start();
+  }
+
+  function _renderRunGraph(defn) {
+    if (!_editor) _initEditor();
+    if (!_editor) return;
+    // Wipe any previous render.
+    try { _editor.clear(); } catch (_) {}
+    _idMap = {};
+    // Spawn a node per step using the composer's same dfNodeHtml so the
+    // visual is identical. We use logical positions; auto-layout below
+    // re-flows via dagre.
+    (defn.steps || []).forEach((step, i) => {
+      const data = {
+        id: step.id, name: step.name || step.id,
+        role: step.role || 'general',
+        system_prompt: step.system_prompt || '',
+        outputs: Array.isArray(step.outputs) ? step.outputs : ['result'],
+        output_format: (step.output_parser && step.output_parser.format) || 'raw',
+        quality_gates: [], inputs: [],
+        is_decision: !!step.is_decision,
+        persona: step.persona ||
+          (window.AgentIcons ? AgentIcons.resolve({ role: step.role, name: step.name }) : 'general'),
+        skills: step.skills || [], tools: step.tools || [],
+      };
+      const x = 80 + (i % 4) * 220;
+      const y = 60 + Math.floor(i / 4) * 140;
+      const numOut = data.outputs.length > 1 && data.is_decision ? data.outputs.length : 1;
+      const dfId = _editor.addNode(data.id, 1, numOut, x, y, data.id, {}, dfNodeHtml(data));
+      _idMap[data.id] = dfId;
+    });
+    // Connect via depends_on.
+    (defn.steps || []).forEach((step) => {
+      const tgt = _idMap[step.id];
+      if (!tgt) return;
+      const deps = Array.isArray(step.depends_on) ? step.depends_on
+                 : (step.depends_on ? [step.depends_on] : []);
+      deps.forEach(dep => {
+        const src = _idMap[dep];
+        if (!src) return;
+        try { _editor.addConnection(src, tgt, 'output_1', 'input_1'); } catch (_) {}
+      });
+    });
+    // Auto-layout. We reuse the composer's dagre helper but target our
+    // separate editor — swap dfEditor pointer temporarily.
+    try { _runTabAutoLayout(); } catch (e) { console.warn('runs auto-layout:', e); }
+  }
+
+  function _runTabAutoLayout() {
+    if (typeof dagre === 'undefined' || !_editor) return;
+    const exported = _editor.export();
+    const nodes = exported.drawflow.Home.data;
+    const ids = Object.keys(nodes);
+    if (!ids.length) return;
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 90, marginx: 20, marginy: 20 });
+    g.setDefaultEdgeLabel(() => ({}));
+    const NODE_W = 200, NODE_H = 90;
+    ids.forEach(id => g.setNode(id, { width: NODE_W, height: NODE_H }));
+    ids.forEach(id => {
+      Object.keys(nodes[id].outputs || {}).forEach(k => {
+        (nodes[id].outputs[k].connections || []).forEach(c => g.setEdge(id, String(c.node)));
+      });
+    });
+    dagre.layout(g);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    ids.forEach(id => {
+      const p = g.node(id); if (!p) return;
+      minX = Math.min(minX, p.x - NODE_W/2); minY = Math.min(minY, p.y - NODE_H/2);
+      maxX = Math.max(maxX, p.x + NODE_W/2); maxY = Math.max(maxY, p.y + NODE_H/2);
+    });
+    const canvas = document.getElementById('runs-tab-canvas');
+    const rect = canvas ? canvas.getBoundingClientRect() : { width: 1000, height: 600 };
+    const bboxW = (maxX - minX) || NODE_W;
+    const bboxH = (maxY - minY) || NODE_H;
+    const offX = Math.max(40, (rect.width  - bboxW) / 2 - minX);
+    const offY = Math.max(40, (rect.height - bboxH) / 2 - minY);
+    ids.forEach(id => {
+      const p = g.node(id); if (!p) return;
+      const left = p.x - NODE_W/2 + offX;
+      const top  = p.y - NODE_H/2 + offY;
+      try {
+        const d = _editor.drawflow.drawflow.Home.data[id];
+        if (d) { d.pos_x = left; d.pos_y = top; }
+      } catch (_) {}
+      const el = document.querySelector(`#runs-tab-canvas #node-${id}`);
+      if (el) { el.style.left = left + 'px'; el.style.top = top + 'px'; }
+    });
+    ids.forEach(id => { try { _editor.updateConnectionNodes(`node-${id}`); } catch (_) {} });
+  }
+
+  function _applyStatus(run) {
+    const results = run.step_results || [];
+    const statusMap = new Map();
+    results.forEach(r => { if (r && r.step_id) statusMap.set(r.step_id, r.status); });
+    const planned = Object.keys(_idMap);
+    let completed = 0, current = '';
+    const terminal = ['completed', 'failed', 'error', 'canceled'].includes((run.status || '').toLowerCase());
+    planned.forEach(stepId => {
+      const dfId = _idMap[stepId];
+      const el = document.querySelector(`#runs-tab-canvas #node-${dfId}`);
+      if (!el) return;
+      el.classList.remove('is-queued','is-running','is-completed','is-failed','is-skipped');
+      const st = statusMap.get(stepId);
+      if (st === 'completed') { el.classList.add('is-completed'); completed += 1; }
+      else if (st === 'running') { el.classList.add('is-running'); current = stepId; }
+      else if (st === 'failed' || st === 'error') { el.classList.add('is-failed'); }
+      else if (st === 'skipped') { el.classList.add('is-skipped'); }
+      else if (!terminal) { el.classList.add('is-queued'); }
+    });
+    // Update the chip.
+    const chip = document.getElementById('runs-tab-progress-chip');
+    const cur = document.getElementById('runs-tab-current');
+    const cnt = document.getElementById('runs-tab-chip-count');
+    const bar = document.getElementById('runs-tab-bar');
+    if (chip) chip.hidden = false;
+    if (cur) cur.textContent = current || run.workflow_id || run.run_id || '—';
+    if (cnt) cnt.textContent = `${completed}/${planned.length || 0}`;
+    if (bar) bar.style.width = `${planned.length ? (completed / planned.length) * 100 : 0}%`;
+    // Detail meta line.
+    const meta = document.getElementById('runs-tab-detail-meta');
+    if (meta) meta.textContent = `${run.workflow_id} · ${run.status || '?'} · ${completed}/${planned.length} steps`;
+  }
+
+  function _renderSteps(run) {
+    const body = document.getElementById('runs-tab-steps-body');
+    if (!body) return;
+    const results = run.step_results || [];
+    if (!results.length) {
+      body.innerHTML = '<div class="model-empty">No step results yet.</div>';
+      return;
+    }
+    body.innerHTML = results.map(s => {
+      const dur = s.duration_seconds != null ? Math.round(s.duration_seconds) + 's' : '?';
+      const cls = s.status === 'completed' ? 'ok' : (['failed','error'].includes(s.status) ? 'fail' : 'pending');
+      return `<div class="ws-run-step ws-run-step-${cls}">
+        <span class="ws-run-step-id">${esc(s.step_id)}</span>
+        <span class="ws-run-step-model">${esc(s.model_used || '?')}</span>
+        <span class="ws-run-step-dur">${dur}</span>
+        <span class="ws-run-step-status">${esc(s.status)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function _toggleActionButtons(run) {
+    const resumeBtn = document.getElementById('runs-tab-resume-btn');
+    const cancelBtn = document.getElementById('runs-tab-cancel-btn');
+    const s = (run.status || '').toLowerCase();
+    if (resumeBtn) resumeBtn.hidden = !['failed', 'error'].includes(s);
+    if (cancelBtn) cancelBtn.hidden = !['running', 'queued'].includes(s);
+  }
+
+  async function resumeCurrent() {
+    if (!_selectedId) return;
+    await fetch(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/resume`, { method: 'POST' });
+    select(_selectedId);
+  }
+  async function cancelCurrent() {
+    if (!_selectedId) return;
+    await fetch(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/cancel`, { method: 'POST' });
+  }
+
+  return { init, load, render, setFilter, select, resumeCurrent, cancelCurrent };
+})();
+window.RunsTab = RunsTab;
 
 function renderWorkflowIndex() { WorkflowIndex && WorkflowIndex.refresh && document.getElementById('wfi-grid') && (function(){
   // Re-render with current cache by triggering a refresh of the chip filter.
