@@ -5178,6 +5178,14 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 .wfi-card-dag-svg line { stroke: var(--cyan-dim); stroke-width: 1.2; }
 .wfi-card-dag-svg .mini-step { fill: var(--cyan); stroke: var(--bg-panel); stroke-width: 1.2; }
 .wfi-card-dag-svg .mini-decision { fill: var(--purple); stroke: var(--bg-panel); stroke-width: 1.2; }
+/* Parallel-rank pill — same fill as the rank's role, with a small
+   "×N" badge in the foreground so the operator sees fan-out at a
+   glance without dagre laying nodes out vertically. */
+.wfi-card-dag-svg .mini-pill { stroke: var(--bg-panel); stroke-width: 1.2; }
+.wfi-card-dag-svg .mini-pill-label {
+  font-family: var(--mono); font-size: 7px; font-weight: 600;
+  fill: var(--bg-deep); pointer-events: none; letter-spacing: 0.02em;
+}
 .wfi-card-dag-empty {
   font-family: var(--mono); font-size: 0.55rem;
   color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase;
@@ -16376,86 +16384,102 @@ const WorkflowIndex = (function () {
     }
   }
 
-  // Build an SVG mini-DAG that mirrors the composer's layout but at
-  // ~120×56px scale. Uses dagre when available to get a real
-  // topological layout; falls back to a horizontal chain otherwise.
+  // Build an SVG mini-DAG silhouette for the card. The composer
+  // canvas has space to show the *real* topology; at card scale
+  // (~280×48px) what matters is "how many stages, where are the
+  // fan-outs". So we collapse each topological rank into a single
+  // horizontal slot and draw a pill instead of a circle when a rank
+  // has >1 parallel node — with a small "×N" badge.
+  //
+  // Earlier versions used dagre's LR layout directly. That gave
+  // geometrically-correct but visually-stacked results for fan-in
+  // shapes like code-review (3 passes → synthesize) because dagre
+  // places parallel siblings on different y-coords, which at 48px
+  // tall reads as "blank dots under the heading."
   function _renderWorkflowMiniDag(defn) {
     const steps = (defn && Array.isArray(defn.steps)) ? defn.steps : [];
     if (!steps.length) {
       return '<div class="wfi-card-dag-empty">no steps</div>';
     }
-    const W = 280, H = 70;
-    const NODE_R = 5;
-    let positions;
-    if (typeof dagre !== 'undefined') {
-      const g = new dagre.graphlib.Graph();
-      g.setGraph({ rankdir: 'LR', nodesep: 14, ranksep: 24, marginx: 10, marginy: 10 });
-      g.setDefaultEdgeLabel(() => ({}));
-      const stepIds = new Set(steps.map(s => s.id));
-      steps.forEach(s => g.setNode(s.id, { width: 12, height: 12 }));
-      const edges = [];
+    // Compute topological rank per step. If no depends_on is declared
+    // anywhere, fall back to YAML order (engine behaviour).
+    const stepIds = new Set(steps.map(s => s.id));
+    const declaredDeps = steps.some(s => {
+      const d = s.depends_on;
+      return (Array.isArray(d) && d.length > 0) || (typeof d === 'string' && d);
+    });
+    let ranks;
+    if (!declaredDeps) {
+      // Implicit linear chain — every step is its own rank.
+      ranks = steps.map((s, i) => ({ rank: i, step: s }));
+    } else {
+      const depMap = new Map(steps.map(s => [s.id, []]));
       steps.forEach(s => {
         const deps = Array.isArray(s.depends_on) ? s.depends_on
                    : (s.depends_on ? [s.depends_on] : []);
-        deps.forEach(d => {
-          if (stepIds.has(d)) {
-            g.setEdge(d, s.id);
-            edges.push([d, s.id]);
-          }
-        });
+        depMap.set(s.id, deps.filter(d => stepIds.has(d)));
       });
-      // If no depends_on edges are declared the engine still runs
-      // the steps sequentially by their YAML order — mirror that in
-      // the preview by falling back to the linear chain rendering.
-      // Otherwise dagre collapses every node onto the same rank and
-      // the operator sees a vertical stack of dots.
-      if (!edges.length) return _renderChainDag(steps);
-      try { dagre.layout(g); } catch (e) { return _renderChainDag(steps); }
-      // Project dagre's coords into the SVG viewbox.
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      steps.forEach(s => {
-        const p = g.node(s.id); if (!p) return;
-        minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
-        maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
-      });
-      const dx = (maxX - minX) || 1, dy = (maxY - minY) || 1;
-      const pad = 8;
-      positions = new Map(steps.map(s => {
-        const p = g.node(s.id) || { x: minX, y: minY };
-        const x = pad + ((p.x - minX) / dx) * (W - 2 * pad);
-        const y = pad + ((p.y - minY) / dy) * (H - 2 * pad);
-        return [s.id, { x, y }];
-      }));
-      // Render: edges first, then nodes.
-      const edgeLines = edges.map(([from, to]) => {
-        const a = positions.get(from), b = positions.get(to);
-        if (!a || !b) return '';
-        return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" />`;
-      }).join('');
-      const nodeCircles = steps.map(s => {
-        const p = positions.get(s.id);
-        if (!p) return '';
-        // Failure decision nodes pop purple; everything else cyan.
-        const cls = s.is_decision ? 'mini-decision' : 'mini-step';
-        return `<circle cx="${p.x}" cy="${p.y}" r="${NODE_R}" class="${cls}"><title>${esc(s.id)}</title></circle>`;
-      }).join('');
-      return `<svg class="wfi-card-dag-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${edgeLines}${nodeCircles}</svg>`;
+      const rankOf = new Map();
+      // Iterate until stable: a node's rank = max(deps.rank) + 1.
+      let dirty = true, guard = steps.length + 2;
+      while (dirty && guard-- > 0) {
+        dirty = false;
+        for (const s of steps) {
+          const deps = depMap.get(s.id) || [];
+          const r = deps.length === 0 ? 0
+                  : Math.max(...deps.map(d => rankOf.has(d) ? rankOf.get(d) + 1 : 0));
+          if (rankOf.get(s.id) !== r) { rankOf.set(s.id, r); dirty = true; }
+        }
+      }
+      ranks = steps.map(s => ({ rank: rankOf.get(s.id) || 0, step: s }));
     }
-    return _renderChainDag(steps);
+    // Bucket steps by rank, preserving YAML order within a rank.
+    const buckets = new Map();
+    ranks.forEach(({ rank, step }) => {
+      if (!buckets.has(rank)) buckets.set(rank, []);
+      buckets.get(rank).push(step);
+    });
+    const sortedRanks = Array.from(buckets.keys()).sort((a, b) => a - b);
+    return _renderRankSilhouette(sortedRanks.map(r => buckets.get(r)));
   }
 
-  function _renderChainDag(steps) {
-    const W = 280, H = 70, pad = 10;
-    const n = steps.length;
-    const xs = steps.map((_, i) => pad + (i / Math.max(1, n - 1)) * (W - 2 * pad));
+  // Draw a left-to-right row of rank-slots. Each slot is a circle for
+  // a single step or a pill+×N badge for a parallel rank. Connecting
+  // edges are straight horizontal segments between adjacent slots —
+  // good enough at 48px to communicate "pipeline shape."
+  function _renderRankSilhouette(rankBuckets) {
+    const W = 280, H = 70, pad = 14;
+    const n = rankBuckets.length;
+    const xs = rankBuckets.map((_, i) => pad + (i / Math.max(1, n - 1)) * (W - 2 * pad));
     const y = H / 2;
+    // Edges first (under nodes).
     const lines = xs.slice(1).map((x, i) =>
       `<line x1="${xs[i]}" y1="${y}" x2="${x}" y2="${y}" />`
     ).join('');
-    const circles = steps.map((s, i) =>
-      `<circle cx="${xs[i]}" cy="${y}" r="5" class="${s.is_decision ? 'mini-decision' : 'mini-step'}"><title>${esc(s.id)}</title></circle>`
-    ).join('');
-    return `<svg class="wfi-card-dag-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${lines}${circles}</svg>`;
+    const nodes = rankBuckets.map((bucket, i) => {
+      const cx = xs[i];
+      const isDecision = bucket.some(s => s.is_decision);
+      const cls = isDecision ? 'mini-decision' : 'mini-step';
+      const title = bucket.map(s => s.id).join(' · ');
+      if (bucket.length === 1) {
+        return `<circle cx="${cx}" cy="${y}" r="5" class="${cls}"><title>${esc(title)}</title></circle>`;
+      }
+      // Parallel rank — render a pill + ×N badge.
+      const pillW = 18, pillH = 10;
+      const rx = cx - pillW / 2, ry = y - pillH / 2;
+      return `<g><title>${esc(title)}</title>` +
+             `<rect x="${rx}" y="${ry}" width="${pillW}" height="${pillH}" rx="5" ry="5" class="${cls} mini-pill" />` +
+             `<text x="${cx}" y="${y + 3.5}" class="mini-pill-label" text-anchor="middle">×${bucket.length}</text>` +
+             `</g>`;
+    }).join('');
+    return `<svg class="wfi-card-dag-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${lines}${nodes}</svg>`;
+  }
+
+  // Kept for the legacy "no edges declared" path — not used directly
+  // any more (rank silhouette handles both cases) but referenced by
+  // tests that snapshot the renderer.
+  function _renderChainDag(steps) {
+    return _renderRankSilhouette(steps.map(s => [s]));
   }
 
   // Resolve a workflow card's persona key from its category + tags +
