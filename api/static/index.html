@@ -3502,6 +3502,91 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 14px;
 }
+
+/* Catalog layout — left nav rail + right section pane. Each section
+   manages its own asset class in place (no redirects to admin tabs). */
+.catalog-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 480px;
+}
+@media (max-width: 880px) {
+  .catalog-layout { grid-template-columns: 1fr; }
+}
+.catalog-nav {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  height: fit-content; position: sticky; top: 12px;
+}
+.catalog-nav-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
+}
+.catalog-nav-btn:hover { background: rgba(0, 220, 240, 0.05); color: var(--text); }
+.catalog-nav-btn.active {
+  background: rgba(0, 220, 240, 0.07);
+  border-color: var(--cyan-dim);
+  color: var(--text);
+}
+.catalog-nav-btn .admin-card-icon { width: 28px; height: 28px; flex-shrink: 0; }
+.catalog-nav-btn .admin-card-icon > svg { width: 16px; height: 16px; }
+.catalog-nav-title { flex: 1; font-weight: 600; }
+.catalog-nav-count {
+  font-family: var(--mono); font-size: 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 1px 8px; border-radius: 999px;
+  color: var(--text-muted);
+}
+.catalog-nav-btn.active .catalog-nav-count {
+  color: var(--cyan); border-color: var(--cyan-dim);
+}
+
+.catalog-sections { min-width: 0; }
+.catalog-section {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 14px 16px;
+}
+.catalog-section[hidden] { display: none; }
+.catalog-section-head {
+  display: flex; align-items: center; gap: 12px;
+  padding-bottom: 10px; margin-bottom: 12px;
+  border-bottom: 1px dashed var(--border);
+  flex-wrap: wrap;
+}
+.catalog-section-title {
+  font-family: var(--mono); font-size: 0.9rem;
+  color: var(--cyan); letter-spacing: 0.04em;
+}
+.catalog-section-sub {
+  font-family: var(--mono); font-size: 0.66rem;
+  color: var(--text-muted); flex: 1 1 200px;
+}
+.catalog-section-sub code {
+  color: var(--accent); background: var(--bg-deep);
+  padding: 0 5px; border-radius: 2px;
+}
+.catalog-section-body { min-height: 80px; }
+.catalog-section-body > details {
+  /* When a relocated <details> panel sits inside a section we
+     don't need the section's outer chrome to fight with it. */
+  margin: 0; padding: 12px 14px;
+}
 .catalog-tile {
   position: relative;
   padding: 18px 18px 16px;
@@ -6355,47 +6440,158 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
     <div class="catalog-intro">
       <div class="catalog-intro-title">// Catalog</div>
       <div class="catalog-intro-sub">
-        Unified management for installable artifacts — plugins, skills, MCP servers, and external sources.
-        Workflow runs moved to the <a href="#" onclick="switchTab('runs');return false">Runs tab</a>;
+        Unified management for every installable artifact — discover, add, delete, and make assets
+        available across the system. Pick a section on the left to manage that asset class in place
+        (no redirects). Workflow runs moved to the
+        <a href="#" onclick="switchTab('runs');return false">Runs tab</a>;
         the Role Library moved to <a href="#" onclick="switchTab('documents');return false">Context</a>.
       </div>
     </div>
 
-    <div class="catalog-grid" id="catalog-grid">
-      <div class="catalog-tile" onclick="switchTab('admin-plugins')">
-        <div class="catalog-tile-head">
-          <span class="catalog-tile-icon tone-green" id="catalog-tile-icon-plugin"></span>
-          <span class="catalog-tile-title">Plugins</span>
-          <span class="catalog-tile-count" id="catalog-count-plugins">—</span>
-        </div>
-        <div class="catalog-tile-sub">Authored Python tool packs. Manage installed plugins, browse their tools, invoke directly.</div>
-      </div>
+    <div class="catalog-layout">
+      <!-- LEFT: section selector. Each button switches the right pane;
+           NO routing to other tabs — the management UI lives here. -->
+      <nav class="catalog-nav" role="tablist" aria-label="Catalog sections">
+        <button type="button" class="catalog-nav-btn active" data-cat-sec="models"
+                onclick="CatalogPage.show('models')">
+          <span class="admin-card-icon tone-cyan" id="catalog-tile-icon-model"></span>
+          <span class="catalog-nav-title">Models</span>
+          <span class="catalog-nav-count" id="catalog-count-models">—</span>
+        </button>
+        <button type="button" class="catalog-nav-btn" data-cat-sec="plugins"
+                onclick="CatalogPage.show('plugins')">
+          <span class="admin-card-icon tone-green" id="catalog-tile-icon-plugin"></span>
+          <span class="catalog-nav-title">Plugins</span>
+          <span class="catalog-nav-count" id="catalog-count-plugins">—</span>
+        </button>
+        <button type="button" class="catalog-nav-btn" data-cat-sec="skills"
+                onclick="CatalogPage.show('skills')">
+          <span class="admin-card-icon tone-amber" id="catalog-tile-icon-skill"></span>
+          <span class="catalog-nav-title">Skills</span>
+          <span class="catalog-nav-count" id="catalog-count-skills">—</span>
+        </button>
+        <button type="button" class="catalog-nav-btn" data-cat-sec="mcp"
+                onclick="CatalogPage.show('mcp')">
+          <span class="admin-card-icon tone-purple" id="catalog-tile-icon-mcp"></span>
+          <span class="catalog-nav-title">MCP</span>
+          <span class="catalog-nav-count" id="catalog-count-mcp">—</span>
+        </button>
+        <button type="button" class="catalog-nav-btn" data-cat-sec="agents"
+                onclick="CatalogPage.show('agents')">
+          <span class="admin-card-icon tone-accent" id="catalog-tile-icon-agent"></span>
+          <span class="catalog-nav-title">Agents</span>
+          <span class="catalog-nav-count" id="catalog-count-agents">—</span>
+        </button>
+        <button type="button" class="catalog-nav-btn" data-cat-sec="external"
+                onclick="CatalogPage.show('external')">
+          <span class="admin-card-icon tone-cyan" id="catalog-tile-icon-ext"></span>
+          <span class="catalog-nav-title">External</span>
+          <span class="catalog-nav-count" id="catalog-count-ext">—</span>
+        </button>
+      </nav>
 
-      <div class="catalog-tile" onclick="switchTab('admin-skills')">
-        <div class="catalog-tile-head">
-          <span class="catalog-tile-icon tone-amber" id="catalog-tile-icon-skill"></span>
-          <span class="catalog-tile-title">Skills</span>
-          <span class="catalog-tile-count" id="catalog-count-skills">—</span>
-        </div>
-        <div class="catalog-tile-sub">Markdown prompts that auto-inject on trigger keywords. Browse across every plugin.</div>
+      <!-- RIGHT: one section visible at a time. Each section panel
+           hosts the full management UI inline (discover + add + delete +
+           browse). The 5 <details> discover panels from the Models tab
+           are relocated into the matching sections by the
+           DOMContentLoaded relocator. -->
+      <div class="catalog-sections" id="catalog-sections">
+        <section class="catalog-section active" data-cat-sec="models">
+          <div class="catalog-section-head">
+            <span class="catalog-section-title">Models</span>
+            <span class="catalog-section-sub">Local model inventory + HuggingFace discovery + pull/remove.</span>
+            <span style="flex:1"></span>
+            <button class="action-btn xs" onclick="switchTab('inventory')">Open Models tab ↗</button>
+          </div>
+          <div id="catalog-models-mount" class="catalog-section-body">
+            <div class="model-empty">Loading model catalog…</div>
+          </div>
+        </section>
+        <section class="catalog-section" data-cat-sec="plugins" hidden>
+          <div class="catalog-section-head">
+            <span class="catalog-section-title">Plugins</span>
+            <span class="catalog-section-sub">Python tool packs in <code>plugins/&lt;id&gt;/</code>. Manage installed plugins, browse tools, invoke directly.</span>
+          </div>
+          <div id="catalog-plugins-mount" class="catalog-section-body">
+            <div class="model-empty">Loading plugins…</div>
+          </div>
+        </section>
+        <section class="catalog-section" data-cat-sec="skills" hidden>
+          <div class="catalog-section-head">
+            <span class="catalog-section-title">Skills</span>
+            <span class="catalog-section-sub">Markdown prompts that auto-inject on trigger keywords. Browse, install from catalog, or author a new one.</span>
+            <span style="flex:1"></span>
+            <button class="action-btn xs accent" onclick="SkillsBuilder.open()">+ New Skill</button>
+          </div>
+          <div id="catalog-skills-mount" class="catalog-section-body">
+            <div class="model-empty">Loading skills…</div>
+          </div>
+        </section>
+        <section class="catalog-section" data-cat-sec="mcp" hidden>
+          <div class="catalog-section-head">
+            <span class="catalog-section-title">MCP Servers</span>
+            <span class="catalog-section-sub">External MCP endpoints (stdio + HTTP). Register, test handshake, discover tools.</span>
+            <span style="flex:1"></span>
+            <button class="action-btn xs accent" onclick="if(window.MCPPanel)MCPPanel.showCreate()">+ Register</button>
+          </div>
+          <div id="catalog-mcp-mount" class="catalog-section-body">
+            <div class="model-empty">Loading MCP servers…</div>
+          </div>
+        </section>
+        <section class="catalog-section" data-cat-sec="agents" hidden>
+          <div class="catalog-section-head">
+            <span class="catalog-section-title">Agents</span>
+            <span class="catalog-section-sub">YAML personas under <code>agents/</code>. Each is a model + system prompt + optional context + tools.</span>
+            <span style="flex:1"></span>
+            <button class="action-btn xs accent" onclick="if(typeof showCreateAgentModal === 'function') showCreateAgentModal()">+ New Agent</button>
+          </div>
+          <div id="catalog-agents-mount" class="catalog-section-body">
+            <div class="model-empty">Loading agents…</div>
+          </div>
+        </section>
+        <section class="catalog-section" data-cat-sec="external" hidden>
+          <div class="catalog-section-head">
+            <span class="catalog-section-title">External Sources</span>
+            <span class="catalog-section-sub">Ingestion from upstream registries (MCP Registry, Smithery, Composio, GitHub <code>.prompt.yaml</code>, …).</span>
+          </div>
+          <div id="catalog-external-mount" class="catalog-section-body">
+            <div class="model-empty">Loading external providers…</div>
+          </div>
+        </section>
       </div>
+    </div>
 
-      <div class="catalog-tile" onclick="switchTab('admin-mcp')">
-        <div class="catalog-tile-head">
-          <span class="catalog-tile-icon tone-purple" id="catalog-tile-icon-mcp"></span>
-          <span class="catalog-tile-title">MCP Servers</span>
-          <span class="catalog-tile-count" id="catalog-count-mcp">—</span>
+    <!-- Skill Builder modal — opens from the Skills section's
+         + New Skill button. Authors a markdown body + registers it
+         into a target plugin via POST /api/skills/create. -->
+    <div id="skill-builder-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="max-width:640px">
+        <h3>New Skill</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label class="admin-modal-label">Skill ID</label>
+            <input id="skill-builder-id" type="text" placeholder="concise-writer" autocomplete="off">
+          </div>
+          <div>
+            <label class="admin-modal-label">Name</label>
+            <input id="skill-builder-name" type="text" placeholder="Concise Writer" autocomplete="off">
+          </div>
         </div>
-        <div class="catalog-tile-sub">External MCP endpoints (stdio or HTTP). Register, test handshake, discover tools.</div>
-      </div>
+        <label class="admin-modal-label">Target plugin</label>
+        <select id="skill-builder-plugin" class="model-select"></select>
+        <label class="admin-modal-label">Description</label>
+        <input id="skill-builder-desc" type="text" placeholder="Short one-liner that names the skill's job" autocomplete="off">
+        <label class="admin-modal-label">Trigger keywords <span style="color:var(--text-muted);font-weight:normal">(comma-separated; auto-injects when present)</span></label>
+        <input id="skill-builder-triggers" type="text" placeholder="summarize, tighten, tl;dr" autocomplete="off">
+        <label class="admin-modal-label">Body (markdown — front-matter optional)</label>
+        <textarea id="skill-builder-body" rows="10" placeholder="You are now in <skill-name> mode. Follow this protocol every turn:
 
-      <div class="catalog-tile" onclick="switchTab('inventory')">
-        <div class="catalog-tile-head">
-          <span class="catalog-tile-icon tone-cyan" id="catalog-tile-icon-ext"></span>
-          <span class="catalog-tile-title">External Sources</span>
-          <span class="catalog-tile-count" id="catalog-count-ext">—</span>
+1. ..."></textarea>
+        <div id="skill-builder-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="SkillsBuilder.close()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="SkillsBuilder.submit()">Create</button>
         </div>
-        <div class="catalog-tile-sub">Discover MCP servers, system prompts, plugins, and tools from upstream registries (MCP Registry, Smithery, Composio, …).</div>
       </div>
     </div>
 
@@ -7831,12 +8027,14 @@ async function _refreshProjectsCount() {
 // the same endpoints the admin tabs use, so an idle Catalog visit
 // is cheap (cached by the browser).
 async function loadCatalogPage() {
-  // Icons via AgentIcons so the tones match the workbench + admin tabs.
+  // Paint icons on the section selector.
   if (window.AgentIcons) {
     const ic = id => document.getElementById(id);
+    if (ic('catalog-tile-icon-model'))  ic('catalog-tile-icon-model').innerHTML  = AgentIcons.svg('data');
     if (ic('catalog-tile-icon-plugin')) ic('catalog-tile-icon-plugin').innerHTML = AgentIcons.svg('plugin');
     if (ic('catalog-tile-icon-skill'))  ic('catalog-tile-icon-skill').innerHTML  = AgentIcons.svg('skill');
     if (ic('catalog-tile-icon-mcp'))    ic('catalog-tile-icon-mcp').innerHTML    = AgentIcons.svg('mcp');
+    if (ic('catalog-tile-icon-agent'))  ic('catalog-tile-icon-agent').innerHTML  = AgentIcons.svg('coordinator');
     if (ic('catalog-tile-icon-ext'))    ic('catalog-tile-icon-ext').innerHTML    = AgentIcons.svg('tool');
   }
   // Counts — best effort, never block the page.
@@ -7844,6 +8042,14 @@ async function loadCatalogPage() {
     const el = document.getElementById(id);
     if (el) el.textContent = v == null ? '—' : String(v);
   };
+  try {
+    const r = await fetch('/v1/models');
+    if (r.ok) {
+      const d = await r.json();
+      const list = d.data || [];
+      set('catalog-count-models', list.length);
+    }
+  } catch (_) {}
   try {
     const r = await fetch('/api/plugins');
     if (r.ok) {
@@ -7864,6 +8070,13 @@ async function loadCatalogPage() {
     }
   } catch (_) {}
   try {
+    const r = await fetch('/api/agents');
+    if (r.ok) {
+      const data = await r.json();
+      set('catalog-count-agents', (data || []).length);
+    }
+  } catch (_) {}
+  try {
     const r = await fetch('/api/discover/sources');
     if (r.ok) {
       const data = await r.json();
@@ -7872,7 +8085,188 @@ async function loadCatalogPage() {
       set('catalog-count-ext', provs.length ? `${live}/${provs.length}` : '—');
     }
   } catch (_) {}
+  // Activate the current section (or 'models' on first paint).
+  if (window.CatalogPage) CatalogPage.show(CatalogPage._active || 'models');
 }
+
+// CatalogPage — section selector + per-section mount logic. Each
+// section has a target mount element (#catalog-{name}-mount) where
+// the DOMContentLoaded relocator moved the corresponding discover
+// panels at boot. The show() function flips the active section + lazy-
+// kicks the relevant loader.
+const CatalogPage = (function () {
+  let _active = 'models';
+  let _loaded = new Set();
+
+  function show(name) {
+    _active = name;
+    document.querySelectorAll('.catalog-nav-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.catSec === name);
+    });
+    document.querySelectorAll('.catalog-section').forEach(s => {
+      const matches = s.dataset.catSec === name;
+      if (matches) s.removeAttribute('hidden');
+      else s.setAttribute('hidden', '');
+      s.classList.toggle('active', matches);
+    });
+    // Lazy-load the section's content on first activation.
+    if (!_loaded.has(name)) {
+      _loaded.add(name);
+      _loadSection(name);
+    }
+  }
+
+  async function _loadSection(name) {
+    // For each section, populate the corresponding mount with either
+    // a relocated panel or a freshly-built list. Models / Plugins /
+    // Skills / MCP / External all get their relocated <details>
+    // panels; Agents is built from /api/agents in place.
+    if (name === 'agents') {
+      const mount = document.getElementById('catalog-agents-mount');
+      if (!mount) return;
+      try {
+        const r = await fetch('/api/agents');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const list = await r.json();
+        mount.innerHTML = _renderAgentsList(list || []);
+      } catch (e) {
+        mount.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed: ${esc(e.message)}</div>`;
+      }
+      return;
+    }
+    // For the discover sections we already triggered the loaders
+    // (loadCatalog → loadPluginsDiscover etc.). The relocator moves
+    // the populated <details> into the section mount on boot, so
+    // first visit just shows what's already there.
+    if (name === 'models' && typeof loadCatalog === 'function' && !window.catalogLoaded) {
+      try { loadCatalog(); } catch (_) {}
+    }
+    if (name === 'skills' && window.SkillsDiscover) {
+      try { SkillsDiscover.load(); } catch (_) {}
+    }
+    if (name === 'plugins' && typeof loadPluginsDiscover === 'function') {
+      try { loadPluginsDiscover(); } catch (_) {}
+    }
+    if (name === 'mcp' && typeof loadMcpsDiscover === 'function') {
+      try { loadMcpsDiscover(); } catch (_) {}
+    }
+    if (name === 'external' && typeof loadExternalDiscover === 'function') {
+      try { loadExternalDiscover(); } catch (_) {}
+    }
+  }
+
+  function _renderAgentsList(list) {
+    if (!list.length) {
+      return '<div class="model-empty">No agents yet. Click + New Agent above to author one.</div>';
+    }
+    return list.map(a => {
+      const persona = (window.AgentIcons ? AgentIcons.resolve(a) : 'general');
+      const icon = (window.AgentIcons ? AgentIcons.svg(persona) : '');
+      const tone = (window.AgentIcons ? AgentIcons.tone(persona) : 'accent');
+      return `<div class="agent-tile" onclick="if(typeof openAgentChat==='function')openAgentChat('${esc(a.id)}')">
+        <div class="agent-tile-head">
+          <span class="agent-tile-icon tone-${esc(tone)}">${icon}</span>
+          <div class="agent-tile-titleblock">
+            <div class="agent-tile-title">${esc(a.name || a.id)}</div>
+            <div class="agent-tile-subtitle">${esc((a.description || '').split('\n')[0].slice(0, 90))}</div>
+          </div>
+          <div class="agent-tile-actions">
+            <button onclick="event.stopPropagation();if(typeof showEditAgentModal==='function')showEditAgentModal('${esc(a.id)}')"
+                    class="agent-tile-action" title="Edit">✎</button>
+            <button onclick="event.stopPropagation();if(typeof deleteAgent==='function')deleteAgent('${esc(a.id)}')"
+                    class="agent-tile-action" title="Delete">✕</button>
+          </div>
+        </div>
+        <div class="agent-tile-meta">
+          ${(a.tags || []).map(t => `<span class="agent-tile-tag">${esc(t)}</span>`).join('')}
+          ${a.role ? `<span class="agent-tile-tag tag-role">${esc(a.role)}</span>` : ''}
+          ${a.model ? `<span class="agent-tile-tag tag-model">${esc(a.model)}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  return { show, _active, _loaded, _renderAgentsList };
+})();
+window.CatalogPage = CatalogPage;
+
+// ── Skills Builder ───────────────────────────────────────────────────
+// Authoring modal for a new skill. Posts to /api/skills/create which
+// writes the markdown body to plugins/<plugin>/skills/<id>.md and
+// registers it in the plugin's manifest.
+const SkillsBuilder = (function () {
+  function open() {
+    const modal = document.getElementById('skill-builder-modal');
+    if (!modal) return;
+    // Populate the target-plugin dropdown from /api/plugins so the
+    // operator can pick where the new skill lands.
+    fetch('/api/plugins').then(r => r.ok ? r.json() : []).then(data => {
+      const list = Array.isArray(data) ? data : (data.plugins || []);
+      const sel = document.getElementById('skill-builder-plugin');
+      if (sel) {
+        const ids = list.map(p => p.id).filter(Boolean);
+        const def = ids.includes('general-skills') ? 'general-skills' : (ids[0] || '');
+        sel.innerHTML = ids.map(id => `<option value="${esc(id)}"${id === def ? ' selected' : ''}>${esc(id)}</option>`).join('');
+      }
+    }).catch(() => {});
+    modal.removeAttribute('hidden');
+  }
+
+  function close() {
+    const modal = document.getElementById('skill-builder-modal');
+    if (modal) modal.setAttribute('hidden', '');
+    // Clear fields so the next open is fresh.
+    ['skill-builder-id','skill-builder-name','skill-builder-desc','skill-builder-triggers','skill-builder-body']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    const err = document.getElementById('skill-builder-error');
+    if (err) { err.hidden = true; err.textContent = ''; }
+  }
+
+  async function submit() {
+    const id = (document.getElementById('skill-builder-id') || {}).value || '';
+    const name = (document.getElementById('skill-builder-name') || {}).value || '';
+    const desc = (document.getElementById('skill-builder-desc') || {}).value || '';
+    const plugin = (document.getElementById('skill-builder-plugin') || {}).value || '';
+    const triggers = ((document.getElementById('skill-builder-triggers') || {}).value || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    const body = (document.getElementById('skill-builder-body') || {}).value || '';
+    const err = document.getElementById('skill-builder-error');
+
+    function fail(msg) {
+      if (err) { err.hidden = false; err.textContent = msg; }
+    }
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return fail('Skill ID must be alphanumeric/_/- (max 64 chars).');
+    if (!name.trim())   return fail('Name is required.');
+    if (!plugin)        return fail('Pick a target plugin.');
+    if (!body.trim())   return fail('Body cannot be empty — that\'s the skill.');
+
+    try {
+      const r = await fetch('/api/skills/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id, name, description: desc, plugin_id: plugin,
+          triggers, body,
+        }),
+      });
+      if (!r.ok) {
+        let detail = `HTTP ${r.status}`;
+        try { const j = await r.json(); detail = j.detail || j.error || detail; } catch (_) {}
+        return fail(`Create failed: ${detail}`);
+      }
+      if (window.Toast) Toast.success('Skill created', `${id} → ${plugin}`);
+      close();
+      // Refresh visible surfaces.
+      if (window.SkillsDiscover) { try { SkillsDiscover.load(true); } catch (_) {} }
+      if (window.SkillsPanel)    { try { SkillsPanel.load(); }       catch (_) {} }
+    } catch (e) {
+      fail(`Create failed: ${e.message}`);
+    }
+  }
+
+  return { open, close, submit };
+})();
+window.SkillsBuilder = SkillsBuilder;
 
 // Plugins / MCPs discover sections under the Models tab — small loaders
 // that reuse the workbench renderers but mount into the System-page
@@ -10585,6 +10979,48 @@ document.addEventListener('DOMContentLoaded', () => {
     sep.style.cssText = 'margin: 18px 0 10px; padding-top: 8px; border-top: 1px dashed var(--border)';
     sep.textContent = '// Documents + RAG';
     layout.after(sep);
+  }
+
+  // IA shuffle (cont.): the 5 Discover panels that previously lived
+  // INSIDE the Models tab (#tab-inventory) move into the Catalog
+  // page's per-section mounts. Each panel keeps its existing ID
+  // (#discover-section, #skills-discover-panel, #plugins-discover-
+  // section, #mcps-discover-section, #ext-discover-section) so the
+  // loaders that target those IDs keep writing to the right element.
+  //
+  // The Models inventory list (.inv-grid #inv-grid + hw-info +
+  // .inv-toolbar) also moves so the Catalog's "Models" section
+  // hosts the full management surface, not just the HF discover.
+  {
+    const moves = [
+      // [destination-mount-id, source-element-id]
+      ['catalog-skills-mount',   'skills-discover-panel'],
+      ['catalog-plugins-mount',  'plugins-discover-section'],
+      ['catalog-mcp-mount',      'mcps-discover-section'],
+      ['catalog-external-mount', 'ext-discover-section'],
+    ];
+    moves.forEach(([destId, srcId]) => {
+      const dest = document.getElementById(destId);
+      const src  = document.getElementById(srcId);
+      if (dest && src) {
+        // Clear the placeholder first.
+        dest.innerHTML = '';
+        dest.appendChild(src);
+      }
+    });
+    // Models section — also pulls the inventory grid + hardware
+    // profile + the HuggingFace discover. We rebuild a slim wrapper
+    // so the Catalog reads as a single page, not a sub-tab.
+    const modelsMount = document.getElementById('catalog-models-mount');
+    if (modelsMount) {
+      modelsMount.innerHTML = '';
+      const hw = document.querySelector('#tab-inventory > .panel');     // hardware profile
+      const tb = document.querySelector('#tab-inventory > .inv-toolbar');// toolbar
+      const stats = document.getElementById('inv-stats');
+      const grid = document.getElementById('inv-grid');
+      const disc = document.getElementById('discover-section');
+      [hw, tb, stats, grid, disc].forEach(el => { if (el) modelsMount.appendChild(el); });
+    }
   }
 
   // IA shuffle (cont.): Projects + Kanban relocates from inside the

@@ -208,6 +208,115 @@ async def install(skill_id: str, req: InstallReq) -> Dict[str, Any]:
     }
 
 
+class CreateReq(BaseModel):
+    """Author a brand-new skill from scratch (not from the catalog)."""
+
+    id: str
+    plugin_id: str
+    name: Optional[str] = None
+    description: Optional[str] = None
+    triggers: Optional[List[str]] = None
+    body: str  # markdown body — front-matter optional, written verbatim
+
+
+@router.post("/create", dependencies=[Depends(require_master_key)])
+async def create(req: CreateReq) -> Dict[str, Any]:
+    """Author a brand-new skill from an operator-supplied body.
+
+    Mirrors ``install`` but the body comes from the request payload
+    instead of the curated catalog. Used by the Catalog page's
+    Skill Builder modal.
+
+    Writes:
+      - plugins/<plugin>/skills/<id>.md  with optional front-matter
+        synthesized from name + description when the body doesn't
+        already include a frontmatter block.
+      - plugin.yaml gains a skills[] entry with the trigger list +
+        ``manual: true`` so the skill can also be attached manually.
+    """
+    if not _ID_RE.match(req.id):
+        raise HTTPException(status_code=400, detail="invalid skill id")
+    if not _ID_RE.match(req.plugin_id):
+        raise HTTPException(status_code=400, detail="invalid plugin id")
+    if not req.body or not req.body.strip():
+        raise HTTPException(status_code=400, detail="skill body is required")
+
+    plugin_dir = _PLUGINS_DIR / req.plugin_id
+    manifest_path = plugin_dir / "plugin.yaml"
+    if not manifest_path.exists():
+        raise HTTPException(
+            status_code=404, detail=f"plugin '{req.plugin_id}' not found"
+        )
+
+    try:
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=500, detail=f"failed to read plugin manifest: {exc}"
+        )
+
+    skills_block = manifest.setdefault("skills", [])
+    for existing in skills_block:
+        if (existing or {}).get("id") == req.id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"skill '{req.id}' is already registered in plugin '{req.plugin_id}'",
+            )
+
+    # Write the markdown body. Auto-prepend a front-matter block when
+    # the operator didn't include one, so the file shape stays
+    # consistent with the rest of the catalog.
+    skills_dir = plugin_dir / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    md_path = skills_dir / f"{req.id}.md"
+    if md_path.exists():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"file {md_path.name} already exists in plugin "
+                f"'{req.plugin_id}/skills' — investigate before creating."
+            ),
+        )
+    body = req.body
+    if not body.lstrip().startswith("---"):
+        fm_lines = [
+            "---",
+            f'name: "{(req.name or req.id).replace(chr(34), chr(39))}"',
+        ]
+        if req.description:
+            desc_escaped = req.description.replace('"', "'")
+            fm_lines.append(f'description: "{desc_escaped}"')
+        fm_lines += ['inject: "system"', "---", ""]
+        body = "\n".join(fm_lines) + body.lstrip()
+    md_path.write_text(body, encoding="utf-8")
+
+    # Register in manifest with the supplied triggers (+ manual fallback).
+    trigger_blocks: List[Dict[str, Any]] = []
+    for t in req.triggers or []:
+        if isinstance(t, str) and t.strip():
+            trigger_blocks.append({"keyword": t.strip()})
+    trigger_blocks.append({"manual": True})
+
+    skills_block.append(
+        {
+            "id": req.id,
+            "file": f"skills/{req.id}.md",
+            "triggers": trigger_blocks,
+        }
+    )
+    manifest_path.write_text(
+        yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    logger.info("Authored new skill '%s' into plugin '%s'", req.id, req.plugin_id)
+    return {
+        "created": True,
+        "skill_id": req.id,
+        "plugin_id": req.plugin_id,
+        "file": f"plugins/{req.plugin_id}/skills/{req.id}.md",
+    }
+
+
 @router.delete(
     "/discover/{skill_id}/uninstall", dependencies=[Depends(require_master_key)]
 )
