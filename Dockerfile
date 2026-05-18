@@ -24,6 +24,14 @@ COPY agents/ agents/
 COPY workflows/ workflows/
 COPY prompts/ prompts/
 COPY plugins/ plugins/
+# Bake the agent grounding corpus into the image. Several agent YAMLs
+# (xql-data-model-engineer, xdm-schema-navigator, xql-snippet-curator,
+# xql-rules-reviewer) declare context_sources of the form
+# `docs/seed/xql/<file>` — without this COPY those files resolve to
+# /app/docs/seed/xql/* which doesn't exist, the loader logs
+# "Context file not found" warnings, and the agents run without their
+# grounding knowledge (degraded XQL/XDM output). ~8.9 MB / 88 files.
+COPY docs/seed/ docs/seed/
 COPY .env.example .env
 
 # Create data directories

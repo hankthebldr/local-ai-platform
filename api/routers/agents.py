@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from ..exceptions import APIError
+from ..logging_config import logger
 from ..models.agent_models import AgentDefinition
 from ..services.agent_service import AgentService
 from ..services.model_resolver import ModelResolver
