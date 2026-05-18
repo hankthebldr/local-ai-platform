@@ -25,13 +25,31 @@ def test_top_level_nav_has_promoted_tabs(signed_in_page):
         ), f"top-level tab {data_tab} should display {label!r}; got {btn.inner_text()!r}"
 
 
-def test_top_level_nav_no_longer_has_runs(signed_in_page):
-    """Runs moved into the System hub — it must NOT remain as a top-level tab."""
+def test_top_level_nav_has_runs_and_projects(signed_in_page):
+    """Runs and Projects are now first-class top-level tabs.
+
+    Earlier IA pushed Runs into the System hub; the dedicated Runs tab
+    + Projects tab landed in the platform-redesign work. This test
+    guards the new IA: both tabs must be reachable from the main nav,
+    and the legacy ``data-tab="workflows"`` button now hosts the
+    Catalog dashboard (not Runs)."""
     page = signed_in_page
-    runs_at_top = page.locator('.tab-nav button[data-tab="workflows"]:has-text("Runs")')
-    assert (
-        runs_at_top.count() == 0
-    ), "Runs is still a top-level tab; should be in System"
+    # New top-level Runs tab.
+    runs_tab = page.locator('.tab-nav button[data-tab="runs"]')
+    assert runs_tab.count() == 1, "Runs is missing from the top-level nav"
+    assert "runs" in runs_tab.inner_text().lower()
+    # New top-level Projects tab (was a section inside Workflow Index).
+    proj_tab = page.locator('.tab-nav button[data-tab="projects"]')
+    assert proj_tab.count() == 1, "Projects is missing from the top-level nav"
+    assert "project" in proj_tab.inner_text().lower()
+    # The legacy 'workflows' data-tab is the Catalog dashboard now, not Runs.
+    legacy = page.locator('.tab-nav button[data-tab="workflows"]')
+    if legacy.count() > 0:
+        label = legacy.inner_text().lower()
+        assert "runs" not in label, (
+            "Legacy 'workflows' tab should be repurposed as Catalog, "
+            "not labeled Runs anymore."
+        )
 
 
 def test_top_level_plugins_lists_xdm_toolkit(signed_in_page):

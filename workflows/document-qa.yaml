@@ -1,0 +1,119 @@
+id: document-qa
+name: "Document Q&A (grounded)"
+description: |
+  Answer a question against a body of source material with explicit
+  grounding. Three stages:
+
+    1. decompose — split the question into atomic sub-questions.
+    2. retrieve_and_answer — for each sub-question, answer with a
+       direct quote-or-paraphrase plus a span of evidence.
+    3. compose — assemble a final answer that distinguishes
+       "answered from the document" vs "not answered, need more data".
+
+  No retrieval index required — the document is passed inline as seed
+  context. For a RAG-backed variant, see the rag-research workflow.
+
+version: "1.0"
+schema_version: 1
+
+metadata:
+  author: "Enclave OOTB"
+  category: "research"
+  tags: ["research", "qa", "grounding", "documents"]
+  estimated_duration: 120
+
+defaults:
+  role: reasoning
+  temperature: 0.2
+  max_tokens: 4096
+  retries: 1
+
+context:
+  description: |
+    Required seed keys:
+      document — the source text the answer must be grounded in
+      question — the user's natural-language question
+
+steps:
+  - id: decompose
+    name: "1. Decompose the question"
+    role: reasoning
+    depends_on: []
+    system_prompt: |
+      Split the question into atomic sub-questions that the document
+      can answer in isolation.
+
+      Output ONLY JSON:
+        { "sub_questions": ["<atomic q1>", "<atomic q2>", ...] }
+
+      Rules:
+      - 1 to 5 sub-questions. Most questions decompose into 1-3.
+      - Sub-questions must be answerable from the document alone.
+      - Do NOT rephrase; decompose.
+    inputs:
+      - seed.question
+    outputs:
+      - sub_questions
+    output_format: json
+
+  - id: retrieve_and_answer
+    name: "2. Answer each sub-question with evidence"
+    role: reasoning
+    depends_on: [decompose]
+    system_prompt: |
+      For each sub-question, search the document and answer with
+      an evidence span.
+
+      Output ONLY JSON:
+        {
+          "results": [
+            {
+              "sub_question": "...",
+              "answer": "<≤3 sentences, or 'NOT_FOUND' if absent>",
+              "evidence_quote": "<verbatim snippet ≤30 words, or null>",
+              "confidence": "high|medium|low|none"
+            }
+          ]
+        }
+
+      Rules:
+      - confidence=none → answer must be "NOT_FOUND". Do not guess.
+      - evidence_quote MUST be a verbatim snippet from the document, or null.
+      - If the document is silent on a sub-question, mark NOT_FOUND.
+        Better to say "not in the document" than to hallucinate.
+    inputs:
+      - seed.document
+      - decompose.sub_questions
+    outputs:
+      - results
+    output_format: json
+
+  - id: compose
+    name: "3. Compose final answer"
+    role: reasoning
+    depends_on: [retrieve_and_answer]
+    system_prompt: |
+      Compose the final answer to the user's original question.
+
+      Use this structure:
+
+        **Answer:** <2–4 sentences>
+
+        **Grounded in:**
+        - "<verbatim evidence snippet>" — <which sub-question it supports>
+        - …
+
+        **Not covered by the document:**
+        - <list of NOT_FOUND sub-questions, or "Nothing — every part of the question was answered.">
+
+      Rules:
+      - If every result is NOT_FOUND, the answer is:
+        "The document does not address this question."
+      - Never blend grounded + ungrounded content silently.
+      - Never invent quotations.
+    inputs:
+      - seed.question
+      - retrieve_and_answer.results
+    outputs:
+      - answer
+    output_format: text

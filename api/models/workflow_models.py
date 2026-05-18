@@ -29,6 +29,7 @@ class StepConfig(BaseModel):
 
 class StepPrompt(BaseModel):
     """Five-part prompt block (v2 schema)."""
+
     role_ref: Optional[str] = None
     role_inline: Optional[str] = None
     task: str
@@ -45,12 +46,14 @@ class StepPrompt(BaseModel):
 
 class HookSpec(BaseModel):
     """A single hook entry in the step's `hooks` block."""
+
     name: str
     config: Dict[str, Any] = Field(default_factory=dict)
 
 
 class StepHooks(BaseModel):
     """Per-step hook registrations."""
+
     before_step: List[HookSpec] = Field(default_factory=list)
     transform_prompt: List[HookSpec] = Field(default_factory=list)
     after_step: List[HookSpec] = Field(default_factory=list)
@@ -77,13 +80,26 @@ class AgentStep(BaseModel):
     output_schema: Optional[Dict[str, Any]] = None
     hooks: StepHooks = Field(default_factory=StepHooks)
     config: StepConfig = Field(default_factory=StepConfig)
+    # DAG dependency declaration — a list of upstream step ids this
+    # step waits on. Drives the composer's edge wiring + the engine's
+    # topological-sort hooks. Empty list = independent step (engine
+    # falls back to YAML order). Adding this here (was missing pre
+    # this commit) makes the API actually serialize the field
+    # operators write in their YAML; the composer was previously
+    # seeing every step with depends_on=None and rendering a stacked
+    # blob instead of a connected flow.
+    depends_on: List[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_prompt_shape(self):
         if not self.system_prompt and not self.prompt:
-            raise ValueError("AgentStep requires either prompt or system_prompt (v2 prompt block or v1 system_prompt)")
+            raise ValueError(
+                "AgentStep requires either prompt or system_prompt (v2 prompt block or v1 system_prompt)"
+            )
         if self.system_prompt and self.prompt:
-            raise ValueError("AgentStep has both `prompt` and `system_prompt` — use one")
+            raise ValueError(
+                "AgentStep has both `prompt` and `system_prompt` — use one"
+            )
         if self.system_prompt is not None and not self.system_prompt.strip():
             raise ValueError("system_prompt must not be empty")
         return self
@@ -168,7 +184,11 @@ class StepResult(BaseModel):
     model_used: Optional[str] = None
     duration_seconds: Optional[float] = None
     token_count: Dict[str, int] = Field(
-        default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        default_factory=lambda: {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
     )
     retries: int = 0
     error: Optional[str] = None

@@ -45,7 +45,9 @@ def test_demo_kanban_create_and_move(signed_in_page, base_url, api_headers):
         )
 
     page = signed_in_page
-    page.click('button[data-tab="workflow-index"]')
+    # IA refresh: Kanban moved out of the Workflow Index card grid into
+    # its own first-class Projects tab.
+    page.click('button[data-tab="projects"]')
     _settle(page, 1400)
     page.click("#kanban-panel .action-btn.ghost")  # refresh dropdown
     _settle(page, 800)

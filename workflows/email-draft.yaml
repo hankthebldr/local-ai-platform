@@ -1,0 +1,136 @@
+id: email-draft
+name: "Email draft with tone control"
+description: |
+  Draft an email in three passes:
+
+    1. outline — produce a structured outline (greeting, key points,
+       ask, sign-off) from the intent + context.
+    2. draft — write the email in the requested tone (executive,
+       friendly, formal, terse, follow-up).
+    3. polish — pass for clarity, length, and tone-match. Caps length
+       at the requested word budget.
+
+  Designed for short-to-medium business email. For long-form sales
+  copy use the brand-voice plugin instead.
+
+version: "1.0"
+schema_version: 1
+
+metadata:
+  author: "Enclave OOTB"
+  category: "content"
+  tags: ["content", "email", "writing", "communication"]
+  estimated_duration: 60
+
+defaults:
+  role: general
+  temperature: 0.5
+  max_tokens: 2048
+  retries: 1
+
+context:
+  description: |
+    Required seed keys:
+      intent     — what the email needs to accomplish (1-2 sentences)
+      recipient  — who it's going to (role/relationship matters)
+      context    — optional background the recipient may not have
+      tone       — executive | friendly | formal | terse | follow-up
+      word_budget— soft cap on words (default 180)
+
+steps:
+  - id: outline
+    name: "1. Outline"
+    role: reasoning
+    temperature: 0.3
+    depends_on: []
+    system_prompt: |
+      Build a structured outline for the email.
+
+      Output ONLY JSON:
+        {
+          "subject_line": "<≤60 chars>",
+          "opener": "<one line>",
+          "key_points": ["<bullet 1>", "<bullet 2>", ...],
+          "ask": "<the specific action requested, or 'FYI / no action'>",
+          "closer": "<one line>"
+        }
+
+      Rules:
+      - subject_line must be specific, not "Re: follow-up".
+      - 1-4 key points. The fewer the better.
+      - The ask must name the action, owner (if not the recipient),
+        and rough timeframe (this week / by EOD / when convenient).
+    inputs:
+      - seed.intent
+      - seed.recipient
+      - seed.context
+      - seed.tone
+    outputs:
+      - subject_line
+      - opener
+      - key_points
+      - ask
+      - closer
+    output_format: json
+
+  - id: draft
+    name: "2. Draft"
+    role: general
+    depends_on: [outline]
+    system_prompt: |
+      Write the full email body from the outline, matching tone.
+
+      Tone guide:
+        executive  → short paragraphs, headline first, no filler
+        friendly   → warm, personal, contractions ok
+        formal     → measured, complete sentences, no contractions
+        terse      → 3 sentences or fewer, no preamble
+        follow-up  → references prior context, names the ask up front
+
+      Output structure (plain text, not JSON):
+
+        Subject: <subject>
+
+        <body — paragraphs separated by blank lines>
+
+        <sign-off>,
+        <[Your Name]>
+
+      Rules:
+      - Word budget is a soft cap. Going slightly over is fine if
+        clarity demands it; going under is encouraged.
+      - End with "[Your Name]" as a placeholder — never invent a name.
+    inputs:
+      - seed.tone
+      - seed.word_budget
+      - outline.subject_line
+      - outline.opener
+      - outline.key_points
+      - outline.ask
+      - outline.closer
+    outputs:
+      - email
+    output_format: text
+
+  - id: polish
+    name: "3. Polish"
+    role: reasoning
+    temperature: 0.2
+    depends_on: [draft]
+    system_prompt: |
+      Polish the draft. Goals:
+        - Cut filler ("just", "really", "I think", "perhaps").
+        - Replace passive voice with active where it tightens.
+        - Match the requested tone end-to-end.
+        - Respect the word budget.
+
+      Output ONLY the polished email in the same Subject:/body/sign-off
+      structure. No commentary, no diff, no "here is the polished
+      version" preamble.
+    inputs:
+      - draft.email
+      - seed.tone
+      - seed.word_budget
+    outputs:
+      - final_email
+    output_format: text

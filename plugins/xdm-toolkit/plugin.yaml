@@ -101,23 +101,31 @@ tools:
         default: 5
         description: "Number of candidate matches to return (1..10)."
 
-  - id: "analyse_xql"
-    file: "tools/analyse_xql.py"
+  - id: "scaffold_xql"
+    file: "tools/scaffold_xql.py"
     function: "execute"
     description: |
-      Run the full 82-rule XQL/XDM analyser against a rule body. Returns
-      a structured report with rule IDs, severities, line numbers, and
-      recommendations. Use this directly for high-fidelity validation;
-      validate_xql is the legacy-shape shim.
+      Deterministic scaffold engine. Takes raw log sample(s) and a vendor/product
+      name and emits a paired starter parsing rule + datamodel rule. Detects
+      format family (JSON / key-value / CSV / freetext), maps fields to XDM
+      paths via anchor heuristics, and runs the full 75-rule analyser on both
+      outputs before returning. Returns: parsing rule text, modeling rule text,
+      dominant format family, per-rule validation reports, and a blocking flag
+      (true if either rule has ERROR-severity violations). Paste multiple log
+      samples separated by blank lines for multi-sample scaffolding.
     parameters:
-      rule:
+      raw_log:
         type: string
         required: true
-        description: "The XQL rule body (full MODEL or INGEST block)."
-      kind:
+        description: "One or more raw log lines/events. Separate multiple samples with blank lines."
+      vendor:
         type: string
-        default: "modeling"
-        description: "Either 'modeling' or 'parsing'. Defaults to modeling."
+        default: "vendor_name"
+        description: "Vendor name used in rule identifiers (e.g. 'cisco', 'crowdstrike')."
+      product:
+        type: string
+        default: "product_name"
+        description: "Product name used in rule identifiers (e.g. 'asa', 'falcon')."
 
   - id: "xdm_snippets"
     file: "tools/xdm_snippets.py"

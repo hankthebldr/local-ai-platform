@@ -709,7 +709,7 @@ def scaffold_from_samples(
     }
 
 
-def execute(raw_log: str, vendor: str = "vendor_name", product: str = "product_name") -> dict:
+def execute(raw_log: str, vendor: str = "vendor_name", product: str = "product_name", **_unused) -> dict:
     """Single-sample convenience wrapper around scaffold_from_samples.
 
     Splits multi-line input on blank lines so a paste of three JSON events

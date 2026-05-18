@@ -1,0 +1,117 @@
+{
+  "schema": "enclave.skills-catalog/v1",
+  "version": "1.0.0",
+  "updated": "2026-05-18",
+  "skills": [
+    {
+      "id": "concise-writer",
+      "name": "Concise Writer",
+      "category": "writing",
+      "persona": "writer",
+      "description": "Tightens prose. Strips filler, prefers active voice, caps sentence length, refuses padding.",
+      "triggers": ["summarize", "tighten", "shorter", "concise", "tl;dr"],
+      "tags": ["writing", "editing", "concision"],
+      "source": "bundled",
+      "installed_in": ["general-skills"]
+    },
+    {
+      "id": "code-explainer",
+      "name": "Code Explainer",
+      "category": "code",
+      "persona": "coder",
+      "description": "Walks through code with intent, mechanism, and gotchas. Calibrated to the reader's level.",
+      "triggers": ["explain this code", "walk me through", "what does this do", "explain the function"],
+      "tags": ["code", "explanation", "teaching"],
+      "source": "bundled",
+      "installed_in": ["general-skills"]
+    },
+    {
+      "id": "structured-summarizer",
+      "name": "Structured Summarizer",
+      "category": "writing",
+      "persona": "composer",
+      "description": "Produces TL;DR + key points + caveats + next-actions in a fixed scannable shape.",
+      "triggers": ["summarize this", "key points", "executive summary", "brief me"],
+      "tags": ["writing", "summary", "structured"],
+      "source": "bundled",
+      "installed_in": ["general-skills"]
+    },
+    {
+      "id": "test-author",
+      "name": "Test Author",
+      "category": "code",
+      "persona": "validator",
+      "description": "Writes pytest/jest/junit unit tests with positive, negative, and edge-case coverage. Names tests for the contract they enforce, not the function they call.",
+      "triggers": ["write tests", "add unit tests", "test this function", "increase coverage"],
+      "tags": ["code", "testing", "quality"],
+      "source": "catalog",
+      "skill_md": "# Test Author\n\nYou author **unit tests** for the code provided. Follow this protocol:\n\n1. **Read the contract first.** What does the function promise? What does it forbid? Tests assert the contract.\n2. **Three test classes per function**: happy path, error path, edge case. Skip whichever genuinely doesn't apply.\n3. **Name tests by what they enforce.** `test_returns_404_for_unknown_user`, not `test_get_user`.\n4. **One assertion concept per test.** Multi-assert is OK if all assertions describe one behavior; split otherwise.\n5. **Use the project's existing test framework.** Don't introduce a new one.\n6. **Mock at the boundary.** Network, filesystem, time. Never mock the unit under test.\n7. **Comment only what's surprising.** A test name that reads as English needs no doc.\n\nOutput: the test file, ready to drop into the existing tests/ tree, with imports."
+    },
+    {
+      "id": "bug-triager",
+      "name": "Bug Triager",
+      "category": "code",
+      "persona": "analyzer",
+      "description": "Classifies a bug report's severity, reproducibility, and likely subsystem before assignment. Produces a structured triage record.",
+      "triggers": ["triage this bug", "classify this issue", "severity for this"],
+      "tags": ["code", "triage", "incident"],
+      "source": "catalog",
+      "skill_md": "# Bug Triager\n\nProduce a triage record for the bug report. Output ONLY JSON in this exact shape:\n\n```json\n{\n  \"severity\": \"P0|P1|P2|P3\",\n  \"reproducible\": \"always|sometimes|once|unknown\",\n  \"subsystem\": \"<best guess>\",\n  \"summary\": \"<one sentence>\",\n  \"next_action\": \"<specific, actionable, owner-agnostic>\",\n  \"missing_info\": [\"<question>\", ...]\n}\n```\n\nSeverity rubric:\n- P0: production down, data loss, security exposure\n- P1: major function broken, no workaround\n- P2: bug with workaround OR cosmetic on critical surface\n- P3: minor/cosmetic, edge case\n\nDo not guess severity up — when in doubt, lower."
+    },
+    {
+      "id": "sql-author",
+      "name": "SQL Author",
+      "category": "data",
+      "persona": "data",
+      "description": "Writes correct SQL with explicit JOINs, named CTEs, and no SELECT *. Explains the query in 1 sentence above the code block.",
+      "triggers": ["write SQL", "query for", "select from", "join these tables"],
+      "tags": ["data", "sql", "query"],
+      "source": "catalog",
+      "skill_md": "# SQL Author\n\nWhen producing SQL:\n\n1. **Above the query, one sentence describing what it returns.**\n2. **Named CTEs over nested subqueries.** Readability beats cleverness.\n3. **Explicit JOIN syntax** — never implicit comma-joins.\n4. **No SELECT *.** Name every column.\n5. **Qualify columns with their table alias** when there are 2+ tables.\n6. **State your assumptions** about schema/cardinality at the top.\n\nDialect: match what the user is using; default to PostgreSQL. Surface dialect-specific syntax with a comment."
+    },
+    {
+      "id": "release-notes",
+      "name": "Release Notes Author",
+      "category": "writing",
+      "persona": "writer",
+      "description": "Converts a list of merged PRs/commits into release notes grouped by Features / Fixes / Internal. Imperative voice, customer-facing language.",
+      "triggers": ["draft release notes", "changelog from", "summarize this release"],
+      "tags": ["writing", "release", "changelog"],
+      "source": "catalog",
+      "skill_md": "# Release Notes Author\n\nGiven a list of merged PRs/commits, produce release notes.\n\nStructure:\n\n```\n## v<version> — <date>\n\n### Features\n- <imperative, user-facing, one line per item>\n\n### Fixes\n- <imperative, user-facing>\n\n### Internal\n- <brief: refactors, docs, CI>\n```\n\nRules:\n- Imperative voice (\"Add\", \"Fix\", \"Remove\" — not past tense).\n- **Customer language**, not internal terminology. Translate `npe in OrderSvc.refund()` → `Fix crash when refunding zero-quantity orders`.\n- Skip items that don't affect users (renames, internal-only refactors) unless they unblock something.\n- Group by impact, not by author."
+    },
+    {
+      "id": "incident-commander",
+      "name": "Incident Commander",
+      "category": "ops",
+      "persona": "coordinator",
+      "description": "Drives an incident bridge — clarifies scope, names a single decision-maker, tracks decisions + ETAs, distinguishes facts from theories.",
+      "triggers": ["incident response", "we're paged", "production is down", "ic for this"],
+      "tags": ["ops", "incident", "sre"],
+      "source": "catalog",
+      "skill_md": "# Incident Commander\n\nYou run the incident bridge. Follow this loop every update:\n\n1. **State the current scope** in one sentence. Updated whenever scope changes.\n2. **Name the IC.** Exactly one person. Hand off explicitly when changing.\n3. **Facts vs. theories.** Mark each statement: FACT (observed, sourced) or THEORY (we think, because…).\n4. **Track decisions + their owners + ETAs.** Surface unmet ETAs immediately.\n5. **Communicate up + down.** Status update every 15min (or as defined). Customer comms separately.\n6. **Recovery > root cause.** Get back to green first. RCA is a separate session.\n\nWhen the bridge starts: ask for symptom, impact (who's affected), and time-of-onset. Don't accept \"everything's broken\" — push for a concrete first symptom."
+    },
+    {
+      "id": "threat-modeler",
+      "name": "Threat Modeler",
+      "category": "security",
+      "persona": "security",
+      "description": "Walks a system through STRIDE — names the trust boundaries, the assets each boundary protects, and the threats per category.",
+      "triggers": ["threat model", "stride", "security review", "attack surface"],
+      "tags": ["security", "threat-modeling", "stride"],
+      "source": "catalog",
+      "skill_md": "# Threat Modeler\n\nProduce a STRIDE threat model.\n\n1. **Draw the trust boundaries.** Internet → edge → app → datastore → admin. Or whatever fits.\n2. **List the assets each boundary protects.** Data, integrity, availability.\n3. **STRIDE per boundary** — for each of Spoofing / Tampering / Repudiation / Info-disclosure / DoS / Elevation, identify at least one realistic threat OR explicitly say \"N/A because…\".\n4. **Rank by impact × likelihood**, not just severity. A P1 impact with 0.01 likelihood is below a P2 with 0.5 likelihood.\n5. **Suggest mitigations** — concrete, costed (cheap/medium/expensive).\n\nDon't list every theoretical attack — focus on what's plausible against THIS system."
+    },
+    {
+      "id": "json-extractor",
+      "name": "JSON Extractor",
+      "category": "data",
+      "persona": "fast",
+      "description": "Extracts structured fields from messy text into strict JSON matching a schema. Returns nulls for missing fields, never invents values.",
+      "triggers": ["extract to json", "parse this into", "structured extraction"],
+      "tags": ["data", "extraction", "parsing"],
+      "source": "catalog",
+      "skill_md": "# JSON Extractor\n\nExtract fields from the provided text into JSON matching the schema the user gives you.\n\nRules:\n1. **Output ONLY the JSON object.** No prose, no markdown fences, no preamble.\n2. **Missing field → null.** Never invent. Never guess.\n3. **Wrong type in source → null.** Don't coerce \"abc\" into a number.\n4. **Array fields default to empty array** (`[]`), not null.\n5. **Strings only — no objects for fields the schema declares as string.**\n6. **Validate against the schema before emitting.** If you can't satisfy a required field, set it to null and add `_extraction_notes` with a one-line reason.\n\nIf the user didn't supply a schema, ask once — don't guess at one."
+    }
+  ]
+}

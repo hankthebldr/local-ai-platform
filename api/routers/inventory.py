@@ -101,33 +101,57 @@ HARDWARE_PROFILES = {
 
 
 def detect_hardware() -> dict:
-    """Auto-detect which hardware profile matches this machine."""
+    """Auto-detect which hardware profile matches this machine.
+
+    When running in a container, `sysctl` and /proc/cpuinfo describe
+    the container kernel — useless for picking the right profile.
+    The host's docker-compose entry sets ENCLAVE_HOST_CPU_BRAND /
+    ENCLAVE_HOST_RAM_GB / ENCLAVE_HOST_CPU_CORES / ENCLAVE_HOST_GPU
+    via scripts/host-preset.sh, so we prefer those when present and
+    fall back to native detection only outside containers.
+    """
     import platform
 
-    cpu_brand = ""
-    try:
-        if platform.system() == "Darwin":
-            result = subprocess.run(
-                ["sysctl", "-n", "machdep.cpu.brand_string"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            cpu_brand = result.stdout.strip()
-        else:
-            with open("/proc/cpuinfo") as f:
-                for line in f:
-                    if "model name" in line:
-                        cpu_brand = line.split(":")[1].strip()
-                        break
-    except Exception:
-        cpu_brand = platform.processor() or "unknown"
+    host_cpu = os.environ.get("ENCLAVE_HOST_CPU_BRAND", "").strip()
+    host_ram = os.environ.get("ENCLAVE_HOST_RAM_GB", "").strip()
+    host_cores = os.environ.get("ENCLAVE_HOST_CPU_CORES", "").strip()
+    host_gpu = os.environ.get("ENCLAVE_HOST_GPU", "").strip()
+    host_platform = os.environ.get("ENCLAVE_HOST_PLATFORM", "").strip()
+
+    cpu_brand = host_cpu
+    if not cpu_brand:
+        try:
+            if platform.system() == "Darwin":
+                result = subprocess.run(
+                    ["sysctl", "-n", "machdep.cpu.brand_string"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                cpu_brand = result.stdout.strip()
+            else:
+                with open("/proc/cpuinfo") as f:
+                    for line in f:
+                        if "model name" in line:
+                            cpu_brand = line.split(":")[1].strip()
+                            break
+        except Exception:
+            cpu_brand = platform.processor() or ""
+    # Final fallback so the UI never shows an empty "Detected: " label.
+    if not cpu_brand:
+        cpu_brand = platform.processor() or platform.machine() or "unknown CPU"
 
     cpu_lower = cpu_brand.lower()
-    total_ram = _host_ram_gb()
-    thread_count = _host_cpu_cores()
+    try:
+        total_ram = int(host_ram) if host_ram else _host_ram_gb()
+    except ValueError:
+        total_ram = _host_ram_gb()
+    try:
+        thread_count = int(host_cores) if host_cores else _host_cpu_cores()
+    except ValueError:
+        thread_count = _host_cpu_cores()
 
-    # Match known profiles
+    # Match known profiles — keyword scan against the CPU brand string.
     if "7945hx" in cpu_lower or "bd790i" in cpu_lower:
         profile_key = "bd790i"
     elif "13900h" in cpu_lower or ("i9" in cpu_lower and total_ram <= 64):
@@ -137,6 +161,7 @@ def detect_hardware() -> dict:
         or "m4" in cpu_lower
         or "m3" in cpu_lower
         or "m2" in cpu_lower
+        or host_platform == "darwin"
     ):
         profile_key = "mac-m4"
     else:
@@ -150,13 +175,19 @@ def detect_hardware() -> dict:
             "threads": thread_count,
             "ram_gb": total_ram,
             "max_model_ram_gb": round(total_ram * 0.75),
+            "gpu": host_gpu or "",
         }
 
     profile = HARDWARE_PROFILES[profile_key].copy()
     profile["profile"] = profile_key
-    # Override RAM with actual detected value
+    # Override RAM + cores + GPU with detected values so the UI shows
+    # the host's reality rather than a hardcoded profile sample.
     profile["ram_gb"] = total_ram
     profile["threads"] = thread_count
+    if host_gpu:
+        profile["gpu"] = host_gpu
+    # Make the CPU string explicit even on a matched profile.
+    profile["cpu"] = cpu_brand or profile.get("cpu", "")
     return profile
 
 

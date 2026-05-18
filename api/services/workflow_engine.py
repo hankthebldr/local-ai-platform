@@ -56,6 +56,149 @@ class WorkflowEngine:
         )
         # Hook bus default is built per-step in _build_step_bus()
         self._project_root = project_root
+        # Cancel set — run_ids that have received a cancel request. The
+        # execution loop checks this between steps; in-flight LLM calls
+        # complete normally (cooperative cancel, not pre-emptive). This
+        # is a process-local set, so a multi-worker uvicorn deployment
+        # needs to honour cancels via the persisted run.status field
+        # instead — the loop checks both.
+        self._cancel_set: set = set()
+        # Startup reaper — orphaned runs from a previous crash/restart
+        # get marked as failed so the UI's poller can stop chasing them.
+        # Idempotent: subsequent boots are no-ops because the targets
+        # are now in a terminal state.
+        try:
+            n = self._reap_orphan_runs()
+            if n:
+                logger.info(
+                    "Reaped %s orphan workflow run(s) marked running from prior boot.",
+                    n,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Orphan-run reaper failed: %s", exc)
+
+    def _reap_orphan_runs(self, stale_minutes: int = 30) -> int:
+        """Mark abandoned 'running' runs as failed.
+
+        Scans every ``data/workflows/<run_id>/run.json`` checkpoint.
+        A run qualifies as orphaned when:
+
+          - status is running OR queued
+          - no completed_at
+          - last touch (newest of step.completed_at, step.started_at,
+            run.started_at) is older than ``stale_minutes``
+
+        Writes ``status=failed`` and a descriptive error onto the
+        checkpoint. Returns the number of runs reaped.
+
+        Called exactly once per process boot from __init__. After the
+        first scan, normal engine pathways (step completion, cancel,
+        resume) drive every status transition.
+        """
+        import json as _json
+        from datetime import datetime, timezone
+
+        runs_dir = self._project_root / "data" / "workflows"
+        if not runs_dir.is_dir():
+            return 0
+
+        cutoff_s = stale_minutes * 60
+        now = datetime.now(timezone.utc).timestamp()
+        reaped = 0
+        for run_dir in runs_dir.iterdir():
+            if not run_dir.is_dir():
+                continue
+            cp = run_dir / "run.json"
+            if not cp.exists():
+                continue
+            try:
+                with open(cp) as f:
+                    data = _json.load(f)
+            except Exception:
+                continue
+
+            status = (data.get("status") or "").lower()
+            if status not in {"running", "queued"} or data.get("completed_at"):
+                continue
+
+            # Collect all known timestamps; treat the newest as last touch.
+            stamps: list = []
+            started_at = data.get("started_at")
+            if started_at:
+                stamps.append(started_at)
+            for s in data.get("step_results") or []:
+                if not isinstance(s, dict):
+                    continue
+                for k in ("completed_at", "started_at"):
+                    v = s.get(k)
+                    if v:
+                        stamps.append(v)
+
+            def _to_ts(v):
+                try:
+                    return datetime.fromisoformat(
+                        str(v).replace("Z", "+00:00")
+                    ).timestamp()
+                except (TypeError, ValueError):
+                    return 0
+
+            newest = max((_to_ts(v) for v in stamps), default=0)
+            if not newest or (now - newest) <= cutoff_s:
+                continue
+
+            # Mark failed in place.
+            data["status"] = "failed"
+            data["completed_at"] = (
+                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            )
+            existing_err = data.get("error") or ""
+            data["error"] = (
+                "Engine was restarted while this run was in progress; "
+                "no step results were produced for "
+                f"{stale_minutes}+ minutes. Marked failed at boot."
+                + (f" Prior error: {existing_err}" if existing_err else "")
+            )
+            try:
+                tmp = cp.with_suffix(".json.tmp")
+                tmp.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+                tmp.replace(cp)
+                reaped += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not write reaped run.json for %s: %s",
+                    run_dir.name,
+                    exc,
+                )
+        return reaped
+
+    def request_cancel(self, run_id: str) -> bool:
+        """Mark a run for cancellation. Returns True if newly added."""
+        if not run_id:
+            return False
+        if run_id in self._cancel_set:
+            return False
+        self._cancel_set.add(run_id)
+        return True
+
+    def _should_cancel(self, run_id: str) -> bool:
+        """Cancel check — honors process-local set OR persisted status."""
+        if run_id in self._cancel_set:
+            return True
+        # Cross-worker channel: a sibling worker may have written
+        # status="canceled" to the run.json checkpoint.
+        try:
+            from pathlib import Path
+
+            cp = self._project_root / "data" / "workflows" / run_id / "run.json"
+            if cp.exists():
+                import json as _json
+
+                with open(cp) as f:
+                    d = _json.load(f)
+                return (d.get("status") or "").lower() == "canceled"
+        except Exception:
+            pass
+        return False
 
     # ── Load Phase ─────────────────────────────────────────────────────
 
@@ -260,6 +403,22 @@ class WorkflowEngine:
         Checkpoints to disk after every step.
         """
         for step in steps:
+            # Cooperative cancel point — checked at every step boundary.
+            # In-flight LLM calls always complete, which keeps the engine
+            # state model simple and the partial run useful (every
+            # completed step's output is still in workflow_run).
+            if self._should_cancel(workflow_run.run_id):
+                workflow_run.status = "canceled"
+                workflow_run.completed_at = datetime.utcnow()
+                workflow_run.error = f"Run canceled by operator before step '{step.id}'"
+                self._checkpoint(workflow_run)
+                logger.info(
+                    f"Workflow '{definition.id}' canceled before step '{step.id}'"
+                )
+                # Drop the marker now that we've honored it.
+                self._cancel_set.discard(workflow_run.run_id)
+                return
+
             logger.info(f"Executing step '{step.id}' ({step.name})")
 
             try:

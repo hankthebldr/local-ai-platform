@@ -1,0 +1,144 @@
+id: meeting-summary
+name: "Meeting summary → action items"
+description: |
+  Convert a meeting transcript into a structured brief:
+
+    1. extract_signals — surface decisions, action items, open questions,
+       and blockers from the raw transcript.
+    2. classify_actions — assign each action item to an owner + due date
+       (if mentioned) and tag with confidence.
+    3. compose_brief — produce a one-page Markdown brief with TL;DR,
+       decisions, action items table, open questions, and next-steps.
+
+  Designed for noisy transcripts. Bias is toward *fewer high-confidence*
+  action items over many low-confidence ones.
+
+version: "1.0"
+schema_version: 1
+
+metadata:
+  author: "Enclave OOTB"
+  category: "content"
+  tags: ["content", "meeting", "summary", "productivity"]
+  estimated_duration: 90
+
+defaults:
+  role: general
+  temperature: 0.3
+  max_tokens: 4096
+  retries: 1
+
+context:
+  description: |
+    Required seed keys:
+      transcript — raw meeting transcript (text)
+      meeting_title — optional title
+      attendees  — optional list of attendee names
+
+steps:
+  - id: extract_signals
+    name: "1. Extract signals"
+    role: reasoning
+    depends_on: []
+    system_prompt: |
+      Read the transcript and extract structured signals.
+
+      Output ONLY JSON:
+        {
+          "decisions":     ["<short decision sentence>", ...],
+          "action_items":  ["<raw action item text — keep speaker context>", ...],
+          "open_questions":["<unresolved question>", ...],
+          "blockers":      ["<flagged blocker>", ...],
+          "topics":        ["<topic 1>", "<topic 2>", ...]
+        }
+
+      Rules:
+      - Quote the transcript faithfully. Do not invent decisions.
+      - If unclear whether something is a decision or a discussion,
+        put it in open_questions.
+      - Max 12 action items. Prefer the highest-signal items.
+    inputs:
+      - seed.transcript
+    outputs:
+      - decisions
+      - action_items
+      - open_questions
+      - blockers
+      - topics
+    output_format: json
+
+  - id: classify_actions
+    name: "2. Classify action items"
+    role: general
+    depends_on: [extract_signals]
+    system_prompt: |
+      For each action item from extract_signals.action_items, infer
+      owner + due + confidence.
+
+      Output ONLY JSON:
+        {
+          "items": [
+            {
+              "task": "<imperative-phrased action>",
+              "owner": "<name or 'unassigned'>",
+              "due": "<ISO date | week-of | 'unspecified'>",
+              "confidence": "high|medium|low",
+              "source_quote": "<verbatim transcript snippet>"
+            }
+          ]
+        }
+
+      Rules:
+      - confidence=high only when transcript explicitly assigns both
+        owner and a time signal.
+      - Rephrase task in imperative form ("Send report" not "Henry will send").
+      - Keep source_quote short (≤20 words).
+    inputs:
+      - extract_signals.action_items
+      - seed.attendees
+    outputs:
+      - items
+    output_format: json
+
+  - id: compose_brief
+    name: "3. Compose the brief"
+    role: reasoning
+    depends_on: [extract_signals, classify_actions]
+    system_prompt: |
+      Compose a one-page Markdown brief.
+
+      Required sections (in order):
+        # <meeting_title or "Meeting Summary">
+        **TL;DR:** <one sentence — the single most important outcome>
+
+        ## Decisions
+        - <bullet per decision>
+
+        ## Action items
+        | Owner | Task | Due | Confidence |
+        |---|---|---|---|
+
+        ## Open questions
+        - <bullet per question>
+
+        ## Blockers
+        - <bullet per blocker, or "None.">
+
+        ## Topics covered
+        <comma-separated topic chips>
+
+      Rules:
+      - If a section is empty, write "None." rather than omitting the heading.
+      - Sort action items: confidence DESC, then owner.
+      - No filler. No "thanks for the meeting" framing. Pure content.
+    inputs:
+      - seed.meeting_title
+      - seed.attendees
+      - extract_signals.decisions
+      - extract_signals.open_questions
+      - extract_signals.blockers
+      - extract_signals.topics
+      - classify_actions.items
+    outputs:
+      - brief
+    output_format: text

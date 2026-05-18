@@ -10,7 +10,7 @@ Pydantic v2 models for:
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ── Context Source ───────────────────────────────────────────────────────
@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class ContextSource(BaseModel):
     """A source of context injected into the agent's system prompt"""
+
     type: Literal["file", "url", "graph_query", "workflow_output", "text"]
     value: str
     label: Optional[str] = None
@@ -27,9 +28,37 @@ class ContextSource(BaseModel):
 
 
 class AgentTool(BaseModel):
-    """A tool available to the agent during conversation"""
-    type: Literal["web_search", "workflow", "code_exec"]
+    """A tool the agent can invoke during a turn.
+
+    Two shapes are accepted so YAML authors can use whichever feels natural:
+
+      - Built-in tool: ``type: web_search | workflow | code_exec`` with an
+        optional ``config`` dict.
+      - Plugin tool reference: ``plugin_id: <plugin>`` and ``tool_id: <tool>``,
+        pointing at any registered plugin tool (e.g. ``xdm-toolkit::analyse_xql``).
+
+    Exactly one of the two shapes must be present.
+    """
+
+    type: Optional[Literal["web_search", "workflow", "code_exec"]] = None
     config: Dict[str, Any] = Field(default_factory=dict)
+    plugin_id: Optional[str] = None
+    tool_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _one_shape(self) -> "AgentTool":
+        has_builtin = self.type is not None
+        has_plugin = bool(self.plugin_id) or bool(self.tool_id)
+        if not has_builtin and not has_plugin:
+            raise ValueError(
+                "AgentTool requires either 'type' (built-in) or "
+                "'plugin_id'+'tool_id' (plugin tool reference)."
+            )
+        if has_plugin and not (self.plugin_id and self.tool_id):
+            raise ValueError(
+                "plugin tool reference must include both 'plugin_id' and 'tool_id'."
+            )
+        return self
 
 
 # ── Agent Definition ─────────────────────────────────────────────────────
@@ -42,6 +71,7 @@ class AgentDefinition(BaseModel):
     Agents are defined in YAML files under the agents/ directory and can be
     loaded, edited, and used for chat sessions via the API.
     """
+
     id: str
     name: str
     description: Optional[str] = None

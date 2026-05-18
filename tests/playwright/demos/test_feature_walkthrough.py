@@ -17,8 +17,6 @@ record_video_dir is set on the context when ENCLAVE_PLAYWRIGHT_RECORD=1.
 from __future__ import annotations
 
 
-
-
 # Wait helpers ──────────────────────────────────────────────────────────────
 
 
@@ -82,10 +80,16 @@ def test_demo_composer_workstream_tabs(signed_in_page):
 
 
 def test_demo_skills_lab_artifact_capture(signed_in_page):
-    """Walkthrough: open Skills Lab, simulate a finished research result,
-    expand the per-sub-question thinking cards, click capture-as-artifact."""
+    """Walkthrough: open Context (Knowledge Graph + Deep Research),
+    simulate a finished research result, expand the per-sub-question
+    thinking cards, click capture-as-artifact.
+
+    Skill Lab tab was retired — its content (graph + research) moved
+    into the Context tab. Programmatically activating the legacy
+    'research' tab still works (the wrapper is kept hidden); we route
+    through 'documents' so the demo reads as the production IA."""
     page = signed_in_page
-    page.evaluate("() => window.switchTab && window.switchTab('research')")
+    page.evaluate("() => window.switchTab && window.switchTab('documents')")
     _settle(page, 1500)
 
     # Inject a synthetic research result so the demo doesn't need to wait

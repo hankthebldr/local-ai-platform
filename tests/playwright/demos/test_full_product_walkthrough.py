@@ -58,12 +58,16 @@ def test_demo_full_product_walkthrough(signed_in_page, base_url, api_headers):
     page.click('.workbench-tab[data-bench="steps"]')
     _settle(page, 600)
 
-    # 1. Walk every top-level tab so the motion fade reads on video
+    # 1. Walk every top-level tab so the motion fade reads on video.
+    # IA refresh: Runs + Projects are first-class top-level tabs now;
+    # Skill Lab ('research') was retired and folded into Context
+    # ('documents'); the legacy 'workflows' data-tab is Catalog.
     _scene(page, "1 · Top-level navigation")
     for tab in (
         "workflow-index",
         "agents",
-        "research",
+        "runs",
+        "projects",
         "inventory",
         "documents",
         "admin-plugins",
@@ -72,11 +76,12 @@ def test_demo_full_product_walkthrough(signed_in_page, base_url, api_headers):
     ):
         page.evaluate(f"() => window.switchTab && window.switchTab('{tab}')")
         _settle(page, 900)
-    page.evaluate("() => window.switchTab && window.switchTab('workflow-index')")
+    # Land on Projects so the Kanban scene below has the right tab active.
+    page.evaluate("() => window.switchTab && window.switchTab('projects')")
     _settle(page, 1200)
 
     # 2. Kanban — create a project + tasks via API for instant board state,
-    # then drive the UI to show the modal + drag.
+    # then drive the UI to show the modal + drag. Lives in the Projects tab.
     proj_id = f"demo-walkthrough-{int(time.time() * 1000) & 0xFFFF:04x}"
     requests.delete(
         f"{base_url}/api/projects/{proj_id}", headers=api_headers, timeout=5
@@ -131,8 +136,12 @@ def test_demo_full_product_walkthrough(signed_in_page, base_url, api_headers):
     page.click('.workstream-tab[data-ws="step"]')
     _settle(page, 1000)
 
-    # 4. Skills Lab — synthetic research output + capture-as-artifact
-    page.evaluate("() => window.switchTab && window.switchTab('research')")
+    # 4. Skills Lab — synthetic research output + capture-as-artifact.
+    # The Skill Lab tab was retired in the IA refresh; its content
+    # (Knowledge Graph + Deep Research) moved into the Context tab.
+    # Route through 'documents' so the walkthrough reads as the
+    # production IA — the legacy 'research' wrapper is kept hidden.
+    page.evaluate("() => window.switchTab && window.switchTab('documents')")
     _settle(page, 1400)
     _scene(page, "4 · Skills Lab — research + capture")
     page.evaluate(
@@ -195,15 +204,20 @@ def test_demo_full_product_walkthrough(signed_in_page, base_url, api_headers):
     page.click(f'#{page.evaluate("() => window._demoMid")} .msg-rating-btn.up')
     _settle(page, 1200)
 
-    # 6. Admin → System hub (Memory · License Keys · Runs)
-    _scene(page, "6 · Admin · System hub")
+    # 6. Admin → System hub + first-class Runs tab.
+    # IA refresh: Runs was promoted out of the System sub-nav into its
+    # own top-level tab. The remaining System surfaces (Memory +
+    # License Keys) are reachable via the Admin dropdown's System item;
+    # Runs lands directly via switchTab('runs').
+    _scene(page, "6 · Admin · System hub + Runs")
     page.click("#admin-trigger")
     _settle(page, 800)
     page.click('#admin-menu .admin-menu-item:has-text("System")')
     _settle(page, 1600)
     page.click('#tab-memory .system-subnav-link:has-text("License Keys")')
     _settle(page, 1600)
-    page.click('#tab-admin-keys .system-subnav-link:has-text("Runs")')
+    # Runs is its own top-level tab in the new IA; jump there directly.
+    page.evaluate("() => window.switchTab && window.switchTab('runs')")
     _settle(page, 1800)
 
     # 7. Keyboard shortcuts overlay

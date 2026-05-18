@@ -1,0 +1,176 @@
+id: code-review
+name: "Code Review — security, style, bugs"
+description: |
+  Three-pass code review on a single diff or file. Each pass uses a
+  separate model role so concerns stay decoupled:
+
+    1. security_pass — surface vulnerabilities (OWASP, injection, secrets,
+       unsafe deserialisation, auth gaps). LOW false-positive bias.
+    2. correctness_pass — logic bugs, off-by-ones, race conditions, error
+       handling, missing edge cases.
+    3. style_pass — naming, structure, comments, magic numbers, dead code,
+       readability. Hard cap on nitpicks so output stays actionable.
+
+  Final synthesis ranks findings by severity and writes a reviewer-style
+  comment block that can be pasted into a PR.
+
+version: "1.0"
+schema_version: 1
+
+metadata:
+  author: "Enclave OOTB"
+  category: "code"
+  tags: ["code", "review", "security", "quality"]
+  estimated_duration: 180
+
+defaults:
+  role: reasoning
+  temperature: 0.2
+  max_tokens: 4096
+  retries: 1
+  retry_delay: 3
+
+context:
+  description: |
+    Required seed keys:
+      code      — the full code block, diff, or file contents to review
+      language  — optional language hint (python, ts, go, rust, …)
+      context   — optional surrounding context (PR description, intent)
+
+steps:
+  - id: security_pass
+    name: "1. Security review"
+    role: reasoning
+    depends_on: []
+    system_prompt: |
+      You are a security reviewer. Read the code and surface only
+      *real* vulnerabilities. Be conservative — false positives erode
+      trust.
+
+      Output ONLY JSON:
+        {
+          "findings": [
+            {
+              "severity": "critical|high|medium|low",
+              "category": "injection|secrets|authn|authz|deserialization|crypto|other",
+              "line_hint": "<line number or null>",
+              "title": "<short title>",
+              "detail": "<one-paragraph explanation>",
+              "fix": "<concrete remediation>"
+            }
+          ],
+          "verdict": "clean | findings"
+        }
+
+      Cap: at most 5 findings. If you see none, return an empty array
+      and verdict "clean". Do NOT invent issues to fill the cap.
+    inputs:
+      - seed.code
+      - seed.language
+      - seed.context
+    outputs:
+      - findings
+      - verdict
+    output_format: json
+
+  - id: correctness_pass
+    name: "2. Correctness + bugs"
+    role: reasoning
+    depends_on: []
+    system_prompt: |
+      You are a correctness reviewer. Look for logic bugs, off-by-one
+      errors, race conditions, missing error handling, unhandled
+      edge cases, incorrect API usage.
+
+      Output ONLY JSON:
+        {
+          "findings": [
+            {
+              "severity": "high|medium|low",
+              "kind": "logic|edge_case|error_handling|api_misuse|race|other",
+              "line_hint": "<line number or null>",
+              "title": "<short title>",
+              "detail": "<one-paragraph explanation>",
+              "fix": "<suggested fix>"
+            }
+          ]
+        }
+
+      Cap: at most 6 findings. Prefer fewer, sharper findings.
+    inputs:
+      - seed.code
+      - seed.language
+      - seed.context
+    outputs:
+      - findings
+    output_format: json
+
+  - id: style_pass
+    name: "3. Style + readability"
+    role: general
+    temperature: 0.3
+    depends_on: []
+    system_prompt: |
+      You are a code-style reviewer. Surface readability issues:
+      poor names, magic numbers, dead code, complex one-liners,
+      missing comments where intent is non-obvious, inconsistent
+      structure.
+
+      Output ONLY JSON:
+        {
+          "findings": [
+            {"line_hint": "<line>", "issue": "<short>", "suggestion": "<short>"}
+          ]
+        }
+
+      Cap: 4 findings max. No bikeshedding (formatting, tabs vs spaces,
+      single vs double quotes). If a linter would flag it, you don't
+      need to.
+    inputs:
+      - seed.code
+      - seed.language
+    outputs:
+      - findings
+    output_format: json
+
+  - id: synthesize
+    name: "4. Reviewer comment block"
+    role: reasoning
+    depends_on: [security_pass, correctness_pass, style_pass]
+    system_prompt: |
+      You are the lead reviewer producing a PR-comment-style summary.
+
+      You have three findings sets:
+        - security_pass.findings  (security)
+        - correctness_pass.findings  (bugs / edge cases)
+        - style_pass.findings  (readability)
+
+      Produce a single Markdown comment with this structure:
+
+        ## Code Review
+
+        **Verdict:** <APPROVE | REQUEST_CHANGES | COMMENT>
+
+        ### Blockers
+        <bulleted: every critical/high item across all passes — empty bullet "None." if clean>
+
+        ### Recommended fixes
+        <bulleted: medium-severity items>
+
+        ### Nits
+        <bulleted: low-severity + style items, max 5>
+
+      Rules:
+      - Verdict is REQUEST_CHANGES iff there is ≥1 critical/high.
+      - Verdict is APPROVE iff blockers + medium are both empty.
+      - Otherwise COMMENT.
+      - Quote line numbers inline as `L<n>` when available.
+      - Be terse. No filler. No "great job" preamble.
+    inputs:
+      - security_pass.findings
+      - security_pass.verdict
+      - correctness_pass.findings
+      - style_pass.findings
+    outputs:
+      - review
+    output_format: text
