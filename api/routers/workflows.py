@@ -416,11 +416,30 @@ async def get_workflow(workflow_id: str):
 
     Used by the UI to render the hook/role chips on the pipeline. The
     list endpoint returns only summaries; this one returns everything.
+
+    Honors the private-overlay convention: a workflow with the same id
+    in workflows-private/ wins over the public workflows/ copy. Lets
+    the Runs tab render run details for private workflows without
+    needing to ship them in the public repo.
     """
+    import os
+    from pathlib import Path
+
     if not workflow_id or not all(c.isalnum() or c in "_-" for c in workflow_id):
         raise HTTPException(status_code=400, detail="invalid workflow id")
     engine = get_engine()
-    yaml_path = f"{WORKFLOWS_DIR}/{workflow_id}.yaml"
+    # Overlay first, then public — matches the same precedence the
+    # list endpoint + the workflow_index service already use.
+    private_dir = os.getenv("WORKFLOWS_PRIVATE_DIR", "./workflows-private")
+    candidates = [
+        Path(private_dir) / f"{workflow_id}.yaml",
+        Path(WORKFLOWS_DIR) / f"{workflow_id}.yaml",
+    ]
+    yaml_path = next((str(p) for p in candidates if p.exists()), None)
+    if not yaml_path:
+        raise HTTPException(
+            status_code=404, detail=f"workflow '{workflow_id}' not found"
+        )
     try:
         defn = engine.load(yaml_path)
     except FileNotFoundError:
