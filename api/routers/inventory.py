@@ -20,7 +20,6 @@ from dotenv import load_dotenv
 from ..logging_config import logger
 from ..services.discovery_service import (
     get_cached_or_discover,
-    load_discovery_cache,
     is_cache_fresh,
     TRUSTED_AUTHORS,
 )
@@ -42,6 +41,40 @@ _pull_jobs: dict = {}  # model_name -> {status, progress, total, completed}
 
 # ── Hardware Detection ────────────────────────────────────────────────────
 
+
+def _host_ram_gb() -> int:
+    """Total host RAM in GB. Prefers ENCLAVE_HOST_RAM_GB (compose injects
+    this from sysctl/proc) over psutil, which on Docker Desktop sees only
+    the Linux VM's allocation rather than the real machine."""
+    env = os.getenv("ENCLAVE_HOST_RAM_GB", "").strip()
+    if env.isdigit():
+        return int(env)
+    return round(psutil.virtual_memory().total / (1024**3))
+
+
+def _host_cpu_cores() -> int:
+    """Host physical core count. Same env-var-first pattern as RAM."""
+    env = os.getenv("ENCLAVE_HOST_CPU_CORES", "").strip()
+    if env.isdigit():
+        return int(env)
+    return psutil.cpu_count() or 0
+
+
+def _host_cpu_brand() -> str:
+    """Host CPU brand string, injected by compose (sysctl machdep.cpu.brand_string)."""
+    return os.getenv("ENCLAVE_HOST_CPU_BRAND", "").strip()
+
+
+def _host_gpu() -> str:
+    """Host GPU model string (e.g. "NVIDIA RTX 4000 Blackwell").
+
+    Set by `scripts/host-preset.sh` on hosts with a discrete GPU. Empty
+    string indicates CPU-only inference. The SPA surfaces this in the
+    system strip so the operator can see GPU acceleration is live.
+    """
+    return os.getenv("ENCLAVE_HOST_GPU", "").strip()
+
+
 HARDWARE_PROFILES = {
     "ms01": {
         "name": "Minisforum MS-01",
@@ -59,10 +92,10 @@ HARDWARE_PROFILES = {
     },
     "mac-m4": {
         "name": "Mac M4 Pro",
-        "cpu": "Apple M4 Pro",
-        "threads": psutil.cpu_count() or 12,
-        "ram_gb": round(psutil.virtual_memory().total / (1024**3)),
-        "max_model_ram_gb": round(psutil.virtual_memory().total / (1024**3) * 0.75),
+        "cpu": _host_cpu_brand() or "Apple M4 Pro",
+        "threads": _host_cpu_cores() or 12,
+        "ram_gb": _host_ram_gb(),
+        "max_model_ram_gb": round(_host_ram_gb() * 0.75),
     },
 }
 
@@ -76,7 +109,9 @@ def detect_hardware() -> dict:
         if platform.system() == "Darwin":
             result = subprocess.run(
                 ["sysctl", "-n", "machdep.cpu.brand_string"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             cpu_brand = result.stdout.strip()
         else:
@@ -89,15 +124,20 @@ def detect_hardware() -> dict:
         cpu_brand = platform.processor() or "unknown"
 
     cpu_lower = cpu_brand.lower()
-    total_ram = round(psutil.virtual_memory().total / (1024**3))
-    thread_count = psutil.cpu_count() or 0
+    total_ram = _host_ram_gb()
+    thread_count = _host_cpu_cores()
 
     # Match known profiles
     if "7945hx" in cpu_lower or "bd790i" in cpu_lower:
         profile_key = "bd790i"
     elif "13900h" in cpu_lower or ("i9" in cpu_lower and total_ram <= 64):
         profile_key = "ms01"
-    elif "apple" in cpu_lower or "m4" in cpu_lower or "m3" in cpu_lower or "m2" in cpu_lower:
+    elif (
+        "apple" in cpu_lower
+        or "m4" in cpu_lower
+        or "m3" in cpu_lower
+        or "m2" in cpu_lower
+    ):
         profile_key = "mac-m4"
     else:
         profile_key = "auto"
@@ -122,6 +162,7 @@ def detect_hardware() -> dict:
 
 # ── Model Registry (imported from models/download.py) ─────────────────────
 
+
 def _get_registry() -> dict:
     """Import MODEL_REGISTRY from models/download.py at call time."""
     import sys
@@ -133,6 +174,7 @@ def _get_registry() -> dict:
         sys.path.insert(0, str(project_root))
 
     from models.download import MODEL_REGISTRY
+
     return MODEL_REGISTRY
 
 
@@ -179,6 +221,7 @@ def _get_installed_name(ollama_name: str, installed: dict) -> Optional[str]:
 
 
 # ── Model Scoring ──────────────────────────────────────────────────────────
+
 
 def _parse_context_k(ctx_str: str) -> int:
     """Parse context string like '128K', '256K', '32K' to integer thousands."""
@@ -242,15 +285,31 @@ def score_model(model: dict) -> float:
 
 @router.get("/system")
 async def system_info():
-    """Hardware auto-detection and system info for the dashboard."""
+    """Hardware auto-detection and system info for the dashboard.
+
+    Splits two distinct concerns the SPA used to conflate:
+      * memory.total_gb / cpu.count = HOST hardware (what models you can
+        theoretically run). Pulled from ENCLAVE_HOST_* env vars when set
+        so the container reports the real machine, not the Docker VM.
+      * memory.used_gb / cpu.percent = CONTAINER live usage (what the API
+        process is consuming right now). Always from psutil — accurate
+        for the API itself, not the host.
+    """
     hw = detect_hardware()
     mem = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
+    host_ram_gb = _host_ram_gb()
+    host_cores = _host_cpu_cores()
+    host_source = "env" if os.getenv("ENCLAVE_HOST_RAM_GB", "").strip() else "container"
 
     return {
         "hardware": hw,
+        "host_source": host_source,
         "memory": {
-            "total_gb": round(mem.total / (1024**3), 1),
+            # Host total — accurate on Docker Desktop only when the env
+            # var is set; otherwise this is the Linux-VM slice.
+            "total_gb": float(host_ram_gb),
+            # Container-scoped live usage.
             "used_gb": round(mem.used / (1024**3), 1),
             "available_gb": round(mem.available / (1024**3), 1),
             "percent": mem.percent,
@@ -263,8 +322,15 @@ async def system_info():
         },
         "cpu": {
             "percent": psutil.cpu_percent(interval=0.1),
-            "count": psutil.cpu_count(),
-            "count_physical": psutil.cpu_count(logical=False),
+            "count": host_cores,
+            "count_physical": host_cores,
+            "brand": _host_cpu_brand(),
+        },
+        "gpu": {
+            # Empty string when no discrete GPU (Mac/CPU-only hosts).
+            # Populated by host-preset.sh via ENCLAVE_HOST_GPU env var.
+            "model": _host_gpu(),
+            "present": bool(_host_gpu()),
         },
     }
 
@@ -326,21 +392,25 @@ async def catalog(tag: Optional[str] = None):
     # Also include installed models NOT in registry
     registry_ollama_names = {info.get("ollama", "") for info in registry.values()}
     for name, details in installed.items():
-        if not any(name.startswith(reg) or reg in name for reg in registry_ollama_names if reg):
-            models.append({
-                "id": name,
-                "name": name,
-                "ollama": name,
-                "size": f"{details.get('size_gb', 0):.1f}GB",
-                "size_gb": details.get("size_gb", 0),
-                "speed": "—",
-                "context": "—",
-                "description": "Installed (not in catalog)",
-                "tags": ["extra"],
-                "installed": True,
-                "installed_info": details,
-                "fits_ram": True,
-            })
+        if not any(
+            name.startswith(reg) or reg in name for reg in registry_ollama_names if reg
+        ):
+            models.append(
+                {
+                    "id": name,
+                    "name": name,
+                    "ollama": name,
+                    "size": f"{details.get('size_gb', 0):.1f}GB",
+                    "size_gb": details.get("size_gb", 0),
+                    "speed": "—",
+                    "context": "—",
+                    "description": "Installed (not in catalog)",
+                    "tags": ["extra"],
+                    "installed": True,
+                    "installed_info": details,
+                    "fits_ram": True,
+                }
+            )
 
     # Sort by score descending (abliterated + large context first)
     models.sort(key=lambda m: m.get("score", 0), reverse=True)
@@ -390,7 +460,13 @@ async def pull_model(req: PullRequest, background_tasks: BackgroundTasks):
     if model in _pull_jobs and _pull_jobs[model].get("status") == "pulling":
         return {"status": "already_pulling", "model": model}
 
-    _pull_jobs[model] = {"status": "pulling", "progress": 0, "total": 0, "completed": False, "error": None}
+    _pull_jobs[model] = {
+        "status": "pulling",
+        "progress": 0,
+        "total": 0,
+        "completed": False,
+        "error": None,
+    }
 
     def _do_pull():
         try:
@@ -404,6 +480,7 @@ async def pull_model(req: PullRequest, background_tasks: BackgroundTasks):
             for line in resp.iter_lines():
                 if line:
                     import json
+
                     data = json.loads(line)
                     _pull_jobs[model]["progress"] = data.get("completed", 0)
                     _pull_jobs[model]["total"] = data.get("total", 0)
@@ -464,16 +541,18 @@ async def memory_usage():
         data = resp.json()
         running = []
         for model in data.get("models", []):
-            running.append({
-                "name": model.get("name", ""),
-                "size_bytes": model.get("size", 0),
-                "size_gb": round(model.get("size", 0) / (1024**3), 2),
-                "size_vram_bytes": model.get("size_vram", 0),
-                "size_vram_gb": round(model.get("size_vram", 0) / (1024**3), 2),
-                "digest": model.get("digest", "")[:12],
-                "expires_at": model.get("expires_at", ""),
-                "details": model.get("details", {}),
-            })
+            running.append(
+                {
+                    "name": model.get("name", ""),
+                    "size_bytes": model.get("size", 0),
+                    "size_gb": round(model.get("size", 0) / (1024**3), 2),
+                    "size_vram_bytes": model.get("size_vram", 0),
+                    "size_vram_gb": round(model.get("size_vram", 0) / (1024**3), 2),
+                    "digest": model.get("digest", "")[:12],
+                    "expires_at": model.get("expires_at", ""),
+                    "details": model.get("details", {}),
+                }
+            )
 
         mem = psutil.virtual_memory()
         return {
@@ -541,7 +620,10 @@ async def discover_refresh(background_tasks: BackgroundTasks):
         get_cached_or_discover(max_model_ram_gb=max_ram, force=True)
 
     background_tasks.add_task(_run_discovery)
-    return {"status": "refreshing", "message": "Discovery running in background. Poll /discover for results."}
+    return {
+        "status": "refreshing",
+        "message": "Discovery running in background. Poll /discover for results.",
+    }
 
 
 # ── Search Settings Endpoints ──────────────────────────────────────────────
@@ -558,7 +640,9 @@ class SearchSettingsRequest(BaseModel):
     brave_api_key: Optional[str] = Field(None, description="Brave Search API key")
     search_timeout: Optional[int] = Field(None, description="Search timeout in seconds")
     max_results: Optional[int] = Field(None, description="Max search results per query")
-    default_backend: Optional[str] = Field(None, description="Preferred backend: auto, duckduckgo, searxng, brave")
+    default_backend: Optional[str] = Field(
+        None, description="Preferred backend: auto, duckduckgo, searxng, brave"
+    )
 
 
 @router.post("/settings/search")
@@ -568,14 +652,36 @@ async def update_settings_search(req: SearchSettingsRequest):
 
     # Merge: only update fields that were explicitly provided
     updated = {
-        "searxng_url": req.searxng_url if req.searxng_url is not None else current.get("searxng_url", ""),
-        "brave_api_key": req.brave_api_key if req.brave_api_key is not None else current.get("brave_api_key", ""),
-        "search_timeout": req.search_timeout if req.search_timeout is not None else current.get("search_timeout", 10),
-        "max_results": req.max_results if req.max_results is not None else current.get("max_results", 5),
-        "default_backend": req.default_backend if req.default_backend is not None else current.get("default_backend", "auto"),
+        "searxng_url": (
+            req.searxng_url
+            if req.searxng_url is not None
+            else current.get("searxng_url", "")
+        ),
+        "brave_api_key": (
+            req.brave_api_key
+            if req.brave_api_key is not None
+            else current.get("brave_api_key", "")
+        ),
+        "search_timeout": (
+            req.search_timeout
+            if req.search_timeout is not None
+            else current.get("search_timeout", 10)
+        ),
+        "max_results": (
+            req.max_results
+            if req.max_results is not None
+            else current.get("max_results", 5)
+        ),
+        "default_backend": (
+            req.default_backend
+            if req.default_backend is not None
+            else current.get("default_backend", "auto")
+        ),
     }
 
     save_search_config(updated)
-    logger.info(f"Search settings updated: backend={updated['default_backend']}, searxng={'set' if updated['searxng_url'] else 'unset'}, brave={'set' if updated['brave_api_key'] else 'unset'}")
+    logger.info(
+        f"Search settings updated: backend={updated['default_backend']}, searxng={'set' if updated['searxng_url'] else 'unset'}, brave={'set' if updated['brave_api_key'] else 'unset'}"
+    )
 
     return {"status": "saved", "config": get_search_config()}

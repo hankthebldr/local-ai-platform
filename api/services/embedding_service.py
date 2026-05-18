@@ -37,8 +37,12 @@ class EmbeddingService:
         backend: Optional[str] = None,
     ):
         self._ollama = ollama_service
-        self._ollama_model = ollama_model or os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
-        self._st_model = st_model or os.getenv("SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
+        self._ollama_model = ollama_model or os.getenv(
+            "OLLAMA_EMBEDDING_MODEL", "nomic-embed-text"
+        )
+        self._st_model = st_model or os.getenv(
+            "SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2"
+        )
         self._backend_choice = backend or os.getenv("EMBEDDING_BACKEND", "auto")
 
         self._backend: Optional[str] = None
@@ -79,12 +83,16 @@ class EmbeddingService:
             self._backend = "ollama"
             self._model = self._ollama_model
             self._dimension = len(embedding)
-            logger.info(f"Embedding backend: Ollama ({self._ollama_model}, dim={self._dimension})")
+            logger.info(
+                f"Embedding backend: Ollama ({self._ollama_model}, dim={self._dimension})"
+            )
             return True
         except Exception as e:
             logger.warning(f"Ollama embeddings probe failed: {e}")
             if raise_on_fail:
-                raise EmbeddingBackendUnavailable(f"Ollama embedding backend failed: {e}") from e
+                raise EmbeddingBackendUnavailable(
+                    f"Ollama embedding backend failed: {e}"
+                ) from e
             return False
 
     def _bind_sentence_transformers(self, raise_on_fail: bool) -> bool:
@@ -109,6 +117,7 @@ class EmbeddingService:
     def _load_sentence_transformer(self) -> None:
         """Import and instantiate sentence-transformers. Isolated for test patching."""
         from sentence_transformers import SentenceTransformer
+
         self._st_instance = SentenceTransformer(self._st_model)
 
     # ── Embedding API ─────────────────────────────────────────────────
@@ -118,7 +127,13 @@ class EmbeddingService:
             return []
         if self._backend == "ollama":
             return [self._embed_one_ollama(t) for t in texts]
-        return [list(v) for v in self._st_instance.encode(texts, convert_to_numpy=False)]
+        # sentence_transformers + chromadb: must return List[List[float]].
+        # Previously this used convert_to_numpy=False + list(v), which leaks
+        # PyTorch tensor objects into the embeddings list and breaks Chroma's
+        # add() with: "got [[tensor(0.04…), tensor(-0.02…)]]". convert_to_numpy=True
+        # returns np.ndarray rows; .tolist() flattens them to native floats.
+        embeddings = self._st_instance.encode(texts, convert_to_numpy=True)
+        return [row.tolist() for row in embeddings]
 
     def _embed_one_ollama(self, text: str) -> List[float]:
         resp = requests.post(
@@ -129,7 +144,9 @@ class EmbeddingService:
         resp.raise_for_status()
         embedding = resp.json().get("embedding")
         if not embedding:
-            raise RuntimeError(f"Ollama returned empty embedding for text: {text[:60]}...")
+            raise RuntimeError(
+                f"Ollama returned empty embedding for text: {text[:60]}..."
+            )
         return embedding
 
     def embed_query(self, text: str) -> List[float]:

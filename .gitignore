@@ -171,3 +171,12 @@ desktop/build/
 .claude/worktrees/
 .worktrees/
 .superpowers/
+
+# ── Playwright artifacts (PNG screenshots + WebM videos + traces) ───
+# Per-run, intentionally not committed; reproducible by running
+# scripts/run-playwright.sh or scripts/record-demos.sh.
+playwright-results/
+
+# ── Runtime data captured locally (feedback + per-project tasks) ────
+data/feedback/
+data/projects/

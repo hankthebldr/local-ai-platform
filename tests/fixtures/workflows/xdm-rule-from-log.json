@@ -1,0 +1,10 @@
+{
+  "_comment": "Execution fixture for the 4-step single-log XDM rule workflow.",
+  "timeout_seconds": 300,
+  "seed": {
+    "vendor": "AcmeAuth",
+    "product": "AcmeAuth Cloud SSO",
+    "raw_log": "May 17 03:42:18 sso-edge AcmeAuth[2031]: AUTH_FAIL src_ip=185.220.101.45 user=alice@example.com host=workstation-07 reason=invalid_credentials",
+    "dataset_name": "acme_auth_raw"
+  }
+}

@@ -158,6 +158,7 @@ class WorkflowEngine:
         self,
         definition: WorkflowDefinition,
         seed: Dict[str, Any],
+        run_id: Optional[str] = None,
     ) -> WorkflowRun:
         """
         Execute a workflow end-to-end.
@@ -166,13 +167,20 @@ class WorkflowEngine:
         and returns the completed (or failed) run. The run is checkpointed
         to disk after each step so a crash mid-run leaves a resumable
         snapshot — see resume().
+
+        Pass `run_id` to force a specific run identifier (used by the
+        async run endpoint so the caller can pre-publish the polling
+        URL before the engine starts work).
         """
         context = WorkflowContext(seed=seed)
-        workflow_run = WorkflowRun(
-            workflow_id=definition.id,
-            context=context,
-            started_at=datetime.utcnow(),
-        )
+        kwargs = {
+            "workflow_id": definition.id,
+            "context": context,
+            "started_at": datetime.utcnow(),
+        }
+        if run_id:
+            kwargs["run_id"] = run_id
+        workflow_run = WorkflowRun(**kwargs)
         workflow_run.status = "running"
 
         logger.info(

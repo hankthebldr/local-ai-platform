@@ -1,0 +1,15 @@
+# Playwright browser E2E — installs alongside the dev tools but kept in its
+# own requirements file so the production API image doesn't pick up a
+# headless Chromium dependency.
+#
+# After installing Python deps, fetch the browser binary once:
+#   playwright install chromium
+#
+# Run the suite:
+#   pytest tests/playwright -v
+#   pytest tests/playwright -m "not slow" -v   # skip workflow-execution tests
+
+-r requirements-core.txt
+
+playwright>=1.46.0
+pytest-playwright>=0.5.1

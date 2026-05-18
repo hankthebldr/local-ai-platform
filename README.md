@@ -58,13 +58,13 @@ For non-developers on Linux / Windows, or anyone who wants Enclave fully isolate
    ```bash
    ./run.sh
    ```
-3. The script verifies Docker, brings up the stack (`ollama` + `api` + `webui`), pulls a small starter model on first run (`llama3.2:3b`, ~2 GB), and opens the dashboard in your browser.
+3. The script verifies Docker, brings up the stack (`ollama` + `api`), pulls a small starter model on first run (`llama3.2:3b`, ~2 GB), and opens the dashboard in your browser.
 
 | | URL |
 |---|---|
-| **Dashboard** (recommended) | `http://localhost:8000` |
-| Chat UI (Open WebUI)        | `http://localhost:8080` |
-| API docs                    | `http://localhost:8000/docs` |
+| **Enclave SPA** (the application) | `http://localhost:8000` |
+| API docs                          | `http://localhost:8000/docs` |
+| Open WebUI (opt-in)               | `http://localhost:8081` — `docker compose -f docker-compose.yml -f docker-compose.webui.yml up -d` |
 
 To stop: `./stop.sh` (data preserved) — or `./stop.sh --reset` to wipe models and chat history.
 

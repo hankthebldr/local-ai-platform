@@ -26,6 +26,15 @@ skills:
       - keyword: "review my rule"
       - manual: true
 
+  - id: "rag-query-crafter"
+    file: "skills/rag-query-crafter.md"
+    triggers:
+      - keyword: "rag"
+      - keyword: "knowledge base"
+      - keyword: "look up document"
+      - keyword: "retrieve from docs"
+      - manual: true
+
 # Tools are callable from any step's agentic loop. Each is a Python file
 # implementing an `execute(params: dict) -> dict` entrypoint.
 tools:

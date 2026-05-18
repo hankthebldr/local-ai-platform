@@ -198,6 +198,906 @@ html { font-size: 14px; }
     scroll-behavior: auto !important;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   MOTION DESIGN — modernization layer (2026-05-18)
+   ──────────────────────────────────────────────────────────────────
+   The original UI was deliberately boxy / mil-spec-flat. This layer
+   adds tasteful motion + interaction polish without changing layout:
+   easing tokens, hover lifts, focus rings, skeleton loaders, toast
+   stack, tab fade transitions. Everything respects prefers-reduced-
+   motion via the block above (transition-duration is overridden).
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Easing tokens — same curve, scaled durations.
+     fast = micro-interactions (button press, hover)
+     med  = panel changes, tab swaps
+     slow = modals, page-level enters */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:    cubic-bezier(0.7, 0, 0.84, 0);
+  --t-fast:     140ms;
+  --t-med:      220ms;
+  --t-slow:     340ms;
+
+  /* Elevation scale — used by card-hover lifts. Subtle on dark theme. */
+  --elev-1: 0 1px 2px rgba(0,0,0,0.35);
+  --elev-2: 0 4px 12px rgba(0,0,0,0.45), 0 0 0 1px var(--accent-trace);
+  --elev-3: 0 8px 24px rgba(0,0,0,0.55), 0 0 0 1px var(--accent-dim);
+}
+
+/* Buttons — press feedback + subtle lift on hover. The existing
+   .action-btn / .tab-btn / .send-btn variants already have hover
+   color changes; this just adds the motion. */
+.action-btn,
+.send-btn,
+.tab-btn,
+.workbench-tab,
+.system-subnav-link,
+.admin-menu-item,
+.admin-modal-btn,
+.canvas-ctrl {
+  transition:
+    transform var(--t-fast) var(--ease-out),
+    background-color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
+}
+.action-btn:hover:not(:disabled),
+.send-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.action-btn:active:not(:disabled),
+.send-btn:active:not(:disabled),
+.tab-btn:active,
+.workbench-tab:active,
+.admin-menu-item:active {
+  transform: translateY(0.5px);
+}
+
+/* Cards lift on hover — workbench items, model items, wfi cards. */
+.workbench-item,
+.wfi-card,
+.model-item,
+.plugins-detail-panel,
+.composer-canvas-panel {
+  transition:
+    transform var(--t-med) var(--ease-out),
+    box-shadow var(--t-med) var(--ease-out),
+    border-color var(--t-med) var(--ease-out);
+}
+.workbench-item:hover,
+.wfi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--elev-2);
+  border-color: var(--accent-dim);
+}
+
+/* Panel borders breathe lightly when the cursor is over them. */
+.panel {
+  transition: border-color var(--t-med) var(--ease-out);
+}
+
+/* Status pip — a living pulse so the "system OK" signal feels live
+   rather than a flat dot. The existing .status-pip used a flat color;
+   this adds a soft halo that fades in/out. */
+@keyframes enclave-pip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-dim); }
+  50%      { box-shadow: 0 0 0 4px transparent; }
+}
+.status-pip.online,
+.gauge-fill.cpu,
+.pip.idle {
+  animation: enclave-pip-pulse 2.4s var(--ease-out) infinite;
+}
+
+/* Inputs — focus state with a subtle ring that grows on focus.
+   Doesn't conflict with the existing :focus-visible outline. */
+.chat-input,
+.search-input,
+.model-select {
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
+}
+.chat-input:focus,
+.search-input:focus,
+.model-select:focus {
+  box-shadow: 0 0 0 3px var(--accent-ghost);
+}
+
+/* Tab content — fade-in when activated. Uses the .active toggle that
+   switchTab() already sets, so no JS changes required. */
+.tab-content {
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity var(--t-med) var(--ease-out),
+    transform var(--t-med) var(--ease-out);
+  pointer-events: none;
+}
+.tab-content.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Sub-nav active link — accent fill animates in. */
+.system-subnav-link::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--t-med) var(--ease-out);
+}
+.system-subnav-link { position: relative; }
+.system-subnav-link.active::after { transform: scaleX(1); }
+
+/* ── Skeleton loader ─────────────────────────────────────────────
+   Drop the .skeleton class on any element to replace "Loading…" with
+   a shimmer block. Use width/height inline or via a wrapper. */
+@keyframes enclave-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  display: inline-block;
+  position: relative;
+  background:
+    linear-gradient(
+      90deg,
+      var(--border) 0%,
+      var(--accent-ghost) 50%,
+      var(--border) 100%
+    );
+  background-size: 200% 100%;
+  animation: enclave-shimmer 1.6s linear infinite;
+  border-radius: 3px;
+  color: transparent !important;
+  user-select: none;
+  min-height: 0.9em;
+  min-width: 4ch;
+}
+.skeleton-line { display: block; height: 0.85em; margin: 4px 0; }
+.skeleton-line.short { width: 40%; }
+.skeleton-line.long  { width: 88%; }
+
+/* ── Toast notifications ─────────────────────────────────────────
+   Stack lives in #enclave-toasts (inserted lazily by the JS API).
+   Each .enclave-toast is a small card that slides in from the right,
+   auto-dismisses, and matches the brand palette. */
+#enclave-toasts {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.enclave-toast {
+  pointer-events: auto;
+  padding: 10px 14px 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text);
+  max-width: 360px;
+  box-shadow: var(--elev-2);
+  opacity: 0;
+  transform: translateX(20px);
+  animation: enclave-toast-in var(--t-med) var(--ease-out) forwards;
+}
+.enclave-toast.dismissing {
+  animation: enclave-toast-out var(--t-med) var(--ease-in) forwards;
+}
+.enclave-toast.kind-warn   { border-left-color: var(--amber); }
+.enclave-toast.kind-danger { border-left-color: var(--red); }
+.enclave-toast.kind-info   { border-left-color: var(--cyan); }
+.enclave-toast .toast-title {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+@keyframes enclave-toast-in {
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes enclave-toast-out {
+  to { opacity: 0; transform: translateX(20px); }
+}
+
+/* ── Chat message rating toolbar ─────────────────────────────────
+   Appears below each assistant message. Thumbs up/down + copy. State
+   is rehydrated from localStorage by ChatRating.rehydrate(). */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  opacity: 0.45;
+  transition: opacity var(--t-fast) var(--ease-out);
+}
+.msg.assistant:hover .msg-actions,
+.msg-actions:focus-within,
+.msg-actions.has-rating { opacity: 1; }
+.msg-rating-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition:
+    color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out);
+}
+.msg-rating-btn:hover { transform: translateY(-1px); }
+.msg-rating-btn.up:hover    { color: var(--accent); border-color: var(--accent-dim); }
+.msg-rating-btn.down:hover  { color: var(--red);    border-color: var(--red-dim); }
+.msg-rating-btn.copy:hover  { color: var(--text);   border-color: var(--text-dim); }
+.msg-rating-btn.up.on   { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-ghost); }
+.msg-rating-btn.down.on { color: var(--red);    border-color: var(--red-dim);    background: rgba(255,51,102,0.08); }
+.msg-rating-status {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ── Global responsive defaults ──────────────────────────────────
+   Every form control inside a panel grows to fill its column unless
+   explicitly constrained. Panels themselves use box-sizing:border-box
+   so padding doesn't push them past their parent. This is what makes
+   the site feel "alive" — clicking a panel makes inputs jump to use
+   every pixel available. */
+.panel { box-sizing: border-box; width: 100%; }
+.panel input[type="text"]:not([style*="width:"]),
+.panel input[type="password"]:not([style*="width:"]),
+.panel input[type="number"]:not([style*="width:"]),
+.panel input[type="date"]:not([style*="width:"]),
+.panel textarea:not([style*="width:"]) {
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+.panel select.model-select:not([style*="width:"]) {
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+/* Admin modal cards used to be capped at fixed pixels. Let them grow
+   to a sensible % of the viewport on big screens. */
+.admin-modal-card {
+  width: min(640px, 90vw) !important;
+  max-width: 90vw;
+  box-sizing: border-box;
+}
+.admin-modal-card input[type="password"],
+.admin-modal-card input[type="text"],
+.admin-modal-card input[type="number"],
+.admin-modal-card input[type="date"],
+.admin-modal-card textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Heartbeat-driven env chip states ────────────────────────────
+   The existing #env-chip in the header reflects backend liveness:
+   healthy = subtle accent border, degraded = amber pulse, offline =
+   red pulse. Heartbeat module toggles these classes every 30s. */
+#env-chip { transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out); }
+#env-chip.healthy  { border-color: var(--accent-dim); color: var(--accent); }
+#env-chip.degraded {
+  border-color: var(--amber);
+  color: var(--amber);
+  animation: enclave-degraded-pulse 2.2s var(--ease-out) infinite;
+}
+#env-chip.offline  {
+  border-color: var(--red);
+  color: var(--red);
+  animation: enclave-degraded-pulse 1.4s var(--ease-out) infinite;
+}
+@keyframes enclave-degraded-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  50%      { box-shadow: 0 0 0 4px transparent; opacity: 0.6; }
+}
+
+/* ── Unified error + empty states ───────────────────────────────
+   Every "load failed" / "no data" surface in the app uses the same
+   visual treatment. ErrorPanel.render(el, {…}) and EmptyState.render
+   write into the same shape so panels feel consistent. */
+.enclave-error-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--red-dim);
+  border-left-width: 3px;
+  background: rgba(255, 51, 102, 0.04);
+  border-radius: 3px;
+  font-family: var(--mono);
+}
+.enclave-error-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--red-dim);
+  border-radius: 50%;
+  color: var(--red);
+  font-size: 0.9rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.enclave-error-body { flex: 1; min-width: 0; }
+.enclave-error-title {
+  color: var(--red);
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.enclave-error-detail {
+  color: var(--text-dim);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.enclave-error-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.enclave-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 28px 16px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+.enclave-empty-glyph {
+  font-size: 1.6rem;
+  color: var(--accent-dim);
+  line-height: 1;
+}
+.enclave-empty-title {
+  color: var(--text);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+.enclave-empty-detail {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  max-width: 420px;
+  line-height: 1.5;
+}
+.enclave-empty-state .action-btn { margin-top: 8px; }
+
+/* ── Keyboard shortcuts overlay ─────────────────────────────────
+   Triggered by Cmd/Ctrl-K or "?". Lists the g+letter tab jumps. */
+.kbd-list {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) 1fr;
+  gap: 6px 14px;
+  margin-top: 10px;
+  font-size: 0.72rem;
+}
+.kbd-row {
+  display: contents;
+}
+.kbd-key {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--bg-deep);
+  color: var(--accent);
+  border-radius: 3px;
+  min-width: 60px;
+  text-align: center;
+}
+.kbd-label { color: var(--text-dim); align-self: center; }
+
+/* ── Kanban board (Projects + Tasks in Workflow Index) ──────────
+   Three fluid columns. Cards are draggable across columns; drop-target
+   columns get an accent-tinted background while a card is hovering. */
+.kanban-panel { padding: 14px 16px; }
+.kanban-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.kanban-head-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kanban-project-label {
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .kanban-board { grid-template-columns: 1fr; }
+}
+.kanban-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-deep);
+  overflow: hidden;
+}
+.kanban-col-head {
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.kanban-col[data-column="todo"]  .kanban-col-head { border-bottom-color: var(--amber-dim); }
+.kanban-col[data-column="doing"] .kanban-col-head { border-bottom-color: var(--cyan-dim); }
+.kanban-col[data-column="done"]  .kanban-col-head { border-bottom-color: var(--accent-dim); }
+.kanban-col-title {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.kanban-col-count {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.kanban-col-body {
+  flex: 1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 480px;
+  transition: background var(--t-fast) var(--ease-out);
+}
+.kanban-col-body.drop-target { background: var(--accent-ghost); }
+.kanban-col-add {
+  border-top: 1px dashed var(--border);
+  margin: 0;
+  border-radius: 0;
+  padding: 6px 10px;
+  text-align: center;
+}
+.kanban-empty {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  padding: 14px 8px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+  background: transparent;
+}
+.kanban-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-dim);
+  border-radius: 3px;
+  padding: 8px 10px;
+  position: relative;
+  cursor: grab;
+  transition:
+    transform var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
+}
+.kanban-col[data-column="todo"]  .kanban-card { border-left-color: var(--amber); }
+.kanban-col[data-column="doing"] .kanban-card { border-left-color: var(--cyan); }
+.kanban-col[data-column="done"]  .kanban-card {
+  border-left-color: var(--accent);
+  opacity: 0.85;
+}
+.kanban-col[data-column="done"]  .kanban-card .kanban-card-title { text-decoration: line-through; }
+.kanban-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--elev-2);
+  border-color: var(--accent-dim);
+}
+.kanban-card.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+.kanban-card-title {
+  font-size: 0.74rem;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 4px;
+  padding-right: 40px;
+}
+.kanban-card-desc {
+  font-size: 0.66rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+}
+.kanban-card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.kanban-label {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+.kanban-card-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease-out);
+}
+.kanban-card:hover .kanban-card-actions { opacity: 1; }
+.kanban-card-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.54rem;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.kanban-card-btn:hover { color: var(--text); border-color: var(--text-dim); }
+.kanban-card-btn.danger:hover { color: var(--red); border-color: var(--red-dim); }
+
+/* ── Composer Workstream — bottom 3-tab strip ───────────────────
+   Shares the panel real estate between Step Config, Active Run,
+   and Run History. Sub-tabs scoped to .workstream-* to avoid
+   colliding with .tab-* (top-level nav) or .workbench-tab
+   (left rail). */
+.composer-workstream { padding: 10px 12px; }
+.workstream-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.workstream-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  padding: 5px 12px 5px 10px;
+  cursor: pointer;
+  border-radius: 3px 3px 0 0;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition:
+    color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out);
+}
+.workstream-tab:hover { color: var(--text); transform: translateY(-1px); }
+.workstream-tab.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  border-bottom-color: var(--bg-deep);
+  background: var(--accent-ghost);
+}
+.ws-tab-label { font-weight: 600; }
+.ws-tab-meta {
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+.ws-pane[hidden] { display: none !important; }
+.ws-pane {
+  animation: ws-pane-in var(--t-med) var(--ease-out);
+}
+@keyframes ws-pane-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Run pane — per-step strip */
+.ws-run-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px dashed var(--border);
+  margin-bottom: 6px;
+}
+.ws-run-meta {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.ws-run-step {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, auto) 60px 80px;
+  gap: 10px;
+  align-items: center;
+  padding: 5px 8px;
+  border-left: 2px solid var(--border);
+  margin: 3px 0;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  background: var(--bg-deep);
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+.ws-run-step-ok      { border-left-color: var(--accent); }
+.ws-run-step-fail    { border-left-color: var(--red); }
+.ws-run-step-pending { border-left-color: var(--amber); }
+.ws-run-step-id { color: var(--text); }
+.ws-run-step-model { color: var(--cyan); }
+.ws-run-step-dur, .ws-run-step-status {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+}
+
+/* History pane */
+.ws-history-row {
+  display: grid;
+  grid-template-columns: 1fr auto 80px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  margin: 4px 0;
+  font-family: var(--mono);
+  font-size: 0.64rem;
+}
+.ws-history-row-ok   { border-left: 2px solid var(--accent); }
+.ws-history-row-fail { border-left: 2px solid var(--red); }
+.ws-history-wf { color: var(--text); }
+.ws-history-id { color: var(--cyan); }
+.ws-history-status { text-align: right; color: var(--text-dim); }
+.ws-history-ts { color: var(--text-muted); text-align: right; }
+
+/* ── Skills Lab — research thinking cards ────────────────────────
+   Each sub-question becomes an expandable "thinking" card so the
+   operator can see exactly what context the research agent gathered
+   for that angle, with its own + Capture button. */
+.research-topic-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-deep);
+  margin-bottom: 12px;
+  font-size: 0.78rem;
+  flex-wrap: wrap;
+}
+.research-topic-label {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.research-topic-meta {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+}
+.research-thinking-strip {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.research-thinking-strip-label {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.research-thinking-card {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+  transition: border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
+}
+.research-thinking-card[open] {
+  border-color: var(--accent-dim);
+  box-shadow: var(--elev-2);
+}
+.research-thinking-card > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.72rem;
+}
+.research-thinking-card > summary::-webkit-details-marker { display: none; }
+.research-thinking-card > summary::before {
+  content: '▸';
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  transition: transform var(--t-fast) var(--ease-out);
+}
+.research-thinking-card[open] > summary::before { transform: rotate(90deg); }
+.thinking-step-num {
+  display: inline-flex;
+  width: 22px; height: 22px;
+  align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-ghost);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.thinking-step-q { flex: 1; }
+.thinking-step-meta {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+.thinking-step-body {
+  padding: 0 12px 12px 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.thinking-step-context {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  border-left: 2px solid var(--cyan-dim);
+  border-radius: 0 3px 3px 0;
+  white-space: pre-wrap;
+}
+.thinking-step-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.thinking-step-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.synthesis-label {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+/* Artifact library modal */
+.artifact-row {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--bg-deep);
+}
+.artifact-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.artifact-row-meta {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+}
+.artifact-row-body {
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  max-height: 6em;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Empty states ────────────────────────────────────────────────
+   Replace the bare "No models. Run: ollama pull..." text with a
+   visual block that has an icon + CTA. Backwards-compatible: the
+   existing .model-empty class still renders, just nicer. */
+.model-empty,
+.composer-config-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px;
+  color: var(--text-muted);
+  font-style: normal;
+}
+.model-empty::before,
+.composer-config-empty::before {
+  content: '◇';
+  color: var(--accent-dim);
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
 body {
   font-family: var(--mono);
   background: var(--bg-deep);
@@ -243,12 +1143,19 @@ body::after {
     linear-gradient(to bottom, rgba(11,15,20,0.04) 1px, transparent 1px);
 }
 
-/* ── LAYOUT ─────────────────────────────────────────────────────── */
+/* ── LAYOUT ───────────────────────────────────────────────────────
+   The .shell wraps every page. Fluid by default: fills the viewport
+   minus comfortable gutters. Hard cap at 1800px so 4K monitors don't
+   stretch line-length to unreadable widths. Operators on standard
+   laptops (1440-1920) get the full real estate they used to lose to
+   the old 1200px cap. */
 .shell {
-  max-width: 1200px;
+  width: 100%;
+  max-width: min(1800px, 100vw - 32px);
   margin: 0 auto;
-  padding: 32px 24px;
+  padding: 24px clamp(16px, 2.5vw, 36px);
   position: relative;
+  box-sizing: border-box;
 }
 
 /* ── HEADER — Cortex Command Bar ─────────────────────────────────
@@ -486,30 +1393,6 @@ body::after {
   position: relative;
   flex-wrap: wrap;
 }
-.tab-section {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 10px 0 14px;
-  font-family: var(--mono);
-  font-size: 0.54rem;
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-  color: var(--text-faint);
-  align-self: center;
-  user-select: none;
-  pointer-events: none;
-}
-.tab-section::after {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 1px;
-  background: var(--text-faint);
-  margin-left: 8px;
-  opacity: 0.5;
-}
-.tab-section:first-child { padding-left: 4px; }
-
 .tab-btn {
   background: transparent;
   border: none;
@@ -565,16 +1448,6 @@ body::after {
 }
 
 /* === Admin dropdown ============================================= */
-.tab-divider {
-  display: inline-block;
-  width: 1px;
-  height: 18px;
-  background: var(--border);
-  margin: 0 12px;
-  vertical-align: middle;
-  align-self: center;
-}
-
 .tab-dropdown {
   position: relative;
   display: inline-block;
@@ -1040,7 +1913,30 @@ details[open] > summary::before { transform: rotate(90deg); }
 .model-empty { color: var(--text-muted); font-size: 0.75rem; font-style: italic; padding: 12px 0; }
 
 /* ── CHAT PANEL ─────────────────────────────────────────────────── */
-.chat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+/* Chat dock header — left column has the panel label, right column
+   holds the agent + model selects + system + ▾ + EXPORT buttons.
+   Selects grow to absorb available width so the dock feels alive. */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.chat-header > div:nth-child(2) {
+  flex: 1 1 360px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.chat-header select.model-select {
+  flex: 1 1 140px;
+  min-width: 120px;
+  max-width: 280px;
+}
 .model-select {
   background: transparent;
   border: 1px solid var(--border);
@@ -1075,6 +1971,24 @@ details[open] > summary::before { transform: rotate(90deg); }
 .chat-messages::-webkit-scrollbar { width: 4px; }
 .chat-messages::-webkit-scrollbar-track { background: transparent; }
 .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* === Global dark-theme scrollbar =================================
+   Every scrollable surface in the app (right rail, workbench, modals,
+   code panes, etc.) gets the same low-contrast track + accent-tinted
+   thumb. WebKit + Firefox properties both included so Chrome, Safari,
+   and Firefox all render the same. */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); background-clip: padding-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
+/* Firefox */
+html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 
 .msg { padding: 10px 14px; margin: 6px 0; max-width: 85%; position: relative; }
 .msg.user {
@@ -1442,6 +2356,51 @@ details[open] > summary::before { transform: rotate(90deg); }
   letter-spacing: 0.1em;
   transition: all 0.2s ease;
 }
+/* === .action-btn system ==========================================
+   Canonical button across every panel surface. Variants compose
+   orthogonally — size · intent — so every operator-facing surface
+   inherits the same hit-target, spacing, and color language.
+
+     Sizes:    (default) · .xs · .sm · .lg · .icon
+     Intent:   .accent · .cyan · .amber · .danger · .pull · .remove
+               · .unload · .ghost · .primary
+     Modifier: .full     (stretch to container width)
+
+   Use .btn-group on the wrapping element to keep groups of buttons
+   evenly spaced and aligned — no more bespoke flex/gap per row.
+
+   IMPORTANT: avoid inline style="padding…/font-size…/color…/border-color…"
+   on .action-btn. Add a missing variant here instead. The Playwright
+   suite ensures consistency doesn't drift in either direction. */
+
+/* Sizes */
+.action-btn.xs    { padding: 1px 6px;   font-size: 0.55rem; }
+.action-btn.sm    { padding: 3px 10px;  font-size: 0.65rem; }
+.action-btn.lg    { padding: 6px 18px;  font-size: 0.78rem; }
+.action-btn.icon  { padding: 0 12px;    font-size: 1rem;    border-color: var(--border); }
+
+/* Intent — chromatic */
+.action-btn.accent { border-color: var(--accent-dim); color: var(--accent); }
+.action-btn.accent:hover { background: rgba(0,204,102,0.08); }
+.action-btn.cyan   { border-color: var(--cyan-dim);   color: var(--cyan);   }
+.action-btn.cyan:hover   { background: rgba(0,180,216,0.08); }
+.action-btn.amber  { border-color: var(--amber-dim);  color: var(--amber);  }
+.action-btn.amber:hover  { background: rgba(245,166,35,0.08); }
+
+/* Intent — filled CTA (highest emphasis) */
+.action-btn.primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.action-btn.primary:hover { background: var(--accent); opacity: 0.85; }
+
+/* Ghost — minimal chrome for low-emphasis affordances (dock toggles, etc) */
+.action-btn.ghost { border-color: var(--border); color: var(--text-dim); }
+.action-btn.ghost:hover { color: var(--text); }
+
+/* Existing semantic variants — kept as-is to avoid breaking selectors */
 .action-btn.pull { border-color: var(--green-dim); color: var(--green); }
 .action-btn.pull:hover { background: #00ff8810; box-shadow: var(--glow-green); }
 .action-btn.remove { border-color: var(--red-dim); color: var(--red); }
@@ -1449,6 +2408,75 @@ details[open] > summary::before { transform: rotate(90deg); }
 .action-btn.unload { border-color: var(--amber-dim); color: var(--amber); }
 .action-btn.unload:hover { background: #ff8c0010; box-shadow: var(--glow-amber); }
 .action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Modifiers */
+.action-btn.full { width: 100%; }
+
+/* === System sub-nav ==============================================
+   Rendered at the top of tab-memory, tab-admin-keys, tab-workflows so
+   the operator sees "System » Memory / License Keys / Runs" and can
+   move between them while staying in the System area. Click handlers
+   call switchTab so each sub-tab's data load fires through its
+   existing path — no new state machine to maintain. */
+.system-subnav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-deep);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  border-radius: 2px;
+}
+.system-subnav-label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.system-subnav-label::after {
+  content: '›';
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-left: 2px;
+}
+.system-subnav-link {
+  color: var(--text-dim);
+  padding: 3px 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.system-subnav-link:hover { color: var(--text); border-color: var(--text-dim); }
+.system-subnav-link.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: var(--accent-ghost);
+}
+
+/* === .btn-group ==================================================
+   Consistent spacing + alignment for any cluster of action-btns.
+   Replaces the dozens of ad-hoc `display:flex;gap:Xpx;...` rows. */
+.btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.btn-group.tight { gap: 4px; }
+.btn-group.loose { gap: 14px; }
+.btn-group.justify-end   { justify-content: flex-end; }
+.btn-group.justify-between { justify-content: space-between; width: 100%; }
 
 /* Pull progress bar */
 .pull-progress {
@@ -2040,15 +3068,73 @@ details[open] > summary::before { transform: rotate(90deg); }
 .df-gate-row select, .df-gate-row input { font-size: 0.6rem; padding: 3px 6px; }
 
 /* ── COMPOSER-AS-DASHBOARD ──────────────────────────────────────── */
-.composer-toolbar { margin-bottom: 10px; padding: 10px 12px; }
-.composer-meta-row { display: grid; grid-template-columns: 180px 180px 130px 130px 1fr; gap: 8px; margin-bottom: 8px; }
-.composer-meta-row label { font-size: 0.54rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 2px; }
-.composer-meta-row .chat-input, .composer-meta-row .model-select { font-size: 0.68rem; padding: 4px 8px; }
+/* Composer toolbar — fluid: workflow ID/Name/Role/Category share the
+   row using fr units, Description claims remaining space. On narrower
+   widths the grid collapses to single column via the media queries
+   further down. Every input inside fills 100% of its grid cell. */
+.composer-toolbar { margin-bottom: 10px; padding: 12px 14px; }
+.composer-meta-row {
+  display: grid;
+  grid-template-columns:
+    minmax(160px, 1.2fr)
+    minmax(160px, 1.2fr)
+    minmax(120px, 0.9fr)
+    minmax(120px, 0.9fr)
+    minmax(220px, 2.5fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.composer-meta-row label {
+  font-size: 0.54rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: block;
+  margin-bottom: 3px;
+}
+.composer-meta-row .chat-input,
+.composer-meta-row .model-select {
+  font-size: 0.68rem;
+  padding: 5px 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.composer-meta-field { min-width: 0; /* lets the grid track collapse without overflow */ }
+@media (max-width: 1100px) {
+  .composer-meta-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .composer-meta-row .composer-meta-grow { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .composer-meta-row { grid-template-columns: 1fr; }
+}
 .composer-meta-grow { grid-column: span 1; }
 .composer-actions-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--border); }
 .composer-actions-row .send-btn { padding: 6px 22px; }
 
-.composer-grid { display: grid; grid-template-columns: 220px 1fr 320px; gap: 10px; min-height: 480px; }
+/* Canvas is the main portion of the app. Left rail holds the workbench
+   palette; center is the drawflow canvas (was sharing space with a 320px
+   right rail — that rail's Step Config panel relocated to live BELOW the
+   agent-chat-dock so the canvas can dominate). */
+/* Composer grid — left workbench (fluid 200-260px) + canvas (fills the
+   rest). min-height scales with viewport so the canvas grows on large
+   monitors instead of staying capped at 480. */
+.composer-grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: max(480px, calc(100vh - 420px));
+  width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 900px) {
+  .composer-grid {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+}
+.composer-canvas-panel { min-height: max(480px, calc(100vh - 460px)) !important; }
 .composer-left, .composer-center, .composer-right { display: flex; flex-direction: column; gap: 10px; }
 .composer-left-panel { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .composer-canvas-panel { flex: 1; min-height: 480px; position: relative; padding: 0; overflow: hidden; }
@@ -2141,7 +3227,32 @@ details[open] > summary::before { transform: rotate(90deg); }
 .composer-canvas-empty-sub { font-size: 0.7rem; line-height: 1.5; }
 .composer-canvas-panel.has-nodes .composer-canvas-empty { display: none; }
 
-.composer-config-body { font-size: 0.72rem; color: var(--text-dim); padding: 0 2px; }
+.composer-config-body { font-size: 0.72rem; color: var(--text-dim); padding: 0 6px; }
+/* Step Config inputs — every text/select/textarea inside the config
+   panel fills its container's width. Inline styles in dfRenderConfigPanel
+   override font-size + padding but width:100% wins via specificity. */
+.composer-config-body .chat-input,
+.composer-config-body .model-select,
+.composer-config-body select,
+.composer-config-body textarea,
+.composer-config-body input[type="text"],
+.composer-config-body input[type="number"] {
+  width: 100% !important;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+.composer-config-body .df-gate-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 28px;
+  gap: 4px;
+  margin-bottom: 4px;
+  align-items: center;
+}
+.composer-config-body .df-gate-row .chat-input,
+.composer-config-body .df-gate-row .model-select { width: 100% !important; }
+/* The legacy ID-bar that does "input + Add button" — make the input grow
+   so the Add button hugs the right edge of the panel. */
+.composer-config-body input[type="text"][id^="df-new-output-"] { flex: 1 1 auto; }
 .composer-config-empty { padding: 24px 8px; text-align: center; color: var(--text-muted); font-size: 0.64rem; line-height: 1.5; }
 
 .composer-mini-status { display: flex; flex-direction: column; gap: 8px; }
@@ -2176,8 +3287,28 @@ details[open] > summary::before { transform: rotate(90deg); }
 .wfi-card-actions .action-btn { padding: 3px 8px; font-size: 0.6rem; flex: 1; }
 
 /* ── PROJECT BAR ─────────────────────────────────────────────────── */
-.composer-project-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 10px; flex-wrap: wrap; }
-.composer-project-bar code { background: var(--bg-deep); padding: 2px 6px; border-radius: 3px; font-family: var(--mono); }
+/* Project bar — fluid. The project select grows to fill available
+   width; the action buttons hug the right. */
+.composer-project-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.composer-project-bar code {
+  background: var(--bg-deep);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: var(--mono);
+}
+.composer-project-bar > select#project-select {
+  flex: 1 1 280px;
+  min-width: 240px;
+  max-width: 100%;
+}
+.composer-project-bar > button { flex: 0 0 auto; }
 
 /* ── AGENT GENERATOR MODAL ───────────────────────────────────────── */
 .ag-steps { display: flex; gap: 8px; margin: 10px 0 14px; font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -2260,41 +3391,32 @@ details[open] > summary::before { transform: rotate(90deg); }
               title="Toggle theme (light / dark)">
         <span id="theme-toggle-icon" aria-hidden="true">☾</span>
       </button>
-    </div>
-    <!-- Breadcrumb row — JS updates these spans on tab switch so the
-         operator always knows which mode/sub-context they're in. -->
-    <div class="header-breadcrumb" id="header-breadcrumb">
-      <span class="crumb">Enclave</span>
-      <span class="crumb-sep">›</span>
-      <span class="crumb active" id="crumb-mode">Compose</span>
-      <span class="crumb-sep">›</span>
-      <span class="crumb-ctx" id="crumb-context">Workflow Composer</span>
+      <button class="theme-toggle"
+              type="button"
+              onclick="Shortcuts.toggle()"
+              aria-label="Show keyboard shortcuts"
+              title="Keyboard shortcuts (⌘K)"
+              style="margin-left:4px">
+        <span aria-hidden="true">⌘K</span>
+      </button>
     </div>
   </div>
 
-  <!-- TAB NAVIGATION — grouped by operator phase (Cortex IA pattern):
-       BUILD   = author what runs        (Composer, Workflow Index, Agents, Skill Lab)
-       OPERATE = run + observe           (Runs)
-       LIBRARY = governed assets         (Models, Context, Memory)
-       ADMIN   = system + identity       (dropdown)
-       Section labels are visual only; existing data-tab IDs are
-       preserved so switchTab() and routing back-compat keep working. -->
+  <!-- TAB NAVIGATION — flat list. Section labels (Build / Operate / Library)
+       were removed because they consumed horizontal nav space and pushed the
+       Admin dropdown off-screen on standard widths. Tab order is preserved so
+       muscle memory and any deep-link routes keep working. -->
   <div class="tab-nav" role="tablist">
-    <span class="tab-section" aria-hidden="true">Build</span>
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Composer</button>
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <button class="tab-btn" data-tab="research" onclick="switchTab('research', this)">Skill Lab<span class="tab-count" id="res-count"></span></button>
-    <span class="tab-divider" aria-hidden="true"></span>
-    <span class="tab-section" aria-hidden="true">Operate</span>
-    <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows', this)">Runs</button>
-    <span class="tab-divider" aria-hidden="true"></span>
-    <span class="tab-section" aria-hidden="true">Library</span>
     <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
     <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">Context</button>
-    <button class="tab-btn" data-tab="memory" onclick="switchTab('memory', this)">Memory<span class="tab-count" id="mem-count"></span></button>
-    <span class="tab-divider" aria-hidden="true"></span>
-    <div class="tab-dropdown" role="presentation">
+    <button class="tab-btn" data-tab="admin-plugins" onclick="switchTab('admin-plugins', this)">Plugins<span class="tab-count" id="plugins-count"></span></button>
+    <button class="tab-btn" data-tab="admin-skills" onclick="switchTab('admin-skills', this)">Skills<span class="tab-count" id="skills-count"></span></button>
+    <button class="tab-btn" data-tab="admin-mcp" onclick="switchTab('admin-mcp', this)">MCP<span class="tab-count" id="mcp-count"></span></button>
+    <div class="tab-dropdown" role="presentation" style="margin-left:auto">
       <button class="tab-btn admin-trigger" id="admin-trigger"
               type="button" aria-haspopup="menu" aria-expanded="false"
               onclick="AdminMenu.toggle(this)">
@@ -2302,14 +3424,14 @@ details[open] > summary::before { transform: rotate(90deg); }
         <span class="caret" aria-hidden="true">▾</span>
       </button>
       <div class="admin-menu" id="admin-menu" role="menu" hidden>
+        <!-- System is a HUB spanning Memory · License Keys · Runs; each
+             of those carries an in-panel sub-nav so the user can move
+             between them while staying in the System context. Plugins,
+             Skills, and MCP have been promoted to top-level tabs. -->
         <button class="admin-menu-item" role="menuitem" type="button"
-                data-panel="admin-keys" onclick="AdminMenu.select('admin-keys')">API Keys</button>
-        <button class="admin-menu-item" role="menuitem" type="button"
-                data-panel="admin-plugins" onclick="AdminMenu.select('admin-plugins')">Plugins</button>
-        <button class="admin-menu-item" role="menuitem" type="button"
-                data-panel="admin-skills" onclick="AdminMenu.select('admin-skills')">Skills</button>
-        <button class="admin-menu-item" role="menuitem" type="button"
-                data-panel="admin-mcp" onclick="AdminMenu.select('admin-mcp')">MCP Servers</button>
+                data-panel="memory"
+                onclick="AdminMenu.close(); switchTab('memory'); document.getElementById('admin-trigger').classList.add('active');">System</button>
+        <div class="admin-menu-divider" aria-hidden="true"></div>
         <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-cloud" onclick="AdminMenu.select('admin-cloud')">Cloud Models</button>
         <button class="admin-menu-item" role="menuitem" type="button"
@@ -2347,7 +3469,7 @@ details[open] > summary::before { transform: rotate(90deg); }
       <button class="action-btn" onclick="Projects.showCreate()">+ New Project</button>
       <button class="action-btn" onclick="Projects.attachCurrentWorkflow()" title="Attach the current workflow to the active project">Attach Workflow</button>
       <button class="action-btn" onclick="Projects.importBundle()">Import Project</button>
-      <button class="action-btn" onclick="Projects.exportBundle()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export Project</button>
+      <button class="action-btn cyan" onclick="Projects.exportBundle()">Export Project</button>
     </div>
 
     <!-- Project create modal — replaces the prior prompt() flow with a
@@ -2423,11 +3545,12 @@ details[open] > summary::before { transform: rotate(90deg); }
         <button class="action-btn" onclick="dfImportYaml()">Import YAML</button>
         <button class="action-btn" onclick="dfImportBundle()">Import Bundle</button>
         <button class="action-btn" onclick="dfAutoLayout()">Auto-Layout</button>
-        <button class="action-btn" onclick="dfExportYaml()" style="color:var(--cyan);border-color:var(--cyan-dim)">Export YAML</button>
+        <button class="action-btn cyan" onclick="dfExportYaml()">Export YAML</button>
         <button class="action-btn" onclick="composerExportBundle()" title="Export this workflow + linked agents as a portable bundle">Export Bundle</button>
-        <button class="action-btn" onclick="dfSave()" style="color:var(--green);border-color:var(--green-dim)">Save</button>
+        <button class="action-btn pull" onclick="dfSave()">Save</button>
         <div style="flex:1"></div>
-        <button class="send-btn" onclick="dfRunWorkflowFromComposer()" title="Save then run this workflow">Run ▶</button>
+        <button class="action-btn ghost" onclick="dfRunWorkflowLive()" title="Save + run in background; watch live progress in the workstream below">Run ▶ live</button>
+        <button class="send-btn" onclick="dfRunWorkflowFromComposer()" title="Save then run this workflow (synchronous; switches to the Runs tab when done)">Run ▶</button>
       </div>
     </div>
 
@@ -2452,21 +3575,21 @@ details[open] > summary::before { transform: rotate(90deg); }
             </div>
             <div class="workbench-pane" id="bench-agents" hidden>
               <div class="workbench-hint">Drag an agent to spawn a step pre-configured with its role, model, and system prompt.</div>
-              <div id="bench-agents-list"><div class="model-empty">Loading…</div></div>
+              <div id="bench-agents-list"><div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-line long"></div></div>
             </div>
             <div class="workbench-pane" id="bench-skills" hidden>
               <div class="workbench-hint">Skills are auto-attached to steps when their triggers match. Drag onto a step to pin manually.</div>
-              <div id="bench-skills-list"><div class="model-empty">Loading…</div></div>
+              <div id="bench-skills-list"><div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line short"></div></div>
             </div>
             <div class="workbench-pane" id="bench-plugins" hidden>
               <div class="workbench-hint">Plugin tools become callable from any step. Drag onto a step to scope it.</div>
-              <div id="bench-plugins-list"><div class="model-empty">Loading…</div></div>
+              <div id="bench-plugins-list"><div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line short"></div></div>
             </div>
             <div class="workbench-pane" id="bench-mcps" hidden>
               <div class="workbench-hint">
                 MCP servers expose external tools. Register servers under <a href="#" onclick="AdminMenu.select('admin-mcp');return false">Admin → MCP</a>.
               </div>
-              <div id="bench-mcps-list"><div class="model-empty">Loading…</div></div>
+              <div id="bench-mcps-list"><div class="skeleton skeleton-line short"></div></div>
             </div>
           </div>
         </div>
@@ -2501,44 +3624,9 @@ details[open] > summary::before { transform: rotate(90deg); }
         </div>
       </div>
 
-      <!-- RIGHT RAIL: system mini-status + node config -->
-      <div class="composer-right">
-        <div class="panel composer-right-panel">
-          <span class="corner-tr"></span><span class="corner-bl"></span>
-          <div class="panel-label">System</div>
-          <div class="composer-mini-status">
-            <div id="status-content" class="composer-mini-metrics">
-              <div class="metric-row"><span class="metric-key">API</span><span class="metric-val" style="color:var(--text-muted)">loading…</span></div>
-              <div class="metric-row"><span class="metric-key">Ollama</span><span class="metric-val" style="color:var(--text-muted)">loading…</span></div>
-              <div class="metric-row"><span class="metric-key">Models</span><span class="metric-val" style="color:var(--text-muted)">--</span></div>
-              <div class="metric-row"><span class="metric-key">Version</span><span class="metric-val" style="color:var(--text-muted)">--</span></div>
-            </div>
-            <div class="composer-mini-gauges">
-              <div class="gauge gauge-mini" id="cpu-gauge">
-                <svg viewBox="0 0 90 90"><circle class="gauge-track" cx="45" cy="45" r="38"/><circle class="gauge-fill cpu" cx="45" cy="45" r="38" stroke-dasharray="238.76" stroke-dashoffset="238.76" id="cpu-arc"/></svg>
-                <div class="gauge-center"><div class="gauge-value cpu-color" id="cpu-value">--%</div><div class="gauge-label">CPU</div></div>
-              </div>
-              <div class="gauge gauge-mini" id="mem-gauge">
-                <svg viewBox="0 0 90 90"><circle class="gauge-track" cx="45" cy="45" r="38"/><circle class="gauge-fill mem" cx="45" cy="45" r="38" stroke-dasharray="238.76" stroke-dashoffset="238.76" id="mem-arc"/></svg>
-                <div class="gauge-center"><div class="gauge-value mem-color" id="mem-value">--%</div><div class="gauge-label">MEM</div></div>
-              </div>
-            </div>
-            <div class="composer-mini-models">
-              <div class="metric-row" style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:6px">Loaded Models</div>
-              <div id="models-content" class="model-list"><div class="model-empty">scanning…</div></div>
-              <div class="metric-row" style="margin-top:6px"><span class="metric-key">Cores</span><span class="metric-val" id="cpu-cores">--</span></div>
-              <div class="metric-row"><span class="metric-key">RAM</span><span class="metric-val" id="mem-detail">-- / -- GB</span></div>
-            </div>
-          </div>
-        </div>
-        <div class="panel composer-right-panel" style="flex:1;overflow:auto">
-          <span class="corner-tr"></span><span class="corner-bl"></span>
-          <div class="panel-label" id="df-config-title">Step Config</div>
-          <div id="df-config-panel" class="composer-config-body">
-            <div class="composer-config-empty">Click a node to configure it, or drag a workbench item onto a node to attach a skill, plugin tool, or MCP tool.</div>
-          </div>
-        </div>
-      </div>
+      <!-- Step Config relocated below the agent-chat-dock so the canvas
+           is the main portion of the app. Right rail removed entirely. -->
+
     </div>
 
     <!-- AGENT CHAT DOCK: repurposed from the legacy global chat into the
@@ -2547,6 +3635,42 @@ details[open] > summary::before { transform: rotate(90deg); }
          workflow agent (composer/custom) via the selector. -->
     <div class="panel agent-chat-dock" id="agent-chat-dock">
       <span class="corner-tr"></span><span class="corner-bl"></span>
+
+      <!-- Compact system-impact strip — relocated from the right-rail
+           "System" panel. Surfaces API / Ollama health + CPU% + MEM% +
+           the active model right above the chat so each step's system
+           cost is visible inline. JS poller IDs preserved verbatim. -->
+      <div class="chat-system-strip" id="chat-system-strip"
+           style="display:flex;align-items:center;gap:14px;padding:4px 10px;
+                  border-bottom:1px solid var(--border);
+                  font-family:var(--mono);font-size:0.62rem;
+                  color:var(--text-muted);letter-spacing:0.05em;flex-wrap:wrap">
+        <div id="status-content" style="display:flex;gap:14px;align-items:center">
+          <span><span class="stat-key">API</span> <span class="metric-val" style="color:var(--text-muted)">·</span></span>
+          <span><span class="stat-key">Ollama</span> <span class="metric-val" style="color:var(--text-muted)">·</span></span>
+          <span><span class="stat-key">Models</span> <span class="metric-val" style="color:var(--text-muted)">--</span></span>
+          <span><span class="stat-key">Version</span> <span class="metric-val" style="color:var(--text-muted)">--</span></span>
+        </div>
+        <span class="vsep" aria-hidden="true"
+              style="display:inline-block;width:1px;height:12px;background:var(--border)"></span>
+        <span><span class="stat-key">CPU</span> <span id="cpu-value" class="cpu-color">--%</span></span>
+        <span><span class="stat-key">MEM</span> <span id="mem-value" class="mem-color">--%</span></span>
+        <span class="vsep" aria-hidden="true"
+              style="display:inline-block;width:1px;height:12px;background:var(--border)"></span>
+        <span><span class="stat-key">Cores</span> <span id="cpu-cores">--</span></span>
+        <span><span class="stat-key">RAM</span> <span id="mem-detail">-- / -- GB</span></span>
+        <span style="flex:1"></span>
+        <span><span class="stat-key">Loaded</span>
+          <span id="models-content" style="color:var(--accent);font-family:var(--mono)">scanning…</span>
+        </span>
+        <!-- Hidden gauge arcs — keep so the poller's
+             stroke-dashoffset writes don't error. CSS hides them. -->
+        <svg style="position:absolute;width:0;height:0;visibility:hidden" aria-hidden="true">
+          <circle id="cpu-arc" r="38" stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+          <circle id="mem-arc" r="38" stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+        </svg>
+      </div>
+
       <div class="chat-header">
         <div class="panel-label" style="margin-bottom:0">
           Agent Chat
@@ -2559,9 +3683,9 @@ details[open] > summary::before { transform: rotate(90deg); }
           </select>
           <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Model</label>
           <select class="model-select" id="model-select"><option>loading…</option></select>
-          <button class="action-btn" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border)">System</button>
-          <button class="action-btn" onclick="toggleAgentDock()" title="Collapse / expand the agent chat dock" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border)">▾</button>
-          <button class="action-btn" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" style="padding:4px 10px;font-size:0.7rem;border-color:var(--border);display:none">EXPORT</button>
+          <button class="action-btn ghost" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)">System</button>
+          <button class="action-btn ghost" onclick="toggleAgentDock()" title="Collapse / expand the agent chat dock">▾</button>
+          <button class="action-btn ghost" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" hidden>EXPORT</button>
         </div>
       </div>
 
@@ -2629,6 +3753,65 @@ details[open] > summary::before { transform: rotate(90deg); }
         <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
       </div>
     </div>
+
+    <!-- Composer workstream — three sub-tabs at the bottom of the
+         Composer that share screen space without competing with the
+         canvas. Step Config is what the canvas click selects;
+         Active Run shows progress for whatever run was last kicked
+         off; History tails the run log. All three are populated by
+         the same JS module so the bottom strip stays in sync. -->
+    <div class="panel composer-workstream" id="composer-workstream" style="margin-top:12px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="workstream-tabs" role="tablist">
+        <button type="button" class="workstream-tab active" data-ws="step"
+                onclick="ComposerWorkstream.switch('step', this)">
+          <span class="ws-tab-label">Step Config</span>
+          <span class="ws-tab-meta" id="ws-step-meta" data-step-id="(none)">(none)</span>
+        </button>
+        <button type="button" class="workstream-tab" data-ws="run"
+                onclick="ComposerWorkstream.switch('run', this)">
+          <span class="ws-tab-label">Active Run</span>
+          <span class="ws-tab-meta" id="ws-run-meta">idle</span>
+        </button>
+        <button type="button" class="workstream-tab" data-ws="history"
+                onclick="ComposerWorkstream.switch('history', this)">
+          <span class="ws-tab-label">History</span>
+          <span class="ws-tab-meta" id="ws-history-meta">—</span>
+        </button>
+        <span style="flex:1"></span>
+        <button type="button" class="action-btn xs ghost"
+                onclick="ComposerWorkstream.refresh()" title="Refresh the active sub-tab">⟲</button>
+      </div>
+
+      <div class="workstream-body">
+        <!-- Step Config — kept under the same IDs the dfRenderConfigPanel
+             code writes to, so node-click handler keeps working untouched. -->
+        <div class="ws-pane active" id="ws-pane-step" style="max-height:340px;overflow:auto">
+          <div class="panel-label" id="df-config-title">Step Config</div>
+          <div id="df-config-panel" class="composer-config-body">
+            <div class="composer-config-empty">Click a node in the canvas above to configure it, or drag a workbench item onto a node to attach a skill, plugin tool, or MCP tool.</div>
+          </div>
+        </div>
+
+        <div class="ws-pane" id="ws-pane-run" hidden style="max-height:340px;overflow:auto">
+          <div class="panel-label">Active Run</div>
+          <div id="ws-run-body">
+            <div class="model-empty">No active run. Hit <strong>Run</strong> on the toolbar above, or trigger a workflow from the Workflow Index.</div>
+          </div>
+        </div>
+
+        <div class="ws-pane" id="ws-pane-history" hidden style="max-height:340px;overflow:auto">
+          <div class="panel-label">Run History</div>
+          <div id="ws-history-body">
+            <div class="model-empty">Recent runs land here. Filter / re-open from the list.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden legacy mount point — kept so old code that selects
+         #step-config-panel directly doesn't break. -->
+    <div id="step-config-panel" hidden></div>
   </div>
 
   <!-- ═══ TAB: WORKFLOW INDEX ═══════════════════════════════════════
@@ -2653,6 +3836,82 @@ details[open] > summary::before { transform: rotate(90deg); }
     </div>
     <div id="wfi-grid" class="wfi-grid">
       <div class="model-empty">Loading workflows…</div>
+    </div>
+
+    <!-- Projects + Kanban — a lightweight task board scoped to whichever
+         project is selected in the Composer's project bar. Tasks are
+         per-project so switching projects swaps the board. -->
+    <div class="panel kanban-panel" id="kanban-panel" style="margin-top:18px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label kanban-head">
+        <span>// PROJECTS &amp; TASKS</span>
+        <span class="kanban-head-controls">
+          <label class="kanban-project-label">project</label>
+          <select id="kanban-project-select" class="model-select"
+                  onchange="Kanban.setActive(this.value)"
+                  style="font-size:0.7rem;padding:3px 8px;min-width:180px">
+            <option value="">— pick a project —</option>
+          </select>
+          <button class="action-btn xs accent" onclick="Kanban.showCreateProject()">+ Project</button>
+          <button class="action-btn xs ghost" onclick="Kanban.refresh()" title="Refresh tasks">⟲</button>
+        </span>
+      </div>
+      <div class="kanban-board" id="kanban-board">
+        <div class="kanban-col" data-column="todo">
+          <header class="kanban-col-head">
+            <span class="kanban-col-title">To do</span>
+            <span class="kanban-col-count" data-count></span>
+          </header>
+          <div class="kanban-col-body"
+               ondragover="event.preventDefault(); this.classList.add('drop-target')"
+               ondragleave="this.classList.remove('drop-target')"
+               ondrop="Kanban.drop(event, 'todo')"></div>
+          <button class="action-btn xs ghost full kanban-col-add"
+                  onclick="Kanban.showCreateTask('todo')">+ Add task</button>
+        </div>
+        <div class="kanban-col" data-column="doing">
+          <header class="kanban-col-head">
+            <span class="kanban-col-title">In progress</span>
+            <span class="kanban-col-count" data-count></span>
+          </header>
+          <div class="kanban-col-body"
+               ondragover="event.preventDefault(); this.classList.add('drop-target')"
+               ondragleave="this.classList.remove('drop-target')"
+               ondrop="Kanban.drop(event, 'doing')"></div>
+          <button class="action-btn xs ghost full kanban-col-add"
+                  onclick="Kanban.showCreateTask('doing')">+ Add task</button>
+        </div>
+        <div class="kanban-col" data-column="done">
+          <header class="kanban-col-head">
+            <span class="kanban-col-title">Done</span>
+            <span class="kanban-col-count" data-count></span>
+          </header>
+          <div class="kanban-col-body"
+               ondragover="event.preventDefault(); this.classList.add('drop-target')"
+               ondragleave="this.classList.remove('drop-target')"
+               ondrop="Kanban.drop(event, 'done')"></div>
+          <button class="action-btn xs ghost full kanban-col-add"
+                  onclick="Kanban.showCreateTask('done')">+ Add task</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Kanban "new task" modal — reused for both new-task and new-project flows -->
+    <div id="kanban-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card">
+        <h3 id="kanban-modal-title">New task</h3>
+        <label class="admin-modal-label">Title</label>
+        <input id="kanban-modal-title-input" type="text" placeholder="e.g. Draft XQL rule for AcmeAuth" autocomplete="off">
+        <label class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <textarea id="kanban-modal-desc" rows="3" placeholder="What does done look like?"></textarea>
+        <label class="admin-modal-label">Labels <span style="color:var(--text-muted);font-weight:normal">(comma-separated)</span></label>
+        <input id="kanban-modal-labels" type="text" placeholder="e.g. xql, urgent" autocomplete="off">
+        <div id="kanban-modal-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="Kanban._cancelModal()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" id="kanban-modal-submit" onclick="Kanban._submitModal()">Save</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2684,6 +3943,12 @@ details[open] > summary::before { transform: rotate(90deg); }
 
   <!-- ═══ TAB: MEMORY ══════════════════════════════════════════════ -->
   <div class="tab-content" id="tab-memory">
+    <div class="system-subnav" role="tablist" aria-label="System area">
+      <span class="system-subnav-label">⚙ System</span>
+      <button class="system-subnav-link active" type="button" onclick="switchTab('memory')">Memory</button>
+      <button class="system-subnav-link" type="button" onclick="switchTab('admin-keys')">License Keys</button>
+      <button class="system-subnav-link" type="button" onclick="switchTab('workflows')">Runs</button>
+    </div>
     <div class="mem-grid">
       <div class="panel">
         <span class="corner-tr"></span><span class="corner-bl"></span>
@@ -2888,6 +4153,12 @@ details[open] > summary::before { transform: rotate(90deg); }
 
   <!-- TAB: WORKFLOWS -->
   <div class="tab-content" id="tab-workflows">
+    <div class="system-subnav" role="tablist" aria-label="System area">
+      <span class="system-subnav-label">⚙ System</span>
+      <button class="system-subnav-link" type="button" onclick="switchTab('memory')">Memory</button>
+      <button class="system-subnav-link" type="button" onclick="switchTab('admin-keys')">License Keys</button>
+      <button class="system-subnav-link active" type="button" onclick="switchTab('workflows')">Runs</button>
+    </div>
     <!-- A2A Integrations panel — advertises this Enclave to remote agents -->
     <div class="panel" id="a2a-panel" style="margin-bottom:16px;display:none">
       <span class="corner-tr"></span><span class="corner-bl"></span>
@@ -2919,7 +4190,7 @@ details[open] > summary::before { transform: rotate(90deg); }
           <select id="wf-select" class="model-select" style="min-width:260px">
             <option value="">-- select workflow --</option>
           </select>
-          <button class="action-btn" onclick="loadWorkflowDetail()" style="color:var(--cyan);border-color:var(--cyan-dim)">Load</button>
+          <button class="action-btn cyan" onclick="loadWorkflowDetail()">Load</button>
           <button class="action-btn" onclick="composerLoadByIdAndSwitch()" title="Open this workflow in the Composer">Open in Composer</button>
           <div style="flex:1"></div>
           <button class="action-btn" onclick="refreshWorkflows()">Refresh</button>
@@ -3069,9 +4340,15 @@ details[open] > summary::before { transform: rotate(90deg); }
 
   <!-- ═══ ADMIN PANELS ═════════════════════════════════════════════ -->
   <div class="tab-content" id="tab-admin-keys" style="display:none">
+    <div class="system-subnav" role="tablist" aria-label="System area">
+      <span class="system-subnav-label">⚙ System</span>
+      <button class="system-subnav-link" type="button" onclick="switchTab('memory')">Memory</button>
+      <button class="system-subnav-link active" type="button" onclick="switchTab('admin-keys')">License Keys</button>
+      <button class="system-subnav-link" type="button" onclick="switchTab('workflows')">Runs</button>
+    </div>
     <div class="panel">
       <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">// API KEYS
+      <div class="panel-label">// LICENSE KEYS
         <span style="float:right">
           <button class="action-btn" onclick="ApiKeysPanel.showCreate()"
             style="color:var(--accent);border-color:var(--accent-dim)">+ New Key</button>
@@ -3177,7 +4454,7 @@ details[open] > summary::before { transform: rotate(90deg); }
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="panel-label">// MCP SERVERS
           <span style="float:right">
-            <button class="action-btn" onclick="MCPPanel.showCreate()" style="color:var(--accent);border-color:var(--accent-dim)">+ Register</button>
+            <button class="action-btn accent" onclick="MCPPanel.showCreate()">+ Register</button>
             <button class="action-btn" onclick="MCPPanel.refresh()">Refresh</button>
           </span>
         </div>
@@ -3255,7 +4532,7 @@ details[open] > summary::before { transform: rotate(90deg); }
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="panel-label">// CLOUD PROVIDERS
           <span style="float:right">
-            <button class="action-btn" onclick="CloudPanel.showCreate()" style="color:var(--accent);border-color:var(--accent-dim)">+ Add Provider</button>
+            <button class="action-btn accent" onclick="CloudPanel.showCreate()">+ Add Provider</button>
             <button class="action-btn" onclick="CloudPanel.refresh()">Refresh</button>
           </span>
         </div>
@@ -3324,26 +4601,33 @@ details[open] > summary::before { transform: rotate(90deg); }
     </div>
   </div>
 
-  <!-- ── Admin sign-in modal ───────────────────────────────────────── -->
+  <!-- ── Sign-in modal — license key fallback ────────────────────────
+       For local installs the SPA auto-fetches the license key on boot
+       (see /api/setup/local-license). This modal is the manual fallback
+       for remote installs or when the auto-fetch fails. The key persists
+       in localStorage so it survives reload and tab close. -->
   <div id="admin-signin-modal" class="admin-modal" hidden role="dialog"
        aria-modal="true" aria-labelledby="admin-signin-title">
     <div class="admin-modal-card">
-      <h3 id="admin-signin-title">Sign in as admin</h3>
+      <h3 id="admin-signin-title">Activate Enclave</h3>
       <p class="admin-modal-sub">
-        Enter the <code>MASTER_API_KEY</code> set on the server. The key
-        is held in <code>sessionStorage</code> for this tab only and is
-        cleared when the tab closes.
+        Paste your Enclave license key. One key unlocks chat, models,
+        memory, and system controls — no separate admin tier. For local
+        installs the key is in <code>data/config/first-run-key.txt</code>
+        on the API host (also printed once at boot — see
+        <code>docker compose logs api | grep KEY</code>). Paid-product
+        activation will replace this flow in a future build.
       </p>
       <input id="admin-signin-input" type="password" autocomplete="off"
-             placeholder="MASTER_API_KEY" />
+             placeholder="sk-..." />
       <div id="admin-signin-error" class="admin-modal-error" hidden>
-        Master key rejected.
+        License key rejected.
       </div>
       <div class="admin-modal-actions">
         <button type="button" class="admin-modal-btn"
                 onclick="AdminAuth._cancelSignIn()">Cancel</button>
         <button type="button" class="admin-modal-btn primary"
-                onclick="AdminAuth._submitSignIn()">Sign in</button>
+                onclick="AdminAuth._submitSignIn()">Activate</button>
       </div>
     </div>
   </div>
@@ -3589,7 +4873,7 @@ function switchTab(name, el) {
   if (btn) btn.classList.add('active');
 
   if (name === 'dashboard') ComposerView.init();
-  if (name === 'workflow-index') WorkflowIndex.load();
+  if (name === 'workflow-index') { WorkflowIndex.load(); if (window.Kanban) Kanban.refresh(); }
   if (name === 'inventory' && !catalogLoaded) loadCatalog();
   if (name === 'memory') { loadMemory(); loadMemoryTab(); }
   // Discover was promoted-then-demoted into Models tab as a collapsible
@@ -3606,6 +4890,21 @@ function switchTab(name, el) {
   if (name === 'workflows') loadWorkflowsTab();
   if (name === 'documents') loadDocumentsTab();
   if (name === 'agents') loadAgentsTab();
+
+  // Promoted admin panels (Plugins / Skills / MCP / Cloud / Exports) were
+  // moved out of the dropdown but still register their data-load handlers
+  // on the `adminPanelActivated` event. Re-emit that event from switchTab
+  // so first-class top-level entry to those tabs triggers the same load
+  // path the dropdown route used to fire.
+  if (name === 'admin-plugins' || name === 'admin-skills' || name === 'admin-mcp'
+      || name === 'admin-cloud' || name === 'admin-exports' || name === 'admin-keys') {
+    window.dispatchEvent(new CustomEvent('adminPanelActivated', { detail: { panel: name } }));
+    // Also activate the Admin trigger so the operator sees an admin-context
+    // hint when they're on a system-area tab (admin-keys reached via System
+    // sub-nav, etc.).
+    const trig = document.getElementById('admin-trigger');
+    if (trig && (name === 'admin-keys')) trig.classList.add('active');
+  }
 }
 
 /* ── CLOCK ──────────────────────────────────────────────────────── */
@@ -3712,6 +5011,19 @@ async function loadModels() {
 
     if (models.length === 0) {
       container.innerHTML = '<div class="model-empty">No models. Run: ollama pull dolphin3</div>';
+      // Also clear the model-select; otherwise the "loading…" sentinel
+      // stays forever on a fresh stack (or a 401 response with d.data === undefined).
+      // Cache must reflect reality for downstream node-config dropdowns.
+      window._chatModels = [];
+      const selEmpty = document.getElementById('model-select');
+      if (selEmpty) {
+        selEmpty.replaceChildren();
+        const opt = document.createElement('option');
+        opt.disabled = true;
+        opt.selected = true;
+        opt.textContent = 'No chat models — pull one (e.g. llama3.2:3b)';
+        selEmpty.appendChild(opt);
+      }
       return;
     }
 
@@ -4022,7 +5334,8 @@ async function _sendStepMessage(text, stepData) {
       if (d.model_fallback) {
         banner = `<div style="background:rgba(255,200,0,0.07);border:1px solid rgba(255,200,0,0.35);border-radius:4px;padding:4px 8px;font-size:0.62rem;color:var(--text-muted);margin-bottom:4px">⚠ Pinned <strong>${esc(d.model_fallback.requested)}</strong> not installed — ran on <strong>${esc(d.model_fallback.resolved)}</strong>.</div>`;
       }
-      messages.innerHTML += `<div class="msg assistant">${banner}${esc(content)}${modelLabel}</div>`;
+      const mid = ChatRating.nextId();
+      messages.innerHTML += `<div class="msg assistant" id="${mid}">${banner}${esc(content)}${modelLabel}${ChatRating.toolbarHtml(mid, {model: d.model, agent: window._chatAgent})}</div>`;
     }
   } catch (e) {
     document.getElementById(typingId)?.remove();
@@ -4133,7 +5446,8 @@ async function sendMessage() {
 
       const citedContent = renderCitations(content, sources);
       const sourcesHtml = renderSources(sources);
-      messages.innerHTML += `<div class="msg assistant">${citedContent}${sourcesHtml}</div>`;
+      const mid = ChatRating.nextId();
+      messages.innerHTML += `<div class="msg assistant" id="${mid}">${citedContent}${sourcesHtml}${ChatRating.toolbarHtml(mid, {model, web_search: webSearchEnabled})}</div>`;
     }
   } catch(e) {
     const ti = document.getElementById(typingId);
@@ -4670,13 +5984,40 @@ let selectedNode = null;
 let researchLoaded = false;
 
 function initResearch() {
-  if (researchLoaded) return;
+  // Rehydrate the last research result every time the tab is shown.
+  // This is what makes tab-switch-and-back keep the result visible.
+  // window._lastResearch is set by renderResearchResults; nothing to do
+  // if we don't have one yet.
+  if (researchLoaded) {
+    if (window._lastResearch) {
+      try { renderResearchResults(window._lastResearch); } catch (_) {}
+    } else if (window._researchInFlight) {
+      _renderResearchInFlight(window._researchInFlight);
+    }
+    return;
+  }
   researchLoaded = true;
   loadGraphData();
   populateResModelSelect();
   document.getElementById('res-depth').addEventListener('input', function() {
     document.getElementById('depth-hint').textContent = this.value + ' sub-questions';
   });
+}
+
+function _renderResearchInFlight(state) {
+  const out = document.getElementById('research-output');
+  if (!out) return;
+  out.innerHTML = `
+    <div class="research-steps" id="res-steps">
+      <div class="research-step ${state.stage === 'decompose' ? 'active' : state.passed.includes('decompose') ? 'done' : ''}"><span class="step-icon">🔬</span> Decomposing topic into sub-questions…</div>
+      <div class="research-step ${state.stage === 'search' ? 'active' : state.passed.includes('search') ? 'done' : ''}"><span class="step-icon">🌐</span> Searching each angle…</div>
+      <div class="research-step ${state.stage === 'synth' ? 'active' : state.passed.includes('synth') ? 'done' : ''}"><span class="step-icon">🧠</span> Synthesizing report…</div>
+    </div>
+    <div style="margin-top:10px;font-size:0.7rem;color:var(--text-muted)">
+      Research running in the background for: <strong>${esc(state.topic)}</strong>.
+      Safe to switch tabs — results will be here when you return.
+    </div>
+  `;
 }
 
 async function populateResModelSelect() {
@@ -4907,21 +6248,26 @@ async function runDeepDive() {
   btn.disabled = true;
   btn.textContent = 'Researching…';
 
-  // Show progress UI
-  out.innerHTML = `
-    <div class="research-steps" id="res-steps">
-      <div class="research-step active" id="step-decompose"><span class="step-icon">🔬</span> Decomposing topic into sub-questions...</div>
-      <div class="research-step" id="step-search"><span class="step-icon">🌐</span> Searching each angle...</div>
-      <div class="research-step" id="step-synth"><span class="step-icon">🧠</span> Synthesizing report...</div>
-    </div>
-  `;
+  // In-flight state — survives tab switches. initResearch() rehydrates
+  // this if the Skills Lab tab is left and re-entered while the call
+  // is still pending. Cleared in the finally block.
+  window._researchInFlight = {
+    topic,
+    model,
+    depth,
+    started_at: new Date().toISOString(),
+    stage: 'decompose',
+    passed: [],
+  };
+  window._lastResearch = null;  // hide stale results while a new run is active
+  _renderResearchInFlight(window._researchInFlight);
 
   try {
     // Tick step 1 → 2 after a beat
     await new Promise(r => setTimeout(r, 600));
-    document.getElementById('step-decompose').classList.add('done');
-    document.getElementById('step-decompose').classList.remove('active');
-    document.getElementById('step-search').classList.add('active');
+    window._researchInFlight.passed.push('decompose');
+    window._researchInFlight.stage = 'search';
+    _renderResearchInFlight(window._researchInFlight);
 
     const resp = await fetch('/api/research/deep-dive', {
       method: 'POST',
@@ -4929,23 +6275,33 @@ async function runDeepDive() {
       body: JSON.stringify({ topic, model, depth }),
     });
 
-    document.getElementById('step-search').classList.add('done');
-    document.getElementById('step-search').classList.remove('active');
-    document.getElementById('step-synth').classList.add('active');
+    window._researchInFlight.passed.push('search');
+    window._researchInFlight.stage = 'synth';
+    _renderResearchInFlight(window._researchInFlight);
 
     await new Promise(r => setTimeout(r, 300));
 
     const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
 
-    document.getElementById('step-synth').classList.add('done');
-    document.getElementById('step-synth').classList.remove('active');
-
+    window._researchInFlight.passed.push('synth');
+    window._researchInFlight = null;
     renderResearchResults(data);
 
     // Rebuild graph after research (new session may be added via export)
     await loadGraphData();
+
+    if (window.Toast) {
+      window.Toast.success(
+        'Research complete',
+        `${(data.sub_questions || []).length} sub-questions explored · ${(data.sources || []).length} sources`,
+        { ttl: 4000 }
+      );
+    }
   } catch (e) {
+    window._researchInFlight = null;
     out.innerHTML = `<div class="research-empty" style="color:var(--red)">Research failed: ${esc(String(e))}</div>`;
+    if (window.Toast) window.Toast.danger('Research failed', String(e));
   } finally {
     btn.disabled = false;
     btn.textContent = 'Research';
@@ -4955,10 +6311,42 @@ async function runDeepDive() {
 function renderResearchResults(data) {
   const out = document.getElementById('research-output');
 
-  // Sub-question pills
-  const pills = (data.sub_questions || []).map(q =>
-    `<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;font-size:0.62rem;color:var(--text-dim);margin:2px;display:inline-block">${esc(q)}</span>`
-  ).join('');
+  // Each sub-question gets its own "thinking" card — expandable, showing
+  // what the research agent actually looked at for that angle. Backend's
+  // `data.research` is [{question, context, sources}] aligned with sub_questions.
+  const thinkingCards = (data.research || []).map((sec, idx) => {
+    const qSrcs = (sec.sources || []).slice(0, 6);
+    const srcHtml = qSrcs.length
+      ? qSrcs.map(s =>
+          `<a class="res-source-chip" href="${esc(s.url || '#')}" target="_blank" rel="noopener">${esc(s.title || s.url || '(untitled)').slice(0, 80)}</a>`
+        ).join('')
+      : '<span style="color:var(--text-muted);font-size:0.62rem">no sources for this angle</span>';
+    const ctxPreview = (sec.context || '').slice(0, 320);
+    const safeQ = esc(sec.question || '');
+    const payloadAttr = encodeURIComponent(JSON.stringify({
+      source: 'research',
+      title: 'Sub-finding: ' + (sec.question || ''),
+      body: (sec.context || '') + '\n\nSources:\n' + qSrcs.map(s => '- ' + (s.url || '')).join('\n'),
+      tags: ['research', 'sub-question'],
+      context: { parent_topic: data.topic, sub_question: sec.question, model: data.model }
+    }));
+    return `
+      <details class="research-thinking-card">
+        <summary>
+          <span class="thinking-step-num">${idx + 1}</span>
+          <span class="thinking-step-q">${safeQ}</span>
+          <span class="thinking-step-meta">${qSrcs.length} source${qSrcs.length === 1 ? '' : 's'}</span>
+        </summary>
+        <div class="thinking-step-body">
+          <div class="thinking-step-context">${ctxPreview ? esc(ctxPreview) + (sec.context && sec.context.length > 320 ? '…' : '') : '<em style="color:var(--text-muted)">no context gathered</em>'}</div>
+          <div class="thinking-step-sources">${srcHtml}</div>
+          <div class="thinking-step-actions">
+            <button class="action-btn xs cyan" onclick='ResearchArtifacts.captureRaw(decodeURIComponent("${payloadAttr}"))'>+ Capture as artifact</button>
+          </div>
+        </div>
+      </details>
+    `;
+  }).join('');
 
   // Source chips
   const chips = (data.sources || []).map(s =>
@@ -4967,22 +6355,133 @@ function renderResearchResults(data) {
 
   // Render synthesis markdown (basic)
   const synthesis = renderMarkdownBasic(data.synthesis || '');
+  const synthPayload = encodeURIComponent(JSON.stringify({
+    source: 'research',
+    title: 'Synthesis: ' + (data.topic || 'untitled'),
+    body: data.synthesis || '',
+    tags: ['research', 'synthesis'],
+    context: {
+      topic: data.topic,
+      model: data.model,
+      sub_questions: data.sub_questions || [],
+      source_count: (data.sources || []).length,
+    }
+  }));
 
   out.innerHTML = `
-    <div style="margin-bottom:10px">
-      <div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:6px">SUB-QUESTIONS</div>
-      ${pills || '<span style="color:var(--text-muted);font-size:0.65rem">none</span>'}
+    <div class="research-topic-bar">
+      <span class="research-topic-label">TOPIC</span>
+      <strong>${esc(data.topic || '')}</strong>
+      <span class="research-topic-meta">model: ${esc(data.model || '?')} · ${(data.sub_questions || []).length} sub-questions · ${(data.sources || []).length} unique sources</span>
     </div>
-    <div class="synthesis-block">${synthesis}</div>
-    ${chips ? `<div style="margin-top:12px;font-size:0.62rem;color:var(--text-muted);margin-bottom:6px">SOURCES</div><div class="res-sources">${chips}</div>` : ''}
-    <div style="margin-top:14px;display:flex;gap:8px">
-      <button class="action-btn" onclick="exportResearch()" style="font-size:0.65rem;padding:4px 10px">Export as MD</button>
+
+    <div class="research-thinking-strip">
+      <div class="research-thinking-strip-label">AGENT THINKING — per sub-question</div>
+      ${thinkingCards || '<div style="color:var(--text-muted);font-size:0.65rem">no per-sub-question detail returned</div>'}
+    </div>
+
+    <div class="synthesis-block">
+      <div class="synthesis-label">SYNTHESIS</div>
+      ${synthesis}
+    </div>
+    ${chips ? `<div style="margin-top:12px;font-size:0.62rem;color:var(--text-muted);margin-bottom:6px">ALL SOURCES</div><div class="res-sources">${chips}</div>` : ''}
+    <div class="research-actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="action-btn accent" onclick='ResearchArtifacts.captureRaw(decodeURIComponent("${synthPayload}"))'>+ Capture synthesis as artifact</button>
+      <button class="action-btn cyan" onclick="ResearchArtifacts.openLibrary()">View captured artifacts</button>
+      <button class="action-btn" onclick="exportResearch()">Export as MD</button>
     </div>
   `;
 
-  // Store for export
+  // Store for export AND for tab-switch rehydration.
   window._lastResearch = data;
 }
+
+// ── Research artifact capture ────────────────────────────────────────────
+// Wraps POST /api/feedback/artifacts. Each click captures the finding as
+// a durable record (and best-effort RAG-ingests it server-side so the
+// artifact becomes semantically searchable in the Context tab).
+window.ResearchArtifacts = (function () {
+  async function captureRaw(payloadJson) {
+    let payload;
+    try {
+      payload = typeof payloadJson === 'string' ? JSON.parse(payloadJson) : payloadJson;
+    } catch (e) {
+      if (window.Toast) Toast.danger('Capture failed', 'Could not parse payload: ' + e.message);
+      return;
+    }
+    if (window.Toast) Toast.info('Capturing…', payload.title || 'artifact', { ttl: 1500 });
+    try {
+      const r = await fetch('/api/feedback/artifacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const text = await r.text();
+        throw new Error('HTTP ' + r.status + ' — ' + text.slice(0, 200));
+      }
+      const rec = await r.json();
+      if (window.Toast) {
+        Toast.success(
+          'Captured',
+          (rec.title || payload.title) + (rec.rag_ingested ? ' · also indexed in Context' : ''),
+          { ttl: 3000 }
+        );
+      }
+      return rec;
+    } catch (e) {
+      if (window.Toast) Toast.danger('Capture failed', String(e));
+    }
+  }
+
+  async function openLibrary() {
+    // Lightweight in-page list — no new tab needed. Renders into an
+    // ad-hoc modal so the operator stays in the Skills Lab context.
+    let modal = document.getElementById('artifact-library-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'artifact-library-modal';
+      modal.className = 'admin-modal';
+      modal.role = 'dialog';
+      modal.setAttribute('aria-modal', 'true');
+      modal.innerHTML = `
+        <div class="admin-modal-card" style="width:680px;max-height:78vh;display:flex;flex-direction:column">
+          <h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span>Captured artifacts</span>
+            <button type="button" class="action-btn xs" onclick="document.getElementById('artifact-library-modal').hidden=true">close</button>
+          </h3>
+          <div id="artifact-library-body" style="flex:1;overflow:auto;font-size:0.72rem"></div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+    modal.hidden = false;
+    const body = document.getElementById('artifact-library-body');
+    body.innerHTML = '<div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-line long"></div>';
+    try {
+      const r = await fetch('/api/feedback/artifacts?limit=50');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const list = await r.json();
+      if (!list.length) {
+        body.innerHTML = '<div class="model-empty" style="padding:20px">No artifacts captured yet. Run a research and click <strong>+ Capture as artifact</strong>.</div>';
+        return;
+      }
+      body.innerHTML = list.map(a => `
+        <div class="artifact-row">
+          <div class="artifact-row-head">
+            <strong>${esc(a.title || '(untitled)')}</strong>
+            <span class="artifact-row-meta">${esc(a.source || '?')} · ${(a.tags || []).map(t => esc(t)).join(', ')} · ${esc(a.captured_at || '')}</span>
+          </div>
+          <div class="artifact-row-body">${esc((a.body || '').slice(0, 320))}${(a.body || '').length > 320 ? '…' : ''}</div>
+        </div>
+      `).join('');
+    } catch (e) {
+      body.innerHTML = '<div class="model-empty" style="color:var(--red);padding:20px">Failed to load artifacts: ' + esc(String(e)) + '</div>';
+    }
+  }
+
+  return { captureRaw, openLibrary };
+})();
 
 function renderMarkdownBasic(text) {
   if (!text) return '';
@@ -5548,10 +7047,18 @@ function renderContextInspector(ctx) {
   `;
 }
 
-/* ── INIT ────────────────────────────────────────────────────────── */
-loadStatus();
-loadModels();
-setInterval(loadStatus, 10000);
+/* ── INIT ──────────────────────────────────────────────────────────
+   IMPORTANT: must run AFTER the Auth fetch-wrapper IIFE installs
+   (further down at the AdminAuth block). Otherwise the first
+   loadModels() call goes out un-injected, hits /v1/models with no
+   auth, gets 401 with d.data===undefined, and the picker stays
+   stuck on the "loading…" sentinel forever. Deferring to
+   DOMContentLoaded guarantees the wrapper is in place by then. */
+document.addEventListener('DOMContentLoaded', () => {
+  loadStatus();
+  loadModels();
+  setInterval(loadStatus, 10000);
+});
 
 // ── Memory Tab (Sessions / Facts / Stats) ────────────────────────
 async function loadMemoryTab() {
@@ -6080,6 +7587,15 @@ function dfInitEditor() {
     // Engage the dashboard chat input against this step so the
     // operator can iterate by typing without leaving the canvas.
     if (typeof composerEnterStepEngage === 'function') composerEnterStepEngage(id);
+    // Surface the selection in the bottom workstream — auto-switch to
+    // Step Config and stamp the meta with the node id.
+    if (window.ComposerWorkstream) {
+      try {
+        const data = dfNodeData && dfNodeData[id];
+        const label = data && (data.id || data.name) ? (data.id || data.name) : id;
+        ComposerWorkstream.focusStep(label);
+      } catch (_) { ComposerWorkstream.focusStep(id); }
+    }
   });
   dfEditor.on('nodeUnselected', () => {
     dfSelectedNodeId = null;
@@ -6950,13 +8466,27 @@ window.AdminMenu = (function () {
 })();
 
 // ── AdminAuth ─────────────────────────────────────────────────────────────
+// Persists the operator's license key in localStorage so it survives
+// reloads and tab close. Legacy installs that stored under the old
+// sessionStorage key are migrated forward on first read.
 window.AdminAuth = (function () {
-  const STORAGE_KEY = 'enclave.admin.masterKey';
+  const STORAGE_KEY = 'enclave.licenseKey';
+  const LEGACY_SESSION_KEY = 'enclave.admin.masterKey';
   // After successful sign-in, the panel that triggered the modal gets reloaded.
   let pendingPanel = null;
 
   function getKey() {
-    return sessionStorage.getItem(STORAGE_KEY) || '';
+    let k = localStorage.getItem(STORAGE_KEY) || '';
+    if (!k) {
+      // One-shot migration from the old sessionStorage slot.
+      const legacy = sessionStorage.getItem(LEGACY_SESSION_KEY) || '';
+      if (legacy) {
+        localStorage.setItem(STORAGE_KEY, legacy);
+        sessionStorage.removeItem(LEGACY_SESSION_KEY);
+        k = legacy;
+      }
+    }
+    return k;
   }
 
   function isSignedIn() {
@@ -6964,12 +8494,14 @@ window.AdminAuth = (function () {
   }
 
   function setKey(key) {
-    sessionStorage.setItem(STORAGE_KEY, key);
+    localStorage.setItem(STORAGE_KEY, key);
+    sessionStorage.removeItem(LEGACY_SESSION_KEY);
     _refreshStatus();
   }
 
   function clearKey() {
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(LEGACY_SESSION_KEY);
     _refreshStatus();
   }
 
@@ -7037,10 +8569,15 @@ window.AdminAuth = (function () {
     setKey(candidate);
     document.getElementById('admin-signin-modal').hidden = true;
     if (pendingPanel) {
-      // Re-render the originating panel.
+      // Re-render the originating admin panel.
       window.dispatchEvent(new CustomEvent('adminPanelActivated', {detail: {panel: pendingPanel}}));
+      pendingPanel = null;
+    } else {
+      // Boot-time / global 401 sign-in — reload so every tab's data fetch
+      // reinitializes with the key now in sessionStorage.
+      pendingPanel = null;
+      window.location.reload();
     }
-    pendingPanel = null;
   }
 
   function signOut() {
@@ -7085,6 +8622,1265 @@ window.AdminAuth = (function () {
 
   return { isSignedIn, getKey, authHeaders, fetch, renderLock,
            signIn, signOut, _cancelSignIn, _submitSignIn };
+})();
+
+// ── Auth — single-tier wrapper around AdminAuth ─────────────────────────
+// Collapses the legacy dual-tier (operator vs. admin master key) into one
+// key that gates every same-origin /api/* and /v1/* request. The dropdown
+// stays as an organizational surface, not an RBAC boundary.
+window.Auth = window.AdminAuth;
+
+// ── Toast API ─────────────────────────────────────────────────────────────
+// Replaces alert()-style notifications with a non-blocking corner stack.
+// Usage:
+//   Toast.info('Title', 'Body text')
+//   Toast.success('Saved')
+//   Toast.warn('Rate limit nearing', 'Slow down or bump RATE_LIMIT_RPM')
+//   Toast.danger('Workflow failed', err.message)
+// Toasts auto-dismiss after 4s; click to dismiss earlier.
+window.Toast = (function () {
+  function _container() {
+    let c = document.getElementById('enclave-toasts');
+    if (!c) {
+      c = document.createElement('div');
+      c.id = 'enclave-toasts';
+      document.body.appendChild(c);
+    }
+    return c;
+  }
+  function _esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function show(kind, title, body, opts) {
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.className = 'enclave-toast kind-' + kind;
+    el.innerHTML =
+      (title ? '<div class="toast-title">' + _esc(title) + '</div>' : '') +
+      '<div class="toast-body">' + _esc(body || title) + '</div>';
+    el.addEventListener('click', () => dismiss(el));
+    _container().appendChild(el);
+    const ttl = opts.ttl != null ? opts.ttl : 4000;
+    if (ttl > 0) setTimeout(() => dismiss(el), ttl);
+    return el;
+  }
+  function dismiss(el) {
+    if (!el || !el.isConnected) return;
+    el.classList.add('dismissing');
+    setTimeout(() => el.remove(), 240);
+  }
+  return {
+    info:    (t, b, o) => show('info', t, b, o),
+    success: (t, b, o) => show('success', t, b, o),
+    warn:    (t, b, o) => show('warn', t, b, o),
+    danger:  (t, b, o) => show('danger', t, b, o),
+    dismiss,
+  };
+})();
+
+// ── Global error safety net ───────────────────────────────────────────────
+// Catches uncaught exceptions and unhandled promise rejections so they
+// surface to the operator instead of dying silently in the console.
+// Rate-limited so a runaway loop can't spam the toast stack. Also tracks
+// the error in localStorage for post-incident debugging.
+(function installGlobalErrorHandlers() {
+  const STORE_KEY = 'enclave.errorLog.v1';
+  const MAX_LOG = 50;
+  let _lastToast = 0;
+
+  function _logError(kind, info) {
+    try {
+      const log = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
+      log.push({ kind, info, ts: new Date().toISOString(), href: location.href });
+      while (log.length > MAX_LOG) log.shift();
+      localStorage.setItem(STORE_KEY, JSON.stringify(log));
+    } catch (_) { /* localStorage full / disabled — fine */ }
+  }
+
+  function _toastOnce(title, detail) {
+    const now = Date.now();
+    if (now - _lastToast < 2500) return; // rate-limit
+    _lastToast = now;
+    if (window.Toast) Toast.danger(title, detail, { ttl: 4500 });
+  }
+
+  window.addEventListener('error', (e) => {
+    if (!e) return;
+    const info = (e.message || '') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || '?');
+    _logError('error', info);
+    _toastOnce('Unhandled error', info.slice(0, 200));
+  });
+
+  window.addEventListener('unhandledrejection', (e) => {
+    const info = (e && e.reason && (e.reason.message || String(e.reason))) || 'unknown promise rejection';
+    _logError('rejection', info);
+    // Don't toast on common AbortError — those are normal during nav.
+    if (/AbortError|aborted/.test(String(info))) return;
+    _toastOnce('Unhandled promise rejection', String(info).slice(0, 200));
+  });
+
+  window.EnclaveErrorLog = {
+    list: () => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch (_) { return []; } },
+    clear: () => { try { localStorage.removeItem(STORE_KEY); } catch (_) {} },
+  };
+})();
+
+// ── Net: hardened fetch wrapper ───────────────────────────────────────────
+// Single chokepoint for every API call so retry/backoff/offline detection
+// and error semantics are consistent across the whole SPA. The existing
+// monkey-patched window.fetch handles auth-header injection; Net wraps
+// that with:
+//   • automatic retry-with-backoff on transient failures (network errors,
+//     5xx, 429 with Retry-After)
+//   • offline detection — surfaces a single sticky toast while offline
+//     and auto-dismisses when back
+//   • structured error returns: { ok, status, data, error, retried }
+//   • silent mode for polling loops that shouldn't toast on every miss
+//
+// Existing call sites that use window.fetch directly still work — Net is
+// opt-in and additive.
+window.Net = (function () {
+  let _offline = !navigator.onLine;
+  let _offlineToast = null;
+
+  function _setOffline(off) {
+    if (_offline === off) return;
+    _offline = off;
+    if (off) {
+      if (window.Toast) {
+        _offlineToast = Toast.warn(
+          'Offline',
+          'Network unreachable. The app will keep trying.',
+          { ttl: 0 }
+        );
+      }
+    } else {
+      if (_offlineToast) {
+        Toast.dismiss(_offlineToast);
+        _offlineToast = null;
+      }
+      if (window.Toast) Toast.success('Back online', 'Reconnected.', { ttl: 2000 });
+    }
+  }
+
+  window.addEventListener('online',  () => _setOffline(false));
+  window.addEventListener('offline', () => _setOffline(true));
+
+  function _shouldRetry(status) {
+    return status === 429 || status === 502 || status === 503 || status === 504;
+  }
+
+  async function call(url, opts) {
+    opts = opts || {};
+    const maxRetries = opts.retries == null ? 2 : opts.retries;
+    const backoffMs  = opts.backoffMs || 600;
+    const silent     = !!opts.silent;
+    const expectJson = opts.expectJson !== false;
+
+    let lastError = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const r = await window.fetch(url, opts.init || opts);
+        if (!r.ok && _shouldRetry(r.status) && attempt < maxRetries) {
+          const retryAfter = parseInt(r.headers.get('Retry-After') || '0', 10);
+          const wait = retryAfter > 0 ? retryAfter * 1000 : backoffMs * Math.pow(2, attempt);
+          await new Promise(rs => setTimeout(rs, wait));
+          continue;
+        }
+        _setOffline(false);
+        let data = null;
+        if (expectJson) {
+          try { data = await r.clone().json(); } catch (_) {
+            try { data = await r.text(); } catch (_) { data = null; }
+          }
+        }
+        return {
+          ok: r.ok,
+          status: r.status,
+          data,
+          response: r,
+          retried: attempt,
+          error: r.ok ? null : (data && typeof data === 'object' && (data.detail || data.error)) || ('HTTP ' + r.status),
+        };
+      } catch (e) {
+        lastError = e;
+        // Network error — exponential backoff before retrying.
+        if (attempt < maxRetries) {
+          await new Promise(rs => setTimeout(rs, backoffMs * Math.pow(2, attempt)));
+          continue;
+        }
+        _setOffline(true);
+        if (!silent && window.Toast) {
+          Toast.danger('Request failed', String(e.message || e), { ttl: 4000 });
+        }
+        return {
+          ok: false,
+          status: 0,
+          data: null,
+          response: null,
+          retried: attempt,
+          error: e.message || String(e),
+        };
+      }
+    }
+    return { ok: false, status: 0, data: null, response: null, retried: maxRetries, error: String(lastError) };
+  }
+
+  // Convenience methods that return the data directly + throw on failure.
+  // Use these in flows that already have local try/catch + want the
+  // result body, not the wrapper.
+  async function getJson(url, opts) {
+    const r = await call(url, { ...(opts || {}), init: { method: 'GET', ...(opts && opts.init || {}) } });
+    if (!r.ok) throw new Error(r.error || ('GET ' + url + ' failed: ' + r.status));
+    return r.data;
+  }
+  async function postJson(url, body, opts) {
+    const init = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...((opts && opts.init && opts.init.headers) || {}) },
+      body: typeof body === 'string' ? body : JSON.stringify(body || {}),
+    };
+    const r = await call(url, { ...(opts || {}), init });
+    if (!r.ok) throw new Error(r.error || ('POST ' + url + ' failed: ' + r.status));
+    return r.data;
+  }
+
+  return { call, getJson, postJson, isOffline: () => _offline };
+})();
+
+// ── ErrorPanel: consistent inline error rendering ─────────────────────────
+// Drop the same visual treatment everywhere a panel fails to load. Pairs
+// with EmptyState for the success-but-empty case.
+window.ErrorPanel = (function () {
+  function render(el, opts) {
+    if (!el) return;
+    opts = opts || {};
+    const title = opts.title || 'Something went wrong';
+    const detail = opts.detail || opts.error || '';
+    const action = opts.retry
+      ? `<button class="action-btn xs cyan" data-error-retry>Retry</button>`
+      : '';
+    el.innerHTML = `
+      <div class="enclave-error-panel">
+        <div class="enclave-error-icon" aria-hidden="true">!</div>
+        <div class="enclave-error-body">
+          <div class="enclave-error-title">${esc(title)}</div>
+          ${detail ? `<div class="enclave-error-detail">${esc(String(detail).slice(0, 400))}</div>` : ''}
+          ${action ? `<div class="enclave-error-actions">${action}</div>` : ''}
+        </div>
+      </div>`;
+    if (opts.retry) {
+      const btn = el.querySelector('[data-error-retry]');
+      if (btn) btn.addEventListener('click', () => opts.retry());
+    }
+  }
+  return { render };
+})();
+
+// ── EmptyState: consistent zero-data treatment ───────────────────────────
+window.EmptyState = (function () {
+  function render(el, opts) {
+    if (!el) return;
+    opts = opts || {};
+    const title = opts.title || 'Nothing here yet';
+    const detail = opts.detail || '';
+    const cta = opts.cta;  // {label, onclick}
+    el.innerHTML = `
+      <div class="enclave-empty-state">
+        <div class="enclave-empty-glyph" aria-hidden="true">${esc(opts.glyph || '◇')}</div>
+        <div class="enclave-empty-title">${esc(title)}</div>
+        ${detail ? `<div class="enclave-empty-detail">${esc(detail)}</div>` : ''}
+        ${cta ? `<button class="action-btn accent" data-empty-cta>${esc(cta.label)}</button>` : ''}
+      </div>`;
+    if (cta && cta.onclick) {
+      const btn = el.querySelector('[data-empty-cta]');
+      if (btn) btn.addEventListener('click', cta.onclick);
+    }
+  }
+  return { render };
+})();
+
+// ── Heartbeat: backend liveness + degraded-state banner ───────────────────
+// Polls /health every 30s with no auth (it's a public endpoint). Surfaces
+// degraded states in a chip glued to the header so the operator sees
+// instantly when Ollama drops out, the auth keystore is misconfigured,
+// or the API itself starts erroring. Reuses the existing #env-chip
+// container so we don't compete for header real estate.
+window.Heartbeat = (function () {
+  let _timer = null;
+  let _lastStatus = null;
+
+  function _chip() {
+    return document.getElementById('env-chip-label');
+  }
+  function _envChip() {
+    return document.getElementById('env-chip');
+  }
+
+  async function _tick() {
+    const r = await Net.call('/health', { silent: true, retries: 0 });
+    const status = r.ok && r.data ? (r.data.status || 'unknown') : 'offline';
+    // /health returns ollama: { status: "healthy" | "degraded", models_loaded: N }
+    const ollamaUp = !!(r.ok && r.data && r.data.ollama && r.data.ollama.status === 'healthy');
+    _paint(status, ollamaUp, r.data);
+    _lastStatus = status;
+  }
+
+  function _paint(status, ollamaUp, data) {
+    const chip = _chip();
+    const env = _envChip();
+    if (!chip || !env) return;
+    env.classList.remove('healthy', 'degraded', 'offline');
+    const modelCount = (data && data.ollama && (data.ollama.models_loaded || (data.ollama.models || []).length)) || 0;
+    if (status === 'healthy' && ollamaUp) {
+      env.classList.add('healthy');
+      chip.textContent = 'LOCAL';
+      env.title = 'Healthy · ' + modelCount + ' models loaded';
+    } else if (status === 'degraded' || (status === 'healthy' && !ollamaUp)) {
+      env.classList.add('degraded');
+      chip.textContent = 'DEGRADED';
+      env.title = 'Ollama unreachable. Inference will fail until it comes back.';
+      if (_lastStatus && _lastStatus !== 'degraded' && window.Toast) {
+        Toast.warn('Ollama unreachable', 'Models won’t respond until the service is back.', { ttl: 4500 });
+      }
+    } else {
+      env.classList.add('offline');
+      chip.textContent = 'OFFLINE';
+      env.title = 'API not responding to /health.';
+    }
+  }
+
+  function start(intervalMs) {
+    if (_timer) clearInterval(_timer);
+    _tick();
+    _timer = setInterval(_tick, intervalMs || 30_000);
+  }
+  function stop() { if (_timer) clearInterval(_timer); _timer = null; }
+  function lastStatus() { return _lastStatus; }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => start(30_000));
+  } else {
+    start(30_000);
+  }
+
+  return { start, stop, tick: _tick, lastStatus };
+})();
+
+// ── Confirm: styled replacement for window.confirm() ──────────────────────
+// Same call-site shape as a real promise-based confirm. Returns a
+// promise that resolves to true/false. Built on the admin-modal CSS so
+// it inherits the brand palette + motion.
+window.Confirm = (function () {
+  function ask(opts) {
+    opts = opts || {};
+    return new Promise((resolve) => {
+      let m = document.getElementById('enclave-confirm-modal');
+      if (!m) {
+        m = document.createElement('div');
+        m.id = 'enclave-confirm-modal';
+        m.className = 'admin-modal';
+        m.setAttribute('role', 'dialog');
+        m.setAttribute('aria-modal', 'true');
+        m.innerHTML = `
+          <div class="admin-modal-card" style="width:min(440px,90vw)">
+            <h3 id="enclave-confirm-title">Confirm</h3>
+            <p class="admin-modal-sub" id="enclave-confirm-body"></p>
+            <div class="admin-modal-actions">
+              <button type="button" class="admin-modal-btn"        id="enclave-confirm-cancel">Cancel</button>
+              <button type="button" class="admin-modal-btn primary" id="enclave-confirm-ok">OK</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(m);
+      }
+      m.querySelector('#enclave-confirm-title').textContent = opts.title || 'Confirm';
+      m.querySelector('#enclave-confirm-body').textContent  = opts.body  || 'Are you sure?';
+      m.querySelector('#enclave-confirm-ok').textContent    = opts.okLabel    || 'OK';
+      m.querySelector('#enclave-confirm-cancel').textContent = opts.cancelLabel || 'Cancel';
+      const okBtn = m.querySelector('#enclave-confirm-ok');
+      okBtn.className = 'admin-modal-btn primary' + (opts.danger ? ' kind-danger' : '');
+      m.hidden = false;
+
+      function _close(value) {
+        m.hidden = true;
+        okBtn.removeEventListener('click', _yes);
+        cancelBtn.removeEventListener('click', _no);
+        document.removeEventListener('keydown', _onKey);
+        resolve(value);
+      }
+      function _yes() { _close(true); }
+      function _no()  { _close(false); }
+      function _onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); _no(); }
+        if (e.key === 'Enter')  { e.preventDefault(); _yes(); }
+      }
+      const cancelBtn = m.querySelector('#enclave-confirm-cancel');
+      okBtn.addEventListener('click', _yes);
+      cancelBtn.addEventListener('click', _no);
+      document.addEventListener('keydown', _onKey);
+      setTimeout(() => okBtn.focus(), 0);
+    });
+  }
+  return { ask };
+})();
+
+// ── Keyboard Shortcuts ────────────────────────────────────────────────────
+// Operator productivity layer: command palette + tab jumps. Press
+// Cmd/Ctrl-K to toggle, or any of the keymap entries for direct jumps.
+// Designed to fail silently when focus is on a text input so users can
+// type the keys literally without triggering shortcuts.
+window.Shortcuts = (function () {
+  const keymap = [
+    { key: 'g d', label: 'Composer (dashboard)',  action: () => switchTab('dashboard') },
+    { key: 'g w', label: 'Workflow Index',         action: () => switchTab('workflow-index') },
+    { key: 'g a', label: 'Agents',                 action: () => switchTab('agents') },
+    { key: 'g r', label: 'Skill Lab',              action: () => switchTab('research') },
+    { key: 'g m', label: 'Models',                 action: () => switchTab('inventory') },
+    { key: 'g c', label: 'Context',                action: () => switchTab('documents') },
+    { key: 'g p', label: 'Plugins',                action: () => switchTab('admin-plugins') },
+    { key: 'g s', label: 'Skills',                 action: () => switchTab('admin-skills') },
+    { key: 'g x', label: 'MCP Servers',            action: () => switchTab('admin-mcp') },
+    { key: 'g y', label: 'System (Memory)',        action: () => switchTab('memory') },
+    { key: 'g k', label: 'License Keys',           action: () => switchTab('admin-keys') },
+    { key: 'g h', label: 'Runs (history)',         action: () => switchTab('workflows') },
+    { key: '?',   label: 'Show this overlay',      action: () => toggle(true) },
+    { key: 'Escape', label: 'Close overlay',       action: () => toggle(false), inOverlay: true },
+  ];
+
+  let _open = false;
+  let _seq = '';
+  let _seqTimer = null;
+
+  function _modal() {
+    let m = document.getElementById('shortcuts-modal');
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = 'shortcuts-modal';
+    m.className = 'admin-modal';
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    m.hidden = true;
+    const rows = keymap.filter(e => !e.inOverlay || e.key === 'Escape').map(e => `
+      <div class="kbd-row">
+        <kbd class="kbd-key">${esc(e.key)}</kbd>
+        <span class="kbd-label">${esc(e.label)}</span>
+      </div>
+    `).join('');
+    m.innerHTML = `
+      <div class="admin-modal-card" style="width:min(560px,90vw)">
+        <h3 style="display:flex;align-items:center;justify-content:space-between">
+          <span>Keyboard shortcuts</span>
+          <button class="action-btn xs" type="button" onclick="Shortcuts.toggle(false)">close</button>
+        </h3>
+        <p class="admin-modal-sub">
+          Shortcuts ignore your keystrokes when focus is on a text input,
+          so typing inside fields is safe. <kbd class="kbd-key">g</kbd>
+          followed by another key jumps tabs.
+        </p>
+        <div class="kbd-list">${rows}</div>
+      </div>
+    `;
+    document.body.appendChild(m);
+    return m;
+  }
+
+  function toggle(force) {
+    const m = _modal();
+    _open = (force === undefined) ? !_open : !!force;
+    m.hidden = !_open;
+  }
+
+  function _isTextTarget(t) {
+    if (!t) return false;
+    const tag = (t.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable;
+  }
+
+  function _onKey(e) {
+    // Cmd/Ctrl-K toggles overlay regardless of focus.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      toggle();
+      return;
+    }
+    // Escape closes overlay even when on text input.
+    if (e.key === 'Escape' && _open) { toggle(false); return; }
+    if (_isTextTarget(e.target)) return;
+
+    // ? help
+    if (e.key === '?') { e.preventDefault(); toggle(true); return; }
+
+    // Two-key sequences: "g <x>"
+    if (e.key === 'g') {
+      _seq = 'g';
+      if (_seqTimer) clearTimeout(_seqTimer);
+      _seqTimer = setTimeout(() => { _seq = ''; }, 900);
+      return;
+    }
+    if (_seq === 'g') {
+      const combo = 'g ' + e.key.toLowerCase();
+      _seq = '';
+      const entry = keymap.find(k => k.key === combo);
+      if (entry) { e.preventDefault(); entry.action(); }
+    }
+  }
+
+  document.addEventListener('keydown', _onKey);
+  return { toggle };
+})();
+
+// ── Kanban (Projects + Tasks) ─────────────────────────────────────────────
+// Lightweight task board inside Workflow Index. Tasks live server-side as
+// JSONL events under data/projects/<id>/tasks.jsonl, fetched via
+// /api/projects/{id}/tasks. State is per-project so switching the
+// project_select in the kanban head swaps the board.
+window.Kanban = (function () {
+  let _activeProject = null;
+  let _modalMode = null;       // 'task' | 'project'
+  let _modalColumn = 'todo';
+  let _editingTaskId = null;
+
+  function _setEmptyBoard() {
+    document.querySelectorAll('.kanban-col-body').forEach(b => {
+      b.innerHTML = '<div class="kanban-empty">Drop tasks here — or click + Add task.</div>';
+    });
+    document.querySelectorAll('.kanban-col-count[data-count]').forEach(c => c.textContent = '0');
+  }
+
+  async function _loadProjectsIntoSelect() {
+    const sel = document.getElementById('kanban-project-select');
+    if (!sel) return;
+    try {
+      const r = await fetch('/api/projects');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const list = await r.json();
+      const projects = Array.isArray(list) ? list : (list.projects || []);
+      const current = sel.value;
+      sel.innerHTML = '<option value="">— pick a project —</option>' +
+        projects.map(p => `<option value="${esc(p.id || p.project_id || '')}">${esc(p.name || p.id || '?')}</option>`).join('');
+      if (current && projects.some(p => (p.id || p.project_id) === current)) {
+        sel.value = current;
+      }
+    } catch (e) {
+      sel.innerHTML = '<option value="">(failed to load projects)</option>';
+    }
+  }
+
+  async function setActive(projectId) {
+    _activeProject = projectId || null;
+    if (!_activeProject) { _setEmptyBoard(); return; }
+    await _renderTasks();
+  }
+
+  async function refresh() {
+    await _loadProjectsIntoSelect();
+    if (_activeProject) await _renderTasks();
+  }
+
+  async function _renderTasks() {
+    if (!_activeProject) return _setEmptyBoard();
+    const board = document.getElementById('kanban-board');
+    if (!board) return;
+    // Skeleton placeholders while we fetch.
+    document.querySelectorAll('.kanban-col-body').forEach(b => {
+      b.innerHTML = '<div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line short"></div>';
+    });
+    try {
+      const r = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const tasks = await r.json();
+      const byCol = { todo: [], doing: [], done: [] };
+      (tasks || []).forEach(t => {
+        const col = byCol[t.column] ? t.column : 'todo';
+        byCol[col].push(t);
+      });
+      Object.entries(byCol).forEach(([col, items]) => {
+        items.sort((a, b) => (a.position || 0) - (b.position || 0));
+        const body = document.querySelector(`.kanban-col[data-column="${col}"] .kanban-col-body`);
+        if (!body) return;
+        if (!items.length) {
+          body.innerHTML = '<div class="kanban-empty">Drop tasks here — or click + Add task.</div>';
+        } else {
+          body.innerHTML = items.map(t => _renderCard(t)).join('');
+        }
+        const count = document.querySelector(`.kanban-col[data-column="${col}"] .kanban-col-count`);
+        if (count) count.textContent = items.length || '';
+      });
+    } catch (e) {
+      // Render unified error in each column so the operator sees it
+      // visually wherever they look, with a Retry button.
+      document.querySelectorAll('.kanban-col-body').forEach((b, i) => {
+        if (i === 0) {
+          ErrorPanel.render(b, {
+            title: 'Couldn’t load tasks',
+            detail: String(e),
+            retry: () => _renderTasks(),
+          });
+        } else {
+          b.innerHTML = '';
+        }
+      });
+      if (window.Toast) Toast.danger('Tasks load failed', String(e));
+    }
+  }
+
+  function _renderCard(t) {
+    const labels = (t.labels || []).map(l => `<span class="kanban-label">${esc(l)}</span>`).join('');
+    const desc = t.description ? `<div class="kanban-card-desc">${esc(t.description.slice(0, 200))}${t.description.length > 200 ? '…' : ''}</div>` : '';
+    return `
+      <div class="kanban-card" draggable="true"
+           data-task-id="${esc(t.id)}"
+           ondragstart="Kanban._dragStart(event, '${esc(t.id)}')"
+           ondragend="Kanban._dragEnd(event)"
+           ondblclick="Kanban.showEditTask('${esc(t.id)}')">
+        <div class="kanban-card-title">${esc(t.title || '')}</div>
+        ${desc}
+        ${labels ? `<div class="kanban-card-labels">${labels}</div>` : ''}
+        <div class="kanban-card-actions">
+          <button class="kanban-card-btn" title="Edit"
+                  onclick="event.stopPropagation(); Kanban.showEditTask('${esc(t.id)}')">edit</button>
+          <button class="kanban-card-btn danger" title="Delete"
+                  onclick="event.stopPropagation(); Kanban.deleteTask('${esc(t.id)}')">×</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function _dragStart(ev, id) {
+    ev.dataTransfer.setData('application/x-enclave-task', id);
+    ev.dataTransfer.effectAllowed = 'move';
+    ev.target.classList.add('dragging');
+  }
+  function _dragEnd(ev) {
+    ev.target.classList.remove('dragging');
+    document.querySelectorAll('.kanban-col-body.drop-target').forEach(b => b.classList.remove('drop-target'));
+  }
+  async function drop(ev, column) {
+    ev.preventDefault();
+    document.querySelectorAll('.kanban-col-body.drop-target').forEach(b => b.classList.remove('drop-target'));
+    const id = ev.dataTransfer.getData('application/x-enclave-task');
+    if (!id || !_activeProject) return;
+    try {
+      const r = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks/' + encodeURIComponent(id), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ column, position: Date.now() }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      await _renderTasks();
+    } catch (e) {
+      if (window.Toast) Toast.danger('Move failed', String(e));
+    }
+  }
+
+  // ── Modal flows ────────────────────────────────────────────────────
+  function _openModal(mode, opts) {
+    _modalMode = mode;
+    opts = opts || {};
+    _modalColumn = opts.column || 'todo';
+    _editingTaskId = opts.editingTaskId || null;
+    document.getElementById('kanban-modal-title').textContent =
+      mode === 'project' ? 'New project' :
+      _editingTaskId ? 'Edit task' : 'New task — ' + _modalColumn;
+    document.getElementById('kanban-modal-title-input').value = opts.title || '';
+    document.getElementById('kanban-modal-desc').value = opts.description || '';
+    document.getElementById('kanban-modal-labels').value = (opts.labels || []).join(', ');
+    document.getElementById('kanban-modal-error').hidden = true;
+    document.getElementById('kanban-modal').hidden = false;
+    setTimeout(() => document.getElementById('kanban-modal-title-input').focus(), 0);
+  }
+  function _cancelModal() {
+    document.getElementById('kanban-modal').hidden = true;
+    _editingTaskId = null;
+    _modalMode = null;
+  }
+
+  function showCreateTask(column) {
+    if (!_activeProject) {
+      if (window.Toast) Toast.warn('Pick a project first', 'Use the dropdown above the board.');
+      return;
+    }
+    _openModal('task', { column: column || 'todo' });
+  }
+
+  async function showEditTask(taskId) {
+    if (!_activeProject) return;
+    try {
+      const list = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks').then(r => r.json());
+      const t = (list || []).find(x => x.id === taskId);
+      if (!t) return;
+      _openModal('task', {
+        column: t.column,
+        editingTaskId: taskId,
+        title: t.title,
+        description: t.description,
+        labels: t.labels || [],
+      });
+    } catch (_) {}
+  }
+
+  function showCreateProject() {
+    _openModal('project');
+  }
+
+  async function _submitModal() {
+    const errBox = document.getElementById('kanban-modal-error');
+    const title = document.getElementById('kanban-modal-title-input').value.trim();
+    if (!title) {
+      errBox.hidden = false;
+      errBox.textContent = 'Title is required.';
+      return;
+    }
+    try {
+      if (_modalMode === 'project') {
+        const desc = document.getElementById('kanban-modal-desc').value.trim();
+        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || ('proj_' + Date.now().toString(36));
+        const r = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: slug, name: title, description: desc }),
+        });
+        if (!r.ok) {
+          const t = await r.text();
+          throw new Error('HTTP ' + r.status + ' — ' + t.slice(0, 200));
+        }
+        const rec = await r.json();
+        _cancelModal();
+        await _loadProjectsIntoSelect();
+        document.getElementById('kanban-project-select').value = rec.id || slug;
+        await setActive(rec.id || slug);
+        if (window.Toast) Toast.success('Project created', title);
+      } else if (_modalMode === 'task') {
+        const desc = document.getElementById('kanban-modal-desc').value.trim();
+        const labels = document.getElementById('kanban-modal-labels').value
+          .split(',').map(s => s.trim()).filter(Boolean);
+        if (_editingTaskId) {
+          const r = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks/' + encodeURIComponent(_editingTaskId), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, description: desc, labels }),
+          });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+        } else {
+          const r = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, description: desc, labels, column: _modalColumn }),
+          });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+        }
+        _cancelModal();
+        await _renderTasks();
+      }
+    } catch (e) {
+      errBox.hidden = false;
+      errBox.textContent = String(e);
+    }
+  }
+
+  async function deleteTask(taskId) {
+    if (!_activeProject) return;
+    const ok = await Confirm.ask({
+      title: 'Delete task?',
+      body: 'This removes the task from the board. The event stays in the project log so the action is auditable, but the task won’t come back.',
+      okLabel: 'Delete',
+      cancelLabel: 'Keep',
+      danger: true,
+    });
+    if (!ok) return;
+    const r = await Net.call(
+      '/api/projects/' + encodeURIComponent(_activeProject) + '/tasks/' + encodeURIComponent(taskId),
+      { init: { method: 'DELETE' }, silent: true }
+    );
+    if (!r.ok) {
+      if (window.Toast) Toast.danger('Delete failed', r.error);
+      return;
+    }
+    await _renderTasks();
+  }
+
+  // Auto-init when the Workflow Index tab activates.
+  document.addEventListener('DOMContentLoaded', () => {
+    refresh();
+  });
+
+  return {
+    setActive, refresh,
+    showCreateTask, showEditTask, showCreateProject, deleteTask, drop,
+    _dragStart, _dragEnd, _cancelModal, _submitModal,
+  };
+})();
+
+// ── Composer Workstream ───────────────────────────────────────────────────
+// Controller for the three-tab strip at the bottom of the Composer:
+//   Step Config · Active Run · History
+// All three are mounted in the same panel so the canvas above keeps its
+// full real estate. The Step pane wraps the existing df-config-panel
+// element so node-click handlers don't need any wiring change.
+window.ComposerWorkstream = (function () {
+  const panes = ['step', 'run', 'history'];
+
+  function _setActive(name) {
+    panes.forEach(p => {
+      const tab  = document.querySelector('.workstream-tab[data-ws="' + p + '"]');
+      const pane = document.getElementById('ws-pane-' + p);
+      if (!pane) return;
+      const on = (p === name);
+      pane.hidden = !on;
+      if (tab) tab.classList.toggle('active', on);
+    });
+  }
+
+  function switchTab(name, _el) {
+    _setActive(name);
+    if (name === 'run')     _refreshRun();
+    if (name === 'history') _refreshHistory();
+  }
+
+  function focusStep(stepId) {
+    // Called by the canvas node-click handler so the bottom strip pulls
+    // attention to Step Config whenever a node is selected.
+    _setActive('step');
+    const meta = document.getElementById('ws-step-meta');
+    if (meta) {
+      meta.textContent = stepId ? '#' + stepId : '(none)';
+      meta.setAttribute('data-step-id', stepId || '(none)');
+    }
+  }
+
+  async function _refreshRun() {
+    const body = document.getElementById('ws-run-body');
+    if (!body) return;
+    // _lastRunSummary is set by anything that POSTs /api/workflows/run.
+    // We don't subscribe to live progress yet — but the Active Run pane
+    // tails the last run so the operator always has somewhere to look.
+    const last = window._lastRunSummary;
+    if (!last) {
+      EmptyState.render(body, {
+        title: 'No active run',
+        detail: 'Hit Run ▶ or Run ▶ live on the toolbar above, or trigger a workflow from the Workflow Index.',
+        glyph: '▶',
+      });
+      _setRunMeta('idle');
+      return;
+    }
+    const steps = (last.step_results || []).map(s => {
+      const dur = s.duration_seconds != null ? Math.round(s.duration_seconds) + 's' : '?';
+      const stateClass = s.status === 'completed' ? 'ok' : s.status === 'failed' ? 'fail' : 'pending';
+      return `
+        <div class="ws-run-step ws-run-step-${stateClass}">
+          <span class="ws-run-step-id">${esc(s.step_id)}</span>
+          <span class="ws-run-step-model">${esc(s.model_used || '?')}</span>
+          <span class="ws-run-step-dur">${dur}</span>
+          <span class="ws-run-step-status">${esc(s.status)}</span>
+        </div>
+      `;
+    }).join('');
+    body.innerHTML = `
+      <div class="ws-run-head">
+        <strong>${esc(last.workflow_id || '?')}</strong>
+        <span class="ws-run-meta">run_id ${esc((last.run_id || '').slice(0, 12))} · status ${esc(last.status || '?')}</span>
+      </div>
+      ${steps || '<div class="model-empty">no steps reported</div>'}
+    `;
+    _setRunMeta(last.status === 'completed' ? '✓ ' + (last.step_results || []).length + ' steps' : last.status || 'running');
+  }
+
+  async function _refreshHistory() {
+    const body = document.getElementById('ws-history-body');
+    if (!body) return;
+    Skeleton.fill(body, 3);
+    const r = await Net.call('/api/workflows/runs?limit=20', { silent: true });
+    if (!r.ok) {
+      ErrorPanel.render(body, {
+        title: 'Couldn’t load run history',
+        detail: r.error,
+        retry: () => _refreshHistory(),
+      });
+      return;
+    }
+    const list = r.data;
+    const rows = Array.isArray(list) ? list : (list && list.runs) || [];
+    if (!rows.length) {
+      EmptyState.render(body, {
+        title: 'No runs yet',
+        detail: 'Run a workflow from the toolbar above or kick one off from the Workflow Index.',
+        glyph: '▶',
+      });
+      const hm = document.getElementById('ws-history-meta');
+      if (hm) hm.textContent = '0';
+      return;
+    }
+    body.innerHTML = rows.map(row => {
+      const stateClass = row.status === 'completed' ? 'ok' : row.status === 'failed' ? 'fail' : 'pending';
+      const ts = row.started_at || row.created_at || '';
+      return `
+        <div class="ws-history-row ws-history-row-${stateClass}">
+          <span class="ws-history-wf">${esc(row.workflow_id || '?')}</span>
+          <code class="ws-history-id">${esc((row.run_id || '').slice(0, 12))}</code>
+          <span class="ws-history-status">${esc(row.status || '?')}</span>
+          <span class="ws-history-ts">${esc(ts)}</span>
+        </div>
+      `;
+    }).join('');
+    const hm = document.getElementById('ws-history-meta');
+    if (hm) hm.textContent = rows.length + (rows.length === 20 ? '+' : '');
+  }
+
+  function _setRunMeta(text) {
+    const m = document.getElementById('ws-run-meta');
+    if (m) m.textContent = text;
+  }
+
+  function recordRun(summary) {
+    window._lastRunSummary = summary;
+    if (document.querySelector('.workstream-tab[data-ws="run"].active')) _refreshRun();
+    else _setRunMeta(summary.status || 'running');
+  }
+
+  // Live polling. Call startPolling(run_id) right after POST /run-async;
+  // the workstream auto-switches to the Active Run pane and updates the
+  // per-step status as the engine checkpoints. Stops when the run reaches
+  // a terminal status. Returns a stop() function for the caller.
+  let _activePollHandle = null;
+  function startPolling(runId, opts) {
+    if (!runId) return () => {};
+    if (_activePollHandle) clearInterval(_activePollHandle);
+    opts = opts || {};
+    const intervalMs = opts.interval || 1200;
+    _setActive('run');
+    _setRunMeta('queued');
+    const body = document.getElementById('ws-run-body');
+    if (body) {
+      body.innerHTML = `
+        <div class="ws-run-head">
+          <strong>${esc(runId.slice(0, 12))}…</strong>
+          <span class="ws-run-meta">starting…</span>
+        </div>
+        <div class="skeleton skeleton-line long"></div>
+        <div class="skeleton skeleton-line short"></div>
+        <div class="skeleton skeleton-line long"></div>
+      `;
+    }
+
+    const seen = new Set();
+    let lastStatus = '';
+    let consecutiveFailures = 0;
+    const maxFailures = 5;
+
+    _activePollHandle = setInterval(async () => {
+      try {
+        const r = await fetch('/api/workflows/runs/' + encodeURIComponent(runId));
+        if (!r.ok) {
+          consecutiveFailures++;
+          if (consecutiveFailures >= maxFailures) {
+            clearInterval(_activePollHandle);
+            _activePollHandle = null;
+            _setRunMeta('lost contact');
+            if (window.Toast) Toast.danger('Run lost', 'Poll repeatedly returned ' + r.status);
+          }
+          return;
+        }
+        consecutiveFailures = 0;
+        const run = await r.json();
+        recordRun(run);
+        if (document.querySelector('.workstream-tab[data-ws="run"].active')) _refreshRun();
+        // Toast new completed steps once each.
+        (run.step_results || []).forEach(s => {
+          const key = s.step_id + ':' + s.status;
+          if (!seen.has(key) && s.status === 'completed') {
+            seen.add(key);
+            if (window.Toast) {
+              Toast.success(
+                'Step ' + s.step_id,
+                'completed in ' + Math.round(s.duration_seconds || 0) + 's · ' + (s.model_used || '?'),
+                { ttl: 3500 }
+              );
+            }
+          }
+          if (!seen.has(s.step_id + ':failed') && s.status === 'failed') {
+            seen.add(s.step_id + ':failed');
+            if (window.Toast) Toast.danger('Step ' + s.step_id + ' failed', s.error || 'unknown error');
+          }
+        });
+        // Terminal status — stop polling.
+        if (['completed', 'failed', 'error'].includes(run.status) && lastStatus !== run.status) {
+          lastStatus = run.status;
+          clearInterval(_activePollHandle);
+          _activePollHandle = null;
+          if (window.Toast) {
+            if (run.status === 'completed') {
+              Toast.success('Run complete', run.workflow_id + ' · ' + (run.step_results || []).length + ' steps');
+            } else {
+              Toast.danger('Run failed', run.error || run.status);
+            }
+          }
+        }
+      } catch (e) {
+        consecutiveFailures++;
+      }
+    }, intervalMs);
+
+    return function stop() {
+      if (_activePollHandle) {
+        clearInterval(_activePollHandle);
+        _activePollHandle = null;
+      }
+    };
+  }
+
+  function stopPolling() {
+    if (_activePollHandle) {
+      clearInterval(_activePollHandle);
+      _activePollHandle = null;
+    }
+  }
+
+  function refresh() {
+    const active = document.querySelector('.workstream-tab.active');
+    const name = active ? active.dataset.ws : 'step';
+    switchTab(name);
+  }
+
+  return {
+    switch: switchTab,
+    focusStep,
+    recordRun,
+    refresh,
+    startPolling,
+    stopPolling,
+  };
+})();
+
+// ── Chat Rating ───────────────────────────────────────────────────────────
+// Thumbs up/down + optional note on every assistant message. Each rating
+// is appended to a localStorage log keyed by message id, AND posted to
+// /api/feedback when that endpoint is available (silently no-ops on 404
+// so the rating UI still works in older builds). The rating becomes
+// per-conversation training data: which outputs the operator marked good
+// vs bad with optional context.
+window.ChatRating = (function () {
+  const STORE_KEY = 'enclave.chatRatings.v1';
+  let _seq = 0;
+
+  function _load() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); }
+    catch (_) { return {}; }
+  }
+  function _save(all) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(all)); } catch (_) {}
+  }
+
+  function nextId() {
+    _seq += 1;
+    return 'cmsg-' + Date.now().toString(36) + '-' + _seq;
+  }
+
+  function toolbarHtml(msgId, meta) {
+    meta = meta || {};
+    const metaAttr = encodeURIComponent(JSON.stringify(meta));
+    return (
+      '<div class="msg-actions" data-msg-id="' + msgId + '" data-msg-meta="' + metaAttr + '">' +
+        '<button type="button" class="msg-rating-btn up" title="Rate this response good"' +
+                ' onclick="ChatRating.rate(\'' + msgId + '\', \'up\', this)">' +
+          '<span aria-hidden="true">▲</span>' +
+        '</button>' +
+        '<button type="button" class="msg-rating-btn down" title="Rate this response bad"' +
+                ' onclick="ChatRating.rate(\'' + msgId + '\', \'down\', this)">' +
+          '<span aria-hidden="true">▼</span>' +
+        '</button>' +
+        '<button type="button" class="msg-rating-btn copy" title="Copy message text"' +
+                ' onclick="ChatRating.copy(\'' + msgId + '\', this)">copy</button>' +
+        '<span class="msg-rating-status" data-status></span>' +
+      '</div>'
+    );
+  }
+
+  async function rate(msgId, kind, btn) {
+    const all = _load();
+    // Toggle off if the same button is clicked again.
+    if (all[msgId] && all[msgId].kind === kind) {
+      delete all[msgId];
+      _save(all);
+      _paintRowState(msgId, null);
+      return;
+    }
+    const host = btn ? btn.closest('.msg-actions') : null;
+    let meta = {};
+    try {
+      const raw = host ? host.getAttribute('data-msg-meta') : '{}';
+      meta = JSON.parse(decodeURIComponent(raw || '{}'));
+    } catch (_) { meta = {}; }
+
+    const messageEl = document.getElementById(msgId);
+    const textContent = messageEl ? messageEl.innerText.replace(/\s+▲\s+▼\s+copy.*$/s, '').trim() : '';
+    const record = {
+      kind,
+      ts: new Date().toISOString(),
+      meta,
+      text: textContent.slice(0, 4000),
+    };
+    all[msgId] = record;
+    _save(all);
+    _paintRowState(msgId, kind);
+
+    // Best-effort send to backend. Endpoint may not exist yet; that's fine.
+    try {
+      await window.fetch('/api/feedback/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: msgId, ...record }),
+      });
+    } catch (_) { /* offline / not implemented */ }
+
+    if (window.Toast) {
+      window.Toast.success(
+        kind === 'up' ? 'Marked good' : 'Marked bad',
+        'Logged locally' + (kind === 'down' ? ' — consider regenerating with a different model' : ''),
+        { ttl: 2500 }
+      );
+    }
+  }
+
+  function _paintRowState(msgId, kind) {
+    const host = document.querySelector('.msg-actions[data-msg-id="' + msgId + '"]');
+    if (!host) return;
+    host.querySelectorAll('.msg-rating-btn').forEach(b => b.classList.remove('on'));
+    if (kind === 'up')   host.querySelector('.msg-rating-btn.up')?.classList.add('on');
+    if (kind === 'down') host.querySelector('.msg-rating-btn.down')?.classList.add('on');
+    const s = host.querySelector('[data-status]');
+    if (s) s.textContent = kind ? (kind === 'up' ? 'good' : 'bad') : '';
+  }
+
+  async function copy(msgId, btn) {
+    const el = document.getElementById(msgId);
+    if (!el) return;
+    // Strip the toolbar text from the clone before reading.
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('.msg-actions').forEach(n => n.remove());
+    const txt = clone.innerText.trim();
+    try {
+      await navigator.clipboard.writeText(txt);
+      if (window.Toast) window.Toast.info('Copied', '', { ttl: 1500 });
+    } catch (e) {
+      if (window.Toast) window.Toast.warn('Copy failed', e.message || String(e), { ttl: 3000 });
+    }
+  }
+
+  function ratingsFor(filter) {
+    const all = _load();
+    if (!filter) return all;
+    return Object.fromEntries(
+      Object.entries(all).filter(([_id, r]) => r.kind === filter)
+    );
+  }
+
+  // Re-paint rating state when the messages list is rerendered (e.g. on
+  // session-load). Idempotent.
+  function rehydrate() {
+    const all = _load();
+    Object.entries(all).forEach(([id, r]) => _paintRowState(id, r.kind));
+  }
+
+  return { nextId, toolbarHtml, rate, copy, ratingsFor, rehydrate };
+})();
+
+// ── Skeleton helper ───────────────────────────────────────────────────────
+// Render N shimmer placeholder lines into a container, replacing whatever
+// "Loading…" sentinel the panel currently shows. The caller swaps these
+// out when its data arrives:
+//   Skeleton.fill(el, 3)
+//   ... fetch ...
+//   el.innerHTML = renderedRows;
+window.Skeleton = (function () {
+  function fill(el, count, opts) {
+    if (!el) return;
+    count = count || 3;
+    opts = opts || {};
+    const lines = [];
+    for (let i = 0; i < count; i++) {
+      const cls = i % 2 === 0 ? 'long' : 'short';
+      lines.push('<div class="skeleton skeleton-line ' + cls + '"></div>');
+    }
+    el.innerHTML = lines.join('');
+  }
+  return { fill };
+})();
+
+(function installGlobalAuthFetch() {
+  const _origFetch = window.fetch.bind(window);
+  const apiPath = /^\/(api|v1)\//;
+  let _reauthInFlight = false;
+
+  function pathOf(input) {
+    let url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (/^https?:\/\//.test(url)) {
+      try {
+        const u = new URL(url);
+        if (u.origin === window.location.origin) return u.pathname + u.search;
+        return '';  // cross-origin — skip injection
+      } catch (_) { return ''; }
+    }
+    return url;
+  }
+
+  window.fetch = function (input, init) {
+    const path = pathOf(input);
+    if (path && apiPath.test(path) && Auth.isSignedIn()) {
+      init = init || {};
+      init.headers = Object.assign({}, init.headers || {}, Auth.authHeaders());
+    }
+    return _origFetch(input, init).then(function (r) {
+      if (r.status === 401 && path && apiPath.test(path) && !_reauthInFlight) {
+        // Key rejected — clear and re-prompt once. Don't loop on a storm
+        // of parallel 401s; the first one drives the modal.
+        _reauthInFlight = true;
+        Auth.signOut();
+        Auth.signIn(null);
+        // Reset the latch when the modal closes (cancel or successful submit
+        // — successful submit triggers a reload anyway).
+        const reset = () => { _reauthInFlight = false; };
+        document.getElementById('admin-signin-modal').addEventListener(
+          'transitionend', reset, { once: true }
+        );
+        setTimeout(reset, 1500);  // fallback if no transition fires
+      }
+      return r;
+    });
+  };
+
+  // Boot — auto-deliver the local "license" key so the operator isn't
+  // gated by the modal during local testing. The endpoint is public-path
+  // and localhost-only on the backend; if it fails (remote install, key
+  // file missing, future paid activation flow), fall back to the manual
+  // sign-in modal so there's always a path forward.
+  async function bootSignIn() {
+    if (Auth.isSignedIn()) return;
+    try {
+      const r = await _origFetch('/api/setup/local-license', {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (r.ok) {
+        const data = await r.json();
+        if (data && data.key) {
+          Auth.setKey(data.key);
+          // Reload so every subsequent fetch picks up the auth header
+          // via the wrapper. Cheaper and more reliable than re-firing
+          // every panel's init by hand.
+          window.location.reload();
+          return;
+        }
+      }
+    } catch (_) { /* fall through to manual modal */ }
+    Auth.signIn(null);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootSignIn);
+  } else {
+    bootSignIn();
+  }
 })();
 
 // ── ApiKeysPanel ──────────────────────────────────────────────────────────
@@ -8226,20 +11022,20 @@ function composerSwitchBench(bench, el) {
 
 /* ── Workbench loaders ──────────────────────────────────────────── */
 async function loadWorkbenches() {
-  // Skills + Plugins use the same /api/plugins endpoint (master-key gated).
-  // MCPs use /api/mcp/servers. Both calls fail gracefully when auth is missing.
-  const headers = (window.AdminAuth && AdminAuth.authHeaders) ? AdminAuth.authHeaders() : {};
+  // Auth is handled globally by the monkey-patched window.fetch (installed
+  // alongside the Auth module). Each pane fails independently so one
+  // failing endpoint doesn't blank the whole sidebar.
 
-  // Plugins (skills + tools)
+  // Plugins (powers both Skills and Plugins panes)
   try {
-    const r = await fetch('/api/plugins', { headers });
+    const r = await fetch('/api/plugins');
     if (r.ok) {
       const plugins = await r.json();
       renderSkillsWorkbench(plugins);
       renderPluginsWorkbench(plugins);
     } else {
-      renderWorkbenchAuthHint('bench-skills-list');
-      renderWorkbenchAuthHint('bench-plugins-list');
+      renderWorkbenchError('bench-skills-list', `HTTP ${r.status}`);
+      renderWorkbenchError('bench-plugins-list', `HTTP ${r.status}`);
     }
   } catch (e) {
     renderWorkbenchError('bench-skills-list', e.message);
@@ -8248,12 +11044,12 @@ async function loadWorkbenches() {
 
   // MCP servers
   try {
-    const r = await fetch('/api/mcp/servers', { headers });
+    const r = await fetch('/api/mcp/servers');
     if (r.ok) {
       const servers = await r.json();
       renderMcpsWorkbench(servers);
     } else {
-      renderWorkbenchAuthHint('bench-mcps-list');
+      renderWorkbenchError('bench-mcps-list', `HTTP ${r.status}`);
     }
   } catch (e) {
     renderWorkbenchError('bench-mcps-list', e.message);
@@ -8601,6 +11397,64 @@ async function dfRunWorkflowFromComposer() {
   }
 }
 
+// Live-mode run: POSTs to /api/workflows/run-async, returns run_id
+// immediately, then hands off to ComposerWorkstream.startPolling which
+// surfaces step-by-step progress in the Active Run pane below the
+// canvas. Operator stays in the Composer and watches the run unfold.
+async function dfRunWorkflowLive() {
+  if (!window.dfNodeData || Object.keys(window.dfNodeData).length === 0) {
+    if (window.Toast) Toast.warn('Empty workflow', 'Add at least one step to the canvas before running.');
+    return;
+  }
+  let definition;
+  try {
+    if (typeof dfBuildWorkflowDefinition === 'function') {
+      definition = dfBuildWorkflowDefinition();
+    } else if (typeof dfExportYaml === 'function') {
+      const yamlText = dfExportYaml();
+      // Best-effort: parse it back to a dict via a tiny YAML loader.
+      // If we don't have one client-side, send as workflow_id assumes
+      // the workflow was just saved.
+      definition = null;
+    }
+  } catch (e) {
+    if (window.Toast) Toast.danger('Build failed', e.message || String(e));
+    return;
+  }
+
+  let seed = {};
+  try {
+    const seedEl = document.getElementById('wf-seed');
+    if (seedEl && seedEl.value) seed = JSON.parse(seedEl.value || '{}');
+  } catch (_) { seed = {}; }
+
+  const wfId = (document.getElementById('df-wf-id') || {}).value;
+  const body = definition ? { definition, seed } : (wfId ? { workflow_id: wfId, seed } : null);
+  if (!body) {
+    if (window.Toast) Toast.warn('Need a workflow', 'Save the workflow first or open one from the index.');
+    return;
+  }
+
+  if (window.Toast) Toast.info('Kicking off…', 'live polling will surface step progress', { ttl: 2200 });
+  try {
+    const r = await fetch('/api/workflows/run-async', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error('HTTP ' + r.status + ' — ' + t.slice(0, 200));
+    }
+    const data = await r.json();
+    if (data.run_id && window.ComposerWorkstream) {
+      ComposerWorkstream.startPolling(data.run_id);
+    }
+  } catch (e) {
+    if (window.Toast) Toast.danger('Run kickoff failed', String(e));
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════
    WORKFLOW INDEX — categorized catalogue + import/export bundles.
    ══════════════════════════════════════════════════════════════════ */
@@ -8610,21 +11464,23 @@ const WorkflowIndex = (function () {
 
   async function load() {
     const grid = document.getElementById('wfi-grid');
-    if (grid) grid.innerHTML = '<div class="model-empty">Loading workflows…</div>';
-    try {
-      const r = await fetch('/api/workflow-index');
-      if (!r.ok) {
-        if (grid) grid.innerHTML = `<div class="model-empty" style="color:var(--danger)">Load failed (${r.status})</div>`;
-        return;
+    if (grid) Skeleton.fill(grid, 5);
+    const r = await Net.call('/api/workflow-index', { silent: true });
+    if (!r.ok) {
+      if (grid) {
+        ErrorPanel.render(grid, {
+          title: 'Couldn’t load workflows',
+          detail: r.error,
+          retry: () => load(),
+        });
       }
-      _data = await r.json();
-      const wfiCount = document.getElementById('wfi-count');
-      if (wfiCount) wfiCount.textContent = _data.total || '';
-      renderChips();
-      render();
-    } catch (e) {
-      if (grid) grid.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(e.message)}</div>`;
+      return;
     }
+    _data = r.data || { workflows: [], categories: [] };
+    const wfiCount = document.getElementById('wfi-count');
+    if (wfiCount) wfiCount.textContent = _data.total || '';
+    renderChips();
+    render();
   }
 
   function refresh() { load(); }
