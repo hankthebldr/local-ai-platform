@@ -10422,9 +10422,26 @@ async function loadWorkflowDetail() {
       pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
     }
 
+    // Update seed textarea placeholder from the workflow's context.description.
+    // Parses "Required seed keys: vendor, product, raw_log." → skeleton JSON.
+    updateSeedPlaceholder(defn);
+
   } catch (e) {
     console.error('Failed to load workflow:', e);
   }
+}
+
+function updateSeedPlaceholder(defn) {
+  const seedEl = document.getElementById('wf-seed');
+  if (!seedEl) return;
+  const ctxDesc = defn && defn.context && defn.context.description;
+  if (!ctxDesc) { seedEl.placeholder = '{"key": "value"}'; return; }
+  const reqMatch = ctxDesc.match(/[Rr]equired\s+seed\s+keys?:\s*([^\n.]+)/);
+  if (!reqMatch) return;
+  const keys = reqMatch[1].split(',').map(k => k.trim().split(/\s/)[0]).filter(Boolean);
+  const skeleton = {};
+  keys.forEach(k => { skeleton[k] = ''; });
+  seedEl.placeholder = JSON.stringify(skeleton, null, 2);
 }
 
 function renderStepBox(step, status, result) {
@@ -15715,6 +15732,9 @@ const AgentIcons = (() => {
     extension:  'plugin',
     // Aliases that map common YAML keywords from older configs.
     'scan-eye': 'reviewer',
+    book:       'library',
+    magnify:    'search',
+    curator:    'library',
     chart:      _S('<path d="M4 20V8M10 20V4M16 20v-8M22 20H2"/>'),
     pen:        'writer',
     brain:      'reasoning',
