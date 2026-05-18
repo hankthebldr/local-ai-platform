@@ -1132,13 +1132,37 @@ body {
    the operator described as "very obnoxious". Brand the highlight
    with the Cortex cyan at low opacity so it reads as a soft tint,
    not a saturated blast. Light theme gets a matching variant so the
-   contrast stays legible against the bg-deep surface. */
-::selection {
+   contrast stays legible against the bg-deep surface.
+
+   On macOS WebKit (Chrome + Safari), ::selection at the global level
+   applies to text nodes but NOT to text *inside form fields* (input,
+   textarea) — those fall through to the OS accent. The composer is
+   ~90% form fields, so the operator was still seeing the macOS red
+   highlight when drag-selecting inside step config / prompt boxes.
+   Explicit form-field selectors below close that gap. */
+::selection,
+::-moz-selection {
   background: rgba(0, 220, 240, 0.22);
   color: var(--text);
 }
-:root[data-theme="light"] ::selection {
+input::selection,
+textarea::selection,
+[contenteditable]::selection,
+.chat-input::selection,
+.composer-desc-area::selection,
+.df-config-body ::selection {
+  background: rgba(0, 220, 240, 0.28);
+  color: var(--text);
+}
+:root[data-theme="light"] ::selection,
+:root[data-theme="light"] ::-moz-selection {
   background: rgba(0, 180, 216, 0.28);
+  color: var(--text);
+}
+:root[data-theme="light"] input::selection,
+:root[data-theme="light"] textarea::selection,
+:root[data-theme="light"] [contenteditable]::selection {
+  background: rgba(0, 180, 216, 0.32);
   color: var(--text);
 }
 
