@@ -3452,6 +3452,78 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
    record of a past run" from "this is what I'm editing." The status
    classes (is-running / is-completed / is-failed) still override
    with full color so the run state remains legible. */
+/* ── Catalog dashboard (System → Catalog) ──────────────────────── */
+.catalog-intro {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--mono);
+}
+.catalog-intro-title {
+  font-size: 0.95rem; color: var(--cyan);
+  letter-spacing: 0.04em; margin-bottom: 6px;
+}
+.catalog-intro-sub {
+  font-size: 0.72rem; color: var(--text-dim);
+  line-height: 1.5;
+}
+.catalog-intro-sub a { color: var(--cyan); text-decoration: none; }
+.catalog-intro-sub a:hover { text-decoration: underline; }
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.catalog-tile {
+  position: relative;
+  padding: 18px 18px 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.catalog-tile:hover {
+  border-color: var(--cyan-dim);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+}
+.catalog-tile-head {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 8px;
+}
+.catalog-tile-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  border-radius: 8px;
+  background: rgba(0, 220, 240, 0.08);
+  border: 1px solid var(--border);
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+.catalog-tile-icon > svg { width: 22px; height: 22px; }
+.catalog-tile-icon.tone-cyan   { color: var(--cyan);   background: rgba(0, 220, 240, 0.10); }
+.catalog-tile-icon.tone-amber  { color: var(--amber);  background: rgba(255, 165, 0, 0.12); }
+.catalog-tile-icon.tone-purple { color: var(--purple); background: rgba(179, 136, 255, 0.12); }
+.catalog-tile-icon.tone-green  { color: var(--green,  #5fd49b); background: rgba(95, 212, 155, 0.12); }
+.catalog-tile-title {
+  flex: 1; font-family: var(--mono); font-size: 0.92rem;
+  font-weight: 600; color: var(--text);
+}
+.catalog-tile-count {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+  color: var(--cyan);
+  background: rgba(0, 220, 240, 0.07);
+  border: 1px solid var(--cyan-dim);
+  padding: 2px 9px; border-radius: 999px;
+}
+.catalog-tile-sub {
+  font-size: 0.72rem; color: var(--text-dim);
+  line-height: 1.5;
+}
+
 /* Read-only canvas — disables canvas pan/drag + port-pull, but keeps
    nodes themselves clickable. The earlier blanket pointer-events:none
    on .drawflow_content_node turned the whole DAG into static art.
@@ -5706,7 +5778,7 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
       <span class="system-subnav-label">⚙ System</span>
       <button class="system-subnav-link active" type="button" onclick="switchTab('memory')">Memory</button>
       <button class="system-subnav-link" type="button" onclick="switchTab('admin-keys')">License Keys</button>
-      <button class="system-subnav-link" type="button" onclick="switchTab('workflows')">Runs</button>
+      <button class="system-subnav-link" type="button" onclick="switchTab('workflows')">Catalog</button>
     </div>
     <div class="mem-grid">
       <div class="panel">
@@ -6156,101 +6228,86 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   <!-- Graph tooltip (global) -->
   <div class="graph-tooltip" id="graph-tooltip"></div>
 
-  <!-- TAB: WORKFLOWS -->
+  <!-- TAB: WORKFLOWS — repurposed as Catalog (Plugins/Skills/MCP/
+       External management). The Runs picker that used to live here
+       moved to the dedicated Runs tab; the Role Library moved to
+       Context. The tab id is preserved so existing switchTab calls
+       don't 404 — they just land on the Catalog dashboard now.
+
+       The DOMContentLoaded relocators above migrate the A2A panel,
+       Runs picker, Role Library, and Recent Runs OUT of here. Those
+       original blocks are kept below (hidden by CSS) so any JS that
+       directly mounts to their IDs (wf-roles-list, wf-runs-list,
+       wf-select, etc.) keeps working without per-call lookup changes. -->
   <div class="tab-content" id="tab-workflows">
     <div class="system-subnav" role="tablist" aria-label="System area">
       <span class="system-subnav-label">⚙ System</span>
       <button class="system-subnav-link" type="button" onclick="switchTab('memory')">Memory</button>
       <button class="system-subnav-link" type="button" onclick="switchTab('admin-keys')">License Keys</button>
-      <button class="system-subnav-link active" type="button" onclick="switchTab('workflows')">Runs</button>
-    </div>
-    <!-- A2A Integrations panel — advertises this Enclave to remote agents -->
-    <div class="panel" id="a2a-panel" style="margin-bottom:16px;display:none">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">A2A
-        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">agent-to-agent protocol</span>
-      </div>
-      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-        <div style="font-size:0.7rem;color:var(--text-dim);flex:1;min-width:200px">
-          External agents can discover and call this Enclave via Google's A2A protocol.
-          <span id="a2a-skill-count" style="color:var(--cyan)"></span>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;font-family:var(--mono);font-size:0.68rem">
-          <span style="color:var(--text-muted)">Agent Card</span>
-          <code id="a2a-card-url" style="background:var(--bg-deep);padding:3px 8px;border-radius:3px;color:var(--cyan);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">…</code>
-          <button class="action-btn" style="padding:2px 8px;font-size:0.65rem" onclick="copyA2ACardUrl()" title="Copy Agent Card URL">Copy</button>
-          <button class="action-btn" style="padding:2px 8px;font-size:0.65rem" onclick="toggleA2ASkills()" title="Toggle skill list">Skills</button>
-        </div>
-      </div>
-      <div id="a2a-skills-list" style="display:none;margin-top:10px;padding:10px;background:var(--bg-deep);border-radius:4px;font-family:var(--mono);font-size:0.7rem;max-height:180px;overflow-y:auto"></div>
+      <button class="system-subnav-link active" type="button" onclick="switchTab('workflows')">Catalog</button>
     </div>
 
-    <div class="panel" style="margin-bottom:16px">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">Runs
-        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">workflows/</span>
-      </div>
-      <div class="wf-toolbar">
-        <div id="wf-runner-controls" style="display:flex;gap:8px;align-items:center;flex:1">
-          <select id="wf-select" class="model-select" style="min-width:260px">
-            <option value="">-- select workflow --</option>
-          </select>
-          <button class="action-btn cyan" onclick="loadWorkflowDetail()">Load</button>
-          <button class="action-btn" onclick="composerLoadByIdAndSwitch()" title="Open this workflow in the Composer">Open in Composer</button>
-          <div style="flex:1"></div>
-          <button class="action-btn" onclick="refreshWorkflows()">Refresh</button>
-        </div>
+    <div class="catalog-intro">
+      <div class="catalog-intro-title">// Catalog</div>
+      <div class="catalog-intro-sub">
+        Unified management for installable artifacts — plugins, skills, MCP servers, and external sources.
+        Workflow runs moved to the <a href="#" onclick="switchTab('runs');return false">Runs tab</a>;
+        the Role Library moved to <a href="#" onclick="switchTab('documents');return false">Context</a>.
       </div>
     </div>
 
-    <!-- Workflow Detail (hidden until loaded) -->
-    <div id="wf-detail" style="display:none">
-      <div class="panel" style="margin-bottom:16px">
-        <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div class="panel-label" id="wf-detail-name">Workflow</div>
-        <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:12px" id="wf-detail-desc"></div>
-
-        <!-- Pipeline Visualization -->
-        <div class="wf-pipeline" id="wf-pipeline"></div>
-
-        <!-- Seed Input -->
-        <div style="margin-top:16px">
-          <div style="font-size:0.65rem;color:var(--text-dim);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px">Seed Data (JSON)</div>
-          <textarea id="wf-seed" class="chat-input" style="min-height:80px;resize:vertical;font-size:0.75rem" placeholder='{"source_files": ["models/user.py"], "constraints": "PostgreSQL"}'>{}</textarea>
+    <div class="catalog-grid" id="catalog-grid">
+      <div class="catalog-tile" onclick="switchTab('admin-plugins')">
+        <div class="catalog-tile-head">
+          <span class="catalog-tile-icon tone-green" id="catalog-tile-icon-plugin"></span>
+          <span class="catalog-tile-title">Plugins</span>
+          <span class="catalog-tile-count" id="catalog-count-plugins">—</span>
         </div>
-
-        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-          <button class="send-btn" id="wf-run-btn" onclick="runWorkflow()" style="padding:8px 28px">Run</button>
-        </div>
+        <div class="catalog-tile-sub">Authored Python tool packs. Manage installed plugins, browse their tools, invoke directly.</div>
       </div>
 
-      <!-- Run Results (shown after execution) -->
-      <div id="wf-results" style="display:none">
-        <div class="panel">
-          <span class="corner-tr"></span><span class="corner-bl"></span>
-          <div class="panel-label">Execution Results</div>
-          <div id="wf-results-content"></div>
+      <div class="catalog-tile" onclick="switchTab('admin-skills')">
+        <div class="catalog-tile-head">
+          <span class="catalog-tile-icon tone-amber" id="catalog-tile-icon-skill"></span>
+          <span class="catalog-tile-title">Skills</span>
+          <span class="catalog-tile-count" id="catalog-count-skills">—</span>
         </div>
+        <div class="catalog-tile-sub">Markdown prompts that auto-inject on trigger keywords. Browse across every plugin.</div>
+      </div>
+
+      <div class="catalog-tile" onclick="switchTab('admin-mcp')">
+        <div class="catalog-tile-head">
+          <span class="catalog-tile-icon tone-purple" id="catalog-tile-icon-mcp"></span>
+          <span class="catalog-tile-title">MCP Servers</span>
+          <span class="catalog-tile-count" id="catalog-count-mcp">—</span>
+        </div>
+        <div class="catalog-tile-sub">External MCP endpoints (stdio or HTTP). Register, test handshake, discover tools.</div>
+      </div>
+
+      <div class="catalog-tile" onclick="switchTab('inventory')">
+        <div class="catalog-tile-head">
+          <span class="catalog-tile-icon tone-cyan" id="catalog-tile-icon-ext"></span>
+          <span class="catalog-tile-title">External Sources</span>
+          <span class="catalog-tile-count" id="catalog-count-ext">—</span>
+        </div>
+        <div class="catalog-tile-sub">Discover MCP servers, system prompts, plugins, and tools from upstream registries (MCP Registry, Smithery, Composio, …).</div>
       </div>
     </div>
 
-    <!-- Role Library (v2 prompt framework) -->
-    <div class="panel" style="margin-bottom:16px">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">// ROLE LIBRARY
-        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">prompts/roles/</span>
-      </div>
-      <div id="wf-roles-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px"></div>
-      <div id="wf-role-preview" style="display:none;margin-top:14px;padding:12px;background:var(--bg-deep);border-left:2px solid var(--accent-dim);font-family:var(--mono);font-size:0.72rem;line-height:1.6;white-space:pre-wrap;color:var(--text-dim)"></div>
-    </div>
-
-    <!-- Recent Runs -->
-    <div class="panel">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">Recent Runs</div>
-      <div id="wf-runs-list">
-        <div class="model-empty">No workflow runs yet</div>
-      </div>
+    <!-- Legacy mount points — hidden but kept so existing JS that
+         directly writes to these IDs (loadWorkflowDetail, refreshWorkflows,
+         a2a panel, etc.) doesn't NPE. The DOMContentLoaded relocators
+         move the original panels OUT of this tab into Runs/Context;
+         these are the lingering ID anchors only. -->
+    <div id="catalog-legacy-mounts" style="display:none">
+      <div id="a2a-panel"><div id="a2a-skill-count"></div><code id="a2a-card-url"></code><div id="a2a-skills-list"></div></div>
+      <select id="wf-select"></select>
+      <div id="wf-runner-controls"></div>
+      <div id="wf-detail"><div id="wf-detail-name"></div><div id="wf-detail-desc"></div><div id="wf-pipeline"></div><textarea id="wf-seed"></textarea><button id="wf-run-btn"></button></div>
+      <div id="wf-results"><div id="wf-results-content"></div></div>
+      <div id="wf-roles-list"></div>
+      <div id="wf-role-preview"></div>
+      <div id="wf-runs-list"></div>
     </div>
   </div>
 
@@ -6349,7 +6406,7 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
       <span class="system-subnav-label">⚙ System</span>
       <button class="system-subnav-link" type="button" onclick="switchTab('memory')">Memory</button>
       <button class="system-subnav-link active" type="button" onclick="switchTab('admin-keys')">License Keys</button>
-      <button class="system-subnav-link" type="button" onclick="switchTab('workflows')">Runs</button>
+      <button class="system-subnav-link" type="button" onclick="switchTab('workflows')">Catalog</button>
     </div>
     <div class="panel">
       <span class="corner-tr"></span><span class="corner-bl"></span>
@@ -6896,8 +6953,22 @@ function switchTab(name, el) {
   // research panels. initResearch() runs from BOTH tab entries (the
   // hidden 'research' fallback is harmless).
   if (name === 'research') initResearch();
-  if (name === 'documents') { try { initResearch(); } catch (_) {} }
-  if (name === 'workflows') loadWorkflowsTab();
+  if (name === 'documents') {
+    try { initResearch(); } catch (_) {}
+    // Role Library was relocated here from the legacy Runs tab — keep
+    // it fresh on every visit since prompts/roles/ may have changed.
+    if (typeof loadRoles === 'function') {
+      try { loadRoles(); } catch (_) {}
+    }
+  }
+  if (name === 'workflows') {
+    // Legacy loader still runs (writes to the hidden mounts under
+    // the Catalog page so refreshWorkflows + loadWorkflowDetail
+    // don't NPE). The Catalog counts loader is what actually
+    // populates the visible surface.
+    if (typeof loadWorkflowsTab === 'function') { try { loadWorkflowsTab(); } catch (_) {} }
+    if (typeof loadCatalogPage === 'function') { try { loadCatalogPage(); } catch (_) {} }
+  }
   if (name === 'documents') loadDocumentsTab();
   if (name === 'agents') loadAgentsTab();
 
@@ -7623,6 +7694,55 @@ async function loadCatalog() {
     document.getElementById('inv-grid').innerHTML =
       `<div class="model-empty" style="color:var(--red)">Failed to load catalog: ${e.message}</div>`;
   }
+}
+
+// Catalog page (legacy Workflows tab, repurposed) — paints tile
+// icons + live counts for Plugins / Skills / MCP / External. Each
+// tile click routes to the relevant admin tab. Counts come from
+// the same endpoints the admin tabs use, so an idle Catalog visit
+// is cheap (cached by the browser).
+async function loadCatalogPage() {
+  // Icons via AgentIcons so the tones match the workbench + admin tabs.
+  if (window.AgentIcons) {
+    const ic = id => document.getElementById(id);
+    if (ic('catalog-tile-icon-plugin')) ic('catalog-tile-icon-plugin').innerHTML = AgentIcons.svg('plugin');
+    if (ic('catalog-tile-icon-skill'))  ic('catalog-tile-icon-skill').innerHTML  = AgentIcons.svg('skill');
+    if (ic('catalog-tile-icon-mcp'))    ic('catalog-tile-icon-mcp').innerHTML    = AgentIcons.svg('mcp');
+    if (ic('catalog-tile-icon-ext'))    ic('catalog-tile-icon-ext').innerHTML    = AgentIcons.svg('tool');
+  }
+  // Counts — best effort, never block the page.
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = v == null ? '—' : String(v);
+  };
+  try {
+    const r = await fetch('/api/plugins');
+    if (r.ok) {
+      const data = await r.json();
+      const list = Array.isArray(data) ? data : (data.plugins || []);
+      set('catalog-count-plugins', list.length);
+      let totalSkills = 0;
+      list.forEach(p => { totalSkills += ((p.skills || []).length); });
+      set('catalog-count-skills', totalSkills);
+    }
+  } catch (_) {}
+  try {
+    const r = await fetch('/api/mcp/servers');
+    if (r.ok) {
+      const data = await r.json();
+      const list = Array.isArray(data) ? data : (data.servers || []);
+      set('catalog-count-mcp', list.length);
+    }
+  } catch (_) {}
+  try {
+    const r = await fetch('/api/discover/sources');
+    if (r.ok) {
+      const data = await r.json();
+      const provs = data.providers || [];
+      const live = provs.filter(p => p.implemented).length;
+      set('catalog-count-ext', provs.length ? `${live}/${provs.length}` : '—');
+    }
+  } catch (_) {}
 }
 
 // Plugins / MCPs discover sections under the Models tab — small loaders
@@ -10337,6 +10457,43 @@ document.addEventListener('DOMContentLoaded', () => {
     sep.textContent = '// Documents + RAG';
     layout.after(sep);
   }
+
+  // IA shuffle (cont.): the Role Library now lives at the bottom of
+  // the Context tab. Built fresh here because the original panel
+  // inside tab-workflows was replaced by the Catalog dashboard; the
+  // legacy IDs (#wf-roles-list, #wf-role-preview) live in a hidden
+  // mount inside tab-workflows so loadRoles() still has targets if
+  // ever called from there — but we ALSO mount visible copies into
+  // Context. loadRoles() finds the FIRST matching id, so the newest
+  // wf-roles-list is the visible one.
+  if (ctxTab) {
+    const rolesSep = document.createElement('div');
+    rolesSep.className = 'panel-label';
+    rolesSep.style.cssText = 'margin: 18px 0 10px; padding-top: 8px; border-top: 1px dashed var(--border)';
+    rolesSep.textContent = '// Role Library';
+    ctxTab.appendChild(rolesSep);
+
+    const rolesPanel = document.createElement('div');
+    rolesPanel.className = 'panel';
+    rolesPanel.style.marginBottom = '16px';
+    rolesPanel.innerHTML = `
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// ROLE LIBRARY
+        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">prompts/roles/</span>
+      </div>
+      <div id="wf-roles-list-ctx" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px"></div>
+      <div id="wf-role-preview-ctx" style="display:none;margin-top:14px;padding:12px;background:var(--bg-deep);border-left:2px solid var(--accent-dim);font-family:var(--mono);font-size:0.72rem;line-height:1.6;white-space:pre-wrap;color:var(--text-dim)"></div>`;
+    ctxTab.appendChild(rolesPanel);
+    // Rewrite the legacy IDs so loadRoles() (which targets
+    // #wf-roles-list) writes into the new visible container.
+    // Sequence: rename legacy → strip; promote ctx → legacy id.
+    const legacy = document.getElementById('wf-roles-list');
+    if (legacy) legacy.id = 'wf-roles-list-legacy';
+    const legacyPv = document.getElementById('wf-role-preview');
+    if (legacyPv) legacyPv.id = 'wf-role-preview-legacy';
+    document.getElementById('wf-roles-list-ctx').id = 'wf-roles-list';
+    document.getElementById('wf-role-preview-ctx').id = 'wf-role-preview';
+  }
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -12381,7 +12538,7 @@ window.Shortcuts = (function () {
     { key: 'g x', label: 'MCP Servers',            action: () => switchTab('admin-mcp') },
     { key: 'g y', label: 'System (Memory)',        action: () => switchTab('memory') },
     { key: 'g k', label: 'License Keys',           action: () => switchTab('admin-keys') },
-    { key: 'g h', label: 'Runs (history)',         action: () => switchTab('workflows') },
+    { key: 'g h', label: 'Runs (history)',         action: () => switchTab('runs') },
     { key: '?',   label: 'Show this overlay',      action: () => toggle(true) },
     { key: 'Escape', label: 'Close overlay',       action: () => toggle(false), inOverlay: true },
   ];
@@ -15277,6 +15434,18 @@ async function composerLoadById(wfId) {
     // Re-use the YAML import path so node placement / connections work the
     // same as a paste-import — fewest moving parts.
     const text = jsyaml.dump(defn);
+    // Ensure the drawflow editor exists BEFORE the cleanup + node spawn
+    // path runs. composerNewWorkflow is a no-op when dfEditor is
+    // undefined, and dfAddNodeFromTemplate hard-requires it — so a
+    // workflow-index → "Open in Composer" click that happens before
+    // the operator has ever visited the Composer tab would silently
+    // produce zero nodes. ComposerView.init wires the editor + the
+    // palette and is idempotent.
+    if (typeof ComposerView !== 'undefined' && ComposerView && ComposerView.init) {
+      try { ComposerView.init(); } catch (_) {}
+    } else if (typeof dfInitEditor === 'function') {
+      try { dfInitEditor(); } catch (_) {}
+    }
     composerNewWorkflow();
     // jsyaml import path uses the modal textarea; call the function that
     // accepts a definition object directly via the same path.
@@ -15363,10 +15532,12 @@ async function composerLoadByIdAndSwitch() {
 }
 
 async function dfRunWorkflowFromComposer() {
-  // Use the existing run path; it saves + switches to Runner.
+  // Use the existing run path; it saves + kicks the engine. The
+  // post-run landing moved to the dedicated Runs tab (was the legacy
+  // 'workflows' Catalog page).
   if (typeof dfRunWorkflow === 'function') {
     await dfRunWorkflow();
-    switchTab('workflows');
+    switchTab('runs');
   }
 }
 
@@ -15545,12 +15716,32 @@ const WorkflowIndex = (function () {
     setTimeout(() => composerLoadById(id), 80);
   }
 
-  function run(id) {
-    switchTab('workflows');
-    setTimeout(() => {
-      const sel = document.getElementById('wf-select');
-      if (sel) { sel.value = id; if (typeof loadWorkflowDetail === 'function') loadWorkflowDetail(); }
-    }, 80);
+  async function run(id) {
+    // Kick the run via the async endpoint, then route the operator to
+    // the Runs tab and auto-select the new run so they see the live
+    // DAG instead of the legacy System → Runs page.
+    try {
+      const r = await fetch('/api/workflows/run-async', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflow_id: id, seed: {} }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const out = await r.json();
+      switchTab('runs');
+      // Give the tab dispatcher a beat to mount + fetch the list,
+      // then drill into the new run.
+      setTimeout(() => {
+        if (window.RunsTab) {
+          RunsTab.load();
+          if (out.run_id) setTimeout(() => RunsTab.select(out.run_id), 150);
+        }
+      }, 80);
+      if (window.Toast) Toast.success('Run started', `${id} · ${(out.run_id || '').slice(0, 12)}…`);
+    } catch (e) {
+      if (window.Toast) Toast.danger('Run failed', e.message);
+      else alert('Run failed: ' + e.message);
+    }
   }
 
   async function exportBundle(id) {
