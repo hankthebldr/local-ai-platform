@@ -5514,6 +5514,13 @@ textarea.composer-desc-area {
       </div>
       <div class="composer-actions-row">
         <button class="action-btn" onclick="composerNewWorkflow()" title="Reset composer to a blank workflow">New</button>
+        <!-- Explicit Clear button. composerNewWorkflow already does
+             the cleanup work (wipes nodes + metadata); the previous
+             "New" affordance was easy to miss because operators
+             expect "New" to start a flow, not destroy one. Confirms
+             before wiping so a stray click doesn't trash unsaved
+             composer state. -->
+        <button class="action-btn" onclick="composerClearWithConfirm()" title="Clear the composer canvas + metadata (prompts before wiping)">Clear</button>
         <button class="action-btn" onclick="composerLoadFromIndex()" title="Open an existing workflow into the composer">Load…</button>
         <button class="action-btn" onclick="dfImportYaml()">Import YAML</button>
         <button class="action-btn" onclick="dfImportBundle()">Import Bundle</button>
@@ -16239,6 +16246,29 @@ function dfImportBundle() {
 }
 
 /* ── Composer convenience: new workflow / load from index ─────────── */
+// Explicit "Clear" — prompts before wiping so unsaved composer state
+// isn't lost to a stray click. Falls through to composerNewWorkflow
+// (the existing cleanup path); the only difference is the confirm
+// gate. Returning false from confirm() leaves the composer untouched.
+function composerClearWithConfirm() {
+  const hasNodes = (typeof dfEditor !== 'undefined' && dfEditor &&
+                    Object.keys(dfEditor.drawflow.drawflow.Home.data || {}).length > 0);
+  const hasMeta = ['df-wf-id', 'df-wf-name', 'df-wf-desc']
+    .some(id => (document.getElementById(id)?.value || '').trim().length > 0);
+  if (!hasNodes && !hasMeta) {
+    // Already empty — nothing to confirm. Trigger the cleanup so the
+    // canvas-empty-state flag stays in sync with the actual state.
+    composerNewWorkflow();
+    return;
+  }
+  const msg = hasNodes
+    ? 'Clear the composer? All canvas nodes + metadata will be wiped. (Unsaved work cannot be recovered.)'
+    : 'Clear the workflow metadata? (No canvas nodes will be affected.)';
+  if (!confirm(msg)) return;
+  composerNewWorkflow();
+  if (window.Toast) Toast.info('Composer cleared', '', { ttl: 1600 });
+}
+
 function composerNewWorkflow() {
   // Wipe all nodes and reset metadata so the user starts blank.
   if (typeof dfEditor !== 'undefined' && dfEditor) {
