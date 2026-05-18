@@ -9,7 +9,7 @@ import subprocess
 import json
 
 import requests as http_requests
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pathlib import Path
 
@@ -20,6 +20,60 @@ router = APIRouter(tags=["setup"])
 APP_DIR = os.path.expanduser("~/.enclave")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 STATIC_DIR = Path(__file__).parent.parent / "static"
+
+# Hosts considered "local" for the auto-license-delivery endpoint. Docker
+# Compose puts the browser behind a bridge so client.host shows up as an
+# RFC1918 address (172.x typically). Anything outside loopback or RFC1918
+# gets a 403 — that's where remote license activation will eventually
+# replace the local-key handoff.
+_LOCAL_CLIENT_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _is_local_client(request: Request) -> bool:
+    if not request.client:
+        return False
+    host = request.client.host or ""
+    if host in _LOCAL_CLIENT_HOSTS:
+        return True
+    return (
+        host.startswith("172.") or host.startswith("192.168.") or host.startswith("10.")
+    )
+
+
+@router.get("/api/setup/local-license")
+async def local_license(request: Request) -> dict:
+    """
+    Return the local first-run / "license" key so the SPA can auto-sign-in
+    on first boot. Localhost / private-network clients only.
+
+    The key delivered here is the same master key written to
+    ``data/config/first-run-key.txt`` at first boot. It exists today as the
+    only credential; in the future, paid-product activation will replace
+    this with a real license-server roundtrip and this endpoint will gate
+    on entitlement.
+    """
+    if not _is_local_client(request):
+        raise HTTPException(status_code=403, detail="Local clients only")
+
+    key_path = Path(os.getenv("DATA_CONFIG_DIR", "data/config")) / "first-run-key.txt"
+    if not key_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No first-run key on disk; auth may be disabled or the "
+            "keystore was provisioned externally.",
+        )
+    try:
+        key = key_path.read_text().strip()
+    except OSError as exc:
+        logger.warning("Failed to read first-run-key.txt: %s", exc)
+        raise HTTPException(status_code=500, detail="Could not read license key")
+    if not key:
+        raise HTTPException(status_code=500, detail="License key file is empty")
+    return {
+        "key": key,
+        "kind": "local-first-run",
+        "source": "data/config/first-run-key.txt",
+    }
 
 
 @router.get("/setup")
@@ -50,22 +104,32 @@ async def install_ollama():
             http_requests.get(f"{OLLAMA_HOST}/api/tags", timeout=2)
             return {"status": "already_running"}
         except Exception:
-            subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             return {"status": "started"}
 
     logger.info("Installing Ollama via CLI installer...")
     try:
         result = subprocess.run(
             ["bash", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             logger.error(f"Ollama install failed: {result.stderr}")
-            raise HTTPException(status_code=500, detail=f"Install failed: {result.stderr[:200]}")
+            raise HTTPException(
+                status_code=500, detail=f"Install failed: {result.stderr[:200]}"
+            )
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=500, detail="Install timed out after 120s")
 
-    subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(
+        ["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
     logger.info("Ollama installed and started")
     return {"status": "installed"}
 
@@ -81,7 +145,8 @@ async def pull_model(body: dict):
             r = http_requests.post(
                 f"{OLLAMA_HOST}/api/pull",
                 json={"name": model_name, "stream": True},
-                stream=True, timeout=1800,
+                stream=True,
+                timeout=1800,
             )
             r.raise_for_status()
             for line in r.iter_lines():

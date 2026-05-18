@@ -9,9 +9,11 @@ Pipeline:
 
 from __future__ import annotations
 
+import json
+import re
 import time
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from ..logging_config import logger
 from ..models.workflow_models import (
@@ -302,7 +304,22 @@ class StepExecutor:
     def _write_outputs(
         self, step: AgentStep, ctx: HookContext, context: WorkflowContext
     ):
-        # Prefer parsed (from json_schema hook) over raw text
+        """Write step results into the workflow context.
+
+        Strategy:
+          1. If a validate_output hook (e.g. json_schema) already produced
+             a parsed dict, use it — that's authoritative.
+          2. Else, when the step declares multiple output keys, try to
+             auto-extract JSON from the raw response and split by key.
+             This is the implicit-JSON-output behaviour every multi-output
+             step needs; otherwise every key gets the same raw text and
+             downstream steps see prompt-context noise. (Bug fix May 2026:
+             previously the engine wrote ctx.output to every key unless an
+             explicit json_schema hook ran, making multi-stage workflows
+             un-composable in practice.)
+          3. Fall back to writing the raw text. Single-output steps and
+             non-JSON multi-output steps both flow through this path.
+        """
         parsed = ctx.parsed
         if isinstance(parsed, dict):
             for key in step.outputs:
@@ -310,8 +327,81 @@ class StepExecutor:
                     context.set_workspace(step.id, key, parsed[key])
                 else:
                     context.set_workspace(step.id, key, ctx.output)
-        elif len(step.outputs) == 1:
+            return
+
+        if len(step.outputs) == 1:
             context.set_workspace(step.id, step.outputs[0], ctx.output)
-        else:
+            return
+
+        auto = self._auto_extract_json(ctx.output)
+        if isinstance(auto, dict):
             for key in step.outputs:
-                context.set_workspace(step.id, key, ctx.output)
+                if key in auto:
+                    context.set_workspace(step.id, key, auto[key])
+                else:
+                    # Field absent from parsed JSON: store empty rather than
+                    # leaking the whole raw blob into every other key.
+                    context.set_workspace(step.id, key, None)
+            return
+
+        # Last resort: raw text under every key. Preserves the legacy
+        # behaviour for steps that genuinely return prose into multiple
+        # named outputs (rare).
+        for key in step.outputs:
+            context.set_workspace(step.id, key, ctx.output)
+
+    @staticmethod
+    def _auto_extract_json(raw: Optional[str]) -> Any:
+        """Best-effort JSON extraction from a raw model response.
+
+        Handles three common shapes models actually emit:
+          - Pure JSON object / array
+          - Markdown-fenced JSON: ```json {...} ```
+          - Narrative-then-JSON, where the JSON is the first balanced
+            {...} or [...] in the text.
+
+        Returns the parsed Python value on success, or None on failure.
+        Never raises — callers should treat None as "not parseable, fall
+        back to raw text".
+        """
+        if not raw or not isinstance(raw, str):
+            return None
+        text = raw.strip()
+        if not text:
+            return None
+
+        # Quick path: pure JSON.
+        if text[0] in "{[":
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass
+
+        # Markdown-fenced JSON.
+        m = re.search(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # Largest balanced {...} or [...] in the text. Use a greedy-then-
+        # shrinking strategy so we accept extra prose around a JSON blob.
+        for opener, closer in (("{", "}"), ("[", "]")):
+            start = text.find(opener)
+            if start == -1:
+                continue
+            depth = 0
+            for i in range(start, len(text)):
+                ch = text[i]
+                if ch == opener:
+                    depth += 1
+                elif ch == closer:
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start : i + 1]
+                        try:
+                            return json.loads(candidate)
+                        except json.JSONDecodeError:
+                            break
+        return None

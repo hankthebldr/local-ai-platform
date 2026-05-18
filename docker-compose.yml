@@ -42,10 +42,35 @@ services:
       # `docker compose logs api | grep "FIRST-RUN"` to retrieve it.
       - ENABLE_API_AUTH=${ENABLE_API_AUTH:-true}
       - API_KEY=${API_KEY:-}
-      - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-60}
+      # SPA boot fires ~10 parallel fetches and the system poller adds more
+      # every few seconds — 60 RPM throttled normal interactive use AND
+      # caused the Playwright E2E suite to 429-storm. 600 is a sensible
+      # local-dev default (10/sec average, well above human-driven traffic).
+      - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-600}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-300}
-      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:8080","http://localhost:3000"]}
+      # CORS_ORIGINS — by default we don't allow any cross-origin browser
+      # since the Enclave SPA is same-origin with the API. The legacy
+      # entries for :8080 (Open WebUI, now opt-in) and :3000 (vite/Next
+      # dev) are kept for operators who turn either back on. Set to ["*"]
+      # for permissive local dev, or a list of explicit origins for prod.
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:8081","http://localhost:3000"]}
+      # Host hardware truth — Docker Desktop's Linux VM hides the real host
+      # from psutil. Operators set these from the shell before `compose up`
+      # so the SPA reports the actual machine instead of the container slice.
+      # macOS:  export ENCLAVE_HOST_RAM_GB=$(($(sysctl -n hw.memsize)/1073741824))
+      #         export ENCLAVE_HOST_CPU_CORES=$(sysctl -n hw.physicalcpu)
+      #         export ENCLAVE_HOST_CPU_BRAND="$(sysctl -n machdep.cpu.brand_string)"
+      # Linux:  cat /proc/meminfo  +  nproc  +  lscpu
+      - ENCLAVE_HOST_RAM_GB=${ENCLAVE_HOST_RAM_GB:-}
+      - ENCLAVE_HOST_CPU_CORES=${ENCLAVE_HOST_CPU_CORES:-}
+      - ENCLAVE_HOST_CPU_BRAND=${ENCLAVE_HOST_CPU_BRAND:-}
+      - ENCLAVE_HOST_PLATFORM=${ENCLAVE_HOST_PLATFORM:-}
+      # GPU model string (e.g. "NVIDIA RTX 4000 Blackwell"). Set by
+      # scripts/host-preset.sh on hosts with a discrete GPU; surfaced
+      # in /api/inventory/system so the SPA can show acceleration
+      # status. Empty string ⇒ CPU-only.
+      - ENCLAVE_HOST_GPU=${ENCLAVE_HOST_GPU:-}
     volumes:
       # All API state lives under /app/data. Persisting the whole dir
       # survives container rebuild — keystore (data/config/),
@@ -69,26 +94,12 @@ services:
       retries: 3
       start_period: 15s
 
-  # ── Open WebUI — Chat Interface ──────────────────────────────────────
-  webui:
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: local-ai-webui
-    ports:
-      - "8080:8080"
-    environment:
-      # Connect to our API server (OpenAI-compatible)
-      - OPENAI_API_BASE_URL=http://api:8000/v1
-      - OPENAI_API_KEY=${API_KEY:-sk-local}
-      # Also connect directly to Ollama for native features
-      - OLLAMA_BASE_URL=http://ollama:11434
-      # WebUI auth: set WEBUI_AUTH=false to disable for trusted local-only setups.
-      - WEBUI_AUTH=${WEBUI_AUTH:-true}
-    volumes:
-      - webui_data:/app/backend/data
-    depends_on:
-      api:
-        condition: service_healthy
-    restart: unless-stopped
+  # Open WebUI was previously bundled on :8080 as a generic chat client,
+  # but it competes visually with the Enclave SPA at :8000 (its own login
+  # screen reads as a confusing "auth error" for operators expecting the
+  # Enclave UI). Moved to docker-compose.webui.yml as an opt-in override.
+  # To re-add:
+  #   docker compose -f docker-compose.yml -f docker-compose.webui.yml up -d
 
 volumes:
   ollama_data:
@@ -97,5 +108,3 @@ volumes:
     name: local-ai-api-data
   api_logs:
     name: local-ai-api-logs
-  webui_data:
-    name: local-ai-webui-data

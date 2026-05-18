@@ -90,6 +90,113 @@ async def export_bundle(project_id: str):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+# ── Kanban task management ────────────────────────────────────────────────
+# Lightweight task tracker scoped to a project. Tasks live as a JSONL file
+# under data/projects/<id>/tasks.jsonl. Three columns: todo · doing · done.
+
+import json as _json
+import os as _os
+from datetime import datetime as _dt
+from pathlib import Path as _Path
+
+_DATA_DIR = _Path(_os.getenv("DATA_PROJECTS_DIR", "data/projects"))
+
+
+def _tasks_path(project_id: str) -> _Path:
+    safe = "".join(c for c in project_id if c.isalnum() or c in "-_.")
+    if not safe or safe != project_id:
+        raise HTTPException(status_code=400, detail="invalid project id")
+    p = _DATA_DIR / safe
+    p.mkdir(parents=True, exist_ok=True)
+    return p / "tasks.jsonl"
+
+
+def _read_tasks(project_id: str) -> list[dict]:
+    p = _tasks_path(project_id)
+    if not p.exists():
+        return []
+    tasks: dict[str, dict] = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            evt = _json.loads(line)
+        except _json.JSONDecodeError:
+            continue
+        tid = evt.get("id")
+        if not tid:
+            continue
+        op = evt.get("op")
+        if op == "del":
+            tasks.pop(tid, None)
+        else:
+            current = tasks.get(tid, {})
+            current.update(evt)
+            current.pop("op", None)
+            tasks[tid] = current
+    out = list(tasks.values())
+    out.sort(key=lambda t: t.get("position", 0))
+    return out
+
+
+def _append_event(project_id: str, evt: dict) -> None:
+    p = _tasks_path(project_id)
+    evt["ts"] = _dt.utcnow().isoformat() + "Z"
+    with p.open("a", encoding="utf-8") as f:
+        f.write(_json.dumps(evt, default=str) + "\n")
+
+
+@router.get("/{project_id}/tasks")
+async def list_tasks(project_id: str):
+    return _read_tasks(project_id)
+
+
+@router.post("/{project_id}/tasks")
+async def create_task(project_id: str, body: Dict[str, Any]):
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+    column = body.get("column") or "todo"
+    if column not in ("todo", "doing", "done"):
+        raise HTTPException(status_code=400, detail="column must be todo|doing|done")
+    tid = f"task_{int(_dt.utcnow().timestamp() * 1000):x}"
+    evt = {
+        "id": tid,
+        "title": title[:240],
+        "description": (body.get("description") or "")[:4000],
+        "column": column,
+        "position": int(body.get("position") or _dt.utcnow().timestamp()),
+        "labels": list(body.get("labels") or [])[:8],
+        "assignee": (body.get("assignee") or "").strip()[:80] or None,
+        "created_at": _dt.utcnow().isoformat() + "Z",
+    }
+    _append_event(project_id, evt)
+    return evt
+
+
+@router.patch("/{project_id}/tasks/{task_id}")
+async def update_task(project_id: str, task_id: str, body: Dict[str, Any]):
+    allowed = {"title", "description", "column", "position", "labels", "assignee"}
+    patch = {k: v for k, v in body.items() if k in allowed}
+    if "column" in patch and patch["column"] not in ("todo", "doing", "done"):
+        raise HTTPException(status_code=400, detail="column must be todo|doing|done")
+    patch["id"] = task_id
+    _append_event(project_id, patch)
+    # Return the current resolved view of the task so the SPA doesn't need
+    # to re-fetch the whole list after every move.
+    for t in _read_tasks(project_id):
+        if t.get("id") == task_id:
+            return t
+    raise HTTPException(status_code=404, detail="task not found")
+
+
+@router.delete("/{project_id}/tasks/{task_id}")
+async def delete_task(project_id: str, task_id: str):
+    _append_event(project_id, {"id": task_id, "op": "del"})
+    return {"removed": True, "id": task_id}
+
+
 @router.post("/import")
 async def import_bundle(body: Dict[str, Any], overwrite: bool = False):
     try:

@@ -251,7 +251,12 @@ async def run_workflow(req: WorkflowRunRequest, background_tasks: BackgroundTask
     if req.definition:
         defn = engine.load_from_dict(req.definition)
     elif req.workflow_id:
-        yaml_path = f"{WORKFLOWS_DIR}/{req.workflow_id}.yaml"
+        yaml_path = engine.resolve_workflow_path(req.workflow_id, WORKFLOWS_DIR)
+        if not yaml_path:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Workflow '{req.workflow_id}' not found in public or private overlay",
+            )
         defn = engine.load(yaml_path)
     else:
         raise HTTPException(
@@ -295,6 +300,84 @@ async def run_workflow(req: WorkflowRunRequest, background_tasks: BackgroundTask
             "shared": run.context.shared,
         },
         "error": run.error,
+    }
+
+
+@router.post("/run-async")
+async def run_workflow_async(
+    req: WorkflowRunRequest, background_tasks: BackgroundTasks
+):
+    """
+    Kick off a workflow run in the background and return the run_id
+    immediately. The caller polls /api/workflows/runs/{run_id} to watch
+    step-by-step progress as the engine checkpoints after every step.
+
+    Use this when you want live UI updates. The sync /run endpoint is
+    still the right call for short workflows that return quickly.
+    """
+    import uuid as _uuid
+    from datetime import datetime as _dt
+    from ..models.workflow_models import WorkflowRun, WorkflowContext
+
+    engine = get_engine()
+
+    if req.definition:
+        defn = engine.load_from_dict(req.definition)
+    elif req.workflow_id:
+        yaml_path = engine.resolve_workflow_path(req.workflow_id, WORKFLOWS_DIR)
+        if not yaml_path:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Workflow '{req.workflow_id}' not found in public or private overlay",
+            )
+        defn = engine.load(yaml_path)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either 'workflow_id' or 'definition'",
+        )
+
+    try:
+        engine.validate(defn, seed_keys=list(req.seed.keys()) if req.seed else None)
+    except WorkflowValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Pre-create the run id + checkpoint a "queued" record so the client
+    # can immediately poll /runs/{id}. The engine generates its own
+    # internal run_id otherwise; we hand it in so the URL is stable.
+    run_id = str(_uuid.uuid4())
+    ctx = WorkflowContext(seed=dict(req.seed or {}))
+    placeholder = WorkflowRun(
+        run_id=run_id,
+        workflow_id=defn.id,
+        status="queued",
+        context=ctx,
+        started_at=_dt.utcnow(),
+    )
+    try:
+        engine._checkpoint(placeholder)
+    except Exception:
+        pass
+
+    def _run_in_background():
+        from ..logging_config import logger as _logger
+
+        try:
+            engine.run(defn, seed=req.seed, run_id=run_id)
+        except TypeError:
+            # Older engine signature without run_id kwarg — fall back and
+            # accept the engine's auto-generated id. The pre-checkpoint
+            # placeholder is then orphaned (harmless; cleanup elsewhere).
+            engine.run(defn, seed=req.seed)
+        except Exception as e:
+            _logger.error(f"Background workflow run {run_id} failed: {e}")
+
+    background_tasks.add_task(_run_in_background)
+    return {
+        "run_id": run_id,
+        "workflow_id": defn.id,
+        "status": "queued",
+        "poll_url": f"/api/workflows/runs/{run_id}",
     }
 
 
@@ -389,7 +472,12 @@ async def get_workflow(workflow_id: str):
     if not workflow_id or not all(c.isalnum() or c in "_-" for c in workflow_id):
         raise HTTPException(status_code=400, detail="invalid workflow id")
     engine = get_engine()
-    yaml_path = f"{WORKFLOWS_DIR}/{workflow_id}.yaml"
+    yaml_path = engine.resolve_workflow_path(workflow_id, WORKFLOWS_DIR)
+    if not yaml_path:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Workflow '{workflow_id}' not found in public or private overlay",
+        )
     try:
         defn = engine.load(yaml_path)
     except FileNotFoundError:
