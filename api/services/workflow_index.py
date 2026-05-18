@@ -26,6 +26,7 @@ from ..logging_config import logger
 
 KNOWN_CATEGORIES: List[str] = [
     "security",
+    "security-engineering",
     "devops",
     "data",
     "code",
@@ -63,7 +64,10 @@ _TAG_TO_CATEGORY = {
 
 
 def _categorize(workflow: Dict[str, Any]) -> str:
-    explicit = workflow.get("category")
+    # Check top-level category, then metadata.category (where most YAMLs declare it).
+    explicit = workflow.get("category") or (workflow.get("metadata") or {}).get(
+        "category"
+    )
     if isinstance(explicit, str) and explicit in KNOWN_CATEGORIES:
         return explicit
     tags = workflow.get("tags") or []

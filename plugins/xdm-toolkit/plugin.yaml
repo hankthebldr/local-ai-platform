@@ -79,3 +79,29 @@ tools:
         type: integer
         default: 5
         description: "Number of candidate matches to return (1..10)."
+
+  - id: "scaffold_xql"
+    file: "tools/scaffold_xql.py"
+    function: "execute"
+    description: |
+      Deterministic scaffold engine. Takes raw log sample(s) and a vendor/product
+      name and emits a paired starter parsing rule + datamodel rule. Detects
+      format family (JSON / key-value / CSV / freetext), maps fields to XDM
+      paths via anchor heuristics, and runs the full 75-rule analyser on both
+      outputs before returning. Returns: parsing rule text, modeling rule text,
+      dominant format family, per-rule validation reports, and a blocking flag
+      (true if either rule has ERROR-severity violations). Paste multiple log
+      samples separated by blank lines for multi-sample scaffolding.
+    parameters:
+      raw_log:
+        type: string
+        required: true
+        description: "One or more raw log lines/events. Separate multiple samples with blank lines."
+      vendor:
+        type: string
+        default: "vendor_name"
+        description: "Vendor name used in rule identifiers (e.g. 'cisco', 'crowdstrike')."
+      product:
+        type: string
+        default: "product_name"
+        description: "Product name used in rule identifiers (e.g. 'asa', 'falcon')."
