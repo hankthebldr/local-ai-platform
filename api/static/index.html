@@ -2709,6 +2709,107 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 }
 .graph-link-filter   { bottom: 36px; }
 .graph-sizing-picker { bottom: 62px; }
+
+/* Graph Config — Obsidian-style settings rail. Floats over the right
+   edge of the graph panel. Slider values surface in real time. */
+.graph-controls button#graph-config-toggle.active {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: rgba(0, 220, 240, 0.08);
+}
+.graph-config-panel {
+  position: absolute; top: 50px; right: 12px;
+  z-index: 4;
+  width: clamp(220px, 24vw, 280px);
+  max-height: calc(100% - 70px);
+  background: rgba(6, 10, 16, 0.96);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 6px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+  font-family: var(--mono);
+  display: flex; flex-direction: column;
+  backdrop-filter: blur(6px);
+}
+.graph-config-panel[hidden] { display: none; }
+.graph-config-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.68rem; letter-spacing: 0.08em; color: var(--cyan);
+}
+.graph-config-head > span { flex: 1; }
+.graph-config-close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.graph-config-close:hover { color: var(--cyan); }
+.graph-config-body {
+  flex: 1; min-height: 0; overflow: auto; padding: 10px 12px;
+}
+.graph-config-foot {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end;
+}
+.graph-config-reset {
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--mono); font-size: 0.55rem; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px; border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.graph-config-reset:hover { color: var(--cyan); border-color: var(--cyan-dim); background: rgba(0, 220, 240, 0.06); }
+.gc-group { margin-bottom: 14px; }
+.gc-group:last-child { margin-bottom: 0; }
+.gc-group-head {
+  font-size: 0.5rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--cyan); margin-bottom: 6px;
+  padding-bottom: 4px; border-bottom: 1px dashed var(--border);
+}
+.gc-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 40px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.gc-label {
+  font-size: 0.6rem; color: var(--text-dim);
+}
+.gc-val {
+  font-size: 0.6rem; color: var(--text);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.gc-slider {
+  width: 100%; height: 18px;
+  -webkit-appearance: none; appearance: none;
+  background: transparent; cursor: pointer;
+}
+.gc-slider:focus { outline: none; }
+.gc-slider::-webkit-slider-runnable-track {
+  height: 3px; background: var(--border); border-radius: 2px;
+}
+.gc-slider::-moz-range-track {
+  height: 3px; background: var(--border); border-radius: 2px;
+}
+.gc-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 12px;
+  background: var(--cyan); border-radius: 50%;
+  margin-top: -4.5px; cursor: grab;
+  box-shadow: 0 0 6px rgba(0, 220, 240, 0.5);
+}
+.gc-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.1); }
+.gc-slider::-moz-range-thumb {
+  width: 12px; height: 12px;
+  background: var(--cyan); border-radius: 50%; border: none;
+  cursor: grab;
+}
+.gc-toggle {
+  justify-self: start; accent-color: var(--cyan);
+}
 .legend-row-label {
   font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--text-muted); align-self: center; margin-right: 4px;
@@ -3345,14 +3446,22 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 /* Canvas node: persona icon block + meta column. Pairs with run-state
    classes below for the active-workflow visualization. */
 .df-node-body {
-  border-top: 3px solid var(--role-color, var(--border));
-  padding: 8px 12px 10px;
+  /* Colored top bar via inset shadow instead of border-top — the
+     shadow is constrained to the element's box and can never bleed
+     past the rounded wrapper, even when drawflow's wrapper has its
+     own 1.5px border + radius. Padding-top moves content below the
+     visual bar so layout is unchanged. */
+  box-shadow: inset 0 3px 0 var(--role-color, var(--border));
+  padding: 11px 12px 10px;
   display: flex; gap: 9px; align-items: flex-start;
   position: relative;
-  /* Important: width inherits the wrapper's min/max so descendants
-     ellipsis instead of pushing the card wider than the canvas
-     can accommodate. */
+  /* Width inherits the wrapper's min/max so descendants ellipsis
+     instead of pushing the card wider than the canvas can handle. */
   width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
+  /* Match the wrapper's radius on the TOP corners so the inset
+     shadow's color bar follows the rounded edge cleanly. */
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
 }
 .df-node-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -3431,7 +3540,11 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   padding: 1px 5px; border-radius: 2px;
   margin-left: 6px; vertical-align: middle;
 }
-.df-node-body.is-decision { border-top-color: var(--purple); }
+.df-node-body.is-decision {
+  /* Decision-node accent — override the inset-shadow color directly so
+     the bar reads as the router-purple instead of the role color. */
+  box-shadow: inset 0 3px 0 var(--purple);
+}
 /* Drawflow stacks output ports vertically when num_outputs > 1.
    Add breathing room so labels (yes/no/etc) read cleanly. */
 .drawflow .drawflow-node.is-decision-node .outputs { gap: 14px; }
@@ -5355,7 +5468,25 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
           <div class="graph-controls">
             <button onclick="rebuildGraph()" title="Rebuild from exports">Rebuild</button>
             <button onclick="resetGraphZoom()" title="Reset zoom">Reset</button>
+            <button onclick="toggleGraphConfigPanel()" id="graph-config-toggle"
+                    title="Open visual settings (node size, link width, forces)">⚙</button>
           </div>
+          <!-- Obsidian-style graph config — sliders for visual + force
+               tuning. Hidden by default, opens to a side rail over the
+               graph. All values persist to localStorage. -->
+          <aside class="graph-config-panel" id="graph-config-panel" hidden aria-label="Graph settings">
+            <div class="graph-config-head">
+              <span>Graph Settings</span>
+              <button type="button" class="graph-config-close"
+                      onclick="toggleGraphConfigPanel(false)" aria-label="Close">×</button>
+            </div>
+            <div class="graph-config-body" id="graph-config-body"></div>
+            <div class="graph-config-foot">
+              <button type="button" class="graph-config-reset"
+                      onclick="resetGraphConfigDefaults()"
+                      title="Restore the original Enclave defaults">Reset to defaults</button>
+            </div>
+          </aside>
           <svg id="graph-svg"></svg>
           <div class="graph-legend" id="graph-legend">
             <!-- Node-type swatches (informational) -->
@@ -7414,13 +7545,62 @@ function resetGraphZoom() {
 }
 
 // Graph config — lives across renders so the user's toggle choices
-// survive a rebuild.
-window.graphConfig = window.graphConfig || {
-  // Set<string> of enabled link types; empty = show all
-  linkKinds: new Set(),
-  // 'importance' | 'content' | 'hybrid'
-  sizingMode: 'importance',
+// survive a rebuild. Sliders + toggles are persisted to localStorage
+// under the `enclave.graphConfig` key so reloads keep the same view.
+//
+// Modeled on the Obsidian graph view's settings panel:
+//   - Display:  node scale, link width, link opacity, label fade, arrows
+//   - Forces :  charge (repel), link distance, link strength, center
+//
+// Numeric values are stored as plain numbers (sliders read/write them
+// directly). `linkKinds` stays a Set because it's a categorical filter.
+const _GRAPH_CONFIG_DEFAULTS = {
+  // Display
+  nodeScale: 1.0,        // multiplier on nodeRadius output (0.5–2.0)
+  linkWidth: 1.0,        // multiplier on link stroke-width (0.5–4.0)
+  linkOpacity: 1.0,      // 0.2 → 1.0
+  labelFadeZoom: 1.0,    // hide session labels below this zoom (0.4–2.0)
+  showArrows: false,     // arrowheads on directed edges
+  // Forces
+  charge: -200,          // repel strength (more negative = stronger repel)
+  linkDistance: 80,      // px between connected nodes
+  linkStrength: 0.5,     // 0.05 → 1.0
+  centerStrength: 0.05,  // gravitational pull to center (0 → 0.5)
+  // Categorical
+  linkKinds: new Set(),  // empty = show all
+  sizingMode: 'importance', // 'importance' | 'content' | 'hybrid'
 };
+
+window.graphConfig = window.graphConfig || _loadGraphConfig();
+
+function _loadGraphConfig() {
+  // Merge defaults with whatever the operator persisted. linkKinds
+  // round-trips as an array; rebuild the Set on load.
+  const merged = Object.assign({}, _GRAPH_CONFIG_DEFAULTS, {
+    linkKinds: new Set(_GRAPH_CONFIG_DEFAULTS.linkKinds),
+  });
+  try {
+    const raw = localStorage.getItem('enclave.graphConfig');
+    if (!raw) return merged;
+    const saved = JSON.parse(raw);
+    Object.keys(merged).forEach(k => {
+      if (k === 'linkKinds') {
+        if (Array.isArray(saved.linkKinds)) merged.linkKinds = new Set(saved.linkKinds);
+      } else if (saved[k] !== undefined) {
+        merged[k] = saved[k];
+      }
+    });
+  } catch (_) {}
+  return merged;
+}
+
+function _saveGraphConfig() {
+  try {
+    const c = window.graphConfig;
+    const out = Object.assign({}, c, { linkKinds: Array.from(c.linkKinds || []) });
+    localStorage.setItem('enclave.graphConfig', JSON.stringify(out));
+  } catch (_) { /* private mode / quota — non-fatal */ }
+}
 
 function _renderGraphLegendToggles(data) {
   // Safety: every interpolated value below is either (a) escaped via
@@ -7478,11 +7658,129 @@ function resetGraphLinkFilter() {
 }
 function setGraphSizingMode(mode) {
   window.graphConfig.sizingMode = mode;
+  _saveGraphConfig();
   if (window.graphData) renderGraph(window.graphData);
 }
 window.toggleGraphLinkKind   = toggleGraphLinkKind;
 window.resetGraphLinkFilter  = resetGraphLinkFilter;
 window.setGraphSizingMode    = setGraphSizingMode;
+
+// ── Obsidian-style Graph Config panel ────────────────────────────────
+// Slider rail for visual + force tuning. Renders once into
+// #graph-config-body; each slider updates window.graphConfig live
+// and re-renders the graph. Saves to localStorage on change.
+const _GRAPH_CONFIG_FIELDS = [
+  // [key, label, min, max, step, suffix, group]
+  { k: 'nodeScale',     label: 'Node size',       min: 0.3, max: 2.5, step: 0.05, group: 'Display' },
+  { k: 'linkWidth',     label: 'Link width',      min: 0.3, max: 5.0, step: 0.1,  group: 'Display' },
+  { k: 'linkOpacity',   label: 'Link opacity',    min: 0.1, max: 1.0, step: 0.05, group: 'Display' },
+  { k: 'labelFadeZoom', label: 'Label fade ≤',    min: 0.3, max: 2.5, step: 0.1,  group: 'Display' },
+  { k: 'showArrows',    label: 'Arrows',          type: 'toggle',             group: 'Display' },
+  { k: 'charge',        label: 'Repel force',     min: -800, max: -20, step: 10, group: 'Forces' },
+  { k: 'linkDistance',  label: 'Link distance',   min: 30,  max: 300, step: 5,   group: 'Forces' },
+  { k: 'linkStrength',  label: 'Link strength',   min: 0.05, max: 1.0, step: 0.05, group: 'Forces' },
+  { k: 'centerStrength',label: 'Center gravity',  min: 0,   max: 0.5, step: 0.01, group: 'Forces' },
+];
+
+function _renderGraphConfigPanel() {
+  const body = document.getElementById('graph-config-body');
+  if (!body) return;
+  const cfg = window.graphConfig;
+  const groups = {};
+  _GRAPH_CONFIG_FIELDS.forEach(f => { (groups[f.group] = groups[f.group] || []).push(f); });
+  const html = Object.keys(groups).map(g => {
+    const rows = groups[g].map(f => {
+      const v = cfg[f.k];
+      if (f.type === 'toggle') {
+        return `<div class="gc-row">
+          <label class="gc-label" for="gc-${esc(f.k)}">${esc(f.label)}</label>
+          <input type="checkbox" id="gc-${esc(f.k)}" class="gc-toggle"
+                 ${v ? 'checked' : ''}
+                 onchange="setGraphConfigValue('${esc(f.k)}', this.checked)" />
+        </div>`;
+      }
+      const displayVal = Number.isInteger(f.step) ? v : Number(v).toFixed(2);
+      return `<div class="gc-row">
+        <label class="gc-label" for="gc-${esc(f.k)}">${esc(f.label)}</label>
+        <input type="range" id="gc-${esc(f.k)}" class="gc-slider"
+               min="${f.min}" max="${f.max}" step="${f.step}" value="${esc(String(v))}"
+               oninput="setGraphConfigValue('${esc(f.k)}', parseFloat(this.value))" />
+        <span class="gc-val" id="gc-val-${esc(f.k)}">${esc(String(displayVal))}</span>
+      </div>`;
+    }).join('');
+    return `<div class="gc-group">
+      <div class="gc-group-head">${esc(g)}</div>
+      ${rows}
+    </div>`;
+  }).join('');
+  body.innerHTML = html;
+}
+
+function setGraphConfigValue(key, value) {
+  if (!_GRAPH_CONFIG_FIELDS.find(f => f.k === key)) return;
+  window.graphConfig[key] = value;
+  _saveGraphConfig();
+  // Update the readout next to the slider without a full re-render so
+  // the drag feels live.
+  const valEl = document.getElementById(`gc-val-${key}`);
+  if (valEl) {
+    const f = _GRAPH_CONFIG_FIELDS.find(x => x.k === key);
+    valEl.textContent = (f && Number.isInteger(f.step)) ? value : Number(value).toFixed(2);
+  }
+  // Trigger a re-render. For force changes we just bump the running
+  // simulation instead of rebuilding the SVG, which is much smoother.
+  if (['charge', 'linkDistance', 'linkStrength', 'centerStrength'].includes(key)) {
+    _applyGraphForces();
+  } else if (window.graphData) {
+    renderGraph(window.graphData);
+  }
+}
+
+function _applyGraphForces() {
+  const sim = window.graphSim;
+  const cfg = window.graphConfig;
+  if (!sim) return;
+  const linkF = sim.force('link');
+  const chargeF = sim.force('charge');
+  const centerF = sim.force('center');
+  if (linkF)   linkF.distance(cfg.linkDistance).strength(cfg.linkStrength);
+  if (chargeF) chargeF.strength(cfg.charge);
+  // forceCenter doesn't have its own strength; emulate via a forceX/forceY
+  // gravity term if needed. For simplicity nudge alpha so the existing
+  // center force re-engages.
+  sim.alpha(0.4).restart();
+}
+
+function toggleGraphConfigPanel(force) {
+  const panel = document.getElementById('graph-config-panel');
+  const btn = document.getElementById('graph-config-toggle');
+  if (!panel) return;
+  const willOpen = force === undefined ? panel.hasAttribute('hidden') : !!force;
+  if (willOpen) {
+    panel.removeAttribute('hidden');
+    _renderGraphConfigPanel();
+    if (btn) btn.classList.add('active');
+  } else {
+    panel.setAttribute('hidden', '');
+    if (btn) btn.classList.remove('active');
+  }
+}
+
+function resetGraphConfigDefaults() {
+  const linkKinds = window.graphConfig.linkKinds;  // preserve filter selection
+  const sizingMode = window.graphConfig.sizingMode;
+  window.graphConfig = Object.assign({}, _GRAPH_CONFIG_DEFAULTS, {
+    linkKinds: new Set(linkKinds),
+    sizingMode,
+  });
+  _saveGraphConfig();
+  _renderGraphConfigPanel();
+  if (window.graphData) renderGraph(window.graphData);
+}
+
+window.toggleGraphConfigPanel  = toggleGraphConfigPanel;
+window.setGraphConfigValue     = setGraphConfigValue;
+window.resetGraphConfigDefaults = resetGraphConfigDefaults;
 
 function renderGraph(data) {
   const svgEl = document.getElementById('graph-svg');
@@ -7505,10 +7803,17 @@ function renderGraph(data) {
   const svg = d3.select('#graph-svg');
   const g = svg.append('g');
 
-  // Zoom + pan
+  // Zoom + pan. The zoom level also drives label fade-out — session
+  // labels (cluttering at fully-zoomed-in views) hide below the
+  // labelFadeZoom threshold from the config panel.
   const zoom = d3.zoom()
     .scaleExtent([0.2, 4])
-    .on('zoom', (e) => g.attr('transform', e.transform));
+    .on('zoom', (e) => {
+      g.attr('transform', e.transform);
+      const fade = (window.graphConfig && graphConfig.labelFadeZoom) || 1.0;
+      g.selectAll('text.gn-session-label')
+        .attr('opacity', e.transform.k >= fade ? 1 : 0);
+    });
   svg.call(zoom);
 
   const nodeColor = (d) => {
@@ -7545,14 +7850,18 @@ function renderGraph(data) {
   }
 
   function _nodeBaseRadius(t) {
-    return ({ session: 8, topic: 6, source: 6, agent: 8, workflow_run: 6 })[t] || 5;
+    // Default sizes tuned smaller per user feedback that nodes were
+    // too big relative to the link lines. The config-panel
+    // 'nodeScale' multiplier brings them back up if desired.
+    return ({ session: 6, topic: 5, source: 5, agent: 6, workflow_run: 5 })[t] || 4;
   }
-  const NODE_R_MAX = 22;
+  const NODE_R_MAX = 24;
 
   const nodeRadius = (d) => {
     const w = Math.max(0, _nodeWeight(d));
-    const r = _nodeBaseRadius(d.type) + Math.sqrt(w) * 2.4;
-    return Math.min(r, NODE_R_MAX);
+    const r = _nodeBaseRadius(d.type) + Math.sqrt(w) * 1.8;
+    const scale = (window.graphConfig && graphConfig.nodeScale) || 1.0;
+    return Math.min(r * scale, NODE_R_MAX * scale);
   };
 
   // Link palette + filter. graphConfig.linkKinds is a Set of enabled
@@ -7602,12 +7911,16 @@ function renderGraph(data) {
     linkPairs.set(`${t}||${s}`, l);
   }
 
+  // Force-simulation parameters come from graphConfig so the panel
+  // sliders can tune them live. The link-distance multiplier on
+  // 'related' edges keeps the visual hierarchy from the original
+  // (related sessions sit a bit further from each other).
+  const cfg = window.graphConfig || _GRAPH_CONFIG_DEFAULTS;
   const sim = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
-      if (d.type === 'related') return 120;
-      return 70;
-    }).strength(0.5))
-    .force('charge', d3.forceManyBody().strength(-200))
+    .force('link', d3.forceLink(links).id(d => d.id)
+      .distance(d => d.type === 'related' ? cfg.linkDistance * 1.5 : cfg.linkDistance)
+      .strength(cfg.linkStrength))
+    .force('charge', d3.forceManyBody().strength(cfg.charge))
     .force('center', d3.forceCenter(W / 2, H / 2))
     .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 6));
   graphSim = sim;
@@ -7615,12 +7928,45 @@ function renderGraph(data) {
   // force-center when the SVG viewport resizes.
   window.graphSim = sim;
 
-  // Links
+  // Links — width scales with both the link's own weight AND the
+  // global linkWidth multiplier so the user can fatten lines until
+  // they read clearly against the node circles. Default thickness
+  // bumped from 1px to ~1.6px per user feedback.
+  const linkW = cfg.linkWidth || 1.0;
+  const linkA = cfg.linkOpacity || 1.0;
   const link = g.append('g').selectAll('line')
     .data(links).enter().append('line')
     .attr('stroke', linkColor)
-    .attr('stroke-width', d => d.type === 'related' ? (d.weight || 1) * 0.5 + 0.5 : 1)
-    .attr('stroke-dasharray', d => d.type === 'mentions' ? '3,3' : 'none');
+    .attr('stroke-width', d => {
+      const base = d.type === 'related'
+        ? ((d.weight || 1) * 0.6 + 0.8)
+        : 1.6;
+      return base * linkW;
+    })
+    .attr('stroke-opacity', linkA)
+    .attr('stroke-dasharray', d => {
+      const s = _linkStyle(d);
+      return s.dash || 'none';
+    })
+    .attr('marker-end', cfg.showArrows ? 'url(#graph-arrow)' : null);
+
+  // One global arrowhead marker — referenced by every link when arrows
+  // are enabled. Sized to match the link width so it scales naturally.
+  if (cfg.showArrows) {
+    let defs = svg.select('defs');
+    if (defs.empty()) defs = svg.append('defs');
+    if (defs.select('#graph-arrow').empty()) {
+      defs.append('marker')
+        .attr('id', 'graph-arrow')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 10).attr('refY', 0)
+        .attr('markerWidth', 6).attr('markerHeight', 6)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', 'var(--text-dim)');
+    }
+  }
 
   // Nodes
   const node = g.append('g').selectAll('circle')
@@ -7645,6 +7991,7 @@ function renderGraph(data) {
   // Labels for session nodes only
   const label = g.append('g').selectAll('text')
     .data(nodes.filter(d => d.type === 'session')).enter().append('text')
+    .attr('class', 'gn-session-label')
     .attr('font-family', 'JetBrains Mono, monospace')
     .attr('font-size', '9px')
     .attr('fill', 'var(--text-dim)')
