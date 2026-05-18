@@ -3452,15 +3452,20 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
    record of a past run" from "this is what I'm editing." The status
    classes (is-running / is-completed / is-failed) still override
    with full color so the run state remains legible. */
-/* Read-only canvas — disables direct node drag + port-pull-to-connect.
-   The pointer-events bias still lets clicks register on inner content
-   (e.g. status badges) but the wrapper itself can't be dragged. */
-.readonly-canvas .drawflow .drawflow-node {
-  cursor: default !important;
-}
-.readonly-canvas .drawflow .drawflow-node .drawflow_content_node { pointer-events: none; }
+/* Read-only canvas — disables canvas pan/drag + port-pull, but keeps
+   nodes themselves clickable. The earlier blanket pointer-events:none
+   on .drawflow_content_node turned the whole DAG into static art.
+   Strategy: turn off pointer-events on the canvas wrapper (which
+   stops drawflow's mousedown→pan handler from firing on background
+   drags) and re-enable on .drawflow-node + its descendants. */
+.readonly-canvas .drawflow .drawflow-node { cursor: pointer; }
+/* Block port-drag — would otherwise start a new connection. */
 .readonly-canvas .drawflow .drawflow-node .input,
 .readonly-canvas .drawflow .drawflow-node .output { pointer-events: none; }
+.readonly-canvas > .drawflow { pointer-events: none; }
+.readonly-canvas > .drawflow .drawflow-node,
+.readonly-canvas > .drawflow .drawflow-node *,
+.readonly-canvas > .drawflow svg { pointer-events: auto; }
 #runs-tab-canvas .drawflow .drawflow-node {
   background: linear-gradient(180deg, rgba(20, 28, 38, 0.96), rgba(10, 16, 22, 0.96));
   filter: saturate(0.7);
@@ -4106,6 +4111,59 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   height: 100%;
   background: linear-gradient(90deg, var(--cyan), var(--green, #5fd49b));
   transition: width 0.4s ease;
+}
+/* Indeterminate state — shown when the run is alive (status=running)
+   but no step has reported yet. Striped bar animates so the
+   operator sees something moving instead of a frozen 0% bar. */
+.df-run-progress-bar-fill.is-indeterminate {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--cyan) 0 8px,
+    rgba(0, 220, 240, 0.35) 8px 16px
+  );
+  animation: dfIndeterminateScroll 1.1s linear infinite;
+  transition: none;
+}
+@keyframes dfIndeterminateScroll {
+  from { background-position: 0 0; }
+  to   { background-position: 32px 0; }
+}
+
+/* Zombie banner — pinned above the step strip when a "running"
+   run has shipped no progress for > 10 min. */
+.runs-zombie-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; margin-bottom: 10px;
+  background: rgba(255, 165, 0, 0.07);
+  border: 1px solid rgba(255, 165, 0, 0.42);
+  border-radius: 4px;
+  font-family: var(--mono); font-size: 0.66rem;
+  color: var(--text-dim);
+}
+.runs-zombie-banner .zb-icon {
+  flex-shrink: 0;
+  width: 20px; height: 20px; line-height: 20px;
+  text-align: center; font-weight: 700;
+  background: rgba(255, 165, 0, 0.18);
+  color: var(--amber);
+  border-radius: 50%;
+}
+.runs-zombie-banner .zb-msg { flex: 1; color: var(--text); }
+.runs-zombie-banner code { color: var(--amber); }
+.runs-tab-progress-chip.is-zombie {
+  border-color: rgba(255, 165, 0, 0.42);
+  background: rgba(255, 165, 0, 0.06);
+}
+.runs-tab-progress-chip.is-zombie .df-run-progress-current { color: var(--amber); }
+
+/* Step row flash — fires when the operator clicks a canvas node and
+   we scroll the matching row into view. */
+.ws-run-step.flash-highlight {
+  animation: stepRowFlash 1.2s ease-out;
+}
+@keyframes stepRowFlash {
+  0%   { box-shadow: 0 0 0 2px var(--cyan), 0 0 18px rgba(0, 220, 240, 0.55); }
+  100% { box-shadow: none; }
 }
 .df-config-label { font-size: 0.54rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
 .df-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; background: var(--cyan-ghost); border: 1px solid var(--cyan-dim); font-size: 0.58rem; color: var(--cyan); margin: 2px; border-radius: 2px; }
@@ -15700,14 +15758,44 @@ const RunsTab = (function () {
     _editor = new Drawflow(container);
     _editor.reroute = true;
     _editor.reroute_fix_curvature = true;
-    // NOTE: 'fixed' mode in some drawflow builds silently no-ops
-    // addConnection() — which was leaving the Runs DAG showing
-    // disconnected nodes. Keep edit mode so addConnection wires
-    // edges, and rely on the read-only class below + the absence of
-    // any interaction handlers to keep the surface non-editable.
+    // 'fixed' silently no-ops addConnection in some drawflow builds —
+    // keep 'edit' so edges wire, then disable pan/drag via the
+    // .readonly-canvas CSS class which routes pointer-events around
+    // drawflow's mousedown→pan handler on the wrapper.
     _editor.editor_mode = 'edit';
     _editor.start();
     container.classList.add('readonly-canvas');
+
+    // Click-to-drill: when the operator clicks a node card, find the
+    // matching step row in the strip below and scroll it into view
+    // + open it. Bound on the container so it survives drawflow's
+    // node re-renders during graph updates.
+    container.addEventListener('click', (e) => {
+      const nodeEl = e.target.closest('.drawflow-node');
+      if (!nodeEl) return;
+      const m = nodeEl.id.match(/^node-(\d+)$/);
+      if (!m) return;
+      const dfId = m[1];
+      // Resolve dfId → step.id via the _idMap we built at render time.
+      const stepId = Object.keys(_idMap).find(k => String(_idMap[k]) === dfId);
+      if (!stepId) return;
+      // Auto-expand the step's row in the result strip + scroll it
+      // into view so the operator sees its error / output immediately.
+      _expandedSteps.add(stepId);
+      if (_currentRun) _renderSteps(_currentRun);
+      // Brief flash on the matching step row so the operator sees
+      // where in the strip their click landed.
+      setTimeout(() => {
+        const row = document.querySelector(
+          `#runs-tab-steps-body .ws-run-step[data-step-id="${CSS.escape(stepId)}"]`
+        );
+        if (row) {
+          row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          row.classList.add('flash-highlight');
+          setTimeout(() => row.classList.remove('flash-highlight'), 1200);
+        }
+      }, 30);
+    });
   }
 
   function _renderRunGraph(defn, run) {
@@ -15849,13 +15937,38 @@ const RunsTab = (function () {
     ids.forEach(id => { try { _editor.updateConnectionNodes(`node-${id}`); } catch (_) {} });
   }
 
+  // A run is "zombie" if its status says running/queued but it
+  // shipped no progress in over ZOMBIE_MS. Container restarts
+  // mid-run leave the persisted status frozen, so we detect this in
+  // the UI and surface a banner + an option to force-fail.
+  const ZOMBIE_MS = 10 * 60 * 1000;  // 10 minutes without progress
+  function _isZombieRun(run) {
+    const s = (run.status || '').toLowerCase();
+    if (!['running', 'queued'].includes(s)) return false;
+    const started = Date.parse(run.started_at || '') || 0;
+    if (!started) return false;
+    const ageMs = Date.now() - started;
+    if (ageMs < ZOMBIE_MS) return false;
+    // If at least one step finished recently the run is still alive.
+    const results = run.step_results || [];
+    if (!results.length) return true;
+    // Check the last step's completion timestamp if any.
+    const lastDone = results
+      .filter(r => r && (r.completed_at || r.started_at))
+      .map(r => Date.parse(r.completed_at || r.started_at || '') || 0);
+    const newest = lastDone.length ? Math.max(...lastDone) : started;
+    return (Date.now() - newest) > ZOMBIE_MS;
+  }
+
   function _applyStatus(run) {
     const results = run.step_results || [];
     const statusMap = new Map();
     results.forEach(r => { if (r && r.step_id) statusMap.set(r.step_id, r.status); });
     const planned = Object.keys(_idMap);
     let completed = 0, current = '';
-    const terminal = ['completed', 'failed', 'error', 'canceled'].includes((run.status || '').toLowerCase());
+    const statusLower = (run.status || '').toLowerCase();
+    const terminal = ['completed', 'failed', 'error', 'canceled'].includes(statusLower);
+    const zombie = _isZombieRun(run);
     planned.forEach(stepId => {
       const dfId = _idMap[stepId];
       const el = document.querySelector(`#runs-tab-canvas #node-${dfId}`);
@@ -15868,18 +15981,97 @@ const RunsTab = (function () {
       else if (st === 'skipped') { el.classList.add('is-skipped'); }
       else if (!terminal) { el.classList.add('is-queued'); }
     });
-    // Update the chip.
+
+    // Stop the live poller for zombie runs — there's nothing to
+    // observe and re-fetching the same orphaned payload every 1.5s
+    // is just noise.
+    if (zombie && _pollHandle) {
+      clearInterval(_pollHandle);
+      _pollHandle = null;
+    }
+
+    // Update the chip. For a healthy running run with 0 steps yet,
+    // show an indeterminate bar (stripe animation) so the operator
+    // sees motion. For zombies, show a static "stalled" badge.
     const chip = document.getElementById('runs-tab-progress-chip');
     const cur = document.getElementById('runs-tab-current');
     const cnt = document.getElementById('runs-tab-chip-count');
     const bar = document.getElementById('runs-tab-bar');
+    const spinner = document.getElementById('runs-tab-spinner');
     if (chip) chip.hidden = false;
-    if (cur) cur.textContent = current || run.workflow_id || run.run_id || '—';
+    if (chip) chip.classList.toggle('is-zombie', zombie);
+    if (cur) {
+      if (zombie) cur.textContent = 'stalled — engine likely restarted mid-run';
+      else cur.textContent = current || (statusLower === 'queued' ? 'queued' : (run.workflow_id || '—'));
+    }
     if (cnt) cnt.textContent = `${completed}/${planned.length || 0}`;
-    if (bar) bar.style.width = `${planned.length ? (completed / planned.length) * 100 : 0}%`;
+    if (bar) {
+      // Indeterminate animation when there's a count of zero in a non-
+      // terminal state; concrete % otherwise.
+      if (!terminal && !zombie && planned.length && completed === 0) {
+        bar.classList.add('is-indeterminate');
+        bar.style.width = '100%';
+      } else {
+        bar.classList.remove('is-indeterminate');
+        bar.style.width = `${planned.length ? (completed / planned.length) * 100 : 0}%`;
+      }
+    }
+    if (spinner) {
+      spinner.classList.toggle('done', statusLower === 'completed');
+      spinner.classList.toggle('failed', ['failed', 'error', 'canceled'].includes(statusLower) || zombie);
+    }
     // Detail meta line.
     const meta = document.getElementById('runs-tab-detail-meta');
-    if (meta) meta.textContent = `${run.workflow_id} · ${run.status || '?'} · ${completed}/${planned.length} steps`;
+    if (meta) {
+      const tag = zombie ? `${run.status || '?'} (stalled)` : (run.status || '?');
+      meta.textContent = `${run.workflow_id || '?'} · ${tag} · ${completed}/${planned.length} steps`;
+    }
+    // Zombie banner above the steps strip — gives the operator a
+    // clear surface to mark the run as failed.
+    _renderZombieBanner(run, zombie);
+  }
+
+  function _renderZombieBanner(run, zombie) {
+    const stepsBody = document.getElementById('runs-tab-steps-body');
+    if (!stepsBody) return;
+    const existing = document.getElementById('runs-tab-zombie-banner');
+    if (existing) existing.remove();
+    if (!zombie) return;
+    const startedAgo = (() => {
+      const t = Date.parse(run.started_at || '') || 0;
+      if (!t) return 'unknown time';
+      const mins = Math.round((Date.now() - t) / 60000);
+      return mins > 60 ? `${Math.round(mins / 60)}h ${mins % 60}m ago` : `${mins}m ago`;
+    })();
+    const banner = document.createElement('div');
+    banner.id = 'runs-tab-zombie-banner';
+    banner.className = 'runs-zombie-banner';
+    banner.innerHTML = `<span class="zb-icon">!</span>
+      <span class="zb-msg">
+        This run started <strong>${esc(startedAgo)}</strong> and has shipped no
+        progress for over 10 minutes. The engine likely restarted mid-run,
+        leaving the run status frozen as <code>${esc(run.status || '')}</code>.
+      </span>
+      <button class="action-btn xs" onclick="RunsTab.markFailed()">Mark Failed</button>`;
+    stepsBody.prepend(banner);
+  }
+
+  async function markFailed() {
+    if (!_selectedId) return;
+    if (!confirm('Mark this stalled run as failed? This persists status="failed" so the UI stops polling.')) return;
+    try {
+      // The cancel endpoint accepts running/queued and marks them
+      // canceled — which is the closest existing signal we have for
+      // "this run is dead, stop polling." If the backend grows a
+      // dedicated mark-failed verb later, swap the URL.
+      const r = await fetch(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/cancel`, { method: 'POST' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (window.Toast) Toast.info('Run marked', 'Engine cancel sent; refreshing.');
+      await load();
+      select(_selectedId);
+    } catch (e) {
+      if (window.Toast) Toast.danger('Could not mark failed', e.message);
+    }
   }
 
   function _renderSteps(run) {
@@ -16267,7 +16459,7 @@ const RunsTab = (function () {
 
   return { init, load, render, setFilter, select,
     resumeCurrent, cancelCurrent, pauseCurrent, rerunCurrent,
-    toggleStepExpand, toggleBottomDrawer };
+    toggleStepExpand, toggleBottomDrawer, markFailed };
 })();
 window.RunsTab = RunsTab;
 
