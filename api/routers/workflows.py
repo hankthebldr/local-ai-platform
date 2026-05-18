@@ -251,7 +251,12 @@ async def run_workflow(req: WorkflowRunRequest, background_tasks: BackgroundTask
     if req.definition:
         defn = engine.load_from_dict(req.definition)
     elif req.workflow_id:
-        yaml_path = f"{WORKFLOWS_DIR}/{req.workflow_id}.yaml"
+        yaml_path = engine.resolve_workflow_path(req.workflow_id, WORKFLOWS_DIR)
+        if not yaml_path:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Workflow '{req.workflow_id}' not found in public or private overlay",
+            )
         defn = engine.load(yaml_path)
     else:
         raise HTTPException(
@@ -319,7 +324,12 @@ async def run_workflow_async(
     if req.definition:
         defn = engine.load_from_dict(req.definition)
     elif req.workflow_id:
-        yaml_path = f"{WORKFLOWS_DIR}/{req.workflow_id}.yaml"
+        yaml_path = engine.resolve_workflow_path(req.workflow_id, WORKFLOWS_DIR)
+        if not yaml_path:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Workflow '{req.workflow_id}' not found in public or private overlay",
+            )
         defn = engine.load(yaml_path)
     else:
         raise HTTPException(
@@ -462,7 +472,12 @@ async def get_workflow(workflow_id: str):
     if not workflow_id or not all(c.isalnum() or c in "_-" for c in workflow_id):
         raise HTTPException(status_code=400, detail="invalid workflow id")
     engine = get_engine()
-    yaml_path = f"{WORKFLOWS_DIR}/{workflow_id}.yaml"
+    yaml_path = engine.resolve_workflow_path(workflow_id, WORKFLOWS_DIR)
+    if not yaml_path:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Workflow '{workflow_id}' not found in public or private overlay",
+        )
     try:
         defn = engine.load(yaml_path)
     except FileNotFoundError:

@@ -33,25 +33,47 @@ def _xdm_toolkit(base_url, api_headers) -> dict:
 
 
 def test_xdm_toolkit_has_registered_skills(base_url, api_headers):
-    """xdm-toolkit's plugin.yaml registers 3 skills."""
+    """xdm-toolkit's plugin.yaml registers a set of skills via manifest
+    discipline. The exact set will grow over time (rag-query-crafter
+    landed in PR #69, vendor-pack-author in XQL Phase 5). This test
+    enforces the *contract* — every expected skill must be present —
+    without asserting a closed set, so additions don't break the test."""
     plug = _xdm_toolkit(base_url, api_headers)
-    skills = plug.get("skills", [])
-    ids = sorted(s.get("id") for s in skills)
-    expected = ["rag-query-crafter", "xdm-rule-writer", "xql-validator"]
-    assert ids == expected, (
-        f"xdm-toolkit skill set drifted from manifest.\n"
-        f"  expected: {expected}\n  actual:   {ids}"
+    ids = {s.get("id") for s in plug.get("skills", [])}
+    must_have = {"xdm-rule-writer", "xql-validator", "rag-query-crafter"}
+    missing = must_have - ids
+    assert not missing, (
+        f"xdm-toolkit lost expected skills: {sorted(missing)}.\n"
+        f"  current skills: {sorted(ids)}"
     )
+    # Each registered id must point to an entry the API treats as a
+    # full skill (has at least a name + triggers list).
+    for skill in plug.get("skills", []):
+        assert skill.get("id"), "skill missing id"
+        assert isinstance(
+            skill.get("triggers"), list
+        ), f"skill {skill.get('id')!r} has no triggers list"
 
 
 def test_xdm_toolkit_tools_still_intact(base_url, api_headers):
-    """Regression: registering a new skill must not affect tool registration."""
+    """Tool surface contract: every tool the API exposes must round-trip
+    through a unique id + a callable function name. Like the skills test,
+    this asserts a must-have minimum rather than a closed set so XQL
+    Phase 4/5 additions (xdm_snippets, rag_lookup) don't break us."""
     plug = _xdm_toolkit(base_url, api_headers)
-    tool_ids = sorted(t.get("id") for t in plug.get("tools", []))
-    expected = sorted(["analyse_xql", "lookup_xdm_path", "validate_xql"])
-    assert (
-        tool_ids == expected
-    ), f"xdm-toolkit tools drifted.\n  expected: {expected}\n  actual: {tool_ids}"
+    tools = plug.get("tools", [])
+    ids = {t.get("id") for t in tools}
+    must_have = {"analyse_xql", "lookup_xdm_path", "validate_xql"}
+    missing = must_have - ids
+    assert not missing, (
+        f"xdm-toolkit lost expected tools: {sorted(missing)}.\n"
+        f"  current tools: {sorted(ids)}"
+    )
+    # Every tool entry has the required shape so the SPA can render its
+    # parameter form.
+    for t in tools:
+        assert t.get("id"), "tool missing id"
+        assert t.get("description"), f"tool {t.get('id')!r} missing description"
 
 
 def test_skill_triggers_have_keywords(base_url, api_headers):

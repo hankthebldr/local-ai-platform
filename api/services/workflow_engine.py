@@ -488,29 +488,60 @@ class WorkflowEngine:
     # ── Utilities ──────────────────────────────────────────────────────
 
     def list_workflows(self, workflows_dir: str = "./workflows") -> List[Dict]:
-        """List all available workflow definitions"""
-        results = []
-        wf_path = Path(workflows_dir)
-        if not wf_path.exists():
-            return results
+        """List all available workflow definitions.
 
-        for f in sorted(wf_path.glob("*.yaml")):
-            try:
-                defn = self.load(str(f))
-                results.append(
-                    {
+        Scans:
+          1. The public workflow directory (workflows_dir / $WORKFLOWS_DIR).
+          2. An optional PRIVATE OVERLAY at workflows-private/ (or
+             $WORKFLOWS_PRIVATE_DIR). Private definitions can shadow
+             public ones with the same id; the private one wins.
+
+        The private overlay is gitignored by default — it's where the
+        operator stages high-value, methodology-heavy YAMLs that
+        shouldn't ship in the source-available repo. The engine treats
+        the two dirs identically once loaded.
+        """
+        by_id: Dict[str, Dict] = {}
+
+        def _scan(dir_str: str, source_label: str):
+            path = Path(dir_str)
+            if not path.exists():
+                return
+            for f in sorted(path.glob("*.yaml")):
+                try:
+                    defn = self.load(str(f))
+                    by_id[defn.id] = {
                         "id": defn.id,
                         "name": defn.name,
                         "description": defn.description,
                         "version": defn.version,
                         "steps": len(defn.steps),
                         "file": str(f),
+                        "source": source_label,
                     }
-                )
-            except Exception as e:
-                logger.warning(f"Skipping invalid workflow {f}: {e}")
+                except Exception as e:
+                    logger.warning(f"Skipping invalid workflow {f}: {e}")
 
-        return results
+        _scan(workflows_dir, "public")
+        # Private overlay wins on id collisions.
+        private_dir = os.getenv("WORKFLOWS_PRIVATE_DIR", "./workflows-private")
+        _scan(private_dir, "private")
+
+        return sorted(by_id.values(), key=lambda w: w.get("id", ""))
+
+    def resolve_workflow_path(
+        self,
+        workflow_id: str,
+        workflows_dir: str = "./workflows",
+    ) -> Optional[str]:
+        """Return the on-disk path for a workflow id, preferring the
+        private overlay over the public directory. None when missing."""
+        private_dir = os.getenv("WORKFLOWS_PRIVATE_DIR", "./workflows-private")
+        for d in (private_dir, workflows_dir):
+            candidate = Path(d) / f"{workflow_id}.yaml"
+            if candidate.exists():
+                return str(candidate)
+        return None
 
     def get_run(self, run_id: str) -> Optional[Dict]:
         """Load a persisted workflow run by ID"""
