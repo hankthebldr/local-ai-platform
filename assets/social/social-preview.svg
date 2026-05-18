@@ -31,6 +31,4 @@
   <!-- Tagline -->
   <text x="640" y="420" text-anchor="middle" font-family="'Space Grotesk', 'Inter', sans-serif" font-size="20" fill="#888888">Self-hosted AI inference. CPU-optimized. One price. Forever.</text>
 
-  <!-- Company -->
-  <text x="640" y="530" text-anchor="middle" font-family="'Space Grotesk', 'Inter', sans-serif" font-size="14" fill="#555555">by ohno llc</text>
 </svg>

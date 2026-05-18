@@ -1003,7 +1003,7 @@ Guidance for Claude Code working on this repo.
 
 ## Project
 
-Enclave by ohno llc — self-hosted local LLM platform, CPU-first, privacy-first. Fleet:
+Enclave — self-hosted local LLM platform, CPU-first, privacy-first. Fleet:
 Mac M4 Pro 48GB (dev) · MS-01 64GB (API) · BD790i 96GB (flagship).
 Authoritative model catalog: [MODELS.md](./MODELS.md).
 

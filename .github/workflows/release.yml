@@ -110,7 +110,7 @@ jobs:
           body: |
             ## Enclave ${{ steps.meta.outputs.version }}
 
-            Self-hosted AI inference. CPU-optimized. By ohno llc.
+            Self-hosted AI inference. CPU-optimized.
 
             ### Install (macOS app)
 
@@ -141,10 +141,6 @@ jobs:
             ### Verify the build
 
             Every release passes a macOS boot probe in CI before publish: the DMG is built, the .app is launched, and the dashboard / setup wizard / API surfaces are all confirmed serving 200s. If you see this release, those checks passed.
-
-            ### License
-
-            Commercial software. See [LICENSE](https://github.com/hankthebldr/local-ai-platform/blob/master/LICENSE). Contact ohno llc for Individual or Teams pricing.
           files: |
             dist/Enclave.dmg
           draft: false

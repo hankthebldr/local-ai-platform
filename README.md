@@ -14,12 +14,11 @@
   <a href="https://github.com/hankthebldr/local-ai-platform/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/hankthebldr/local-ai-platform/ci.yml?branch=master&labelColor=1a1a2e&color=00C0E8&style=flat&label=ci" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS%2012%2B-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="macOS">
   <img src="https://img.shields.io/badge/Linux-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="Linux">
-  <img src="https://img.shields.io/badge/license-Source--Available%20%C2%B7%20Evaluation-1a1a2e?style=flat&labelColor=1a1a2e&color=888888" alt="License">
 </p>
 
 ---
 
-Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero cloud dependencies. Source-available for evaluation and security review; a production license is on the roadmap.
+Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero cloud dependencies.
 
 ## What it does
 
@@ -168,20 +167,8 @@ Every master merge re-publishes a freshly smoke-tested DMG to the [`nightly`](ht
 | MS-01 (Ryzen 9 7945HX) | 64GB | API serving | 34B @ 12 tok/s |
 | BD790i (Ryzen 9 7945HX) | 96GB | Research | 70B @ 5 tok/s |
 
-## Licensing
-
-Enclave is source-available proprietary software by [ohno llc](https://github.com/hankthebldr). The current license permits source review and personal non-production evaluation; production and commercial use require a license that has not yet been published.
-
-A commercial production license is on the roadmap. To register interest and be notified when it's available, open a thread on [Discussions](https://github.com/hankthebldr/local-ai-platform/discussions).
-
-See [LICENSE](LICENSE) for the full terms.
-
 ## Documentation
 
 - [MODELS.md](MODELS.md) — model registry and selection
 - [CLAUDE.md](CLAUDE.md) — developer guide
 - [docs/](docs/) — architecture, deployment, and API reference
-
----
-
-<sub>by ohno llc</sub>

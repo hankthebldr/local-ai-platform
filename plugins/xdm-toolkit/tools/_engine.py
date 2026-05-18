@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: ohno llc
-# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 analyseCode — main engine entry that mirrors `server/data/rules-engine.ts`
 analyseCode (lines 4266-4475).
