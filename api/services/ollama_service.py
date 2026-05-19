@@ -25,7 +25,17 @@ from ..exceptions import (
 load_dotenv()
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "300"))
+# 300 s was the original default, sized for GPU inference. On the
+# CPU-only target hardware in this codebase (Mac M4 Pro / MS-01 / BD790i
+# without dedicated GPU), prefilling a multi-thousand-token grounded
+# prompt against a 1.5B-3B model can run well past 300 s on the first
+# token. Bumped to 900 s (15 min) so long-context steps don't get cut
+# off mid-prefill — which is what produced 26 failed runs of
+# xsiam-detection-engineering against this stack: every one died on
+# the enrich_context step at the 300 s wall, having never produced a
+# completion token. Operators on faster hardware can shrink via the
+# REQUEST_TIMEOUT env var.
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "900"))
 
 # Regex to strip <think>...</think> blocks from reasoning models
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
