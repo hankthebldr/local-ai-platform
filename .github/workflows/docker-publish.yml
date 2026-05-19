@@ -4,9 +4,16 @@ name: Docker Publish
 # and on every master merge (as :latest). Manual dispatch supports a custom
 # tag for hotfix builds.
 #
-# Required repository secrets:
-#   DOCKERHUB_USERNAME  — typically 'hankthebldrr'
-#   DOCKERHUB_TOKEN     — Docker Hub access token (https://hub.docker.com/settings/security)
+# Required repository configuration:
+#   DOCKERHUB_USERNAME  — repository VARIABLE (vars.*); not sensitive.
+#                         Convention: keep account names + non-secret config
+#                         in variables, not secrets. Set at:
+#                         Settings → Secrets and variables → Actions → Variables
+#                         If you accidentally put it in Secrets instead, the
+#                         step below also falls back to secrets.DOCKERHUB_USERNAME
+#                         so either configuration works.
+#   DOCKERHUB_TOKEN     — repository SECRET. Docker Hub access token from
+#                         https://hub.docker.com/settings/security
 #
 # Note the registry repo name: "local-ai-platfrom" (typo) is canonical;
 # the operator created it that way and renaming would orphan published tags.
@@ -70,7 +77,11 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # Prefer the variable (`vars.*`) — that's where the operator
+          # configured DOCKERHUB_USERNAME (non-sensitive account name).
+          # Falls back to `secrets.*` so either setup works without
+          # editing the workflow. Password is always from secrets.
+          username: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build + push
