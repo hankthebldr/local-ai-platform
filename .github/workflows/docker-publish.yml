@@ -1,0 +1,111 @@
+name: Docker Publish
+
+# Publishes hankthebldrr/local-ai-platfrom to Docker Hub on every tag push
+# and on every master merge (as :latest). Manual dispatch supports a custom
+# tag for hotfix builds.
+#
+# Required repository secrets:
+#   DOCKERHUB_USERNAME  — typically 'hankthebldrr'
+#   DOCKERHUB_TOKEN     — Docker Hub access token (https://hub.docker.com/settings/security)
+#
+# Note the registry repo name: "local-ai-platfrom" (typo) is canonical;
+# the operator created it that way and renaming would orphan published tags.
+
+on:
+  push:
+    branches: [master]
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Custom tag to publish (e.g. 1.1.2-rc1). Leave empty for auto."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build + push image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # for `git describe` if we want a SHA-stamped tag
+
+      - name: Determine tags
+        id: meta
+        # User-controllable input (workflow_dispatch.tag) routed through
+        # env: to avoid script-injection — anything matching shell meta-
+        # characters in the input would otherwise execute inside `run:`.
+        # Format validation: must be alphanumeric + dot + dash + underscore.
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" && -n "${INPUT_TAG}" ]]; then
+              # Validate the input — refuse anything outside the safe set.
+              if [[ ! "${INPUT_TAG}" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+                  echo "::error::Tag '${INPUT_TAG}' contains unsafe characters. Allowed: [a-zA-Z0-9._-]"
+                  exit 1
+              fi
+              echo "tags=hankthebldrr/local-ai-platfrom:${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+              echo "kind=manual" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+              version="${GITHUB_REF#refs/tags/v}"
+              echo "tags=hankthebldrr/local-ai-platfrom:${version},hankthebldrr/local-ai-platfrom:latest" >> "$GITHUB_OUTPUT"
+              echo "kind=tag" >> "$GITHUB_OUTPUT"
+          else
+              short_sha="$(git rev-parse --short HEAD)"
+              echo "tags=hankthebldrr/local-ai-platfrom:master-${short_sha},hankthebldrr/local-ai-platfrom:latest" >> "$GITHUB_OUTPUT"
+              echo "kind=master" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build + push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Verify image is pullable
+        env:
+          ALL_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          # Pick the first tag from the comma-list and verify it's resolvable.
+          first_tag="${ALL_TAGS%%,*}"
+          docker buildx imagetools inspect "${first_tag}" | head -10
+
+      - name: Trivy vulnerability scan (non-blocking)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: hankthebldrr/local-ai-platfrom:latest
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"   # don't fail the publish — surface in logs
+
+      - name: Notify (master push)
+        if: steps.meta.outputs.kind == 'master'
+        run: |
+          echo "::notice::Published rolling 'latest' image. Pin to master-<sha> for immutable references."
+
+      - name: Notify (tag push)
+        if: steps.meta.outputs.kind == 'tag'
+        run: |
+          echo "::notice::Published versioned image. Production should pin to this tag, not :latest."
