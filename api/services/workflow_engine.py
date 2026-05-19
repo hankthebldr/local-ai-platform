@@ -55,6 +55,10 @@ class WorkflowEngine:
         )
         # Hook bus default is built per-step in _build_step_bus()
         self._project_root = project_root
+        self._cancel_set: set = set()
+        try:
+            n = self._reap_orphan_runs()
+            if n:
                 logger.info(
                     "Reaped %s orphan workflow run(s) marked running from prior boot.",
                     n,

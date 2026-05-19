@@ -44,7 +44,21 @@ services:
       - API_KEY=${API_KEY:-}
       - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-60}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-300}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-900}
+      # LLM serialization — on CPU-only hardware, two models competing
+      # for the same prefill bandwidth deliver worse total throughput than
+      # serial execution. Default 1 enforces strict serialization. Raise
+      # for GPU deployments where parallel decode is actually faster.
+      - MAX_CONCURRENT_LLM=${MAX_CONCURRENT_LLM:-1}
+      # How long Ollama keeps a loaded GGUF in RAM after its last request.
+      # Adjacent workflow steps using the same model reuse the loaded
+      # weights instead of paying the 30-90s unload+reload tax.
+      # Go duration string: "10m", "24h", "0" (evict immediately), "-1" (never).
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
+      # TTL (seconds) for the model-list cache in ModelResolver.
+      # A 10-step workflow previously made 10 /api/tags round-trips; with
+      # a 30s TTL it makes one. Lower if models are pulled mid-run.
+      - MODEL_LIST_TTL=${MODEL_LIST_TTL:-30}
       - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:8080","http://localhost:3000"]}
     volumes:
       # All API state lives under /app/data. Persisting the whole dir

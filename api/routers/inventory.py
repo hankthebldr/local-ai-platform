@@ -76,7 +76,9 @@ def detect_hardware() -> dict:
         if platform.system() == "Darwin":
             result = subprocess.run(
                 ["sysctl", "-n", "machdep.cpu.brand_string"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             cpu_brand = result.stdout.strip()
         else:
@@ -97,7 +99,12 @@ def detect_hardware() -> dict:
         profile_key = "bd790i"
     elif "13900h" in cpu_lower or ("i9" in cpu_lower and total_ram <= 64):
         profile_key = "ms01"
-    elif "apple" in cpu_lower or "m4" in cpu_lower or "m3" in cpu_lower or "m2" in cpu_lower:
+    elif (
+        "apple" in cpu_lower
+        or "m4" in cpu_lower
+        or "m3" in cpu_lower
+        or "m2" in cpu_lower
+    ):
         profile_key = "mac-m4"
     else:
         profile_key = "auto"
@@ -122,6 +129,7 @@ def detect_hardware() -> dict:
 
 # ── Model Registry (imported from models/download.py) ─────────────────────
 
+
 def _get_registry() -> dict:
     """Import MODEL_REGISTRY from models/download.py at call time."""
     import sys
@@ -133,6 +141,7 @@ def _get_registry() -> dict:
         sys.path.insert(0, str(project_root))
 
     from models.download import MODEL_REGISTRY
+
     return MODEL_REGISTRY
 
 
@@ -179,6 +188,7 @@ def _get_installed_name(ollama_name: str, installed: dict) -> Optional[str]:
 
 
 # ── Model Scoring ──────────────────────────────────────────────────────────
+
 
 def _parse_context_k(ctx_str: str) -> int:
     """Parse context string like '128K', '256K', '32K' to integer thousands."""
@@ -266,6 +276,12 @@ async def system_info():
             "count": psutil.cpu_count(),
             "count_physical": psutil.cpu_count(logical=False),
         },
+        "ollama_config": {
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "10m"),
+            "max_concurrent_llm": int(os.getenv("MAX_CONCURRENT_LLM", "1")),
+            "model_list_ttl": float(os.getenv("MODEL_LIST_TTL", "30")),
+            "request_timeout": int(os.getenv("REQUEST_TIMEOUT", "900")),
+        },
     }
 
 
@@ -326,21 +342,25 @@ async def catalog(tag: Optional[str] = None):
     # Also include installed models NOT in registry
     registry_ollama_names = {info.get("ollama", "") for info in registry.values()}
     for name, details in installed.items():
-        if not any(name.startswith(reg) or reg in name for reg in registry_ollama_names if reg):
-            models.append({
-                "id": name,
-                "name": name,
-                "ollama": name,
-                "size": f"{details.get('size_gb', 0):.1f}GB",
-                "size_gb": details.get("size_gb", 0),
-                "speed": "—",
-                "context": "—",
-                "description": "Installed (not in catalog)",
-                "tags": ["extra"],
-                "installed": True,
-                "installed_info": details,
-                "fits_ram": True,
-            })
+        if not any(
+            name.startswith(reg) or reg in name for reg in registry_ollama_names if reg
+        ):
+            models.append(
+                {
+                    "id": name,
+                    "name": name,
+                    "ollama": name,
+                    "size": f"{details.get('size_gb', 0):.1f}GB",
+                    "size_gb": details.get("size_gb", 0),
+                    "speed": "—",
+                    "context": "—",
+                    "description": "Installed (not in catalog)",
+                    "tags": ["extra"],
+                    "installed": True,
+                    "installed_info": details,
+                    "fits_ram": True,
+                }
+            )
 
     # Sort by score descending (abliterated + large context first)
     models.sort(key=lambda m: m.get("score", 0), reverse=True)
@@ -390,7 +410,13 @@ async def pull_model(req: PullRequest, background_tasks: BackgroundTasks):
     if model in _pull_jobs and _pull_jobs[model].get("status") == "pulling":
         return {"status": "already_pulling", "model": model}
 
-    _pull_jobs[model] = {"status": "pulling", "progress": 0, "total": 0, "completed": False, "error": None}
+    _pull_jobs[model] = {
+        "status": "pulling",
+        "progress": 0,
+        "total": 0,
+        "completed": False,
+        "error": None,
+    }
 
     def _do_pull():
         try:
@@ -404,6 +430,7 @@ async def pull_model(req: PullRequest, background_tasks: BackgroundTasks):
             for line in resp.iter_lines():
                 if line:
                     import json
+
                     data = json.loads(line)
                     _pull_jobs[model]["progress"] = data.get("completed", 0)
                     _pull_jobs[model]["total"] = data.get("total", 0)
@@ -464,16 +491,18 @@ async def memory_usage():
         data = resp.json()
         running = []
         for model in data.get("models", []):
-            running.append({
-                "name": model.get("name", ""),
-                "size_bytes": model.get("size", 0),
-                "size_gb": round(model.get("size", 0) / (1024**3), 2),
-                "size_vram_bytes": model.get("size_vram", 0),
-                "size_vram_gb": round(model.get("size_vram", 0) / (1024**3), 2),
-                "digest": model.get("digest", "")[:12],
-                "expires_at": model.get("expires_at", ""),
-                "details": model.get("details", {}),
-            })
+            running.append(
+                {
+                    "name": model.get("name", ""),
+                    "size_bytes": model.get("size", 0),
+                    "size_gb": round(model.get("size", 0) / (1024**3), 2),
+                    "size_vram_bytes": model.get("size_vram", 0),
+                    "size_vram_gb": round(model.get("size_vram", 0) / (1024**3), 2),
+                    "digest": model.get("digest", "")[:12],
+                    "expires_at": model.get("expires_at", ""),
+                    "details": model.get("details", {}),
+                }
+            )
 
         mem = psutil.virtual_memory()
         return {
@@ -541,7 +570,10 @@ async def discover_refresh(background_tasks: BackgroundTasks):
         get_cached_or_discover(max_model_ram_gb=max_ram, force=True)
 
     background_tasks.add_task(_run_discovery)
-    return {"status": "refreshing", "message": "Discovery running in background. Poll /discover for results."}
+    return {
+        "status": "refreshing",
+        "message": "Discovery running in background. Poll /discover for results.",
+    }
 
 
 # ── Search Settings Endpoints ──────────────────────────────────────────────
@@ -558,7 +590,9 @@ class SearchSettingsRequest(BaseModel):
     brave_api_key: Optional[str] = Field(None, description="Brave Search API key")
     search_timeout: Optional[int] = Field(None, description="Search timeout in seconds")
     max_results: Optional[int] = Field(None, description="Max search results per query")
-    default_backend: Optional[str] = Field(None, description="Preferred backend: auto, duckduckgo, searxng, brave")
+    default_backend: Optional[str] = Field(
+        None, description="Preferred backend: auto, duckduckgo, searxng, brave"
+    )
 
 
 @router.post("/settings/search")
@@ -568,14 +602,26 @@ async def update_settings_search(req: SearchSettingsRequest):
 
     # Merge: only update fields that were explicitly provided
     updated = {
-        "searxng_url": req.searxng_url if req.searxng_url is not None else current.get("searxng_url", ""),
-        "brave_api_key": req.brave_api_key if req.brave_api_key is not None else current.get("brave_api_key", ""),
-        "search_timeout": req.search_timeout if req.search_timeout is not None else current.get("search_timeout", 10),
-        "max_results": req.max_results if req.max_results is not None else current.get("max_results", 5),
-        "default_backend": req.default_backend if req.default_backend is not None else current.get("default_backend", "auto"),
+        "searxng_url": req.searxng_url
+        if req.searxng_url is not None
+        else current.get("searxng_url", ""),
+        "brave_api_key": req.brave_api_key
+        if req.brave_api_key is not None
+        else current.get("brave_api_key", ""),
+        "search_timeout": req.search_timeout
+        if req.search_timeout is not None
+        else current.get("search_timeout", 10),
+        "max_results": req.max_results
+        if req.max_results is not None
+        else current.get("max_results", 5),
+        "default_backend": req.default_backend
+        if req.default_backend is not None
+        else current.get("default_backend", "auto"),
     }
 
     save_search_config(updated)
-    logger.info(f"Search settings updated: backend={updated['default_backend']}, searxng={'set' if updated['searxng_url'] else 'unset'}, brave={'set' if updated['brave_api_key'] else 'unset'}")
+    logger.info(
+        f"Search settings updated: backend={updated['default_backend']}, searxng={'set' if updated['searxng_url'] else 'unset'}, brave={'set' if updated['brave_api_key'] else 'unset'}"
+    )
 
     return {"status": "saved", "config": get_search_config()}
