@@ -29,7 +29,6 @@ from .ollama_service import OllamaService
 from .hook_bus import HookBus
 from .prompt_composer import PromptComposer
 
-
 # Default data directory for workflow run persistence
 DATA_DIR = os.getenv("WORKFLOW_DATA_DIR", "./data/workflows")
 
@@ -187,7 +186,6 @@ class WorkflowEngine:
         # Cross-worker channel: a sibling worker may have written
         # status="canceled" to the run.json checkpoint.
         try:
-            from pathlib import Path
 
             cp = self._project_root / "data" / "workflows" / run_id / "run.json"
             if cp.exists():
@@ -401,7 +399,23 @@ class WorkflowEngine:
         """
         Run the given step list, mutating `workflow_run` in place.
         Checkpoints to disk after every step.
+
+        Tracks the previous step's resolved model so we can log when a
+        model swap happens — adjacent steps on the same model reuse
+        Ollama's loaded weights (via OLLAMA_KEEP_ALIVE), but a swap
+        costs an unload + reload (30-90s for 34B+ GGUFs). Surfacing
+        this lets operators reorder steps to group same-model work.
         """
+        # Resume-aware: prefer the model used by the last completed
+        # step so a mid-workflow restart doesn't spuriously log a swap.
+        previous_model: Optional[str] = next(
+            (
+                r.model_used
+                for r in reversed(workflow_run.step_results)
+                if r.status == "completed" and r.model_used
+            ),
+            None,
+        )
         for step in steps:
             # Cooperative cancel point — checked at every step boundary.
             # In-flight LLM calls always complete, which keeps the engine
@@ -442,6 +456,22 @@ class WorkflowEngine:
                 self._checkpoint(workflow_run)
                 logger.error(f"Workflow failed at step '{step.id}': {e}")
                 return
+
+            # Resource-tradeoff visibility: a model swap between adjacent
+            # steps forces Ollama to unload the previous GGUF and prefill
+            # the next one. On CPU that's 10s for a 7B and 30-90s for a
+            # 34B+. Same-model adjacent steps reuse the loaded weights
+            # for free (thanks to OLLAMA_KEEP_ALIVE). Log only on swap
+            # so the noise stays meaningful.
+            if previous_model and previous_model != resolved_model:
+                logger.info(
+                    "Step '%s' triggers model swap: '%s' → '%s' "
+                    "(expect unload+reload cost; group same-model steps to amortize).",
+                    step.id,
+                    previous_model,
+                    resolved_model,
+                )
+            previous_model = resolved_model
 
             step_bus = self._build_step_bus(step)
             step_executor = StepExecutor(

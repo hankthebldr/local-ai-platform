@@ -17,6 +17,7 @@ from typing import Any
 @dataclass
 class ComposedPrompt:
     """A prompt ready to send to an Ollama model."""
+
     system: str
     user: str
     params: dict[str, Any] = field(default_factory=dict)
@@ -48,6 +49,10 @@ class PromptComposer:
             trim_blocks=False,
             lstrip_blocks=False,
         )
+        # Cache of role_ref → role text. Roles are small markdown files
+        # that don't change mid-process; re-reading them on every step
+        # was wasted disk I/O (10-step workflows hit the same role 10x).
+        self._role_cache: dict[str, str] = {}
 
     def compose(
         self,
@@ -67,7 +72,9 @@ class PromptComposer:
         if few_shot_example:
             few_shot_rendered = {
                 "input": few_shot_example.get("input", ""),
-                "output_json": _json.dumps(few_shot_example.get("output", {}), indent=2),
+                "output_json": _json.dumps(
+                    few_shot_example.get("output", {}), indent=2
+                ),
             }
 
         template = self._env.get_template(template_name)
@@ -85,16 +92,19 @@ class PromptComposer:
 
     def _load_role(self, ref: str | None, inline: str | None) -> str:
         if ref:
+            cached = self._role_cache.get(ref)
+            if cached is not None:
+                return cached
             roles_root = self.roles_dir.resolve()
             path = (self.roles_dir / f"{ref}.md").resolve()
             # Containment check: reject role_ref values that escape roles_dir
             try:
                 path.relative_to(roles_root)
             except ValueError:
-                raise ValueError(
-                    f"role_ref '{ref}' resolves outside roles directory"
-                )
-            return path.read_text(encoding="utf-8")
+                raise ValueError(f"role_ref '{ref}' resolves outside roles directory")
+            text = path.read_text(encoding="utf-8")
+            self._role_cache[ref] = text
+            return text
         if inline:
             return inline
         raise ValueError("PromptComposer.compose requires role_ref or role_inline")
@@ -105,7 +115,9 @@ class PromptComposer:
         lines = ["## Inputs\n"]
         for key, value in inputs.items():
             if isinstance(value, (dict, list)):
-                lines.append(f"### {key}\n```json\n{_json.dumps(value, indent=2)}\n```\n")
+                lines.append(
+                    f"### {key}\n```json\n{_json.dumps(value, indent=2)}\n```\n"
+                )
             else:
                 lines.append(f"### {key}\n{value}\n")
         lines.append("\nComplete your assigned task using the inputs above.")

@@ -5,12 +5,13 @@ Uses the existing OllamaService to query available models and resolves
 role-based references (reasoning, fast, coding, etc.) to concrete model names.
 """
 
+import os
+import time
 from typing import Dict, List, Optional
 
 from ..logging_config import logger
 from ..exceptions import ModelResolutionError, ModelNotFoundError
 from .ollama_service import OllamaService
-
 
 # ── Role → Model Mapping ──────────────────────────────────────────────────
 # Models are matched by substring in their name. Order = preference (first match wins).
@@ -25,11 +26,39 @@ ROLE_PATTERNS: Dict[str, List[str]] = {
 }
 
 
+# Per-process cache TTL for ollama.list_models(). Each workflow step
+# previously paid one /api/tags round-trip for resolve() — a 10-step
+# DAG that all run inside a few seconds was making 10 identical
+# requests. 30 s is short enough that a freshly-pulled model becomes
+# resolvable within half a minute without restarting the engine.
+_LIST_MODELS_TTL = float(os.getenv("MODEL_LIST_TTL", "30"))
+
+
 class ModelResolver:
     """Resolves model references (explicit or role-based) to concrete model names"""
 
     def __init__(self, ollama_service: OllamaService):
         self.ollama = ollama_service
+        self._models_cache: Optional[List[Dict]] = None
+        self._models_cache_ts: float = 0.0
+
+    def _list_models_cached(self) -> List[Dict]:
+        """Return ollama.list_models() with a short TTL cache."""
+        now = time.monotonic()
+        if (
+            self._models_cache is not None
+            and (now - self._models_cache_ts) < _LIST_MODELS_TTL
+        ):
+            return self._models_cache
+        models = self.ollama.list_models()
+        self._models_cache = models
+        self._models_cache_ts = now
+        return models
+
+    def invalidate_cache(self) -> None:
+        """Drop the cached model list (e.g. after a pull/delete)."""
+        self._models_cache = None
+        self._models_cache_ts = 0.0
 
     def resolve(
         self,
@@ -67,7 +96,7 @@ class ModelResolver:
 
     def _resolve_explicit(self, model: str) -> str:
         """Validate an explicit model name exists in Ollama"""
-        available = self.ollama.list_models()
+        available = self._list_models_cached()
         names = [m["name"] for m in available]
 
         if model in names:
@@ -83,7 +112,7 @@ class ModelResolver:
 
     def _resolve_role(self, role: str) -> str:
         """Resolve a role to the best available model"""
-        available = self.ollama.list_models()
+        available = self._list_models_cached()
 
         if not available:
             raise ModelResolutionError(role)

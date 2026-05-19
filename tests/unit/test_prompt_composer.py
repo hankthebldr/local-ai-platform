@@ -1,8 +1,6 @@
 import pytest
 from api.services.prompt_composer import ComposedPrompt
 
-import json
-from pathlib import Path
 from api.services.prompt_composer import PromptComposer
 
 
@@ -79,7 +77,10 @@ def test_composer_raises_on_missing_role_ref(composer):
         composer.compose(
             role_ref="does_not_exist",
             role_inline=None,
-            context="", task="", constraints=[], output_schema={},
+            context="",
+            task="",
+            constraints=[],
+            output_schema={},
         )
 
 
@@ -88,7 +89,10 @@ def test_composer_raises_when_both_role_ref_and_inline_missing(composer):
         composer.compose(
             role_ref=None,
             role_inline=None,
-            context="", task="", constraints=[], output_schema={},
+            context="",
+            task="",
+            constraints=[],
+            output_schema={},
         )
 
 
@@ -111,7 +115,9 @@ def test_composer_builds_user_message_from_inputs(composer):
     prompt = composer.compose(
         role_ref="test_role",
         role_inline=None,
-        context="", task="t", constraints=[],
+        context="",
+        task="t",
+        constraints=[],
         output_schema={},
         resolved_inputs={"source_files": ["models/user.py"], "constraints": "pg"},
     )
@@ -126,7 +132,9 @@ def test_composer_user_message_default_when_no_inputs(composer):
     prompt = composer.compose(
         role_ref="test_role",
         role_inline=None,
-        context="", task="t", constraints=[],
+        context="",
+        task="t",
+        constraints=[],
         output_schema={},
     )
     assert prompt.user.strip() != ""
@@ -141,6 +149,35 @@ def test_composer_rejects_role_ref_path_traversal(composer, tmp_path):
         composer.compose(
             role_ref="../evil",
             role_inline=None,
-            context="", task="t", constraints=[],
+            context="",
+            task="t",
+            constraints=[],
             output_schema={},
         )
+
+
+def test_composer_caches_role_file_reads(composer, tmp_path):
+    """The same role_ref used by many steps in a workflow should read
+    from disk only once. Workflow engines that wire one PromptComposer
+    per process amortize across every step on every run."""
+    # First compose populates the cache
+    composer.compose(
+        role_ref="test_role",
+        role_inline=None,
+        context="",
+        task="t",
+        constraints=[],
+        output_schema={},
+    )
+    # Mutate the on-disk role; cached value should still be served
+    (composer.roles_dir / "test_role.md").write_text("CHANGED")
+    p = composer.compose(
+        role_ref="test_role",
+        role_inline=None,
+        context="",
+        task="t",
+        constraints=[],
+        output_schema={},
+    )
+    assert "CHANGED" not in p.system
+    assert "test role" in p.system.lower()

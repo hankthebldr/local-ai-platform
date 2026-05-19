@@ -9,6 +9,7 @@ Uses /api/generate for raw text completions
 import os
 import re
 import json
+import threading
 from typing import Dict, List, AsyncGenerator
 
 import requests
@@ -36,6 +37,25 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 # completion token. Operators on faster hardware can shrink via the
 # REQUEST_TIMEOUT env var.
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "900"))
+
+# Default keep_alive: tell Ollama to hold the model in RAM for this long
+# after a request. Adjacent workflow steps that use the same model skip
+# the reload cost (30-90s for 34B-70B GGUFs). Set to "0" to evict
+# immediately, or "-1" for indefinite. Format: Go duration string.
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "10m")
+
+# Hard cap on concurrent LLM invocations against this Ollama daemon.
+# On CPU-only hardware, two models sharing the same cores deliver
+# *worse* total throughput than running serially — they fight for the
+# same prefill bandwidth and L2 cache. Default 1 enforces strict
+# serialization. Raise only if Ollama is fronting a GPU box where
+# parallel decode is actually faster.
+MAX_CONCURRENT_LLM = max(1, int(os.getenv("MAX_CONCURRENT_LLM", "1")))
+
+# Process-wide semaphore around every LLM call. Built once at import
+# time; all OllamaService instances share it because what matters is
+# the Ollama daemon's RAM/CPU, not the Python object identity.
+_LLM_SEMAPHORE = threading.BoundedSemaphore(MAX_CONCURRENT_LLM)
 
 # Regex to strip <think>...</think> blocks from reasoning models
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
@@ -109,6 +129,7 @@ class OllamaService:
         temperature: float = 0.7,
         max_tokens: int = 2048,
         tools: List[Dict] = None,
+        keep_alive: str = None,
     ) -> Dict:
         """
         Chat completion using Ollama's native /api/chat endpoint.
@@ -116,11 +137,16 @@ class OllamaService:
         Falls back to /api/generate with manual prompt formatting if /api/chat
         returns empty content (happens with models that lack chat templates,
         e.g. some uncensored/thinking models).
+
+        Serialized via _LLM_SEMAPHORE — concurrent callers (multiple
+        workflow runs, parallel chat requests) queue up rather than
+        loading a second model into RAM alongside the first.
         """
         request_data = {
             "model": model,
             "messages": messages,
             "stream": False,
+            "keep_alive": keep_alive if keep_alive is not None else OLLAMA_KEEP_ALIVE,
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
@@ -133,6 +159,12 @@ class OllamaService:
             f"Chat request: model={model}, messages={len(messages)}, temp={temperature}"
         )
 
+        with _LLM_SEMAPHORE:
+            return self._chat_inner(
+                model, request_data, messages, temperature, max_tokens
+            )
+
+    def _chat_inner(self, model, request_data, messages, temperature, max_tokens):
         try:
             response = requests.post(
                 f"{self.host}/api/chat",
@@ -154,12 +186,20 @@ class OllamaService:
                     f"Chat returned empty for {model}, falling back to /api/generate"
                 )
                 prompt = _format_chat_prompt(messages)
-                gen_result = self.generate(
-                    model=model,
-                    prompt=prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
+                # Call the inner path — we already hold _LLM_SEMAPHORE
+                # from chat(); going through generate() would attempt a
+                # second acquire and deadlock when MAX_CONCURRENT_LLM=1.
+                gen_request = {
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "keep_alive": request_data.get("keep_alive", OLLAMA_KEEP_ALIVE),
+                    "options": {
+                        "temperature": temperature,
+                        "num_predict": max_tokens,
+                    },
+                }
+                gen_result = self._generate_inner(model, gen_request)
                 content = gen_result.get("response", "")
                 result["prompt_eval_count"] = gen_result.get("prompt_eval_count", 0)
                 result["eval_count"] = gen_result.get("eval_count", 0)
@@ -219,15 +259,21 @@ class OllamaService:
         messages: List[Dict],
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        keep_alive: str = None,
     ) -> AsyncGenerator[str, None]:
         """
         Streaming chat completion using Ollama's /api/chat endpoint.
         Filters out <think> blocks from streaming output.
+
+        Holds _LLM_SEMAPHORE for the entire stream duration — the model
+        stays in use until the last token is emitted, so we mustn't let
+        a second model load alongside it.
         """
         request_data = {
             "model": model,
             "messages": messages,
             "stream": True,
+            "keep_alive": keep_alive if keep_alive is not None else OLLAMA_KEEP_ALIVE,
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
@@ -236,6 +282,7 @@ class OllamaService:
 
         logger.info(f"Chat stream: model={model}, messages={len(messages)}")
 
+        _LLM_SEMAPHORE.acquire()
         try:
             response = requests.post(
                 f"{self.host}/api/chat",
@@ -305,6 +352,8 @@ class OllamaService:
         except Exception as e:
             logger.error(f"Chat stream failed: {e}")
             raise GenerationError(str(e))
+        finally:
+            _LLM_SEMAPHORE.release()
 
     # ── Text Completions (uses /api/generate) ──────────────────────────
 
@@ -314,12 +363,21 @@ class OllamaService:
         prompt: str,
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        keep_alive: str = None,
     ) -> Dict:
-        """Generate a raw text completion using Ollama /api/generate"""
+        """Generate a raw text completion using Ollama /api/generate.
+
+        Serialized via _LLM_SEMAPHORE (see chat() for rationale). Note
+        the fallback path in _chat_inner reaches here while it already
+        holds the lock — BoundedSemaphore with MAX_CONCURRENT_LLM=1
+        would deadlock, so callers from _chat_inner pass through
+        _generate_inner directly to avoid double-acquire.
+        """
         request_data = {
             "model": model,
             "prompt": prompt,
             "stream": False,
+            "keep_alive": keep_alive if keep_alive is not None else OLLAMA_KEEP_ALIVE,
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
@@ -328,6 +386,10 @@ class OllamaService:
 
         logger.info(f"Generate request: model={model}, temp={temperature}")
 
+        with _LLM_SEMAPHORE:
+            return self._generate_inner(model, request_data)
+
+    def _generate_inner(self, model, request_data):
         try:
             response = requests.post(
                 f"{self.host}/api/generate",
@@ -362,12 +424,18 @@ class OllamaService:
         prompt: str,
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        keep_alive: str = None,
     ) -> AsyncGenerator[str, None]:
-        """Streaming text completion using Ollama /api/generate"""
+        """Streaming text completion using Ollama /api/generate.
+
+        Holds _LLM_SEMAPHORE for the full stream duration; see chat_stream
+        for the reasoning.
+        """
         request_data = {
             "model": model,
             "prompt": prompt,
             "stream": True,
+            "keep_alive": keep_alive if keep_alive is not None else OLLAMA_KEEP_ALIVE,
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
@@ -376,6 +444,7 @@ class OllamaService:
 
         logger.info(f"Generate stream: model={model}")
 
+        _LLM_SEMAPHORE.acquire()
         try:
             response = requests.post(
                 f"{self.host}/api/generate",
@@ -415,6 +484,8 @@ class OllamaService:
         except Exception as e:
             logger.error(f"Generate stream failed: {e}")
             raise GenerationError(str(e))
+        finally:
+            _LLM_SEMAPHORE.release()
 
     # ── Utilities ──────────────────────────────────────────────────────
 
