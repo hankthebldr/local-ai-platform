@@ -9,8 +9,7 @@ Stages (in execution order):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal, Protocol, runtime_checkable
-
+from typing import Any, Literal, Protocol, runtime_checkable
 
 Stage = Literal[
     "before_workflow",
@@ -27,18 +26,20 @@ Action = Literal["continue", "retry", "fail", "skip"]
 @dataclass
 class HookContext:
     """Mutable context passed to every hook invocation."""
-    workflow: Any = None                  # WorkflowRun, forward-ref to avoid import cycle
-    step: Any = None                      # AgentStep | None at workflow stage
-    prompt: Any = None                    # ComposedPrompt | None, mutable at transform_prompt
-    output: str | None = None             # raw model output, set after model call
-    parsed: Any = None                    # set after successful validation
-    error: Any = None                     # ValidationError | None, set at on_failure
+
+    workflow: Any = None  # WorkflowRun, forward-ref to avoid import cycle
+    step: Any = None  # AgentStep | None at workflow stage
+    prompt: Any = None  # ComposedPrompt | None, mutable at transform_prompt
+    output: str | None = None  # raw model output, set after model call
+    parsed: Any = None  # set after successful validation
+    error: Any = None  # ValidationError | None, set at on_failure
     attempt: int = 0
 
 
 @dataclass
 class HookResult:
     """Hook return value. `action` drives dispatcher behavior."""
+
     action: Action = "continue"
     mutations: dict = field(default_factory=dict)
     feedback: str | None = None
@@ -47,16 +48,22 @@ class HookResult:
 @runtime_checkable
 class Hook(Protocol):
     """Any callable with `name` and `stage` attributes matching this signature."""
+
     name: str
     stage: Stage
+
     def __call__(self, ctx: HookContext) -> HookResult: ...
 
 
 # ── HookBus ────────────────────────────────────────────────────────────────
 
 _VALID_STAGES = {
-    "before_workflow", "before_step", "transform_prompt",
-    "after_step", "validate_output", "on_failure",
+    "before_workflow",
+    "before_step",
+    "transform_prompt",
+    "after_step",
+    "validate_output",
+    "on_failure",
 }
 
 
@@ -88,7 +95,13 @@ class HookBus:
     def dispatch(self, stage: Stage, ctx: HookContext) -> list[HookResult]:
         if stage not in _VALID_STAGES:
             raise ValueError(f"invalid stage: {stage!r}")
-        ordered = sorted(self._hooks[stage], key=lambda t: (t[0], t[1]))
+        # Fast path: 4-of-6 stages are typically empty on a given step
+        # (e.g. before_workflow only fires on workflow start). Skip the
+        # sort + tuple unpacking when nothing is registered.
+        hooks_for_stage = self._hooks[stage]
+        if not hooks_for_stage:
+            return []
+        ordered = sorted(hooks_for_stage, key=lambda t: (t[0], t[1]))
         results: list[HookResult] = []
         for _priority, _order, hook in ordered:
             result = hook(ctx)
@@ -155,6 +168,8 @@ def _extend_HookBus_discovery():
         # Clear what we just registered so a second bus doesn't double-register
         del _PENDING_HOOKS[before:]
         return len(newly_added)
+
     HookBus.discover_and_register = discover_and_register
+
 
 _extend_HookBus_discovery()

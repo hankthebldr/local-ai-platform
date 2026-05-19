@@ -1,4 +1,5 @@
 """Tests for ModelResolver — role-based and explicit model resolution"""
+
 import pytest
 from unittest.mock import MagicMock
 from api.services.model_resolver import ModelResolver
@@ -60,3 +61,24 @@ class TestModelResolver:
         ]
         result = self.resolver.resolve(default_role="general")
         assert result is not None
+
+    def test_list_models_is_cached_within_ttl(self):
+        """Repeated resolve() calls hit list_models() exactly once
+        within the TTL window — a 10-step workflow shouldn't pay 10
+        round-trips to /api/tags for the same inventory."""
+        self.ollama.list_models.return_value = [
+            {"name": "dolphin3:8b", "size": 5000000000},
+        ]
+        self.resolver.resolve(role="general")
+        self.resolver.resolve(role="general")
+        self.resolver.resolve(role="general")
+        assert self.ollama.list_models.call_count == 1
+
+    def test_invalidate_cache_forces_refetch(self):
+        self.ollama.list_models.return_value = [
+            {"name": "dolphin3:8b", "size": 5000000000},
+        ]
+        self.resolver.resolve(role="general")
+        self.resolver.invalidate_cache()
+        self.resolver.resolve(role="general")
+        assert self.ollama.list_models.call_count == 2
