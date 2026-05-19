@@ -1126,6 +1126,22 @@ body {
   position: relative;
 }
 
+/* Text-selection — override the macOS / browser default. Without
+   this rule the highlight defaults to the OS system accent (red /
+   graphite on some macOS configs, bright orange on others), which
+   the operator described as "very obnoxious". Brand the highlight
+   with the Cortex cyan at low opacity so it reads as a soft tint,
+   not a saturated blast. Light theme gets a matching variant so the
+   contrast stays legible against the bg-deep surface. */
+::selection {
+  background: rgba(0, 220, 240, 0.22);
+  color: var(--text);
+}
+:root[data-theme="light"] ::selection {
+  background: rgba(0, 180, 216, 0.28);
+  color: var(--text);
+}
+
 /* ── AMBIENT BACKGROUND ─────────────────────────────────────────── */
 /* Two stacked fixed layers: a fine 32px grid (the Cortex "engineered
    canvas" feel) and a soft green/blue radial undertone in opposite
@@ -7903,9 +7919,24 @@ async function sendMessage() {
     if (d.error) {
       messages.innerHTML += `<div class="msg system-msg" style="color:var(--red)">${d.error.message || d.error.detail || 'Unknown error'}</div>`;
     } else {
-      const content = d.choices?.[0]?.message?.content || '(empty response)';
+      // /v1/chat/completions returns {choices:[{message:{content}}], usage};
+      // /api/agents/{id}/chat returns {content, model, usage, model_fallback}.
+      // The composer chat hits either endpoint depending on whether
+      // window._chatAgent is set — read whichever shape applies so a
+      // real agent reply isn't rendered as literal "(empty response)".
+      const agentShape = (typeof d.content === 'string');
+      const content = agentShape
+        ? d.content
+        : (d.choices?.[0]?.message?.content || '(empty response)');
       const sources = d.sources || [];
       const usage = d.usage || {};
+      // Surface the agent's model_fallback warning (pinned model not
+      // installed, ran on resolved alternative) so the operator sees
+      // it in the composer chat just like in the agents-tab panel.
+      if (agentShape && d.model_fallback) {
+        const fb = d.model_fallback;
+        messages.innerHTML += `<div class="msg system-msg" style="background:rgba(255,200,0,0.05);border-left-color:var(--amber)"><strong>⚠ Model fallback:</strong> Pinned <code>${esc(fb.requested || '?')}</code> not installed — using <code>${esc(fb.resolved || d.model || '?')}</code>.</div>`;
+      }
 
       chatHistory.push({ role: 'assistant', content });
       chatMetadata.push({
@@ -11411,6 +11442,52 @@ function dfInitEditor() {
     // (Existing flow elsewhere in the file handles this; left intact.)
   });
 }
+
+// Click-to-add fallback for the workbench agent cards. HTML5 drag-and-
+// drop is finicky across browser zoom + macOS trackpad gestures; in
+// the live demo the operator reported drag-from-side-panel-to-canvas
+// silently dropping events. This handler spawns the agent at the
+// visible-center of the canvas, scrolled-into-view, so a single click
+// is always reliable. dfInitEditor + the existing dfAddNodeFromAgent
+// path are reused — no parallel implementation.
+async function composerAddAgentAtCenter(agentId) {
+  // Make sure the composer canvas exists. If the operator clicked the
+  // card while on a different tab, switch over first so the canvas
+  // mounts (idempotent if already there).
+  if (typeof switchTab === 'function' && document.getElementById('tab-dashboard') &&
+      !document.getElementById('tab-dashboard').classList.contains('active')) {
+    switchTab('dashboard');
+  }
+  if (typeof ComposerView !== 'undefined' && ComposerView && ComposerView.init) {
+    try { ComposerView.init(); } catch (_) {}
+  } else if (typeof dfInitEditor === 'function') {
+    try { dfInitEditor(); } catch (_) {}
+  }
+  if (typeof dfEditor === 'undefined' || !dfEditor) {
+    if (window.Toast) Toast.warn('Canvas not ready', 'Try again in a moment', { ttl: 1800 });
+    return;
+  }
+  // Find the canvas's visible center in precanvas coordinates so the
+  // node lands where the operator is looking. Account for any zoom +
+  // pan the operator has applied so the spawn is predictable.
+  const canvas = document.getElementById('drawflow-canvas');
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const precanvas = dfEditor.precanvas || canvas;
+  const pre = precanvas.getBoundingClientRect();
+  const zoom = (typeof dfEditor.zoom === 'number') ? dfEditor.zoom : 1;
+  // Center of the visible canvas region, in precanvas coords.
+  const visibleCx = rect.left + rect.width / 2;
+  const visibleCy = rect.top + rect.height / 2;
+  const canvasX = (visibleCx - pre.left) / zoom;
+  const canvasY = (visibleCy - pre.top) / zoom;
+  // Apply a tiny offset so multiple successive clicks don't stack
+  // exactly on top of each other.
+  const jitter = (Math.random() - 0.5) * 60;
+  await dfAddNodeFromAgent(agentId, canvasX + jitter, canvasY + jitter);
+  if (window.Toast) Toast.info('Added agent', agentId, { ttl: 1400 });
+}
+window.composerAddAgentAtCenter = composerAddAgentAtCenter;
 
 async function dfAddNodeFromAgent(agentId, x, y) {
   // Fetch agent definition; spawn an AgentStep clone.
@@ -15683,9 +15760,16 @@ function renderAgentsWorkbench(agents) {
     const role = a.role || 'general';
     // Subtitle: prefer a one-line function summary; fall back to role.
     const subtitle = (a.description || '').split('\n')[0].trim().slice(0, 70);
+    // Click-to-add fallback: HTML5 drag is finicky across zoom states
+    // + macOS gestures; a plain click on the card spawns the agent at
+    // the center of the canvas. Drag still works when it works; click
+    // is the always-reliable path. The dblclick prevents an accidental
+    // double-spawn on rapid clicks.
     return `<div class="workbench-item agent-card" draggable="true"
        ondragstart="event.dataTransfer.setData('application/df-agent', '${esc(a.id)}')"
-       title="Drag onto the canvas to spawn a step from this agent">
+       onclick="composerAddAgentAtCenter('${esc(a.id)}')"
+       ondblclick="event.preventDefault();event.stopPropagation()"
+       title="Click to add (or drag onto the canvas)">
       <div class="agent-card-head">
         <span class="agent-card-icon tone-${esc(tone)}" data-persona="${esc(persona)}">${icon}</span>
         <div class="agent-card-titleblock">
