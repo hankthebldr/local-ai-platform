@@ -4070,25 +4070,29 @@ textarea.composer-desc-area {
   flex-direction: column; gap: 6px;
   color: var(--text-muted); pointer-events: none;
 }
-/* Workflow-progress chip — was centered at the top of the runs DAG
-   canvas (left:50% / translateX), which conflicted with selecting +
-   reviewing the first-rank node(s) directly underneath it. Moved to
-   the top-RIGHT corner so it stays out of the LR DAG flow path while
-   still being easy to glance at. Reduced padding + font-size so it
-   doesn't crowd the zoom controls (which sit bottom-right). */
+/* Workflow-progress chip — lives in the .runs-tab-detail-head panel
+   header now (above the DAG canvas), inline-flex next to the run-
+   management buttons. Previous attempts placed it ABSOLUTELY inside
+   .runs-tab-graph (first top-center, then top-right) which guaranteed
+   overlap with whatever DAG node landed under it — a 10-node mesh
+   like xsiam-normalization-pipeline easily has last-rank nodes at
+   the right edge. Inline header placement removes the entire overlap
+   class of bug. */
 .runs-tab-progress-chip {
-  position: absolute; top: 10px; right: 12px;
   display: inline-flex; align-items: center; gap: 8px;
   background: rgba(6, 10, 16, 0.92);
   border: 1px solid var(--cyan-dim); border-radius: 999px;
   padding: 5px 12px 5px 7px;
   font-family: var(--mono); font-size: 0.62rem; color: var(--text);
-  /* Sit above the canvas without absorbing clicks on the nodes
-     underneath when the chip's translucent shoulder overlaps them. */
-  pointer-events: none;
+  /* Sit on the same baseline as the management buttons so the header
+     reads as one toolbar, not two stacked elements. */
+  flex-shrink: 0;
 }
-.runs-tab-progress-chip > * { pointer-events: auto; }
 .runs-tab-progress-chip[hidden] { display: none; }
+/* Header is a flex row; allow wrap so the chip drops below the
+   action-row on narrow viewports instead of pushing the title
+   off-screen. */
+.runs-tab-detail-head { flex-wrap: wrap; }
 .runs-tab-steps {
   max-height: 36vh; overflow-y: auto; padding: 10px 12px;
 }
@@ -6277,6 +6281,18 @@ textarea.composer-desc-area {
                     onclick="RunsTab.toggleBottomDrawer()" hidden
                     title="Open the bottom detail drawer for this run">⌃ Detail</button>
           </div>
+          <!-- Progress chip lives in the header now, not over the
+               canvas — same visual treatment (spinner + current step
+               name + count + bar), but inline, so it can never sit
+               on top of a DAG node. Hidden by default; RunsTab fills
+               it in via the existing IDs (#runs-tab-spinner / -current
+               / -chip-count / -bar). -->
+          <div class="runs-tab-progress-chip" id="runs-tab-progress-chip" hidden>
+            <span class="df-run-progress-spinner" id="runs-tab-spinner"></span>
+            <span class="df-run-progress-current" id="runs-tab-current">—</span>
+            <span class="df-run-progress-count" id="runs-tab-chip-count">0/0</span>
+            <span class="df-run-progress-bar"><span class="df-run-progress-bar-fill" id="runs-tab-bar" style="width:0%"></span></span>
+          </div>
         </div>
 
         <div class="runs-tab-floor">
@@ -6302,12 +6318,12 @@ textarea.composer-desc-area {
               <div class="composer-canvas-empty-title">Workflow Progress</div>
               <div class="composer-canvas-empty-sub">Select a run on the left to see its DAG with live status overlays.</div>
             </div>
-            <div class="runs-tab-progress-chip" id="runs-tab-progress-chip" hidden>
-              <span class="df-run-progress-spinner" id="runs-tab-spinner"></span>
-              <span class="df-run-progress-current" id="runs-tab-current">—</span>
-              <span class="df-run-progress-count" id="runs-tab-chip-count">0/0</span>
-              <span class="df-run-progress-bar"><span class="df-run-progress-bar-fill" id="runs-tab-bar" style="width:0%"></span></span>
-            </div>
+            <!-- Progress chip was previously positioned ABSOLUTELY here
+                 (inside .runs-tab-graph), so any DAG node that landed
+                 under its corner got hidden behind the chip. Moved to
+                 .runs-tab-detail-head above the canvas (see the chip
+                 right after .runs-tab-actions) — it's now an inline
+                 toolbar element and cannot overlap a node. -->
           </div>
           <!-- Step output strip + context trace. The runs-tab-steps
                pane lists every step result (expandable to show error,
