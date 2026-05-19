@@ -48,10 +48,26 @@ services:
       # local-dev default (10/sec average, well above human-driven traffic).
       - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-600}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-300}
+      # Bumped 300→900s in #79 — covers CPU-only inference of long
+      # grounded prompts. GPU deployments can drop to 120-180s.
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-900}
+      # LLM serialization — on CPU-only hardware, two models competing
+      # for the same prefill bandwidth deliver worse total throughput than
+      # serial execution. Default 1 enforces strict serialization. Raise
+      # for GPU deployments where parallel decode is actually faster.
+      - MAX_CONCURRENT_LLM=${MAX_CONCURRENT_LLM:-1}
+      # How long Ollama keeps a loaded GGUF in RAM after its last request.
+      # Adjacent workflow steps using the same model reuse the loaded
+      # weights instead of paying the 30-90s unload+reload tax.
+      # Go duration string: "10m", "24h", "0" (evict immediately), "-1" (never).
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
+      # TTL (seconds) for the model-list cache in ModelResolver.
+      # A 10-step workflow previously made 10 /api/tags round-trips; with
+      # a 30s TTL it makes one. Lower if models are pulled mid-run.
+      - MODEL_LIST_TTL=${MODEL_LIST_TTL:-30}
       # CORS_ORIGINS — by default we don't allow any cross-origin browser
       # since the Enclave SPA is same-origin with the API. The legacy
-      # entries for :8080 (Open WebUI, now opt-in) and :3000 (vite/Next
+      # entries for :8081 (Open WebUI, now opt-in) and :3000 (vite/Next
       # dev) are kept for operators who turn either back on. Set to ["*"]
       # for permissive local dev, or a list of explicit origins for prod.
       - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:8081","http://localhost:3000"]}

@@ -363,6 +363,12 @@ async def system_info():
             "model": _host_gpu(),
             "present": bool(_host_gpu()),
         },
+        "ollama_config": {
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "10m"),
+            "max_concurrent_llm": int(os.getenv("MAX_CONCURRENT_LLM", "1")),
+            "model_list_ttl": float(os.getenv("MODEL_LIST_TTL", "30")),
+            "request_timeout": int(os.getenv("REQUEST_TIMEOUT", "900")),
+        },
     }
 
 
