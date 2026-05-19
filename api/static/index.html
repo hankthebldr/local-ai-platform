@@ -4070,14 +4070,24 @@ textarea.composer-desc-area {
   flex-direction: column; gap: 6px;
   color: var(--text-muted); pointer-events: none;
 }
+/* Workflow-progress chip — was centered at the top of the runs DAG
+   canvas (left:50% / translateX), which conflicted with selecting +
+   reviewing the first-rank node(s) directly underneath it. Moved to
+   the top-RIGHT corner so it stays out of the LR DAG flow path while
+   still being easy to glance at. Reduced padding + font-size so it
+   doesn't crowd the zoom controls (which sit bottom-right). */
 .runs-tab-progress-chip {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: 10px;
+  position: absolute; top: 10px; right: 12px;
+  display: inline-flex; align-items: center; gap: 8px;
   background: rgba(6, 10, 16, 0.92);
   border: 1px solid var(--cyan-dim); border-radius: 999px;
-  padding: 6px 14px 6px 8px;
-  font-family: var(--mono); font-size: 0.66rem; color: var(--text);
+  padding: 5px 12px 5px 7px;
+  font-family: var(--mono); font-size: 0.62rem; color: var(--text);
+  /* Sit above the canvas without absorbing clicks on the nodes
+     underneath when the chip's translucent shoulder overlaps them. */
+  pointer-events: none;
 }
+.runs-tab-progress-chip > * { pointer-events: auto; }
 .runs-tab-progress-chip[hidden] { display: none; }
 .runs-tab-steps {
   max-height: 36vh; overflow-y: auto; padding: 10px 12px;
