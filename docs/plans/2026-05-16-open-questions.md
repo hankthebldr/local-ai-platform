@@ -3,126 +3,167 @@
 **Date:** 2026-05-16
 **Reads from:** all 12 docs in the `2026-05-16-*` series
 
-Every open question and pending decision across today's planning workspace, in
-one place. Grouped by who needs to answer and whether it blocks sprint 1
-kickoff. Recommendations pinned where I had one.
+Every open decision across today's planning workspace, framed as a real
+question with concrete answer choices. My recommendation is shown but is
+separable from the question — you can pick any option.
 
-## Blocks sprint 1 kickoff (decide first)
+How to read each row:
+- **Q**: the question
+- **Options**: the actual choices you can pick from
+- **Rec**: my recommendation (if any) and one-line reason
+- **Default**: what gets shipped if you say nothing
 
-| # | Question | Source | Recommendation |
-|---|----------|--------|----------------|
-| **B1** | Team shape: 1.5 backend + 1 frontend + 0.5 design/PM? If lower, drop B4 (Enclave Code context modules) to 1.3. | implementation-plan §8 | Confirm or revise; everything else assumes this |
-| **B2** | Eval gate for Enclave Code release: ≥30% pass@1 full / ≥15% Preview? | implementation-plan §8 | These match Aider's published numbers on similar models. Confirm or loosen. |
-| **B3** | License posture for Enclave Code (and platform more broadly): source-available like the rest, or gated behind eval license? | enclave-code-spec, implementation-plan §8 | Source-available for consistency unless commercial strategy demands gating |
-| **B4** | "Enclave Code" naming — keep, or differentiate from "Claude Code"? | enclave-code-spec, implementation-plan §8 | Keep "Enclave Code"; mirroring Claude Code is intentional and helps positioning |
-| **B5** | Default coder model: `qwen2.5-coder:32b` confirmed? | enclave-code-spec | Yes, with `deepseek-coder-v2:16b` as the fallback if eval shows tool-call reliability issues |
-| **B6** | Three-step DAG (plan/edit/verify) vs single-agent loop as the M1 default? | enclave-code-spec | Three-step. Justified in the spec by context size + model heterogeneity. |
-| **B7** | Worktree-per-session vs in-place editing with stash? | enclave-code-spec | Worktree. Already pinned in the decision log; flagged here so it's not silently undone. |
+---
 
-**Time to close all 7: ~15-minute conversation.** Most have firm
-recommendations. The genuinely open ones are B1 (resourcing reality), B2 (eval
-bar appetite), B3 (license).
+## Blocks sprint 1 kickoff
 
-## Strategic / positioning (1.2+ scope)
+| # | Question | Options |
+|---|----------|---------|
+| **B1** | How many engineering FTEs work this roadmap, and what's the backend / frontend split? | (free text — answer in FTEs) |
+|   | **Rec:** 1.5 BE + 1 FE + 0.5 design/PM. **Default if unanswered:** 1 BE + 1 FE; B4 (Enclave Code context modules) drops to 1.3. |
+| **B2** | What SWE-bench Lite pass@1 is the minimum bar for Enclave Code 1.2.0 GA (vs. shipping as Preview)? | A) 15%   B) 20%   C) 25%   D) 30%   E) other (specify) |
+|   | **Rec:** C (25%) — Aider's published numbers on similar models are 20–30%. **Default:** D (30%); ship as Preview if missed. |
+| **B3** | What license does Enclave Code ship under? | A) Same source-available as the rest of the platform   B) Gated eval license   C) A different OSS license (specify) |
+|   | **Rec:** A — consistency with the rest of the platform. **Default:** A. |
+| **B4** | What is the user-facing name? | A) Enclave Code   B) enclave dev   C) enclave do   D) enclave work   E) other (specify) |
+|   | **Rec:** A — mirroring "Claude Code" helps positioning. **Default:** A. |
+| **B5** | Which model is the default for `--role coding`? | A) `qwen2.5-coder:32b`   B) `deepseek-coder-v2:16b`   C) other (specify) |
+|   | **Rec:** A; fall back to B during sprint 5 eval if tool-call validity <80%. **Default:** A. |
+| **B6** | Default M1 execution mode? | A) Three-step plan/edit/verify DAG   B) Single agent loop with the full toolset |
+|   | **Rec:** A — smaller per-step context + model heterogeneity. **Default:** A. |
+| **B7** | How does Enclave Code isolate edits from the user's checkout? | A) Worktree per session on `enclave/<id>` branch   B) In-place edits behind a `git stash` boundary |
+|   | **Rec:** A — reviewable via `git log enclave/<id> ^main`, never touches the user's branch. **Default:** A. |
 
-| # | Question | Source | Recommendation |
-|---|----------|--------|----------------|
-| **S1** | Who is the 1.0 user actually? We have no telemetry by design. | brainstorm | Add a one-time, opt-in survey banner to the dashboard before committing to a 1.3 direction. Or interview ~10 known users. |
-| **S2** | Business model: venture-backed product / sustainable indie OSS / hardware appliance play (sell the BD790i pre-loaded)? | brainstorm | Affects which brainstorm direction (#2 vertical packs vs #3 Teams vs #6 prosumer) becomes the 1.3 strategic bet. Worth a real conversation before sprint 4. |
-| **S3** | "Personal Knowledge" pack as the 1.3 commit (Apple Notes + Email + Calendar + bookmarks, one-toggle bundle)? | adjacent | Strong yes — frames Enclave as "your personal data stays personal," sharpens vs. Apple Intelligence and Microsoft Copilot. |
-| **S4** | MCP-host posture: should Enclave publish its *own* MCP server so Claude Desktop, Cursor, etc. can use our skills/RAG? | adjacent | Slot at 1.3 with one new router. Strategic upside (distribution); doesn't conflict with the "Enclave is the agent" pitch because both can be true. |
-| **S5** | Where Apple Intelligence sits in our marketing positioning? | adjacent | Address directly by 1.3. We win on privacy (always local vs. Apple's hybrid) and capability breadth. Marketing copy needs a direct comparison. |
-| **S6** | Release marketing weight for 1.2: coordinated launch (blog + demo video + HN) or quiet ship? | implementation-plan §8 | Affects sprint 6 day allocation. My read: quiet ship 1.1.0 + 1.1.1, coordinated launch for 1.2.0 when Enclave Code is the headline. |
-| **S7** | Air-gap mode as default in some project templates (e.g., a "Hospital" template that disables all network MCPs)? | adjacent | Worth checking with any healthcare-adjacent design partners — defer until 1.3 unless one materializes |
+**Time to close all 7: ~15 minutes.** B1, B2, B3 are genuinely open; B4–B7
+have firm recommendations and are sanity checks.
 
-## Technical implementation (recommendations pending sign-off)
+---
 
-These are open but have firm recommendations. Sign off to close.
+## Strategic — affects 1.3+ positioning
 
-| # | Question | Source | Recommendation |
-|---|----------|--------|----------------|
-| **T1** | Approval UX in Enclave Code CLI — should `code-default` auto-accept read/search/git-status and only prompt on writes? | enclave-code-spec | Yes. Per-call confirmation on read tools is annoying; the actual risk is writes. |
-| **T2** | Long-context strategy for the coder when context > 32k: proactive summarization or rely on the model? | enclave-code-spec | Proactive summarize, with a flag to disable. Local models degrade with long context worse than frontier models. |
-| **T3** | Streaming model output during tool calls (currently `ToolExecutor` consumes synchronously)? | enclave-code-spec | M2 work. Streams the *user-visible* response when it's the final turn; tool-call inner loop stays synchronous to keep the engine simple. |
-| **T4** | Expose `code.*` tools via MCP so non-Enclave clients (Claude Desktop, Cursor) can use them? | enclave-code-spec | Strong yes for distribution, but defer to v2 — inverts the "Enclave is the agent" pitch in v1 and complicates the security model. Pair with S4. |
-| **T5** | Workflow sub-runs nesting in provenance — if workflow A triggers workflow B, B's edges currently point at B's response_id. | provenance-decisions | M2. Add `parent_response_id` parameter when running as a sub-workflow. Verify `workflow_engine.py` first to know if compose-mode even exists. |
-| **T6** | Resolver registry shape — `source_id` → `{label, link, preview}` as a dict in the router, or methods on each service? | provenance-decisions | Dict in the router. Services stay unaware of provenance; the router owns the read path. |
-| **T7** | DMG signing for 1.2 — sign/notarize or continue `xattr` workaround? | implementation-plan §8 | Sign/notarize for 1.2.0 GA. The `xattr` workaround is a 1.0 papercut that's lived too long. |
-| **T8** | Voice model eval for 1.3 — which Whisper variants + Piper voices are credible CPU-only? | adjacent | Run a 1-day eval pass before 1.3 scoping. Whisper base.en + Piper amy-medium are the starting candidates. |
+| # | Question | Options |
+|---|----------|---------|
+| **S1** | How do we discover who the 1.0 user is before committing to a 1.3 direction? | A) Opt-in dashboard survey banner in 1.1.1   B) Interview ~10 known users   C) Skip — commit to a 1.3 direction on instinct   D) Defer the 1.3 commit until we have known users to interview |
+|   | **Rec:** A. Cheap (1 day), zero-telemetry, sample bias acknowledged. **Default:** D. |
+| **S2** | What is the intended business model going into 1.3? | A) Sustainable indie OSS (sponsorships + support contracts)   B) Venture-backed SaaS + self-hosted   C) Hardware appliance (sell pre-loaded BD790i / MS-01)   D) Vertical packs as paid add-ons (direction #2)   E) Undecided / multiple |
+|   | **Rec:** none — this is your call. The pick determines which brainstorm direction we invest in for 1.3. **Default:** E (defer); 1.2 ships independent of this. |
+| **S3** | Commit to building the Personal Knowledge pack (Apple Notes + Email/IMAP + Calendar + browser bookmarks) for 1.3? | A) Yes — commit now   B) Yes — but only if S1 confirms a knowledge-worker user base   C) No — defer to 1.4+   D) No — never build it |
+|   | **Rec:** B. The bet is strong if confirmed, premature otherwise. **Default:** C. |
+| **S4** | Publish our own MCP server in 1.3 so Claude Desktop / Cursor / etc. can consume Enclave skills + RAG? | A) Yes, in 1.3   B) Yes, in 1.4   C) No |
+|   | **Rec:** A — small (one router), big distribution upside, doesn't conflict with our agent pitch. **Default:** B. |
+| **S5** | Add explicit Apple Intelligence comparison to marketing copy by 1.3 GA? | A) Yes — direct comparison table on the website   B) Yes — implicit positioning only ("always local, your data stays here")   C) No — ignore Apple Intelligence |
+|   | **Rec:** B. Direct comparisons age fast and invite Apple's lawyers. **Default:** B. |
+| **S6** | How loud is the 1.2.0 GA launch? | A) Coordinated: blog post + demo video + HN post + social   B) Medium: blog post only   C) Quiet ship: release notes + nightly graduation |
+|   | **Rec:** A for 1.2.0 (Enclave Code is the headline); B for 1.1.0 + 1.1.1. **Default:** B. |
+| **S7** | Ship a "Hospital" project template (air-gap by default, all network MCPs disabled) in 1.3? | A) Yes — speculative   B) Only if a healthcare design partner materializes   C) No |
+|   | **Rec:** B. **Default:** B. |
 
-## UX decisions (visual / interaction)
+---
 
-| # | Question | Source | Recommendation |
-|---|----------|--------|----------------|
-| **U1** | Integrate as admin modal (1.1.0) or top-level tab (1.2.0)? | ui-flows §20 | Modal first; promote to tab in 1.2.0 if engagement warrants. Cheaper to ship and A/B-able. |
-| **U2** | Skills surface: right rail in Skill Lab (recommended) or dedicated Skills tab? | ui-flows §20 | Right rail. Contextual to research/skill-authoring; cheaper; doesn't crowd the tab bar. |
-| **U3** | Conversation sidebar default state on first visit — open or collapsed? | ui-flows §20 | Collapsed by default with a click-to-expand chevron. New users shouldn't be confronted with empty history. |
-| **U4** | Cost comparison default — GPT-4 hardcoded or user-pickable from day 1? | ui-flows §20 | GPT-4 hardcoded in 1.2; user-pickable (GPT-4o / Claude Sonnet / off) in 1.2.x. Privacy panel toggle ships day 1. |
-| **U5** | Active project in the breadcrumb's middle crumb across all tabs, vs. only inside the Composer's project bar? | ui-flows §20 | Promote to breadcrumb. Surfaces the active context everywhere, not just in Composer. |
-| **U6** | `enclave doctor` as admin menu item only, or also a status pip in the global header (red dot = critical issue)? | ui-flows §20 | Both. Admin menu item stays for "I want to look at this now"; header pip raises visibility for the cases where the user needs to know. |
+## Technical — engineering implementation
 
-## Settled — tracking only
+| # | Question | Options |
+|---|----------|---------|
+| **T1** | In `code-default` profile, which tools require per-call approval? | A) Writes + bash only (`code.write`, `code.apply_patch`, `code.bash`)   B) All tools including reads   C) Configurable per tool, no default |
+|   | **Rec:** A. Reads/searches don't carry write risk. **Default:** A. |
+| **T2** | When the coder's conversation exceeds 32k tokens, what happens? | A) Proactive summarization, with a disable flag   B) Pass-through to the model up to its context limit   C) Hard cap at 32k; refuse longer turns |
+|   | **Rec:** A. Local models degrade on long context worse than frontier. **Default:** A. |
+| **T3** | Stream the user-visible response in Enclave Code? | A) M1 (1.2)   B) M2 (1.3+) |
+|   | **Rec:** B — refactor touches the `ToolExecutor` inner loop; not blocking. **Default:** B. |
+| **T4** | Expose `code.*` tools via MCP so non-Enclave clients can use them? | A) Yes in 1.2   B) Yes in 1.3 (pair with S4)   C) Never |
+|   | **Rec:** B. **Default:** B. |
+| **T5** | When a workflow runs as a sub-workflow of another, where do its provenance edges point? | A) M1: keep flat to its own response_id (current); M2 add parent_response_id   B) M1: add parent_response_id parameter to the engine   C) Never — workflows always run flat |
+|   | **Rec:** A. Verify sub-run support exists in `workflow_engine.py` first. **Default:** A. |
+| **T6** | Where does the `source_id` → `{label, link, preview}` resolver live? | A) Dict in `api/routers/provenance.py`   B) Method on each source service (`document_service`, `skills`, etc.)   C) New `ResolverService` |
+|   | **Rec:** A. Services stay unaware of provenance; router owns the read path. **Default:** A. |
+| **T7** | Will 1.2.0 ship a signed/notarized macOS DMG? | A) Yes — signed + notarized   B) Yes — signed only   C) No — continue `xattr` workaround |
+|   | **Rec:** A. 1.0 papercut that's lived too long. **Default:** A. |
+| **T8** | Run a 1-day eval pass on Whisper variants + Piper voices before 1.3 voice-mode scoping? | A) Yes — schedule for the 1.3 planning window   B) No — accept whisper.cpp base + a default Piper voice without eval   C) Skip voice mode in 1.3 entirely |
+|   | **Rec:** A. **Default:** B. |
 
-Already decided in earlier docs; listed so they don't get re-litigated.
+---
 
-| # | Decision (settled) | Source |
-|---|--------------------|--------|
+## UX — visual / interaction
+
+| # | Question | Options |
+|---|----------|---------|
+| **U1** | Where does Integrate live? | A) Admin modal in 1.1.0 → top-level tab in 1.2.0 if engagement warrants   B) Top-level tab from day 1   C) Admin modal only, never a tab |
+|   | **Rec:** A. Cheaper to ship, A/B-able. **Default:** A. |
+| **U2** | Where does the Skills surface live? | A) Right rail in Skill Lab (contextual)   B) Dedicated Skills tab in BUILD group   C) Admin Skills modal only (no first-class surface) |
+|   | **Rec:** A. Cheaper, doesn't crowd the tab bar. **Default:** A. |
+| **U3** | Default state of the conversation sidebar on first visit? | A) Collapsed, click chevron to expand   B) Open by default with prior threads visible   C) Hidden entirely until user has 2+ conversations |
+|   | **Rec:** A. New users shouldn't face empty history. **Default:** A. |
+| **U4** | Default cost-comparison model in response receipts? | A) GPT-4 hardcoded in 1.2.0; user-pickable in 1.2.x   B) User-pickable from day 1 (GPT-4 / GPT-4o / Claude Sonnet / off)   C) Off by default; opt-in via Privacy panel |
+|   | **Rec:** A. **Default:** A. |
+| **U5** | Show active project in the global breadcrumb across all tabs (not just Composer)? | A) Yes — promote to breadcrumb middle crumb   B) No — keep in Composer project bar only   C) Both — breadcrumb + Composer bar |
+|   | **Rec:** A. Surfaces active context everywhere. **Default:** B (no change). |
+| **U6** | How visible are `enclave doctor` results in the dashboard? | A) Admin menu item only   B) Admin menu item + header status pip when critical issues exist   C) Always-visible status row at top of dashboard |
+|   | **Rec:** B. Pip raises visibility only when needed. **Default:** A. |
+
+---
+
+## Decisions already settled (tracking only — don't re-litigate)
+
+| # | What | Source |
+|---|------|--------|
 | Z1 | Three permission profiles for Enclave Code: readonly / code-default / auto-accept | enclave-code-spec |
-| Z2 | Skills loaded with `triggers: ["*"]` for always-on (loader extension) | enclave-code-buildout |
-| Z3 | ProvenanceEdge stays flat (`response_id` always points to user-visible response); `parent_step_id` lives in `metadata` for future recursive views | provenance-decisions |
-| Z4 | SQLite for provenance store; JSONL export deferred to a CLI subcommand in M2 | provenance-decisions |
-| Z5 | 90-day default retention for provenance | provenance-decisions |
+| Z2 | Skills load with `triggers: ["*"]` for always-on (loader extension) | enclave-code-buildout |
+| Z3 | ProvenanceEdge stays flat — `response_id` is always the final user-visible response; `parent_step_id` lives in `metadata` | provenance-decisions |
+| Z4 | Provenance store: SQLite. JSONL export deferred to a CLI subcommand in M2 | provenance-decisions |
+| Z5 | 90-day default retention for provenance ledger | provenance-decisions |
 | Z6 | Setup wizard checkbox copy: "Show me what shaped each answer (local-only). Recommended." | provenance-decisions |
-| Z7 | Two-stage feature flag rollout for citation rail (M1.0 invisible, M1.1 dogfood flag, then default on) | provenance-decisions |
-| Z8 | Inventory shell is one component parametrized over content kind | content-lifecycle |
+| Z7 | Citation rail rollout: M1.0 invisible, M1.1 behind flag, then default on | provenance-decisions |
+| Z8 | Inventory shell: one component parametrized over content kind (extends existing `.inv-card`/`.wfi-card` pattern) | content-lifecycle |
 | Z9 | Per-project scoping rolls out additively (default global, opt into project) | content-lifecycle |
-| Z10 | Defer dashboard SPA refactor of the 9,457-line `index.html` | ux-stories, implementation-plan |
+| Z10 | Defer dashboard SPA refactor of the 9,457-line `index.html` to 1.3+ | ux-stories |
 | Z11 | Defer Teams / multi-user / mobile to 1.3+ | brainstorm |
-| Z12 | A11y for citation rail: minimal — single `aria-expanded` assertion in tests | provenance-decisions |
+| Z12 | A11y for citation rail: minimum bar — single `aria-expanded` assertion in tests | provenance-decisions |
 | Z13 | `enclave provenance export` CLI subcommand: defer to M2 | provenance-decisions |
-| Z14 | Default response_id format: OpenAI-compat `chatcmpl-...` across both dashboard chat and OpenAI-compat API | provenance-decisions |
-| Z15 | Migrations runner: 50-LOC generic helper in `api/services/migrations/runner.py`, reusable across services | provenance-decisions |
+| Z14 | Response IDs: OpenAI-compat `chatcmpl-...` across both dashboard chat and API | provenance-decisions |
+| Z15 | Migrations runner: 50-LOC generic helper, reusable across SQLite-backed services | provenance-decisions |
 
-## Operational tracking (not decisions, just things not to forget)
+---
 
-| # | Item | When it matters |
-|---|------|-----------------|
-| **O1** | Dashboard chat path audit — confirm `index.html` chat dock calls `/v1/chat/completions` and not a parallel endpoint | Sprint 1 (provenance plumbing) |
-| **O2** | Workflow YAML metadata pass — add `metadata.user_facing` + `metadata.summary` to the 3 workflows surfaced as Quick Actions | Sprint 5 |
-| **O3** | Verify Qwen adapter applies to `qwen2.5-coder:32b` (the regex `qwen` matches it today) | Sprint 3 (Enclave Code start) |
-| **O4** | DMG smoke build is failing on master — verify pre-existing and unrelated to docs-only PRs | Before sprint 6 release prep |
-| **O5** | The 88 dependabot vulnerabilities on the default branch (3 critical, 15 high) | Address as part of 1.2.0 release hygiene |
+## Operational reminders (not questions — things not to forget)
 
-## Suggested 15-minute conversation agenda
+| # | Item | When |
+|---|------|------|
+| **O1** | Audit `index.html` chat dock — confirm it calls `/v1/chat/completions` and not a parallel path | Sprint 1 |
+| **O2** | Add `metadata.user_facing` + `metadata.summary` to the 3 workflows surfaced as Quick Actions | Sprint 5 |
+| **O3** | Verify Qwen adapter regex `qwen` matches `qwen2.5-coder:32b` correctly | Sprint 3 |
+| **O4** | Investigate the pre-existing macOS DMG smoke build failure on master | Before sprint 6 release prep |
+| **O5** | Address 88 dependabot vulnerabilities on default branch (3 critical, 15 high) | 1.2.0 release hygiene |
 
-If we can get one short meeting before sprint 1 kickoff, work through these in
-order:
+---
 
-1. **B1** team shape — 1 minute. Tell me what's real, I'll adjust the plan.
-2. **B3 + B4 + S6** license + name + marketing — 4 minutes. Cluster of strategic
-   product decisions that affect copy and positioning across multiple sprints.
-3. **B2 + T7** eval bar + DMG signing — 3 minutes. Release-quality decisions.
-4. **S2** business model — 5 minutes. The biggest strategic question; affects
-   what we build in 1.3. Honestly OK if this stays "thinking about it."
-5. **U1–U6** — 2 minutes. Most have firm recommendations; confirm or veto.
+## Suggested 15-minute conversation
 
-Everything else (T1–T8, S1, S3–S5, S7) has a firm recommendation pinned and
-can move forward in the background of the conversation. Open them only if
-you disagree with the recommendation.
+Walk these in order:
 
-## Where to read more on each
+1. **B1** team shape — 1 min — drives everything else
+2. **B3 / B4 / S6** license + name + launch loudness — 4 min — strategic cluster
+3. **B2 / T7** eval bar + DMG signing — 3 min — release-quality cluster
+4. **S2** business model — 5 min — biggest strategic question; "still thinking" is a valid answer
+5. **U1–U6** UX decisions — 2 min — most are sanity checks
 
-| Doc | Key decisions it carries |
-|-----|--------------------------|
-| `2026-05-16-product-brainstorm.md` | S1, S2 + the 7 strategic directions context |
-| `2026-05-16-enclave-code-spec.md` | B3–B7, T1–T4 |
-| `2026-05-16-enclave-code-additions.md` | (model + MCP catalog choices) |
+Everything else has a firm recommendation; open them only if you disagree
+with the rec.
+
+---
+
+## Where each row comes from
+
+| Doc | Carries |
+|-----|---------|
+| `2026-05-16-product-brainstorm.md` | S1, S2 + the 7 strategic directions |
+| `2026-05-16-enclave-code-spec.md` | B3, B4, B5, B6, B7, T1, T2, T3, T4 |
+| `2026-05-16-enclave-code-additions.md` | (model + MCP catalog choices, mostly settled) |
 | `2026-05-16-enclave-code-context-skills-buildout.md` | Z2 + skill content |
-| `2026-05-16-ux-stories.md` | (UX moments framing for U1–U6) |
+| `2026-05-16-ux-stories.md` | UX moments framing (U1–U6 derive from here) |
 | `2026-05-16-content-lifecycle-review.md` | Z8, Z9 |
-| `2026-05-16-provenance-edge-spec.md` | (precursor to decisions doc) |
+| `2026-05-16-provenance-edge-spec.md` | precursor to decisions doc |
 | `2026-05-16-provenance-edge-decisions.md` | T5, T6 + Z3–Z7, Z12–Z15 |
-| `2026-05-16-roadmap-spec.md` | (consolidated scope) |
-| `2026-05-16-implementation-plan.md` | B1–B2, S6, T7 |
+| `2026-05-16-roadmap-spec.md` | consolidated scope |
+| `2026-05-16-implementation-plan.md` | B1, B2, S6, T7 |
 | `2026-05-16-ui-flows.md` | U1–U6 |
-| `2026-05-16-adjacent-capabilities.md` | S3–S5, S7, T8 |
+| `2026-05-16-adjacent-capabilities.md` | S3, S4, S5, S7, T8 |
