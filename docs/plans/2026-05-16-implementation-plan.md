@@ -1,10 +1,34 @@
 # Enclave 1.1 → 1.2 — Implementation Plan
 
-**Companion to:** `2026-05-16-roadmap-spec.md`
-**Date:** 2026-05-16
+**Companion to:** `2026-05-16-roadmap-spec.md` + `2026-05-16-ui-flows.md` (visual / flow detail) + `2026-05-16-adjacent-capabilities.md` (data sources + integrations strategy)
+**Date:** 2026-05-16 (revised after dashboard audit)
 
 How the roadmap gets built: team shape, six sprints, what ships per sprint, quality
 gates, and the risk register with owners.
+
+## 0. Current state — corrections to earlier planning
+
+A dashboard audit (post-original-plan) revealed that 1.0 ships more UI than
+the earlier docs assumed. The implementation work re-baselined:
+
+| Assumed in earlier docs | Actual in 1.0 | Implication |
+|------------------------|---------------|-------------|
+| Tabs: Dashboard, Workflows, Documents, Inventory, Research | **Composer, Runs, Context, Models, Skill Lab** (technical `data-tab` ids unchanged) | Use real tab names in user-facing copy; technical ids untouched |
+| "Projects need a UI from scratch" | **Project context bar already exists** in Composer (`index.html:2368`) — select / badge / create modal / attach / import / export | A4 narrows to "add Projects browse tab + templates + doctor + per-project scoping rollout"; do not rebuild the context bar |
+| "Skills have no surface" | **Skill Lab tab exists** (`data-tab="research"`) with deep-research UI; admin Skills modal placeholder exists | Skill Library lives as a right rail in Skill Lab (per UX flows §3), not a new tab; existing admin Skills modal gets fleshed out |
+| "Need a Settings page" | **Admin dropdown menu** with placeholder modals for API Keys, Plugins, Skills, MCP Servers, Cloud Models, Exports | All new admin-style surfaces (API key UI, Privacy, Doctor, MCP catalog) extend the existing modal pattern via `.admin-modal-card` — no new "Settings page" needed |
+| "Citation rail needs a new component library" | **Cortex design tokens fully defined** (panels, `.inv-card`, `.wfi-card`, `.tag`, status pips, scan-line accents, mono/sans typography) | Citation rail reuses these classes; no new design system work |
+| "Workflows-as-apps needs metadata work" | Workflow YAMLs use a standard shape; metadata key is open | Three workflows tagged in S5 by adding `metadata.user_facing` + `metadata.summary` |
+| "Integrate tab needs a Settings page" | Admin modal pattern is the natural home in 1.1.0 | Ship Integrate as admin modal; promote to top-level tab in 1.2.0 if engagement warrants |
+
+**Net effect on scope:** the foundation work is unchanged. The UI work is
+~30% smaller than originally estimated because we're extending shells, not
+building them. Sprint allocations stand; some sprints gain slack we can use
+for risk burn-down.
+
+**For visual specifics and click-by-click flows for every shipped feature,
+see `2026-05-16-ui-flows.md`.** This plan stays focused on sequencing,
+ownership, and acceptance.
 
 ## 1. Team shape (assumed)
 
@@ -32,17 +56,33 @@ the roadmap spec.
 
 **Ship goal:** ProvenanceEdge end-to-end with citation rail visible behind a flag.
 
-**Deliverables:**
-- [B] A1.M1.0 — data model, SQLite + migrations runner, ContextStore additions,
-  `response_id` plumbing through 6 service methods, emission sites #1 (tools)
-  and #2 (skills), `/api/provenance/response/{id}` endpoint.
-- [B] A1.M1.1 — emission site #3 (RAG), dashboard chat path audit + unification.
-- [F] A1.M1.1 (UI) — citation rail component, hooked into chat response render
-  behind `ENABLE_PROVENANCE_UI=true`.
-- [B] C3 — Ollama-not-running banner: middleware catches the error → structured
-  banner payload → frontend renders with action button.
-- [B] A5.cli — `enclave doctor` CLI subcommand (checks; no dashboard view yet).
-- [F] Resume the A2 shell scaffolding (no content kinds wired yet).
+**Deliverables (file paths explicit):**
+- [B] A1.M1.0 — `api/services/migrations/runner.py` (generic, ~50 LOC) +
+  `api/services/migrations/provenance/0001_initial.sql` +
+  `api/services/provenance_store.py` + extensions to
+  `api/services/context_store.py` (add `record_edge`) +
+  `api/models/context_models.py` (add `ProvenanceEdge` dataclass).
+  `response_id` plumbed through six service signatures: `tool_executor.py`,
+  `rag_service.py`, `plugin_service.py`, `step_executor.py`, `mcp_service.py`,
+  `memory_service.py` (default `response_id=None` to keep callers compatible).
+  Emission sites #1 (tools) and #2 (skills) live.
+- [B] A1.M1.1 — emission site #3 in `rag_service.py:search`. Dashboard chat
+  path audit: confirm `index.html` chat dock calls `/v1/chat/completions`
+  (grep for `chat/completions` and `chatcmpl`); plumb response_id minted at
+  request entry.
+- [F] A1.M1.1 (UI) — citation rail component appended to `.chat-message`
+  renderer in `index.html` (search for `appendMessage` or equivalent). Use
+  the visual spec in `2026-05-16-ui-flows.md` §2. Gated behind
+  `window.ENCLAVE_FLAGS.provenance_ui === true` (read from `/api/config/flags`).
+- [B] C3 — Ollama-not-running banner: middleware-layer health probe
+  (extend existing `/api/healthz`), new `/api/setup/start-ollama` endpoint
+  in `api/routers/setup.py`. Banner DOM in `index.html` injected per
+  `2026-05-16-ui-flows.md` §6 — `--warn`-bordered panel at top of `.main`.
+- [B] A5.cli — `cli/doctor.py` (new) with the framework specced in UX flows
+  §7. Subcommand registration in `cli/__init__.py` or wherever CLI dispatch
+  lives.
+- [F] No scaffolding required for A2 shell — existing `.inv-card` / `.wfi-card`
+  / `.admin-modal-card` patterns are the shell.
 
 **Quality gate:** provenance perf test passes (1K edges <2s, 100/100ms burst).
 Citation rail renders for 10 sample responses. Dogfood by team for 1 week.
@@ -55,16 +95,35 @@ emission sites. Inventory shell wired to real content kinds.
 **Ship goal:** 1.1.0 release-ready. Citation rail default on. New users can
 integrate Enclave with their tools in 60 seconds.
 
-**Deliverables:**
-- [B] A1.M1.2 — emission sites #4–#8 (MCP, agent_step, memory, web, auto_context),
-  resolver registry, Settings → Privacy panel.
-- [F] A1 — citation rail goes default-on; flag retained for opt-out.
-- [F] C1 — Integrate tab with copy snippets for VS Code Continue, Cursor, Aider,
-  Python (OpenAI SDK + Anthropic SDK), curl.
-- [F] C2 — API key UI: create / name / copy-once / list / rotate / revoke.
-- [F] A5.ui — `enclave doctor` dashboard panel (same checks as CLI).
-- [B] A2 — content inventory shell, parametrized over content kind; ship it
-  wired to Skills as the first real content kind.
+**Deliverables (file paths explicit):**
+- [B] A1.M1.2 — emission sites #4–#8 in `mcp_service.py:call_tool`,
+  `step_executor.py:execute_step`, `memory_service.py` callers,
+  `api/routers/graph.py` deep-dive web fetches, `code_session.py`
+  (B-track, plumbed via the same plumbing). Resolver registry in
+  `api/routers/provenance.py` — a single dict mapping `source_type` to a
+  resolver function that returns `{label, link, preview}`. Privacy panel
+  per UX flows §16 — extends admin modal pattern in `index.html`.
+- [F] A1 — `ENCLAVE_FLAGS.provenance_ui` defaults to true; permanent
+  `ENABLE_PROVENANCE` collection flag remains (privacy opt-out per
+  setup-wizard checkbox).
+- [F] C1 — Integrate as admin modal (per UX flows §4). New JS module in
+  `index.html` with five client snippet templates; wires to existing
+  `/api/inventory/system` for hostname + LAN IPs and `/api/keys` for
+  fresh-key minting. Tailscale detection via shell-out cached for the
+  session.
+- [F] C2 — Replace admin Skills-modal-style API Keys placeholder with full
+  surface per UX flows §5. Wires to existing `/api/keys/*` endpoints
+  (already CRUD-complete in `api/routers/api_keys.py`).
+- [F] A5.ui — admin menu item "Doctor" → modal per UX flows §7. Reads
+  from `GET /api/doctor/checks` (added in S1 backend); manual "Re-run"
+  button + "Copy report" for clipboard.
+- [F] A2 — no new shell required (current-state correction). Skills tab
+  work begins via Skill Lab right-rail extension per UX flows §3, but
+  that's an S3 deliverable, not S2.
+
+**Slack from removed A2 work** (~3 days) goes to: provenance perf
+hardening, dashboard chat path unification edge cases, S1 dogfood
+follow-ups.
 
 **Quality gate:** 1.1.0 release candidate cut. Internal sign-off on citation
 rail copy and Integrate tab snippets. `enclave doctor` catches every documented
@@ -74,23 +133,35 @@ rail copy and Integrate tab snippets. `enclave doctor` catches every documented
 
 ### Sprint 3 (weeks 5–6): Projects + Enclave Code start
 
-**Ship goal:** Projects exist as a first-class dashboard surface. Enclave Code's
-CLI runs `--plan-only` against a real repo.
+**Ship goal:** Projects exist as a browse surface. Enclave Code's CLI runs
+`--plan-only` against a real repo. MCP catalog ships.
 
-**Deliverables:**
-- [F] A3 — MCP catalog tab built on the A2 shell. Pre-registered MCPs from the
-  Enclave Code additions doc (git, github, sequential-thinking, context7) appear
-  disabled-by-default with one-click enable.
-- [F] A4 — Projects tab built on the A2 shell. CRUD UI. Three templates: Code
-  Review, Security Analyst (XSIAM-bundled), Knowledge Base.
-- [B] A4 — Project doctor: preflight checks (roles have models, MCPs healthy,
-  RAG indexed with project's embedding model).
-- [B] B1 — `cli/code.py` REPL scaffold + `code_session.py` worktree lifecycle.
-- [B] B2 (partial) — `code.read`, `code.search`, `code.bash` tools (the
-  read-only subset).
+**Deliverables (file paths explicit):**
+- [F] A3 — MCP catalog inside the existing admin "MCP Servers" modal per
+  UX flows §14. Two-tab modal (Catalog / Registered). Catalog data from
+  `data/mcp-catalog.json` (new file with 4 curated entries: git-mcp,
+  github-mcp, sequential-thinking, context7). Health rail via
+  `GET /api/mcp/{id}/health` (new endpoint).
+- [F] A4 — **new Projects tab** (note: the in-Composer project context bar
+  stays as-is). Tab insertion in `index.html` between Agents and Skill Lab
+  (technical id `data-tab="projects"`). Reuses existing
+  `/api/projects` CRUD endpoints. Card grid with `.inv-grid`. Skill Lab
+  right-rail "Skill Library" component per UX flows §3 also lands this
+  sprint.
+- [B] A4 — Project doctor as `GET /api/projects/{id}/doctor` reusing the
+  doctor check framework from S1. Surfaced via "Run doctor" button in the
+  project detail modal.
+- [B] A4 — Three project templates in `data/projects/templates/`:
+  `code-review.yaml`, `security-analyst.yaml`, `knowledge-base.yaml`.
+- [B] B1 — `cli/code.py` REPL scaffold + `api/services/code_session.py`
+  (worktree lifecycle, session persistence in `~/.enclave/sessions/<id>/`).
+- [B] B2 (partial) — `plugins/code/plugin.yaml` + `tools/read.py`,
+  `tools/search.py` (ripgrep wrapper), `tools/bash.py` (read-only subset
+  per the readonly profile).
 - [B] B3 (partial) — `workflows/enclave-code.yaml` with `plan` step only.
-- [B] B5 — model registry entries for `qwen2.5-coder:32b/14b`, `qwen2.5:14b`,
-  `nomic-embed-text` (sync `MODELS.md`).
+- [B] B5 — `models/download.py` MODEL_REGISTRY additions:
+  `qwen2.5-coder:32b/14b`, `qwen2.5:14b`, `nomic-embed-text`. `MODELS.md`
+  sync (the hook will remind us).
 
 **Quality gate:** `enclave code --plan-only "describe this repo"` produces a
 coherent plan against a real repo. Projects tab can create / list / archive a
