@@ -1140,7 +1140,15 @@ body {
    ~90% form fields, so the operator was still seeing the macOS red
    highlight when drag-selecting inside step config / prompt boxes.
    Explicit form-field selectors below close that gap. */
-::selection,
+/* IMPORTANT — keep ::selection and ::-moz-selection in SEPARATE rules.
+   Chrome rejects the entire comma-joined rule when it can't parse one
+   selector (it sees ::-moz-selection as invalid and throws away the
+   ::selection half too). The body-scoped rule below was disappearing
+   from the cascade silently for that reason. */
+::selection {
+  background: rgba(0, 220, 240, 0.22);
+  color: var(--text);
+}
 ::-moz-selection {
   background: rgba(0, 220, 240, 0.22);
   color: var(--text);
@@ -1154,7 +1162,10 @@ textarea::selection,
   background: rgba(0, 220, 240, 0.28);
   color: var(--text);
 }
-:root[data-theme="light"] ::selection,
+:root[data-theme="light"] ::selection {
+  background: rgba(0, 180, 216, 0.28);
+  color: var(--text);
+}
 :root[data-theme="light"] ::-moz-selection {
   background: rgba(0, 180, 216, 0.28);
   color: var(--text);
