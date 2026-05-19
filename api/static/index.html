@@ -8779,6 +8779,19 @@ async function loadMemory() {
       </div>
       <div class="metric-row"><span class="metric-key">CPU</span><span class="metric-val">${sys.cpu?.count_physical || '?'}C / ${sys.cpu?.count || '?'}T @ ${sys.cpu?.percent || 0}%</span></div>
       <div class="metric-row"><span class="metric-key">Hardware</span><span class="metric-val highlight">${sys.hardware?.name || 'Auto'}</span></div>
+      ${(() => {
+        // Surface the active Ollama perf knobs (LLM concurrency cap,
+        // model keep-alive duration, request timeout) so operators
+        // can see at a glance how the engine is tuned. Sourced from
+        // /api/inventory/system's ollama_config block.
+        const cfg = sys.ollama_config || {};
+        const concur = cfg.max_concurrent_llm ?? 1;
+        const ka = cfg.keep_alive ?? '10m';
+        const timeout = cfg.request_timeout ?? 900;
+        return `<div class="metric-row"><span class="metric-key">LLM Concurrency</span><span class="metric-val">${concur === 1 ? 'Serial (1)' : concur + ' parallel'}</span></div>
+      <div class="metric-row"><span class="metric-key">Keep-Alive</span><span class="metric-val">${esc(String(ka))}</span></div>
+      <div class="metric-row"><span class="metric-key">Request Timeout</span><span class="metric-val">${timeout}s</span></div>`;
+      })()}
     `;
 
     // Disk bar
