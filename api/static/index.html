@@ -4512,9 +4512,11 @@ async function loadMemory() {
         const concur = cfg.max_concurrent_llm ?? 1;
         const ka = cfg.keep_alive ?? '10m';
         const timeout = cfg.request_timeout ?? 900;
+        const ttl = cfg.model_list_ttl ?? 30;
         return `<div class="metric-row"><span class="metric-key">LLM Concurrency</span><span class="metric-val">${concur === 1 ? 'Serial (1)' : concur + ' parallel'}</span></div>
       <div class="metric-row"><span class="metric-key">Keep-Alive</span><span class="metric-val">${esc(String(ka))}</span></div>
-      <div class="metric-row"><span class="metric-key">Request Timeout</span><span class="metric-val">${timeout}s</span></div>`;
+      <div class="metric-row"><span class="metric-key">Request Timeout</span><span class="metric-val">${timeout}s</span></div>
+      <div class="metric-row"><span class="metric-key">Model List TTL</span><span class="metric-val">${ttl}s</span></div>`;
       })()}
     `;
 
@@ -5305,9 +5307,26 @@ function updateSeedPlaceholder(defn) {
   if (!seedEl) return;
   const ctxDesc = defn && defn.context && defn.context.description;
   if (!ctxDesc) { seedEl.placeholder = '{"key": "value"}'; return; }
-  const reqMatch = ctxDesc.match(/[Rr]equired\s+seed\s+keys?:\s*([^\n.]+)/);
-  if (!reqMatch) return;
-  const keys = reqMatch[1].split(',').map(k => k.trim().split(/\s/)[0]).filter(Boolean);
+
+  let keys = [];
+  // Inline format: "Required seed keys: vendor, product, raw_log."
+  const inlineMatch = ctxDesc.match(/[Rr]equired\s+seed\s+keys?:\s+([^\n.]+)/);
+  if (inlineMatch && inlineMatch[1].includes(',')) {
+    keys = inlineMatch[1].split(',').map(k => k.trim().split(/\s/)[0]).filter(Boolean);
+  } else {
+    // Multi-line format: "Required seed keys:\n  vendor — desc\n  product — desc"
+    const headerPos = ctxDesc.search(/[Rr]equired\s+seed\s+keys?:/);
+    if (headerPos >= 0) {
+      const afterNewline = ctxDesc.indexOf('\n', headerPos);
+      if (afterNewline >= 0) {
+        // Grab only the first paragraph (stop at blank line)
+        const paragraph = ctxDesc.slice(afterNewline + 1).split('\n\n')[0];
+        keys = [...paragraph.matchAll(/^[ \t]+([a-zA-Z_][a-zA-Z0-9_]*)/gm)].map(m => m[1]);
+      }
+    }
+  }
+
+  if (!keys.length) return;
   const skeleton = {};
   keys.forEach(k => { skeleton[k] = ''; });
   seedEl.placeholder = JSON.stringify(skeleton, null, 2);
