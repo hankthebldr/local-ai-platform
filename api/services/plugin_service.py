@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import sys
+import types
 from pathlib import Path
 from typing import Optional
 
@@ -78,15 +79,19 @@ class PluginService:
             for skill_def in manifest.get("skills", []):
                 skill_path = (child / skill_def["file"]).resolve()
                 if not str(skill_path).startswith(str(child.resolve())):
-                    logger.error(f"Path traversal blocked: {skill_def['file']} in {plugin_id}")
+                    logger.error(
+                        f"Path traversal blocked: {skill_def['file']} in {plugin_id}"
+                    )
                     continue
                 if skill_path.exists():
                     parsed = _parse_skill_md(skill_path)
-                    skills.append({
-                        "id": skill_def["id"],
-                        "triggers": skill_def.get("triggers", []),
-                        **parsed,
-                    })
+                    skills.append(
+                        {
+                            "id": skill_def["id"],
+                            "triggers": skill_def.get("triggers", []),
+                            **parsed,
+                        }
+                    )
                 else:
                     logger.warning(f"Skill file not found: {skill_path}")
 
@@ -95,20 +100,26 @@ class PluginService:
             for tool_def in manifest.get("tools", []):
                 tool_path = (child / tool_def["file"]).resolve()
                 if not str(tool_path).startswith(str(child.resolve())):
-                    logger.error(f"Path traversal blocked: {tool_def['file']} in {plugin_id}")
+                    logger.error(
+                        f"Path traversal blocked: {tool_def['file']} in {plugin_id}"
+                    )
                     continue
                 if tool_path.exists():
-                    module = self._load_tool_module(plugin_id, tool_def["id"], tool_path)
+                    module = self._load_tool_module(
+                        plugin_id, tool_def["id"], tool_path
+                    )
                     if module:
                         self._tools[(plugin_id, tool_def["id"])] = {
                             "module": module,
                             "function": tool_def.get("function", "execute"),
                         }
-                    tools.append({
-                        "id": tool_def["id"],
-                        "description": tool_def.get("description", ""),
-                        "parameters": tool_def.get("parameters", {}),
-                    })
+                    tools.append(
+                        {
+                            "id": tool_def["id"],
+                            "description": tool_def.get("description", ""),
+                            "parameters": tool_def.get("parameters", {}),
+                        }
+                    )
                 else:
                     logger.warning(f"Tool file not found: {tool_path}")
 
@@ -132,12 +143,35 @@ class PluginService:
         return found
 
     def _load_tool_module(self, plugin_id: str, tool_id: str, path: Path):
-        """Dynamically load a Python tool module."""
-        module_name = f"plugin_{plugin_id}_{tool_id}"
+        """Dynamically load a Python tool module.
+
+        Registers a synthetic package for the plugin's tools/ directory so
+        tools that use relative imports (e.g. `from ._engine import …`,
+        `from .analyse_xql import …`) resolve correctly without requiring
+        changes to the tool files themselves.
+        """
+        tools_dir = path.parent
+        # Sanitize plugin_id for use as a Python identifier (dashes → underscores)
+        safe_plugin_id = plugin_id.replace("-", "_")
+        pkg_name = f"plugin_{safe_plugin_id}_tools"
+
+        # Register the synthetic package once per plugin so relative imports
+        # anchor against it. Python resolves e.g. `from ._engine import x`
+        # by looking up pkg_name._engine via pkg.__path__.
+        if pkg_name not in sys.modules:
+            pkg = types.ModuleType(pkg_name)
+            pkg.__path__ = [str(tools_dir)]
+            pkg.__package__ = pkg_name
+            sys.modules[pkg_name] = pkg
+
+        sub_name = f"{pkg_name}.{tool_id}"
+        module_alias = f"plugin_{plugin_id}_{tool_id}"
         try:
-            spec = importlib.util.spec_from_file_location(module_name, path)
+            spec = importlib.util.spec_from_file_location(sub_name, path)
             module = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = module
+            module.__package__ = pkg_name
+            sys.modules[sub_name] = module
+            sys.modules[module_alias] = module
             spec.loader.exec_module(module)
             return module
         except Exception as e:
@@ -161,7 +195,9 @@ class PluginService:
                         break
         return matched
 
-    def call_tool(self, plugin_id: str, tool_id: str, params: dict, sandbox=None) -> dict:
+    def call_tool(
+        self, plugin_id: str, tool_id: str, params: dict, sandbox=None
+    ) -> dict:
         """Execute a tool function and return its result.
 
         If `sandbox` is provided and the tool function declares a `__sandbox`
@@ -178,7 +214,9 @@ class PluginService:
         func_name = entry["function"]
         func = getattr(entry["module"], func_name, None)
         if func is None:
-            raise ValueError(f"Function '{func_name}' not found in {plugin_id}/{tool_id}")
+            raise ValueError(
+                f"Function '{func_name}' not found in {plugin_id}/{tool_id}"
+            )
 
         # Inject __sandbox only if the tool declares it
         call_params = dict(params)
@@ -213,16 +251,18 @@ class PluginService:
                     if param_def.get("required", False):
                         required.append(param_name)
 
-                ollama_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": f"{plugin['id']}__{tool['id']}",
-                        "description": tool.get("description", ""),
-                        "parameters": {
-                            "type": "object",
-                            "properties": properties,
-                            "required": required,
+                ollama_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": f"{plugin['id']}__{tool['id']}",
+                            "description": tool.get("description", ""),
+                            "parameters": {
+                                "type": "object",
+                                "properties": properties,
+                                "required": required,
+                            },
                         },
-                    },
-                })
+                    }
+                )
         return ollama_tools

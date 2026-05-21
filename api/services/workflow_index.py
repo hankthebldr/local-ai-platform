@@ -26,6 +26,7 @@ from ..logging_config import logger
 
 KNOWN_CATEGORIES: List[str] = [
     "security",
+    "security-engineering",
     "devops",
     "data",
     "code",
