@@ -79,6 +79,9 @@ Roadmap:
 - Claude Code config plan (this file's hooks): `docs/superpowers/plans/2026-04-22-claude-code-config.md`
 - Hook library: `.claude/hooks/README.md`
 - Ollama API: https://github.com/ollama/ollama/blob/main/docs/api.md
+- **Architecture-aware orchestration (1.3.0 WIP):** design at `docs/plans/2026-05-19-architecture-aware-orchestration-design.md`; impl plan at `docs/plans/2026-05-19-architecture-aware-orchestration-implementation.md`. Introduces `Architecture` + `Deployment` abstractions, freshness-by-default eviction, sequential execution model.
+- **MCP & Skills instrumentation (1.3.0 WIP):** design at `docs/plans/2026-05-19-mcp-skills-instrumentation-design.md`; impl plan at `docs/plans/2026-05-19-mcp-skills-instrumentation-implementation.md`. Step-scoped MCP runners, archetype registry, resource-maximization compiler.
+- **Ollama version pinning:** `docs/deployment/ollama-version.md` documents the 0.23.4 baseline + upgrade procedure.
 
 ## Conventions
 
@@ -87,4 +90,6 @@ Roadmap:
 - **Uncensored-first:** dolphin-mixtral, dolphin-mistral, nous-hermes2-mixtral, yi-34b, wizardlm-uncensored, mythomax.
 - **OpenAI-compatible API:** clients switch between Ollama / vLLM / llama.cpp transparently.
 - **CORS / Auth defaults:** CORS to `["*"]` only if `CORS_ORIGINS` unset (startup warning fires); auth off by default (`ENABLE_API_AUTH=false`) — set both before non-localhost exposure.
+- **Ollama version pinned to `0.23.4`** (see `docs/deployment/ollama-version.md`). The architecture-aware orchestration code (1.3.0+) requires this floor. Detector at `api/services/architecture.py` enforces it at startup.
+- **NVIDIA introspection:** `nvidia-ml-py` is a core dependency (in `setup/requirements-core.txt`). Imports cleanly on non-NVIDIA hosts; `pynvml.nvmlInit()` raises `NVMLError("Shared Library Not Found")` which the detector catches and treats as `cpu_x86` / `apple_unified` per platform.
 - **No telemetry. No cloud. All data local.**
