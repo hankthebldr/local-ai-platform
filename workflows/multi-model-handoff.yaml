@@ -1,0 +1,168 @@
+id: multi-model-handoff
+name: "Multi-model handoff: Qwen → Qwen → Llama"
+description: |
+  Demonstrates explicit context handoff across model families:
+
+    1. extract    (qwen2.5-coder:1.5b) — extract structured facts as JSON.
+                  Code-tuned Qwen is precise at producing valid JSON.
+    2. analyze    (qwen2.5:1.5b)       — reason over the facts and produce
+                  observations + a risk view as JSON.
+    3. synthesize (llama3.2:3b)        — write the human-facing brief in
+                  Markdown, citing which model contributed what.
+
+  Each step pins an explicit `model:` so the handoff is concrete and visible
+  in `runs/<run_id>/steps/*.json`.
+
+version: "1.0"
+schema_version: 1
+
+metadata:
+  author: "Enclave demo"
+  category: "demo"
+  tags: ["demo", "multi-model", "handoff", "qwen", "llama"]
+  estimated_duration: 60
+
+defaults:
+  temperature: 0.3
+  max_tokens: 1024
+  retries: 1
+
+context:
+  description: |
+    Required seed keys:
+      text     — the input text to process (string)
+      audience — who the final brief is for (default: "technical reader")
+
+steps:
+  - id: extract
+    name: "1. Extract facts (qwen2.5-coder)"
+    model: qwen2.5-coder:1.5b
+    depends_on: []
+    temperature: 0.1
+    system_prompt: |
+      You are a precise extraction engine. Read the input text and produce
+      ONLY a JSON object with this exact shape — no prose, no markdown
+      fences:
+
+        {
+          "entities":   ["<proper noun or named system>", ...],
+          "facts":      ["<short declarative fact taken verbatim or near-verbatim>", ...],
+          "numbers":    ["<any quantity, version, percentage, or date>", ...],
+          "claims":     ["<assertion the author makes that is not a hard fact>", ...]
+        }
+
+      Rules:
+      - Be faithful to the source. Do not invent.
+      - Max 8 items per list. Prefer high-signal items.
+      - If a list is empty, return [].
+    inputs:
+      - seed.text
+    outputs:
+      - entities
+      - facts
+      - numbers
+      - claims
+    output_format: json
+
+  - id: analyze
+    name: "2. Analyze (qwen2.5)"
+    model: qwen2.5:1.5b
+    depends_on: [extract]
+    temperature: 0.4
+    system_prompt: |
+      You are an analyst. You will receive structured extraction output
+      from a prior model. Your job is to reason over it and produce
+      ONLY a JSON object:
+
+        {
+          "observations": ["<insight derived by connecting 2+ facts>", ...],
+          "tensions":     ["<contradiction, gap, or unanswered question>", ...],
+          "so_what":      "<one sentence: why this matters to the audience>"
+        }
+
+      Inputs handed off from the extractor:
+        entities: {{ extract.entities | tojson }}
+        facts:    {{ extract.facts    | tojson }}
+        numbers:  {{ extract.numbers  | tojson }}
+        claims:   {{ extract.claims   | tojson }}
+
+      Audience: {{ seed.audience }}
+
+      Rules:
+      # ─── BEGIN: Your contribution ─────────────────────────────────────
+      # GOAL: force qwen2.5:1.5b to genuinely synthesize, not re-list facts.
+      # The previous run produced observations that were verbatim copies of
+      # the extractor's facts. Soft prohibitions ("do not re-list") didn't
+      # work. Use structural constraints (citation by index, banned
+      # substrings, two-pass CoT, few-shot, self-check sentinel — pick the
+      # combination you trust). Reference facts as F1..FN if you go the
+      # citation route. Aim for 5–10 lines.
+      #
+      # Replace these comments with your rules:
+      - <rule 1>
+      - <rule 2>
+      # ─── END: Your contribution ───────────────────────────────────────
+    inputs:
+      - extract.entities
+      - extract.facts
+      - extract.numbers
+      - extract.claims
+      - seed.audience
+    outputs:
+      - observations
+      - tensions
+      - so_what
+    output_format: json
+
+  - id: synthesize
+    name: "3. Synthesize brief (llama3.2)"
+    model: llama3.2:3b
+    depends_on: [analyze]
+    temperature: 0.5
+    max_tokens: 1500
+    system_prompt: |
+      You are a writer producing a one-page brief for: {{ seed.audience }}.
+
+      You have been handed structured output from two upstream models:
+
+        From qwen2.5-coder (extraction):
+          entities: {{ extract.entities | tojson }}
+          facts:    {{ extract.facts    | tojson }}
+          numbers:  {{ extract.numbers  | tojson }}
+          claims:   {{ extract.claims   | tojson }}
+
+        From qwen2.5 (analysis):
+          observations: {{ analyze.observations | tojson }}
+          tensions:     {{ analyze.tensions     | tojson }}
+          so_what:      {{ analyze.so_what }}
+
+      Produce Markdown with this structure:
+
+        ## TL;DR
+        <one sentence, paraphrasing the so_what>
+
+        ## Key facts
+        <bullet list, max 5, drawn from the extractor>
+
+        ## What it means
+        <2–3 short paragraphs synthesizing observations + tensions>
+
+        ## Handoff trace
+        <one line per upstream model: what it contributed.
+         Format: `- **qwen2.5-coder:1.5b** — extracted N entities, M facts, K numbers`
+                 `- **qwen2.5:1.5b** — produced N observations, M tensions`
+                 `- **llama3.2:3b** — this synthesis`>
+
+      Output ONLY the Markdown brief. No preamble.
+    inputs:
+      - extract.entities
+      - extract.facts
+      - extract.numbers
+      - extract.claims
+      - analyze.observations
+      - analyze.tensions
+      - analyze.so_what
+      - seed.audience
+    outputs:
+      - brief
+    output_format: text

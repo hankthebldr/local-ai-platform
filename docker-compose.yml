@@ -11,7 +11,7 @@
 services:
   # ── Ollama — LLM Inference Engine ────────────────────────────────────
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.23.4  # pinned baseline — see docs/deployment/ollama-version.md
     container_name: local-ai-ollama
     ports:
       - "11434:11434"

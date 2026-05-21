@@ -143,7 +143,7 @@ async def lifespan(app: FastAPI):
         logger.info("=" * 64)
         logger.info("Architecture-aware orchestration:")
         logger.info(
-            "  Architecture: %s (%s, %.1f GB, %d pool%s)",
+            "  🧠 Architecture: %s (%s, %.1f GB, %d pool%s)",
             arch.name.value,
             arch.memory_model,
             arch.total_memory_gb,
@@ -151,12 +151,12 @@ async def lifespan(app: FastAPI):
             "s" if arch.pool_count != 1 else "",
         )
         logger.info(
-            "  Deployment:   %s (storage=%s)",
+            "  📦 Deployment:   %s (storage=%s)",
             deployment.mode.value,
             deployment.storage_root,
         )
         logger.info(
-            "  Ollama:       %s (reachable=%s, meets_floor=%s, floor=%s)",
+            "  🦙 Ollama:       %s (reachable=%s, meets_floor=%s, floor=%s)",
             ollama_probe.get("version") or "unreachable",
             ollama_probe.get("reachable"),
             ollama_probe.get("meets_floor"),
@@ -173,6 +173,7 @@ async def lifespan(app: FastAPI):
                 )
         logger.info("=" * 64)
 
+        # Ensure user storage exists (idempotent)
         try:
             deployment.ensure_user_storage()
         except Exception as e:

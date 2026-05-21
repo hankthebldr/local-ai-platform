@@ -92,7 +92,11 @@ class OllamaService:
     # ── Version probe (for architecture-aware orchestration) ─────────
 
     def get_version(self) -> Optional[str]:
-        """Return Ollama daemon version string, or None if unreachable."""
+        """Return Ollama daemon version string, or None if unreachable.
+
+        Used by the architecture detector at startup to enforce the
+        pinned 0.23.4 floor. Never raises — failure returns None.
+        """
         try:
             response = requests.get(f"{self.host}/api/version", timeout=5)
             response.raise_for_status()

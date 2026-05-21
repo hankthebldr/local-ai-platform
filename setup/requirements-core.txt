@@ -13,6 +13,7 @@ typer>=0.9.0
 pyyaml>=6.0.1
 tqdm>=4.66.1
 psutil>=5.9.7
+nvidia-ml-py>=12.535.0  # NVML bindings for architecture detection (replaces deprecated pynvml). Imports cleanly on non-NVIDIA hosts; nvmlInit() raises NVMLError that the detector catches.
 huggingface-hub>=0.20.2
 
 # Prompt framework (workflow engine)
