@@ -10,7 +10,7 @@ import os
 import re
 import json
 import threading
-from typing import Dict, List, AsyncGenerator
+from typing import Dict, List, AsyncGenerator, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -88,6 +88,18 @@ class OllamaService:
 
     def __init__(self, host: str = OLLAMA_HOST):
         self.host = host
+
+    # ── Version probe (for architecture-aware orchestration) ─────────
+
+    def get_version(self) -> Optional[str]:
+        """Return Ollama daemon version string, or None if unreachable."""
+        try:
+            response = requests.get(f"{self.host}/api/version", timeout=5)
+            response.raise_for_status()
+            return response.json().get("version")
+        except Exception as e:
+            logger.debug(f"Ollama version probe failed: {e}")
+            return None
 
     # ── Model Management ───────────────────────────────────────────────
 

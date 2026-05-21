@@ -6059,6 +6059,22 @@ textarea.composer-desc-area {
         <div id="mem-disk-bars"></div>
       </div>
     </div>
+    <!-- Architecture-aware orchestration card (Phase 1) -->
+    <div class="panel" id="arch-card" style="margin-bottom:12px;">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">Architecture &amp; Deployment</div>
+      <div id="arch-info" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 24px;">
+        <div class="metric-row"><span class="metric-key">Architecture</span><span id="arch-name" class="metric-val highlight">—</span></div>
+        <div class="metric-row"><span class="metric-key">Memory Model</span><span id="arch-mem-model" class="metric-val">—</span></div>
+        <div class="metric-row"><span class="metric-key">Total Memory</span><span id="arch-total-mem" class="metric-val">—</span></div>
+        <div class="metric-row"><span class="metric-key">Pools</span><span id="arch-pools" class="metric-val">—</span></div>
+        <div class="metric-row"><span class="metric-key">Bandwidth Est.</span><span id="arch-bw" class="metric-val">—</span></div>
+        <div class="metric-row"><span class="metric-key">Deployment</span><span id="arch-dep-mode" class="metric-val">—</span></div>
+        <div class="metric-row"><span class="metric-key">Effective RAM</span><span id="arch-eff-ram" class="metric-val">—</span></div>
+        <div class="metric-row"><span class="metric-key">Ollama Version</span><span id="arch-ollama-ver" class="metric-val">—</span></div>
+      </div>
+    </div>
+
     <div class="panel">
       <span class="corner-tr"></span><span class="corner-bl"></span>
       <div class="panel-label">Running Models (In Memory)</div>
@@ -8749,7 +8765,58 @@ async function removeModel(name) {
    MEMORY TAB
    ══════════════════════════════════════════════════════════════════ */
 
+async function loadArchInfo() {
+  function setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+  try {
+    const r = await fetch('/api/system/architecture');
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    const arch = d.architecture || {};
+    const dep  = d.deployment  || {};
+    const oll  = d.ollama      || {};
+
+    const ARCH_LABELS = {
+      apple_unified:  'Apple Unified (M-series)',
+      cpu_x86:        'CPU x86 (no discrete GPU)',
+      nvidia_single:  'NVIDIA Single-GPU',
+      nvidia_multi:   'NVIDIA Multi-GPU',
+    };
+    const DEP_LABELS = {
+      host_native: 'Host Native',
+      container:   'Container',
+      dmg_native:  'macOS DMG',
+    };
+
+    setText('arch-name',      ARCH_LABELS[arch.name] || arch.name || '—');
+    setText('arch-mem-model', arch.memory_model || '—');
+    setText('arch-total-mem', arch.total_memory_gb != null ? arch.total_memory_gb + ' GB' : '—');
+    setText('arch-pools',     arch.pool_count    != null ? String(arch.pool_count) : '—');
+    setText('arch-bw',        arch.bandwidth_estimate_gbps != null ? arch.bandwidth_estimate_gbps + ' GB/s' : '—');
+    setText('arch-dep-mode',  DEP_LABELS[dep.mode] || dep.mode || '—');
+    setText('arch-eff-ram',   dep.effective_memory_gb != null ? dep.effective_memory_gb + ' GB' : '—');
+
+    const ver = oll.version || 'unreachable';
+    const floorOk = oll.meets_floor !== false;
+    const verEl = document.getElementById('arch-ollama-ver');
+    if (verEl) {
+      verEl.textContent = ver + (floorOk ? '' : ' ⚠ below floor');
+      verEl.style.color = floorOk ? '' : 'var(--red)';
+    }
+
+    const memModelEl = document.getElementById('arch-mem-model');
+    if (memModelEl) {
+      memModelEl.style.color = arch.memory_model === 'unified' ? 'var(--cyan)' : '';
+    }
+  } catch(e) {
+    setText('arch-name', 'Detection unavailable');
+  }
+}
+
 async function loadMemory() {
+  loadArchInfo();
   try {
     const [memRes, sysRes] = await Promise.all([
       fetch('/api/inventory/memory'),

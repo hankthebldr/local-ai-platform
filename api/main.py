@@ -40,6 +40,7 @@ from .routers import (
     feedback,  # noqa: F401 — used below via app.include_router
     skills,  # noqa: F401 — used below via app.include_router
     discover,  # noqa: F401 — used below via app.include_router
+    system,  # noqa: F401 — architecture-aware orchestration (Phase 1)
 )
 from .services.ollama_service import OllamaService
 from .services.workflow_engine import WorkflowEngine
@@ -128,6 +129,60 @@ async def lifespan(app: FastAPI):
         logger.info(f"  Ollama: healthy ({len(model_list)} models loaded)")
     else:
         logger.warning("  Ollama: NOT responding")
+
+    # ── Architecture-aware orchestration detection (Phase 1) ────────────
+    try:
+        from .services.deployment import detect_deployment
+        from .services.architecture import detect_architecture, probe_ollama_version
+
+        strict_arch = os.getenv("STRICT_ARCH_DETECTION", "false").lower() == "true"
+        deployment = detect_deployment()
+        arch = detect_architecture(strict=strict_arch)
+        ollama_probe = probe_ollama_version(strict=strict_arch)
+
+        logger.info("=" * 64)
+        logger.info("Architecture-aware orchestration:")
+        logger.info(
+            "  Architecture: %s (%s, %.1f GB, %d pool%s)",
+            arch.name.value,
+            arch.memory_model,
+            arch.total_memory_gb,
+            arch.pool_count,
+            "s" if arch.pool_count != 1 else "",
+        )
+        logger.info(
+            "  Deployment:   %s (storage=%s)",
+            deployment.mode.value,
+            deployment.storage_root,
+        )
+        logger.info(
+            "  Ollama:       %s (reachable=%s, meets_floor=%s, floor=%s)",
+            ollama_probe.get("version") or "unreachable",
+            ollama_probe.get("reachable"),
+            ollama_probe.get("meets_floor"),
+            ollama_probe.get("floor"),
+        )
+        if hasattr(arch, "gpus") and arch.gpus:
+            for g in arch.gpus:
+                logger.info(
+                    "    GPU %d: %s (%.0f GB VRAM, PCIe gen %s)",
+                    g.get("gpu_id", 0),
+                    g.get("name", "?"),
+                    g.get("vram_total_gb", 0),
+                    g.get("pcie_gen", "?"),
+                )
+        logger.info("=" * 64)
+
+        try:
+            deployment.ensure_user_storage()
+        except Exception as e:
+            logger.warning("ensure_user_storage failed: %s", e)
+    except Exception as e:
+        logger.warning("Architecture detection failed: %s", e)
+        logger.warning(
+            "Architecture-aware features will run in degraded mode. "
+            "See docs/plans/2026-05-19-architecture-aware-orchestration-design.md"
+        )
 
     yield
     logger.info("Shutting down Enclave API")
@@ -224,6 +279,7 @@ app.include_router(agents.router)
 app.include_router(feedback.router)
 app.include_router(skills.router)
 app.include_router(discover.router)
+app.include_router(system.router)
 from .routers import projects as _projects_router  # noqa: E402
 
 app.include_router(_projects_router.router)
