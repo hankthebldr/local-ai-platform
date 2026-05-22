@@ -51,6 +51,7 @@ def _apply_telemetry(
     arch_name: Optional[str],
     pressure_before: Optional[Dict[str, Any]],
     pressure_after: Optional[Dict[str, Any]],
+    keep_alive_used: Optional[str] = None,
 ) -> None:
     """Populate Phase 2 observability fields on a StepResult.
 
@@ -65,7 +66,36 @@ def _apply_telemetry(
     result.arch_name = arch_name
     result.pressure_before = pressure_before
     result.pressure_after = pressure_after
-    result.keep_alive_used = OLLAMA_KEEP_ALIVE
+    # Phase 3: caller passes the resolved keep_alive (step → defaults → arch → env).
+    # Fall back to OLLAMA_KEEP_ALIVE only when the caller didn't compute one
+    # (legacy code paths in tests etc).
+    result.keep_alive_used = (
+        keep_alive_used if keep_alive_used is not None else OLLAMA_KEEP_ALIVE
+    )
+
+
+def _resolve_keep_alive(step, defaults) -> str:
+    """Phase 3 — resolve keep_alive with priority:
+        1. step.config.keep_alive      (explicit per-step override)
+        2. defaults.keep_alive         (workflow-level default)
+        3. arch.default_keep_alive()   (arch-detected default)
+        4. OLLAMA_KEEP_ALIVE env       (deepest fallback)
+
+    Architecture detection may have failed at startup — in that case
+    step 3 raises and we fall through to step 4.
+    """
+    step_ka = getattr(getattr(step, "config", None), "keep_alive", None)
+    if step_ka is not None:
+        return step_ka
+    defaults_ka = getattr(defaults, "keep_alive", None)
+    if defaults_ka is not None:
+        return defaults_ka
+    try:
+        from .architecture import _get_current as _get_arch
+
+        return _get_arch().default_keep_alive()
+    except Exception:
+        return OLLAMA_KEEP_ALIVE
 
 
 class StepExecutor:
@@ -157,6 +187,11 @@ class StepExecutor:
         # are None on systems where architecture detection didn't initialise.
         arch_name, pressure_before = _safe_pressure_snapshot()
 
+        # --- Phase 3: resolve keep_alive ------------------------------------
+        # Priority: step.config.keep_alive > defaults.keep_alive >
+        # arch.default_keep_alive() > OLLAMA_KEEP_ALIVE env.
+        resolved_keep_alive = _resolve_keep_alive(step, defaults)
+
         # --- Retry loop with hook lifecycle ----------------------------------
         last_error: Any = None
         current_model = resolved_model
@@ -199,6 +234,7 @@ class StepExecutor:
                     messages=ctx.prompt.as_messages(),
                     temperature=ctx.prompt.params.get("temperature", temperature),
                     max_tokens=ctx.prompt.params.get("num_predict", max_tokens),
+                    keep_alive=resolved_keep_alive,
                 )
                 ctx.output = llm_result.get("content", "")
             except Exception as e:
@@ -231,7 +267,12 @@ class StepExecutor:
                     result.completed_at - result.started_at
                 ).total_seconds()
                 _apply_telemetry(
-                    result, llm_result, arch_name, pressure_before, pressure_after
+                    result,
+                    llm_result,
+                    arch_name,
+                    pressure_before,
+                    pressure_after,
+                    keep_alive_used=resolved_keep_alive,
                 )
                 return result
 
@@ -294,7 +335,14 @@ class StepExecutor:
         # Telemetry is still useful on failure — a non-None load_duration
         # tells the operator the model loaded but the response was rejected,
         # which is a different failure mode than "model never loaded".
-        _apply_telemetry(result, llm_result, arch_name, pressure_before, pressure_after)
+        _apply_telemetry(
+            result,
+            llm_result,
+            arch_name,
+            pressure_before,
+            pressure_after,
+            keep_alive_used=resolved_keep_alive,
+        )
         logger.error(
             f"Step '{step.id}' failed after {max_retries + 1} attempts: {last_error}"
         )

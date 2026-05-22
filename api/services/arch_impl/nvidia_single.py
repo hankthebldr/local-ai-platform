@@ -197,6 +197,13 @@ class NvidiaSingleArchitecture:
             ),
         )
 
+    def default_keep_alive(self) -> str:
+        # NVIDIA single GPU: VRAM is scarce (24 GB on a 4000 Blackwell;
+        # a 34B Q4_K_M is ~20 GB by itself). Evict by default so the next
+        # step's model can land. Per-workflow / per-step YAML can override
+        # for single-model long sessions.
+        return "0"
+
     @classmethod
     def current(cls):
         from ..architecture import _get_current

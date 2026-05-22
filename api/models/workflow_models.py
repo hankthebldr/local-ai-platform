@@ -22,6 +22,11 @@ class StepConfig(BaseModel):
     retries: Optional[int] = None
     retry_delay: Optional[int] = None
     timeout: Optional[int] = None
+    # Phase 3 — per-step Ollama keep_alive override. When set, takes priority
+    # over WorkflowDefaults.keep_alive and the arch-detected default.
+    # Accepts the same forms Ollama does: "0", "30m", "1h", "-1" (forever),
+    # or a number of seconds as a string. None = inherit from defaults/arch.
+    keep_alive: Optional[str] = None
 
 
 # ── v2: Structured Prompt + Hook Spec ──────────────────────────────────────
@@ -114,6 +119,10 @@ class WorkflowDefaults(BaseModel):
     max_tokens: int = 4096
     retries: int = 2
     retry_delay: int = 5
+    # Phase 3 — workflow-level keep_alive default. None = use the arch-detected
+    # default (NVIDIA: "0" to free VRAM between steps; unified: "30m" to amortize
+    # the high reload cost on systems where the swap is RAM-resident anyway).
+    keep_alive: Optional[str] = None
 
 
 class WorkflowDefinition(BaseModel):

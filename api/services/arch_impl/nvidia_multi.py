@@ -259,6 +259,12 @@ class NvidiaMultiArchitecture:
             rationale="different model; no free GPU for pre-warm; cold load at boundary",
         )
 
+    def default_keep_alive(self) -> str:
+        # Multi-GPU shares the single-GPU eviction default. The win of
+        # multi-GPU is pre-warm-on-alternate-GPU (Phase 5), not lower
+        # eviction pressure — each GPU still has scarce VRAM.
+        return "0"
+
     @classmethod
     def current(cls):
         from ..architecture import _get_current
