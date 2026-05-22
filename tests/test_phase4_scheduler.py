@@ -129,11 +129,17 @@ def test_schedule_delegates_to_arch():
     assert decisions[1].deferred is True
 
 
-def test_schedule_returns_empty_when_arch_missing():
-    """Detection failure shouldn't crash the engine — return [] so callers
-    can fall back to sequential dispatch."""
+def test_schedule_falls_back_to_unknown_arch_when_no_detection():
+    """Detection failure (singleton unset) falls through to
+    UnknownArchitecture so the engine still gets a usable schedule
+    (head dispatched, rest deferred) rather than [] — which the engine
+    would treat as a deadlock and fail the run."""
     s = Scheduler(arch=None)
-    assert s.schedule([_step("a")]) == []
+    decisions = s.schedule([_step("a"), _step("b")])
+    assert len(decisions) == 2
+    # Head is not deferred; the rest are.
+    assert not getattr(decisions[0], "deferred", False)
+    assert getattr(decisions[1], "deferred", False) is True
 
 
 # ── validate_feasibility ─────────────────────────────────────────────────
@@ -215,20 +221,19 @@ def test_preview_diamond_dag_groups_ready_steps():
     assert "d" in last_tick["ready_step_ids"]
 
 
-def test_preview_reports_no_arch():
-    """When detection failed (arch=None), the preview still produces a
-    structured response: ready steps are listed but no decisions land,
-    and the deadlock-detection note surfaces. Operator sees what's
-    blocking the schedule rather than getting a 500."""
+def test_preview_falls_back_to_unknown_arch():
+    """When detection failed, Scheduler() falls through to
+    UnknownArchitecture — the preview produces real ticks with the
+    head-dispatched/rest-deferred shape, not a deadlock."""
     s = Scheduler(arch=None)
-    defn = _defn([_step("a")])
+    defn = _defn([_step("a"), _step("b", depends_on=["a"])])
     preview = s.preview(defn)
     assert preview.arch_name == "unknown"
-    assert len(preview.ticks) == 1
+    # Two sequential ticks: a then b.
+    assert len(preview.ticks) == 2
     assert preview.ticks[0]["ready_step_ids"] == ["a"]
-    assert preview.ticks[0]["decisions"] == []
-    # The "arch deferred everything" note is the operator-visible signal.
-    assert any("cannot advance" in n for n in preview.notes)
+    assert preview.ticks[1]["ready_step_ids"] == ["b"]
+    assert preview.notes == []
 
 
 # ── Schema ───────────────────────────────────────────────────────────────

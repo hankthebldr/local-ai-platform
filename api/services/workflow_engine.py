@@ -454,15 +454,62 @@ class WorkflowEngine:
         steps: List[AgentStep],
     ) -> None:
         """
-        Run the given step list, mutating `workflow_run` in place.
-        Checkpoints to disk after every step.
+        Phase 4b — scheduler-driven execution.
 
-        Tracks the previous step's resolved model so we can log when a
-        model swap happens — adjacent steps on the same model reuse
-        Ollama's loaded weights (via OLLAMA_KEEP_ALIVE), but a swap
-        costs an unload + reload (30-90s for 34B+ GGUFs). Surfacing
-        this lets operators reorder steps to group same-model work.
+        Replaces the YAML-order sequential loop with tick-based dispatch:
+          1. Compute the ready set (steps whose `depends_on` are satisfied).
+          2. Ask `arch.schedule_ready()` which to dispatch vs defer.
+          3. Run all non-deferred steps in the tick concurrently via a
+             ThreadPoolExecutor. Concurrency is bounded by the arch's
+             schedule (single-GPU/unified return head + deferred rest, so
+             the tick has one runner — same as pre-Phase-4b behavior).
+          4. Wait for the tick to drain. On any failure, mark the run
+             failed but let in-flight steps in the same tick finish first
+             (their work is already paid; partial output is still useful).
+
+        Workflows without `depends_on` declarations behave identically to
+        the pre-Phase-4b loop because their arch's schedule_ready returns
+        "head, deferred rest" — only one step dispatches per tick.
+
+        Concurrency safety:
+          - Step output isolation: each step writes to its own
+            `workspace[step_id]` slot — different threads touch different
+            dict keys.
+          - State mutation: `workflow_run.step_results.append`,
+            `self._checkpoint(...)`, and `workflow_run.status` mutations
+            are guarded by `state_lock`.
+          - Ollama serialization: OllamaService._LLM_SEMAPHORE keeps LLM
+            calls serialized at the network layer regardless of how many
+            threads the engine dispatches.
         """
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        from .scheduler import Scheduler
+
+        scheduler = Scheduler()
+        state_lock = threading.Lock()
+
+        # Resume-aware: every step_results entry from a prior partial run
+        # contributes to completed_ids. Steps in the current dispatch list
+        # but already completed (via resume) are skipped.
+        completed_ids: Set[str] = {
+            r.step_id for r in workflow_run.step_results if r.status == "completed"
+        }
+        # Steps we haven't yet completed AND that are in this execute call's
+        # scope (the resume() path passes only `remaining`).
+        scope_ids = {s.id for s in steps}
+        all_steps = steps + [
+            s
+            for s in definition.steps
+            if s.id not in scope_ids and s.id in completed_ids
+        ]
+        # Above: include already-completed steps from the full definition
+        # so that scheduler.ready_steps() can correctly see their depends_on
+        # as satisfied. Without this, a resumed workflow's downstream step
+        # would never become "ready" because the engine wouldn't know its
+        # depends_on were already met.
+
         # Resume-aware: prefer the model used by the last completed
         # step so a mid-workflow restart doesn't spuriously log a swap.
         previous_model: Optional[str] = next(
@@ -473,98 +520,173 @@ class WorkflowEngine:
             ),
             None,
         )
-        for step in steps:
-            # Cooperative cancel point — checked at every step boundary.
-            # In-flight LLM calls always complete, which keeps the engine
-            # state model simple and the partial run useful (every
-            # completed step's output is still in workflow_run).
+
+        while True:
+            # Cooperative cancel point — checked at every tick boundary.
+            # In-flight LLM calls in the current tick always complete.
             if self._should_cancel(workflow_run.run_id):
-                workflow_run.status = "canceled"
-                workflow_run.completed_at = datetime.utcnow()
-                workflow_run.error = f"Run canceled by operator before step '{step.id}'"
-                self._checkpoint(workflow_run)
-                logger.info(
-                    f"Workflow '{definition.id}' canceled before step '{step.id}'"
-                )
-                # Drop the marker now that we've honored it.
+                with state_lock:
+                    workflow_run.status = "canceled"
+                    workflow_run.completed_at = datetime.utcnow()
+                    workflow_run.error = "Run canceled by operator"
+                    self._checkpoint(workflow_run)
                 self._cancel_set.discard(workflow_run.run_id)
+                logger.info(f"Workflow '{definition.id}' canceled at tick boundary")
                 return
 
-            logger.info(f"Executing step '{step.id}' ({step.name})")
+            ready = [
+                s
+                for s in scheduler.ready_steps(all_steps, completed_ids)
+                if s.id in scope_ids
+            ]
+            if not ready:
+                break  # all scope steps complete (or deadlock — checked below)
 
-            try:
-                resolved_model = self.resolver.resolve(
-                    model=step.model,
-                    role=step.role,
-                    default_role=definition.defaults.role,
+            decisions = scheduler.schedule(ready)
+            dispatch_ids = {
+                d.step_id for d in decisions if not getattr(d, "deferred", False)
+            }
+            if not dispatch_ids:
+                with state_lock:
+                    workflow_run.status = "failed"
+                    workflow_run.error = f"Scheduler deadlock: arch deferred all {len(ready)} ready steps"
+                    workflow_run.completed_at = datetime.utcnow()
+                    workflow_run.telemetry_summary = _aggregate_telemetry(
+                        workflow_run.step_results
+                    )
+                    self._checkpoint(workflow_run)
+                logger.error(
+                    f"Workflow '{definition.id}' deadlocked: arch deferred all ready steps"
                 )
-            except Exception as e:
-                step_result = StepResult(
-                    step_id=step.id,
+                return
+
+            dispatch_steps = [s for s in ready if s.id in dispatch_ids]
+
+            # Pre-resolve models for every step we're about to dispatch.
+            # Failures here are workflow-level (no point dispatching anything
+            # in this tick if one model can't be resolved).
+            resolved_models: Dict[str, str] = {}
+            resolution_failed_step: Optional[AgentStep] = None
+            resolution_error: Optional[str] = None
+            for step in dispatch_steps:
+                try:
+                    resolved_models[step.id] = self.resolver.resolve(
+                        model=step.model,
+                        role=step.role,
+                        default_role=definition.defaults.role,
+                    )
+                except Exception as e:
+                    resolution_failed_step = step
+                    resolution_error = str(e)
+                    break
+
+            if resolution_failed_step is not None:
+                fail_result = StepResult(
+                    step_id=resolution_failed_step.id,
                     status="failed",
-                    error=f"Model resolution failed: {e}",
+                    error=f"Model resolution failed: {resolution_error}",
                     started_at=datetime.utcnow(),
                     completed_at=datetime.utcnow(),
                 )
-                workflow_run.step_results.append(step_result)
-                workflow_run.status = "failed"
-                workflow_run.error = f"Step '{step.id}' failed: model resolution error"
-                workflow_run.completed_at = datetime.utcnow()
-                self._checkpoint(workflow_run)
-                logger.error(f"Workflow failed at step '{step.id}': {e}")
+                with state_lock:
+                    workflow_run.step_results.append(fail_result)
+                    workflow_run.status = "failed"
+                    workflow_run.error = f"Step '{resolution_failed_step.id}' failed: model resolution error"
+                    workflow_run.completed_at = datetime.utcnow()
+                    workflow_run.telemetry_summary = _aggregate_telemetry(
+                        workflow_run.step_results
+                    )
+                    self._checkpoint(workflow_run)
+                logger.error(
+                    f"Workflow failed at step '{resolution_failed_step.id}': "
+                    f"{resolution_error}"
+                )
                 return
 
-            # Resource-tradeoff visibility: a model swap between adjacent
-            # steps forces Ollama to unload the previous GGUF and prefill
-            # the next one. On CPU that's 10s for a 7B and 30-90s for a
-            # 34B+. Same-model adjacent steps reuse the loaded weights
-            # for free (thanks to OLLAMA_KEEP_ALIVE). Log only on swap
-            # so the noise stays meaningful.
-            if previous_model and previous_model != resolved_model:
-                logger.info(
-                    "Step '%s' triggers model swap: '%s' → '%s' "
-                    "(expect unload+reload cost; group same-model steps to amortize).",
-                    step.id,
-                    previous_model,
-                    resolved_model,
-                )
-            previous_model = resolved_model
+            # Model-swap log only when the tick is a single step (the swap
+            # signal is meaningless when multiple models run concurrently).
+            if len(dispatch_steps) == 1 and previous_model:
+                new_model = resolved_models[dispatch_steps[0].id]
+                if previous_model != new_model:
+                    logger.info(
+                        "Step '%s' triggers model swap: '%s' → '%s' "
+                        "(expect unload+reload cost; group same-model steps to amortize).",
+                        dispatch_steps[0].id,
+                        previous_model,
+                        new_model,
+                    )
 
-            step_bus = self._build_step_bus(step)
-            step_executor = StepExecutor(
-                ollama_service=self.ollama,
-                composer=self.composer,
-                hook_bus=step_bus,
-                model_resolver=self.resolver,
+            tick_label = ",".join(s.id for s in dispatch_steps)
+            logger.info(
+                f"Executing tick [{tick_label}] ({len(dispatch_steps)} step"
+                f"{'s' if len(dispatch_steps) != 1 else ''} concurrent)"
             )
-            step_result = step_executor.execute(
-                step=step,
-                workflow=definition,
-                context=context,
-                resolved_model=resolved_model,
-                defaults=definition.defaults,
-                workflow_run=workflow_run,
-            )
-            workflow_run.step_results.append(step_result)
-            # Checkpoint after every step — a crash here loses at most the
-            # output of the next, not-yet-started step.
-            self._checkpoint(workflow_run)
 
-            if step_result.status == "failed":
-                workflow_run.status = "failed"
-                workflow_run.error = (
-                    f"Step '{step.id}' failed after {step_result.retries + 1} attempts: "
-                    f"{step_result.error}"
+            # Dispatch the tick. ThreadPoolExecutor.max_workers caps at
+            # len(dispatch_steps) — no benefit to spinning more threads
+            # than steps.
+            with ThreadPoolExecutor(
+                max_workers=len(dispatch_steps),
+                thread_name_prefix=f"wf-{workflow_run.run_id[:8]}",
+            ) as ex:
+                futures = {
+                    ex.submit(
+                        self._execute_one_step,
+                        step,
+                        definition,
+                        context,
+                        workflow_run,
+                        resolved_models[step.id],
+                    ): step
+                    for step in dispatch_steps
+                }
+                for future in as_completed(futures):
+                    step = futures[future]
+                    try:
+                        step_result = future.result()
+                    except Exception as e:
+                        # _execute_one_step has its own try/except; reaching
+                        # here means something deeply unexpected happened.
+                        step_result = StepResult(
+                            step_id=step.id,
+                            status="failed",
+                            error=f"Step executor raised: {e}",
+                            started_at=datetime.utcnow(),
+                            completed_at=datetime.utcnow(),
+                        )
+                    with state_lock:
+                        workflow_run.step_results.append(step_result)
+                        self._checkpoint(workflow_run)
+                        if step_result.status == "completed":
+                            completed_ids.add(step_result.step_id)
+                            previous_model = step_result.model_used
+
+            # Tick fully drained. If anything in it failed, stop the run.
+            tick_id_set = {s.id for s in dispatch_steps}
+            tick_failures = [
+                r
+                for r in workflow_run.step_results
+                if r.step_id in tick_id_set and r.status == "failed"
+            ]
+            if tick_failures:
+                first = tick_failures[0]
+                with state_lock:
+                    workflow_run.status = "failed"
+                    workflow_run.error = (
+                        f"Step '{first.step_id}' failed after {first.retries + 1} attempts: "
+                        f"{first.error}"
+                    )
+                    workflow_run.completed_at = datetime.utcnow()
+                    workflow_run.telemetry_summary = _aggregate_telemetry(
+                        workflow_run.step_results
+                    )
+                    self._checkpoint(workflow_run)
+                logger.error(
+                    f"Workflow '{definition.id}' failed at step '{first.step_id}'"
                 )
-                workflow_run.completed_at = datetime.utcnow()
-                workflow_run.telemetry_summary = _aggregate_telemetry(
-                    workflow_run.step_results
-                )
-                self._checkpoint(workflow_run)
-                logger.error(f"Workflow '{definition.id}' failed at step '{step.id}'")
                 return
 
-        # All remaining steps succeeded.
+        # All scope steps succeeded.
         workflow_run.status = "completed"
         workflow_run.completed_at = datetime.utcnow()
         workflow_run.telemetry_summary = _aggregate_telemetry(workflow_run.step_results)
@@ -584,6 +706,38 @@ class WorkflowEngine:
         logger.info(
             f"Workflow '{definition.id}' completed in {total_duration:.1f}s "
             f"({total_tokens} total tokens{cold_load_summary})"
+        )
+
+    def _execute_one_step(
+        self,
+        step: AgentStep,
+        definition: WorkflowDefinition,
+        context: WorkflowContext,
+        workflow_run: WorkflowRun,
+        resolved_model: str,
+    ) -> StepResult:
+        """Run a single step end-to-end. Extracted from _execute_steps for
+        Phase 4b so it can be submitted to a ThreadPoolExecutor.
+
+        Builds the step-scoped hook bus and a fresh StepExecutor (executors
+        are cheap; sharing one across threads would risk contaminating
+        per-attempt state in retry_with_feedback). Errors propagate to the
+        future; the caller synthesizes a failed StepResult.
+        """
+        step_bus = self._build_step_bus(step)
+        step_executor = StepExecutor(
+            ollama_service=self.ollama,
+            composer=self.composer,
+            hook_bus=step_bus,
+            model_resolver=self.resolver,
+        )
+        return step_executor.execute(
+            step=step,
+            workflow=definition,
+            context=context,
+            resolved_model=resolved_model,
+            defaults=definition.defaults,
+            workflow_run=workflow_run,
         )
 
     # ── Hook Bus Assembly ──────────────────────────────────────────────

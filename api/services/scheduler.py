@@ -57,15 +57,20 @@ class Scheduler:
     """
 
     def __init__(self, arch: Any = None):
-        # Lazy default: pull the singleton if no override passed in.
-        # Tests can inject a mock arch directly.
+        # Lazy default: pull the singleton if no override passed in. When
+        # detection didn't run (tests, degraded boots), fall back to
+        # UnknownArchitecture so schedule() still returns a usable
+        # head-dispatched/rest-deferred decision rather than [] (which
+        # the engine would treat as deadlock).
         if arch is None:
             try:
                 from .architecture import _get_current
 
                 arch = _get_current()
             except Exception:
-                arch = None
+                from .architecture import UnknownArchitecture
+
+                arch = UnknownArchitecture()
         self.arch = arch
 
     # ── ready-set computation ────────────────────────────────────────────
