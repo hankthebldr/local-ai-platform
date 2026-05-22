@@ -10,7 +10,7 @@ import os
 import re
 import json
 import threading
-from typing import Dict, List, AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -157,6 +157,63 @@ class OllamaService:
             raise OllamaConnectionError(str(e))
         except requests.ConnectionError:
             raise OllamaConnectionError(f"Cannot connect to {self.host}")
+
+    # ── Pre-warm (Phase 5) ─────────────────────────────────────────────
+
+    def pre_warm(self, model: str, keep_alive: Optional[str] = None) -> Dict[str, Any]:
+        """Load a model into Ollama's runtime memory without doing real inference.
+
+        Phase 5 — workflow_engine calls this at tick boundaries (after the
+        current tick's LLM dispatch begins) for the model the next tick will
+        use, so the model is resident by the time the next step needs it.
+        Hides cold-load cost behind the previous step's inference.
+
+        **Bypasses _LLM_SEMAPHORE on purpose.** The semaphore exists to
+        serialize *inference* (preventing two models from sharing CPU/GPU at
+        once). Pre-warm is the inverse case: we *want* Ollama to load model B
+        in the background while model A is generating, which Ollama supports
+        whenever VRAM/RAM allows. The arch.transition_plan() call upstream is
+        responsible for not firing pre_warm when that overlap isn't safe
+        (NVIDIA single + bandwidth contention, OOM-pressure, etc).
+
+        Implementation: POST /api/generate with empty prompt + num_predict=0.
+        Ollama loads the GGUF but produces no tokens. `keep_alive` controls
+        residency after the no-op call returns — defaults to the env setting.
+        Returns the raw response dict (includes load_duration for telemetry).
+        """
+        request_data = {
+            "model": model,
+            "prompt": "",
+            "stream": False,
+            "keep_alive": keep_alive if keep_alive is not None else OLLAMA_KEEP_ALIVE,
+            "options": {"num_predict": 0},
+        }
+        logger.info(
+            f"Pre-warming model: {model} (keep_alive={request_data['keep_alive']})"
+        )
+        try:
+            response = requests.post(
+                f"{self.host}/api/generate",
+                json=request_data,
+                timeout=REQUEST_TIMEOUT,
+            )
+            response.raise_for_status()
+            result = response.json()
+            timings = _extract_timings(result)
+            logger.info(
+                f"Pre-warm complete: model={model} "
+                f"load={timings['load_duration_ms']}ms"
+            )
+            return {"model": model, **timings}
+        except requests.ConnectionError:
+            raise OllamaConnectionError(f"Cannot connect to {self.host}")
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                raise ModelNotFoundError(model)
+            raise GenerationError(f"Pre-warm failed for {model}: {e}")
+        except Exception as e:
+            logger.warning(f"Pre-warm failed for {model}: {e}")
+            raise GenerationError(str(e))
 
     # ── Chat Completions (uses /api/chat) ──────────────────────────────
 
