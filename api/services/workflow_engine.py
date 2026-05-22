@@ -18,10 +18,11 @@ from ..logging_config import logger
 from ..exceptions import WorkflowValidationError
 from ..models.workflow_models import (
     AgentStep,
-    WorkflowDefinition,
-    WorkflowContext,
-    WorkflowRun,
+    RunTelemetrySummary,
     StepResult,
+    WorkflowContext,
+    WorkflowDefinition,
+    WorkflowRun,
 )
 from .model_resolver import ModelResolver
 from .step_executor import StepExecutor
@@ -31,6 +32,44 @@ from .prompt_composer import PromptComposer
 
 # Default data directory for workflow run persistence
 DATA_DIR = os.getenv("WORKFLOW_DATA_DIR", "./data/workflows")
+
+
+# Threshold (ms) at which a step's load_duration is counted as a "cold load"
+# rather than warm reuse. ~100ms is a generous bar — true warm reuse is <50ms
+# on every arch; values between 50-100ms are typically warm w/ small overhead.
+_COLD_LOAD_THRESHOLD_MS = 100.0
+
+
+def _aggregate_telemetry(
+    step_results: List[StepResult],
+) -> Optional[RunTelemetrySummary]:
+    """Roll up per-step Phase-2 telemetry into a per-run summary.
+
+    Returns None when no step has telemetry populated — preserves the
+    "no observability data" signal rather than reporting all zeros.
+    """
+    has_any_telemetry = any(
+        r.load_duration_ms is not None or r.eval_duration_ms is not None
+        for r in step_results
+    )
+    if not has_any_telemetry:
+        return None
+
+    summary = RunTelemetrySummary()
+    for r in step_results:
+        if r.load_duration_ms is not None:
+            if r.load_duration_ms >= _COLD_LOAD_THRESHOLD_MS:
+                summary.total_cold_load_ms += r.load_duration_ms
+                summary.cold_load_count += 1
+            else:
+                summary.warm_step_count += 1
+        if r.eval_duration_ms is not None:
+            summary.total_eval_ms += r.eval_duration_ms
+        if r.prompt_eval_duration_ms is not None:
+            summary.total_prompt_eval_ms += r.prompt_eval_duration_ms
+        if summary.arch_name is None and r.arch_name is not None:
+            summary.arch_name = r.arch_name
+    return summary
 
 
 class WorkflowEngine:
@@ -186,7 +225,6 @@ class WorkflowEngine:
         # Cross-worker channel: a sibling worker may have written
         # status="canceled" to the run.json checkpoint.
         try:
-
             cp = self._project_root / "data" / "workflows" / run_id / "run.json"
             if cp.exists():
                 import json as _json
@@ -500,6 +538,9 @@ class WorkflowEngine:
                     f"{step_result.error}"
                 )
                 workflow_run.completed_at = datetime.utcnow()
+                workflow_run.telemetry_summary = _aggregate_telemetry(
+                    workflow_run.step_results
+                )
                 self._checkpoint(workflow_run)
                 logger.error(f"Workflow '{definition.id}' failed at step '{step.id}'")
                 return
@@ -507,13 +548,23 @@ class WorkflowEngine:
         # All remaining steps succeeded.
         workflow_run.status = "completed"
         workflow_run.completed_at = datetime.utcnow()
+        workflow_run.telemetry_summary = _aggregate_telemetry(workflow_run.step_results)
         total_duration = sum(r.duration_seconds or 0 for r in workflow_run.step_results)
         total_tokens = sum(
             r.token_count.get("total_tokens", 0) for r in workflow_run.step_results
         )
+        cold_load_summary = ""
+        if (
+            workflow_run.telemetry_summary
+            and workflow_run.telemetry_summary.cold_load_count > 0
+        ):
+            cold_load_summary = (
+                f", {workflow_run.telemetry_summary.cold_load_count} cold-load"
+                f" ({workflow_run.telemetry_summary.total_cold_load_ms / 1000:.1f}s)"
+            )
         logger.info(
             f"Workflow '{definition.id}' completed in {total_duration:.1f}s "
-            f"({total_tokens} total tokens)"
+            f"({total_tokens} total tokens{cold_load_summary})"
         )
 
     # ── Hook Bus Assembly ──────────────────────────────────────────────

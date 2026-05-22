@@ -81,20 +81,41 @@ class TestSystemPressureEndpoint:
             assert isinstance(body["per_pool"], list)
 
 
-class TestSystemDeploymentEndpoint:
-    def test_returns_deployment_details(self):
-        with patch_container(cgroup_memory_max_gb=32.0):
+class TestDeploymentPayloadViaArchitectureEndpoint:
+    """The /api/system/deployment endpoint was removed in PR #90 — its
+    payload is now embedded in /api/system/architecture's `.deployment`
+    field. This test guards the consolidated shape so future callers can
+    rely on it.
+    """
+
+    def test_deployment_subobject_carries_full_payload(self):
+        with patch_container(cgroup_memory_max_gb=32.0), patch_apple_unified(
+            total_gb=48.0
+        ):
+            from api.services.architecture import detect_architecture
             from api.services.deployment import detect_deployment
 
             detect_deployment()
+            detect_architecture()
+            client = TestClient(_make_app())
+            r = client.get("/api/system/architecture")
+            assert r.status_code == 200
+            deployment = r.json()["deployment"]
+            assert deployment["mode"] == "container"
+            assert "storage_root" in deployment
+            assert "ollama_url" in deployment
+            assert deployment["effective_memory_gb"] == pytest.approx(28.8, abs=0.1)
+
+    def test_removed_endpoint_returns_404(self):
+        with patch_host_native(), patch_apple_unified(total_gb=48.0):
+            from api.services.architecture import detect_architecture
+            from api.services.deployment import detect_deployment
+
+            detect_deployment()
+            detect_architecture()
             client = TestClient(_make_app())
             r = client.get("/api/system/deployment")
-            assert r.status_code == 200
-            body = r.json()
-            assert body["mode"] == "container"
-            assert "storage_root" in body
-            assert "ollama_url" in body
-            assert body["effective_memory_gb"] == pytest.approx(28.8, abs=0.1)
+            assert r.status_code == 404
 
 
 class TestSystemRefreshEndpoint:

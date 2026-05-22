@@ -6070,6 +6070,21 @@ textarea.composer-desc-area {
       </div>
     </div>
 
+    <!-- ── ARCHITECTURE & PRESSURE (Phase 2) ────────────────────────── -->
+    <div class="panel">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">
+        Architecture &amp; Pressure
+        <button type="button" id="arch-refresh-btn" class="action-btn" style="float:right;margin-top:-4px"
+          onclick="refreshArchitectureDetection()" title="Force re-detect arch + deployment (hot-swap GPU, attach card, etc.)">
+          Re-detect
+        </button>
+      </div>
+      <div id="arch-pressure-content">
+        <div class="model-empty">Loading…</div>
+      </div>
+    </div>
+
     <!-- ── SESSION HISTORY & FACTS ──────────────────────────────────── -->
     <div style="display:flex;gap:12px;margin-top:16px;margin-bottom:16px;">
       <input type="text" id="memory-search" placeholder="Search sessions and facts..."
@@ -7394,7 +7409,8 @@ function switchTab(name, el) {
     if (window.CatalogModelsShare) CatalogModelsShare.showInCatalog();
     if (!catalogLoaded) loadCatalog();
   }
-  if (name === 'memory') { loadMemory(); loadMemoryTab(); }
+  if (name === 'memory') { loadMemory(); loadMemoryTab(); loadArchitecturePanel(); }
+  else { _stopArchPressurePoll(); }
   // Discover was promoted-then-demoted into Models tab as a collapsible
   // sub-section. Legacy switchTab('discover', ...) calls (from old links
   // or external bookmarks) redirect to inventory and pop the Discover
@@ -8857,6 +8873,141 @@ async function unloadModel(name) {
     });
     loadMemory();
   } catch(e) {}
+}
+
+/* ── Architecture & Pressure panel (Phase 2 observability) ──────────
+ *
+ * All dynamic strings are written via textContent — values come from the
+ * trusted /api/system/* endpoints but the safe DOM API keeps us honest
+ * even if a future arch impl reads gpu names from a less-trusted source
+ * (e.g. NVML-reported model strings). No innerHTML in the dynamic path.
+ */
+
+const _ARCH_PRESSURE_POLL_MS = 5000;
+window._archPressureTimer = null;
+
+function _stopArchPressurePoll() {
+  if (window._archPressureTimer) {
+    clearInterval(window._archPressureTimer);
+    window._archPressureTimer = null;
+  }
+}
+
+function _archKvRow(key, value, opts) {
+  const row = document.createElement('div');
+  row.className = 'metric-row';
+  const k = document.createElement('span');
+  k.className = 'metric-key';
+  k.textContent = key;
+  const v = document.createElement('span');
+  v.className = 'metric-val' + (opts && opts.highlight ? ' highlight' : '');
+  v.textContent = value;
+  if (opts && opts.color) v.style.color = opts.color;
+  if (opts && opts.uppercase) {
+    v.style.textTransform = 'uppercase';
+    v.style.letterSpacing = '0.05em';
+  }
+  row.appendChild(k);
+  row.appendChild(v);
+  return row;
+}
+
+function _renderArchPressure(arch, deployment, ollama, pressure) {
+  const root = document.getElementById('arch-pressure-content');
+  if (!root) return;
+  // Clear; the rebuild is cheap and ensures stale rows don't linger.
+  while (root.firstChild) root.removeChild(root.firstChild);
+
+  const poolCount = arch.pool_count ?? 1;
+  root.appendChild(_archKvRow('Arch', arch.name || '?', { highlight: true }));
+  root.appendChild(_archKvRow('Memory Model',
+    (arch.memory_model || '?') + ' · ' + poolCount + ' pool' + (poolCount !== 1 ? 's' : '')));
+  root.appendChild(_archKvRow('Total Memory', (arch.total_memory_gb || 0).toFixed(1) + ' GB'));
+  root.appendChild(_archKvRow('Bandwidth', (arch.bandwidth_estimate_gbps || 0).toFixed(0) + ' GB/s'));
+  (arch.gpus || []).forEach(g => {
+    root.appendChild(_archKvRow(
+      'GPU ' + (g.gpu_id ?? 0),
+      (g.name || '?') + ' · ' + (g.vram_total_gb || 0).toFixed(0) + ' GB VRAM'
+    ));
+  });
+  root.appendChild(_archKvRow('Deployment',
+    (deployment.mode || '?') + ' · ' + (deployment.effective_memory_gb || 0).toFixed(1) + ' GB effective'));
+  const ollamaVer = (ollama && ollama.version) || 'unreachable';
+  const ollamaSuffix = (ollama && ollama.meets_floor === false) ? ' (below floor)' : '';
+  root.appendChild(_archKvRow('Ollama', ollamaVer + ollamaSuffix,
+    ollama && ollama.meets_floor === false ? { color: 'var(--orange, #FA582D)' } : undefined));
+
+  // Pressure section — visually separated.
+  const sep = document.createElement('div');
+  sep.style.borderTop = '1px solid var(--border)';
+  sep.style.marginTop = '8px';
+  sep.style.paddingTop = '8px';
+  root.appendChild(sep);
+
+  const lvl = (pressure && pressure.level) || 'unknown';
+  const lvlColor = lvl === 'critical' ? 'var(--red, #ff5252)'
+                 : lvl === 'warning'  ? 'var(--orange, #FA582D)'
+                 : lvl === 'ok'       ? 'var(--green, #00E87B)'
+                 :                      'var(--text-dim)';
+  root.appendChild(_archKvRow('Pressure', lvl, { color: lvlColor, uppercase: true }));
+  (pressure && Array.isArray(pressure.per_pool) ? pressure.per_pool : []).forEach((p, i) => {
+    root.appendChild(_archKvRow(
+      'Pool ' + i,
+      (p.free_gb ?? 0).toFixed(1) + ' GB free · ' + (p.used_gb ?? 0).toFixed(1) + ' GB used'
+    ));
+  });
+}
+
+function _renderArchError(msg, color) {
+  const root = document.getElementById('arch-pressure-content');
+  if (!root) return;
+  while (root.firstChild) root.removeChild(root.firstChild);
+  const div = document.createElement('div');
+  div.className = 'model-empty';
+  if (color) div.style.color = color;
+  div.textContent = msg;
+  root.appendChild(div);
+}
+
+async function loadArchitecturePanel() {
+  _stopArchPressurePoll();
+  try {
+    const archRes = await fetch('/api/system/architecture');
+    if (!archRes.ok) {
+      _renderArchError('Architecture detection unavailable (status ' + archRes.status + ').');
+      return;
+    }
+    const triple = await archRes.json();
+    _renderArchPressure(triple.arch, triple.deployment, triple.ollama, null);
+
+    const pollOnce = async () => {
+      try {
+        const pRes = await fetch('/api/system/pressure');
+        if (pRes.ok) {
+          const pressure = await pRes.json();
+          _renderArchPressure(triple.arch, triple.deployment, triple.ollama, pressure);
+        }
+      } catch(_) { /* keep the last good paint on transient failures */ }
+    };
+    pollOnce();
+    window._archPressureTimer = setInterval(pollOnce, _ARCH_PRESSURE_POLL_MS);
+  } catch(e) {
+    _renderArchError('Failed to load architecture: ' + e.message, 'var(--red)');
+  }
+}
+
+async function refreshArchitectureDetection() {
+  const btn = document.getElementById('arch-refresh-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Re-detecting…'; }
+  try {
+    const r = await fetch('/api/system/architecture/refresh', { method: 'POST' });
+    if (!r.ok) throw new Error('refresh returned ' + r.status);
+    await loadArchitecturePanel();
+  } catch(e) {
+    _renderArchError('Re-detect failed: ' + e.message, 'var(--red)');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Re-detect'; }
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════

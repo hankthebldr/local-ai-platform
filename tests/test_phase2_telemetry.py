@@ -1,17 +1,23 @@
 """Phase 2 — Architecture-aware observability instrumentation.
 
-Covers the three pure-function pieces that ship the telemetry capture:
-  1. _extract_timings()  in ollama_service — ns → ms conversion + nulls
-  2. _apply_telemetry()  in step_executor — StepResult population
-  3. StepResult schema   — new optional fields deserialize cleanly,
-                            including older payloads written before Phase 2.
+Covers the pure-function pieces that ship the telemetry capture:
+  1. _extract_timings()    in ollama_service — ns → ms + nulls
+  2. _apply_telemetry()    in step_executor — StepResult population
+  3. _aggregate_telemetry() in workflow_engine — per-run summary
+  4. StepResult / WorkflowRun schema — pre-Phase-2 payloads deserialize.
 """
 
 from __future__ import annotations
 
-from api.models.workflow_models import StepResult
+from api.models.workflow_models import (
+    RunTelemetrySummary,
+    StepResult,
+    WorkflowContext,
+    WorkflowRun,
+)
 from api.services.ollama_service import _extract_timings
 from api.services.step_executor import _apply_telemetry
+from api.services.workflow_engine import _aggregate_telemetry
 
 
 # ── _extract_timings ──────────────────────────────────────────────────────
@@ -153,3 +159,91 @@ def test_step_result_round_trip_with_telemetry():
     assert rehydrated.load_duration_ms == 2400.0
     assert rehydrated.arch_name == "gpu_nvidia_single"
     assert rehydrated.pressure_after == {"level": "warning"}
+
+
+# ── _aggregate_telemetry (Phase 2 task 2.4) ──────────────────────────────
+
+
+def _step(load_ms, eval_ms=None, arch="gpu_nvidia_single"):
+    return StepResult(
+        step_id="s",
+        status="completed",
+        load_duration_ms=load_ms,
+        eval_duration_ms=eval_ms,
+        prompt_eval_duration_ms=200.0 if eval_ms is not None else None,
+        arch_name=arch,
+    )
+
+
+def test_aggregate_telemetry_mixed_warm_cold():
+    """Realistic multi-step run: one cold load, two warm reuses, one swap."""
+    steps = [
+        _step(load_ms=2400.0, eval_ms=18100.0),  # cold
+        _step(load_ms=12.0, eval_ms=14700.0),  # warm
+        _step(load_ms=45.0, eval_ms=12300.0),  # warm
+        _step(load_ms=6800.0, eval_ms=41200.0),  # cold (model swap)
+    ]
+    summary = _aggregate_telemetry(steps)
+    assert summary is not None
+    assert summary.cold_load_count == 2
+    assert summary.warm_step_count == 2
+    assert summary.total_cold_load_ms == 9200.0  # 2400 + 6800
+    assert summary.total_eval_ms == 86300.0
+    assert summary.arch_name == "gpu_nvidia_single"
+
+
+def test_aggregate_telemetry_returns_none_when_no_telemetry():
+    """A run with no Phase-2 data populated returns None — preserves the
+    'observability unavailable' signal rather than emitting zeros."""
+    steps = [
+        StepResult(step_id="s1", status="completed", duration_seconds=12.4),
+        StepResult(step_id="s2", status="completed", duration_seconds=8.1),
+    ]
+    assert _aggregate_telemetry(steps) is None
+
+
+def test_aggregate_telemetry_partial_population():
+    """Some steps have telemetry, others don't (e.g. early failure before
+    the LLM call). The summary aggregates only the steps that have data."""
+    steps = [
+        _step(load_ms=2400.0, eval_ms=18000.0),  # populated
+        StepResult(step_id="s2", status="failed"),  # never ran the LLM
+        _step(load_ms=5.0, eval_ms=14000.0),  # populated, warm
+    ]
+    summary = _aggregate_telemetry(steps)
+    assert summary is not None
+    assert summary.cold_load_count == 1
+    assert summary.warm_step_count == 1
+    assert summary.total_eval_ms == 32000.0
+
+
+def test_workflow_run_with_telemetry_summary_round_trips():
+    """The new WorkflowRun.telemetry_summary field deserialises cleanly."""
+    run = WorkflowRun(
+        workflow_id="w1",
+        context=WorkflowContext(workspace={}, shared={}, seed={}),
+        telemetry_summary=RunTelemetrySummary(
+            total_cold_load_ms=9200.0,
+            cold_load_count=2,
+            warm_step_count=3,
+            total_eval_ms=86300.0,
+            arch_name="apple_unified",
+        ),
+    )
+    payload = run.model_dump()
+    rehydrated = WorkflowRun.model_validate(payload)
+    assert rehydrated.telemetry_summary.cold_load_count == 2
+    assert rehydrated.telemetry_summary.arch_name == "apple_unified"
+
+
+def test_workflow_run_legacy_payload_deserializes():
+    """Pre-Phase-2 checkpoint files have no telemetry_summary field."""
+    legacy = {
+        "run_id": "r1",
+        "workflow_id": "w1",
+        "status": "completed",
+        "context": {"workspace": {}, "shared": {}, "seed": {}},
+        "step_results": [],
+    }
+    rehydrated = WorkflowRun.model_validate(legacy)
+    assert rehydrated.telemetry_summary is None
