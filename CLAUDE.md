@@ -55,7 +55,7 @@ Key files by responsibility:
 
 ## Release track
 
-Current: **`1.0.0`** — first public Enclave release (shipped 2026-04-18). Initial product surface (API, CLI, Mac DMG, workflow engine, RAG); not yet enterprise-grade for multi-tenant production. See [ENTERPRISE_DEPLOYMENT_GAPS.md](./ENTERPRISE_DEPLOYMENT_GAPS.md).
+Current: **`1.1.1`** — Cortex Console refresh (shipped 2026-05-15). Builds on `1.0.0` (first public release, 2026-04-18) — see [CHANGELOG.md](./CHANGELOG.md) for the full diff. Positioned as a single-operator sovereign appliance; multi-tenant production hardening is a 2.0 concern.
 
 What's in 1.0.0:
 - Core infra (Ollama + systemd + macOS DMG)

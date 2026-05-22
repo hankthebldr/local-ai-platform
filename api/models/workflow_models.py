@@ -195,8 +195,40 @@ class StepResult(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
+    # Phase 2 — Architecture-aware observability. All optional; populated when
+    # the executor has access to Ollama timing + arch.snapshot(). Older runs
+    # serialized before Phase 2 deserialize cleanly because every field defaults.
+    load_duration_ms: Optional[float] = None
+    prompt_eval_duration_ms: Optional[float] = None
+    eval_duration_ms: Optional[float] = None
+    total_duration_ms: Optional[float] = None
+    arch_name: Optional[str] = None
+    pressure_before: Optional[Dict[str, Any]] = None
+    pressure_after: Optional[Dict[str, Any]] = None
+    keep_alive_used: Optional[str] = None
 
-# ── Workflow Run (unchanged) ───────────────────────────────────────────────
+
+# ── Run-Level Telemetry Summary (Phase 2 task 2.4) ────────────────────────
+
+
+class RunTelemetrySummary(BaseModel):
+    """Per-run aggregation of step-level telemetry.
+
+    Computed once the run finishes (success OR failure) from the populated
+    StepResult.* fields. Lets the UI answer questions like "how much of this
+    run's wall-clock time was paid as model-swap cost?" without iterating the
+    step list. None on runs that have no telemetry-populated steps.
+    """
+
+    total_cold_load_ms: float = 0.0
+    cold_load_count: int = 0
+    warm_step_count: int = 0
+    total_eval_ms: float = 0.0
+    total_prompt_eval_ms: float = 0.0
+    arch_name: Optional[str] = None
+
+
+# ── Workflow Run ──────────────────────────────────────────────────────────
 
 
 class WorkflowRun(BaseModel):
@@ -208,3 +240,4 @@ class WorkflowRun(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
+    telemetry_summary: Optional[RunTelemetrySummary] = None

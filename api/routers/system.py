@@ -4,9 +4,13 @@ System router — exposes architecture / deployment / pressure detection state.
 
 Endpoints (all read-only except refresh):
     GET  /api/system/architecture        — Detected arch + deployment + ollama triple
-    GET  /api/system/deployment          — Deployment-only details
     GET  /api/system/pressure            — Current pressure-poller snapshot
     POST /api/system/architecture/refresh — Force re-detection (admin)
+
+The legacy /api/system/deployment endpoint was removed in PR #90 — its
+payload was a strict subset of /api/system/architecture's `.deployment`
+field. Callers should switch to `GET /api/system/architecture` and read
+`response_json["deployment"]`.
 
 Read endpoints are intentionally unauthenticated so health checks and
 the operator UI can call them without an API key. The refresh endpoint
@@ -109,18 +113,6 @@ def get_architecture() -> Dict[str, Any]:
         "deployment": _deployment_payload(deployment),
         "ollama": _ollama_payload(ollama_probe),
     }
-
-
-@router.get("/deployment")
-def get_deployment() -> Dict[str, Any]:
-    """Return deployment-only details."""
-    from ..services.deployment import _get_current as _get_deployment
-
-    try:
-        deployment = _get_deployment()
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    return _deployment_payload(deployment)
 
 
 @router.get("/pressure")
