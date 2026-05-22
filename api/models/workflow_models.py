@@ -22,6 +22,11 @@ class StepConfig(BaseModel):
     retries: Optional[int] = None
     retry_delay: Optional[int] = None
     timeout: Optional[int] = None
+    # Phase 3 — per-step Ollama keep_alive override. When set, takes priority
+    # over WorkflowDefaults.keep_alive and the arch-detected default.
+    # Accepts the same forms Ollama does: "0", "30m", "1h", "-1" (forever),
+    # or a number of seconds as a string. None = inherit from defaults/arch.
+    keep_alive: Optional[str] = None
 
 
 # ── v2: Structured Prompt + Hook Spec ──────────────────────────────────────
@@ -69,6 +74,13 @@ class AgentStep(BaseModel):
     name: str
     model: Optional[str] = None
     role: Optional[str] = None
+    # Phase 4 — operator-supplied estimate of the model's GGUF size in GB.
+    # Used by Architecture.feasible() at validate time and by the scheduler
+    # at preview time. Optional for backwards compatibility; when missing the
+    # feasibility check is a pass-through (Phase 4b will auto-derive from
+    # MODEL_REGISTRY when not set). Common values: 7B Q4_K_M ≈ 4.5 GB,
+    # 13B Q4_K_M ≈ 8 GB, 32B Q4_K_M ≈ 20 GB, 70B Q4_K_M ≈ 40 GB.
+    est_size_gb: Optional[float] = None
 
     # v1 field
     system_prompt: Optional[str] = None
@@ -114,6 +126,10 @@ class WorkflowDefaults(BaseModel):
     max_tokens: int = 4096
     retries: int = 2
     retry_delay: int = 5
+    # Phase 3 — workflow-level keep_alive default. None = use the arch-detected
+    # default (NVIDIA: "0" to free VRAM between steps; unified: "30m" to amortize
+    # the high reload cost on systems where the swap is RAM-resident anyway).
+    keep_alive: Optional[str] = None
 
 
 class WorkflowDefinition(BaseModel):

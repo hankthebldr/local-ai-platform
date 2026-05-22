@@ -200,6 +200,23 @@ class Architecture(Protocol):
         """Compute eviction + pre-warm strategy for the step boundary."""
         ...
 
+    def default_keep_alive(self) -> str:
+        """Return the arch-appropriate Ollama keep_alive default.
+
+        Phase 3 — different memory architectures want different eviction
+        defaults. Unified (Apple Silicon, x86 CPU) wants to keep models
+        warm because reload cost dominates and RAM is plentiful; discrete
+        (NVIDIA) wants to evict by default because VRAM is scarce and
+        multi-model DAGs need it freed. Per-workflow / per-step YAML
+        overrides this; OLLAMA_KEEP_ALIVE env var is the deepest fallback.
+
+        Returned strings use Ollama's keep_alive grammar:
+            "0"      — evict immediately when the request completes
+            "30m"    — keep loaded for 30 minutes
+            "-1"     — keep forever (until explicit unload)
+        """
+        ...
+
 
 # ── Singleton state + accessors ───────────────────────────────────────────
 # Populated by detect_architecture() below. Pre-detection calls to
@@ -306,6 +323,12 @@ class UnknownArchitecture:
             pre_warm_next=False,
             rationale="unknown architecture; conservative",
         )
+
+    def default_keep_alive(self) -> str:
+        # Unknown arch: defer to Ollama's own default. Picking "5m" here
+        # rather than "0" because we may not actually want eviction —
+        # detection just failed.
+        return "5m"
 
 
 # ── Top-level detector ───────────────────────────────────────────────────

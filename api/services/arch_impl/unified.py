@@ -325,6 +325,13 @@ class UnifiedArchitecture:
             rationale="unified pool; page cache enables cheap pre-warm",
         )
 
+    def default_keep_alive(self) -> str:
+        # Unified memory (Apple Silicon, x86 CPU): reload cost dominates,
+        # plenty of RAM relative to model size. Keep models warm — the
+        # reload would pay full prefill cost on CPU (10s+ for 7B, 90s+
+        # for 34B), and Apple's mmap'd weights stay in page cache anyway.
+        return "30m"
+
     @classmethod
     def current(cls) -> "UnifiedArchitecture":
         # The singleton lives in api.services.architecture; consult it.
