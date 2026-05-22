@@ -528,3 +528,47 @@ async def get_workflow(workflow_id: str):
     except WorkflowValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return defn.model_dump(mode="json")
+
+
+@router.get("/{workflow_id}/schedule-preview")
+async def schedule_preview(workflow_id: str):
+    """Phase 4 — return the per-tick schedule the engine would run on the
+    current architecture, plus any feasibility issues.
+
+    Read-only. Useful for operator inspection ("would these steps run in
+    parallel on the BD790i?") and as the data source for a future Memory
+    tab visualization. The engine itself is still sequential in Phase 4a;
+    this endpoint reports what Phase 4b will do.
+    """
+    if not workflow_id or not all(c.isalnum() or c in "_-" for c in workflow_id):
+        raise HTTPException(status_code=400, detail="invalid workflow id")
+    engine = get_engine()
+    yaml_path = engine.resolve_workflow_path(workflow_id, WORKFLOWS_DIR)
+    if not yaml_path:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Workflow '{workflow_id}' not found in public or private overlay",
+        )
+    try:
+        defn = engine.load(yaml_path)
+    except WorkflowValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    from ..services.scheduler import Scheduler
+
+    preview = Scheduler().preview(defn)
+    return {
+        "workflow_id": workflow_id,
+        "arch_name": preview.arch_name,
+        "ticks": preview.ticks,
+        "feasibility_issues": [
+            {
+                "step_id": i.step_id,
+                "est_size_gb": i.est_size_gb,
+                "arch_budget_gb": i.arch_budget_gb,
+                "reason": i.reason,
+            }
+            for i in preview.feasibility_issues
+        ],
+        "notes": preview.notes,
+    }

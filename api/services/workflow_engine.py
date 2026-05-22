@@ -323,6 +323,25 @@ class WorkflowEngine:
         if dupes:
             errors.append(f"Duplicate step IDs: {set(dupes)}")
 
+        # Phase 4 — arch-aware feasibility. No-op when no step has est_size_gb
+        # set (preserves the pre-Phase-4 acceptance surface). Failures here
+        # are real workflow problems: a step asks for more memory than the
+        # current architecture can give it.
+        try:
+            from .scheduler import Scheduler
+
+            issues = Scheduler().validate_feasibility(definition)
+            for issue in issues:
+                errors.append(
+                    f"step '{issue.step_id}' requests "
+                    f"{issue.est_size_gb} GB but arch budget is "
+                    f"{issue.arch_budget_gb:.1f} GB ({issue.reason})"
+                )
+        except Exception as e:
+            # Scheduler/arch failures must not block workflow validation —
+            # surface as a debug log and continue.
+            logger.debug(f"Scheduler feasibility skipped: {e}")
+
         if errors:
             raise WorkflowValidationError(
                 f"Workflow '{definition.id}' has {len(errors)} validation error(s):\n"

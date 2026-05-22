@@ -74,6 +74,13 @@ class AgentStep(BaseModel):
     name: str
     model: Optional[str] = None
     role: Optional[str] = None
+    # Phase 4 — operator-supplied estimate of the model's GGUF size in GB.
+    # Used by Architecture.feasible() at validate time and by the scheduler
+    # at preview time. Optional for backwards compatibility; when missing the
+    # feasibility check is a pass-through (Phase 4b will auto-derive from
+    # MODEL_REGISTRY when not set). Common values: 7B Q4_K_M ≈ 4.5 GB,
+    # 13B Q4_K_M ≈ 8 GB, 32B Q4_K_M ≈ 20 GB, 70B Q4_K_M ≈ 40 GB.
+    est_size_gb: Optional[float] = None
 
     # v1 field
     system_prompt: Optional[str] = None
