@@ -83,6 +83,28 @@ def _format_chat_prompt(messages: List[Dict]) -> str:
     return prompt
 
 
+def _extract_timings(ollama_result: Dict) -> Dict[str, Optional[float]]:
+    """Pull timing fields from an Ollama /api/chat or /api/generate response.
+
+    Ollama returns nanoseconds; we convert to milliseconds for readability.
+    Returns None for any field the response did not include (older Ollama
+    versions, error paths, or fallback codepaths that synthesized a payload).
+    """
+
+    def _ns_to_ms(v):
+        try:
+            return float(v) / 1_000_000.0 if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "load_duration_ms": _ns_to_ms(ollama_result.get("load_duration")),
+        "prompt_eval_duration_ms": _ns_to_ms(ollama_result.get("prompt_eval_duration")),
+        "eval_duration_ms": _ns_to_ms(ollama_result.get("eval_duration")),
+        "total_duration_ms": _ns_to_ms(ollama_result.get("total_duration")),
+    }
+
+
 class OllamaService:
     """Service for interacting with Ollama API"""
 
@@ -219,6 +241,16 @@ class OllamaService:
                 content = gen_result.get("response", "")
                 result["prompt_eval_count"] = gen_result.get("prompt_eval_count", 0)
                 result["eval_count"] = gen_result.get("eval_count", 0)
+                # Carry timing fields from the fallback so observability still
+                # works when /api/chat returned empty.
+                for k in (
+                    "load_duration",
+                    "prompt_eval_duration",
+                    "eval_duration",
+                    "total_duration",
+                ):
+                    if k in gen_result:
+                        result[k] = gen_result[k]
 
             logger.info(
                 f"Chat complete: model={model}, "
@@ -230,6 +262,7 @@ class OllamaService:
                 "content": content,
                 "prompt_eval_count": result.get("prompt_eval_count", 0),
                 "eval_count": result.get("eval_count", 0),
+                **_extract_timings(result),
             }
             tool_calls = result.get("message", {}).get("tool_calls")
             if tool_calls:

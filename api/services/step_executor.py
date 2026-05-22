@@ -26,7 +26,46 @@ from ..models.workflow_models import (
 from .hook_bus import HookBus, HookContext, HookResult
 from .prompt_composer import PromptComposer, ComposedPrompt
 from .model_adapters import resolve_adapter
-from .ollama_service import OllamaService
+from .ollama_service import OLLAMA_KEEP_ALIVE, OllamaService
+
+
+def _safe_pressure_snapshot() -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """Capture (arch_name, pressure_dict) or (None, None) if arch detection
+    is unavailable. Architecture detection may have failed at startup on
+    systems without NVML or on detached deployments — never raise from here.
+    """
+    try:
+        from .architecture import _get_current as _get_arch
+
+        arch = _get_arch()
+        snap = arch.snapshot()
+        snap_dict = snap.model_dump() if hasattr(snap, "model_dump") else snap.dict()
+        return arch.name.value, snap_dict
+    except Exception:
+        return None, None
+
+
+def _apply_telemetry(
+    result: StepResult,
+    llm_result: Dict[str, Any],
+    arch_name: Optional[str],
+    pressure_before: Optional[Dict[str, Any]],
+    pressure_after: Optional[Dict[str, Any]],
+) -> None:
+    """Populate Phase 2 observability fields on a StepResult.
+
+    Safe to call on both success and failure paths; missing values stay None.
+    Pulls Ollama timing fields out of the chat result dict (added in
+    ollama_service._extract_timings).
+    """
+    result.load_duration_ms = llm_result.get("load_duration_ms")
+    result.prompt_eval_duration_ms = llm_result.get("prompt_eval_duration_ms")
+    result.eval_duration_ms = llm_result.get("eval_duration_ms")
+    result.total_duration_ms = llm_result.get("total_duration_ms")
+    result.arch_name = arch_name
+    result.pressure_before = pressure_before
+    result.pressure_after = pressure_after
+    result.keep_alive_used = OLLAMA_KEEP_ALIVE
 
 
 class StepExecutor:
@@ -112,10 +151,17 @@ class StepExecutor:
         composed, params = adapter.prepare(composed, composed.params)
         composed.params = params
 
+        # --- Phase 2 observability: snapshot before the LLM call -------------
+        # arch_name is fixed for the run; pressure_before is captured once per
+        # step (the retry loop reuses the same pre-state for telemetry). Both
+        # are None on systems where architecture detection didn't initialise.
+        arch_name, pressure_before = _safe_pressure_snapshot()
+
         # --- Retry loop with hook lifecycle ----------------------------------
         last_error: Any = None
         current_model = resolved_model
         llm_result: Dict[str, Any] = {}
+        pressure_after: Optional[Dict[str, Any]] = None
 
         # Snapshot the composed prompt so each retry attempt starts clean.
         # Hooks (especially retry_with_feedback) mutate ctx.prompt.user in place;
@@ -162,6 +208,10 @@ class StepExecutor:
                 logger.warning(
                     f"Step '{step.id}' attempt {attempt + 1} model call raised: {e}"
                 )
+            finally:
+                # Snapshot pressure after every attempt — the most recent
+                # snapshot wins (interesting case is the final attempt).
+                _, pressure_after = _safe_pressure_snapshot()
 
             # after_step
             self.hook_bus.dispatch("after_step", ctx)
@@ -180,6 +230,9 @@ class StepExecutor:
                 result.duration_seconds = (
                     result.completed_at - result.started_at
                 ).total_seconds()
+                _apply_telemetry(
+                    result, llm_result, arch_name, pressure_before, pressure_after
+                )
                 return result
 
             # on_failure
@@ -238,6 +291,10 @@ class StepExecutor:
         result.duration_seconds = (
             result.completed_at - result.started_at
         ).total_seconds()
+        # Telemetry is still useful on failure — a non-None load_duration
+        # tells the operator the model loaded but the response was rejected,
+        # which is a different failure mode than "model never loaded".
+        _apply_telemetry(result, llm_result, arch_name, pressure_before, pressure_after)
         logger.error(
             f"Step '{step.id}' failed after {max_retries + 1} attempts: {last_error}"
         )

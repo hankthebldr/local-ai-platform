@@ -195,6 +195,18 @@ class StepResult(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
+    # Phase 2 — Architecture-aware observability. All optional; populated when
+    # the executor has access to Ollama timing + arch.snapshot(). Older runs
+    # serialized before Phase 2 deserialize cleanly because every field defaults.
+    load_duration_ms: Optional[float] = None
+    prompt_eval_duration_ms: Optional[float] = None
+    eval_duration_ms: Optional[float] = None
+    total_duration_ms: Optional[float] = None
+    arch_name: Optional[str] = None
+    pressure_before: Optional[Dict[str, Any]] = None
+    pressure_after: Optional[Dict[str, Any]] = None
+    keep_alive_used: Optional[str] = None
+
 
 # ── Workflow Run (unchanged) ───────────────────────────────────────────────
 

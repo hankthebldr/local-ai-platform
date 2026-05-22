@@ -3238,6 +3238,9 @@ textarea.composer-desc-area {
 .wf-result-step .step-model { color: var(--text-dim); font-size: 0.68rem; }
 .wf-result-step .step-dur { color: var(--text-dim); font-size: 0.68rem; }
 .wf-result-step .step-tokens { color: var(--text-dim); font-size: 0.68rem; }
+.wf-result-step .step-load { font-size: 0.62rem; padding: 1px 5px; border-radius: 2px; letter-spacing: 0.05em; text-transform: uppercase; }
+.wf-result-step .step-load.warm { color: var(--green, #00E87B); background: rgba(0, 232, 123, 0.08); }
+.wf-result-step .step-load.cold { color: var(--orange, #FA582D); background: rgba(250, 88, 45, 0.08); }
 .wf-result-step.completed { border-left: 2px solid var(--green-dim); }
 .wf-result-step.failed { border-left: 2px solid var(--red-dim); }
 
@@ -10570,12 +10573,21 @@ async function runWorkflow() {
     (run.step_results || []).forEach(step => {
       const dur = step.duration_seconds ? step.duration_seconds.toFixed(1) + 's' : '-';
       const tokens = step.token_count ? step.token_count.total_tokens : 0;
+      // Phase 2 telemetry: load chip shows whether the model was warm in
+      // VRAM/RAM (<100ms) or cold-loaded for this step. Helps operators
+      // debug "why is this step slow" without diving into Ollama logs.
+      const loadChip = step.load_duration_ms != null
+        ? (step.load_duration_ms < 100
+            ? `<span class="step-load warm" title="model warm in memory (${step.load_duration_ms.toFixed(0)}ms)">warm</span>`
+            : `<span class="step-load cold" title="cold-loaded for this step">${(step.load_duration_ms / 1000).toFixed(1)}s load</span>`)
+        : '';
       html += `
         <div class="wf-result-step ${step.status}">
           <span class="step-name">${esc(step.step_id)}</span>
           <span class="step-model">${esc(step.model_used || '-')}</span>
           <span class="step-dur">${dur}</span>
           <span class="step-tokens">${tokens} tok</span>
+          ${loadChip}
           <span style="color:${step.status === 'completed' ? 'var(--green)' : 'var(--red)'};font-size:0.68rem">${step.status}</span>
         </div>
       `;
@@ -10708,12 +10720,21 @@ async function viewRun(runId) {
     (run.step_results || []).forEach(step => {
       const dur = step.duration_seconds ? step.duration_seconds.toFixed(1) + 's' : '-';
       const tokens = step.token_count ? step.token_count.total_tokens : 0;
+      // Phase 2 telemetry: load chip shows whether the model was warm in
+      // VRAM/RAM (<100ms) or cold-loaded for this step. Helps operators
+      // debug "why is this step slow" without diving into Ollama logs.
+      const loadChip = step.load_duration_ms != null
+        ? (step.load_duration_ms < 100
+            ? `<span class="step-load warm" title="model warm in memory (${step.load_duration_ms.toFixed(0)}ms)">warm</span>`
+            : `<span class="step-load cold" title="cold-loaded for this step">${(step.load_duration_ms / 1000).toFixed(1)}s load</span>`)
+        : '';
       html += `
         <div class="wf-result-step ${step.status}">
           <span class="step-name">${esc(step.step_id)}</span>
           <span class="step-model">${esc(step.model_used || '-')}</span>
           <span class="step-dur">${dur}</span>
           <span class="step-tokens">${tokens} tok</span>
+          ${loadChip}
         </div>
       `;
     });
