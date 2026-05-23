@@ -56,7 +56,15 @@ class Scheduler:
     unified, etc.).
     """
 
-    def __init__(self, arch: Any = None):
+    # Phase 4.4 — default max times a single step can be deferred before
+    # the scheduler raises capacity_starvation. 60 ticks at typical 1s tick
+    # cadence is a minute of "this step can't run on this hardware" before
+    # the operator gets a clear error rather than an infinite defer.
+    DEFAULT_MAX_DEFER_TICKS = 60
+
+    def __init__(
+        self, arch: Any = None, max_defer_ticks: int = DEFAULT_MAX_DEFER_TICKS
+    ):
         # Lazy default: pull the singleton if no override passed in. When
         # detection didn't run (tests, degraded boots), fall back to
         # UnknownArchitecture so schedule() still returns a usable
@@ -72,6 +80,12 @@ class Scheduler:
 
                 arch = UnknownArchitecture()
         self.arch = arch
+        self.max_defer_ticks = max_defer_ticks
+        # Phase 4.4 — per-step defer counter, keyed by step.id. Incremented
+        # every time the arch returns deferred=True for the step; cleared
+        # when the step finally dispatches (the engine's responsibility
+        # via clear_defer(step_id) — non-strict; counter is best-effort).
+        self._defer_counts: Dict[str, int] = {}
 
     # ── ready-set computation ────────────────────────────────────────────
 
@@ -104,11 +118,65 @@ class Scheduler:
         Returns ScheduleDecision dataclasses. When no architecture is
         available (detection failed), returns an empty list — Phase 4b's
         execution loop falls back to sequential dispatch in that case.
+
+        Phase 4.4: each decision is post-processed to track defer counts.
+        Steps that defer more than `max_defer_ticks` times have their
+        decision annotated with `error_code = "capacity_starvation"` and
+        `error_message`, so the engine can promote the defer into a
+        ClassifiedError-shaped failure rather than letting the workflow
+        spin forever on a step that can't fit.
         """
         if self.arch is None:
             logger.debug("Scheduler: no arch; returning empty schedule")
             return []
-        return self.arch.schedule_ready(ready)
+        decisions = self.arch.schedule_ready(ready)
+
+        # Phase 4.4 — defer accounting
+        for d in decisions:
+            step_id = getattr(d, "step_id", None)
+            if step_id is None:
+                continue
+            if getattr(d, "deferred", False):
+                self._defer_counts[step_id] = self._defer_counts.get(step_id, 0) + 1
+                if self._defer_counts[step_id] >= self.max_defer_ticks:
+                    # Annotate the decision with starvation. Engine reads
+                    # these attributes; existing arch impls don't set them,
+                    # so the check is "if any decision has error_code".
+                    try:
+                        setattr(d, "error_code", "capacity_starvation")
+                        setattr(
+                            d,
+                            "error_message",
+                            f"step '{step_id}' deferred {self._defer_counts[step_id]} times "
+                            f"(max {self.max_defer_ticks}); arch cannot place it",
+                        )
+                    except (AttributeError, TypeError):
+                        # Some decision types may be frozen dataclasses.
+                        # Surface the starvation via logs instead — the
+                        # engine still has the defer count to act on.
+                        logger.error(
+                            f"Scheduler: step '{step_id}' starved after "
+                            f"{self._defer_counts[step_id]} defers "
+                            f"(arch cannot annotate decision)"
+                        )
+            else:
+                # Step dispatched — reset its defer counter.
+                self._defer_counts.pop(step_id, None)
+        return decisions
+
+    def clear_defer(self, step_id: str) -> None:
+        """Reset the defer counter for a step.
+
+        Engines that pre-empt scheduling decisions (e.g. retry with
+        different model) should call this when the step's identity
+        effectively resets.
+        """
+        self._defer_counts.pop(step_id, None)
+
+    @property
+    def defer_counts(self) -> Dict[str, int]:
+        """Read-only view of the current defer counts. Mainly for telemetry."""
+        return dict(self._defer_counts)
 
     # ── validate-time feasibility ────────────────────────────────────────
 
