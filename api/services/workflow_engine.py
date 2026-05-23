@@ -1136,66 +1136,75 @@ class WorkflowEngine:
 
     # ── Composite step executors (kind=parallel, kind=loop) ───────────
 
-    def _execute_parallel_step(
+    def _dispatch_branches(
         self,
         parent: AgentStep,
         definition: WorkflowDefinition,
         context: WorkflowContext,
         workflow_run: WorkflowRun,
-    ) -> StepResult:
-        """Run a fan-out / gather composite.
+        branch_models: Dict[str, str],
+        mode: str,
+    ) -> Dict[str, StepResult]:
+        """Run a parallel step's branches per the resolved execution mode.
 
-        Branches dispatch concurrently via ThreadPoolExecutor (multi-model
-        concurrency). When all branches resolve, the gather step runs
-        synchronously and its outputs are materialized into the parent's
-        workspace namespace. Failure policy controls whether a single branch
-        failure aborts the parent or whether gather sees partial input.
+        Two dispatch shapes:
+
+          * Concurrent (multi_model_concurrent, single_model_concurrent):
+            ThreadPoolExecutor up to execution.max_concurrency. Note that
+            the daemon-side _LLM_SEMAPHORE serializes Ollama calls when
+            MAX_CONCURRENT_LLM=1 — the workflow asks for concurrency, the
+            daemon decides whether it can grant it.
+
+          * Sequential (single_model_pseudo_parallel):
+            Branches run in declared order, single-threaded. Trade-off:
+            no wall-clock parallelism, but the model stays loaded across
+            branches and Ollama's prompt cache survives between calls
+            (per ~70% latency reduction for prefix-heavy workflows on
+            single 30B+ models on CPU — see spec §3.3).
+
+        Returns a {branch_id: StepResult} mapping in both cases. Failures
+        are returned as failed StepResults (caller decides what to do).
         """
         import threading
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        agg = StepResult(
-            step_id=parent.id, status="running", started_at=datetime.utcnow()
-        )
+        branch_results: Dict[str, StepResult] = {}
         execution_cfg = parent.execution
         max_concurrency = execution_cfg.max_concurrency if execution_cfg else 4
-        failure_policy = execution_cfg.failure_policy if execution_cfg else "fail_fast"
 
-        # Pre-resolve a model for each branch. Failures here are workflow-level —
-        # we never start any branch if one can't be resolved.
-        branch_models: Dict[str, str] = {}
-        for branch in parent.branches:
-            if branch.kind == "llm":
+        if mode == "single_model_pseudo_parallel":
+            logger.info(
+                f"Parallel step '{parent.id}' dispatching "
+                f"{len(parent.branches)} branch(es) sequentially "
+                f"(mode=single_model_pseudo_parallel)"
+            )
+            for branch in parent.branches:
                 try:
-                    branch_models[branch.id] = self.resolver.resolve(
-                        model=branch.model,
-                        role=branch.role,
-                        default_role=definition.defaults.role,
+                    res = self._execute_one_step(
+                        branch,
+                        definition,
+                        context,
+                        workflow_run,
+                        branch_models[branch.id],
                     )
                 except Exception as e:
-                    agg.status = "failed"
-                    agg.error = (
-                        f"Parallel branch '{branch.id}' model resolution failed: {e}"
+                    res = StepResult(
+                        step_id=branch.id,
+                        status="failed",
+                        error=f"Branch raised: {e}",
+                        started_at=datetime.utcnow(),
+                        completed_at=datetime.utcnow(),
                     )
-                    agg.completed_at = datetime.utcnow()
-                    agg.duration_seconds = (
-                        agg.completed_at - agg.started_at
-                    ).total_seconds()
-                    logger.error(agg.error)
-                    return agg
-            else:
-                # Nested composite branches (rare in phase 1, but the validator
-                # already accepts them — recursive _execute_one_step handles it).
-                branch_models[branch.id] = ""
+                branch_results[branch.id] = res
+            return branch_results
 
-        branch_results: Dict[str, StepResult] = {}
+        # Concurrent dispatch (multi_model_concurrent or single_model_concurrent).
         lock = threading.Lock()
-
         logger.info(
-            f"Parallel step '{parent.id}' fanning out to "
-            f"{len(parent.branches)} branch(es) (max_concurrency={max_concurrency})"
+            f"Parallel step '{parent.id}' dispatching "
+            f"{len(parent.branches)} branch(es) concurrently (mode={mode}, "
+            f"max_concurrency={max_concurrency})"
         )
-
         with ThreadPoolExecutor(
             max_workers=min(max_concurrency, len(parent.branches)),
             thread_name_prefix=f"par-{parent.id[:16]}",
@@ -1225,6 +1234,130 @@ class WorkflowEngine:
                     )
                 with lock:
                     branch_results[branch.id] = res
+        return branch_results
+
+    def _execute_parallel_step(
+        self,
+        parent: AgentStep,
+        definition: WorkflowDefinition,
+        context: WorkflowContext,
+        workflow_run: WorkflowRun,
+    ) -> StepResult:
+        """Run a fan-out / gather composite.
+
+        Mode selection (`execution.mode`):
+          - auto                          → engine picks based on branch model set
+          - multi_model_concurrent        → ThreadPoolExecutor; heterogeneous branches
+          - single_model_concurrent       → ThreadPoolExecutor; all branches must
+                                            resolve to the same model name.
+                                            Surfaces a warning when MAX_CONCURRENT_LLM=1
+                                            (the daemon semaphore serializes anyway).
+          - single_model_pseudo_parallel  → sequential dispatch in declared order;
+                                            all branches must resolve to the same
+                                            model. Keeps the prompt cache warm
+                                            between branches.
+
+        When all branches resolve, the gather step runs synchronously and its
+        outputs are materialized into the parent's workspace namespace.
+        """
+        agg = StepResult(
+            step_id=parent.id, status="running", started_at=datetime.utcnow()
+        )
+        execution_cfg = parent.execution
+        declared_mode = (
+            execution_cfg.mode if execution_cfg else "multi_model_concurrent"
+        )
+        failure_policy = execution_cfg.failure_policy if execution_cfg else "fail_fast"
+
+        # Pre-resolve a model for each branch. Failures here are workflow-level —
+        # we never start any branch if one can't be resolved.
+        branch_models: Dict[str, str] = {}
+        for branch in parent.branches:
+            if branch.kind == "llm":
+                try:
+                    branch_models[branch.id] = self.resolver.resolve(
+                        model=branch.model,
+                        role=branch.role,
+                        default_role=definition.defaults.role,
+                    )
+                except Exception as e:
+                    agg.status = "failed"
+                    agg.error = (
+                        f"Parallel branch '{branch.id}' model resolution failed: {e}"
+                    )
+                    agg.completed_at = datetime.utcnow()
+                    agg.duration_seconds = (
+                        agg.completed_at - agg.started_at
+                    ).total_seconds()
+                    logger.error(agg.error)
+                    return agg
+            else:
+                # Nested composite branches (rare in phase 1, but the validator
+                # already accepts them — recursive _execute_one_step handles it).
+                branch_models[branch.id] = ""
+
+        # Resolve `auto` mode + enforce same-model invariant for single-model modes.
+        unique_models = {m for m in branch_models.values() if m}
+        effective_mode = declared_mode
+        if declared_mode == "auto":
+            effective_mode = (
+                "single_model_pseudo_parallel"
+                if len(unique_models) <= 1
+                else "multi_model_concurrent"
+            )
+            logger.info(
+                f"Parallel step '{parent.id}' mode=auto resolved to "
+                f"'{effective_mode}' ({len(unique_models)} unique model(s) "
+                f"across {len(parent.branches)} branch(es))"
+            )
+
+        if (
+            effective_mode
+            in (
+                "single_model_concurrent",
+                "single_model_pseudo_parallel",
+            )
+            and len(unique_models) > 1
+        ):
+            agg.status = "failed"
+            agg.error = (
+                f"Parallel step '{parent.id}' declared mode='{effective_mode}' "
+                f"but branches resolved to {len(unique_models)} different "
+                f"models: {sorted(unique_models)}. Switch to "
+                f"'multi_model_concurrent' or pin all branches to the same model."
+            )
+            agg.completed_at = datetime.utcnow()
+            agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+            logger.error(agg.error)
+            return agg
+
+        # single_model_concurrent on a single-slot daemon won't actually run
+        # concurrently — surface this so operators don't expect speedup that
+        # the deployment can't deliver.
+        if effective_mode == "single_model_concurrent":
+            try:
+                from .ollama_service import MAX_CONCURRENT_LLM
+
+                if MAX_CONCURRENT_LLM == 1:
+                    logger.warning(
+                        f"Parallel step '{parent.id}' mode=single_model_concurrent "
+                        f"but MAX_CONCURRENT_LLM=1 — daemon semaphore will "
+                        f"serialize branches. Either set MAX_CONCURRENT_LLM>1 "
+                        f"(requires OLLAMA_NUM_PARALLEL>1 on the daemon) or "
+                        f"switch to single_model_pseudo_parallel for explicit "
+                        f"sequential dispatch."
+                    )
+            except Exception:
+                pass
+
+        branch_results = self._dispatch_branches(
+            parent=parent,
+            definition=definition,
+            context=context,
+            workflow_run=workflow_run,
+            branch_models=branch_models,
+            mode=effective_mode,
+        )
 
         # Roll up token counts + durations into the composite result.
         total_prompt = sum(

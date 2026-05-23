@@ -51,7 +51,9 @@ new kinds.
   kind: parallel
   outputs: [summary]
   execution:
-    mode: multi_model_concurrent       # only mode supported in Phase 1
+    mode: auto                         # auto | multi_model_concurrent
+                                       # | single_model_concurrent
+                                       # | single_model_pseudo_parallel
     max_concurrency: 3
     failure_policy: fail_fast          # or continue_on_partial
   branches:
@@ -71,11 +73,28 @@ new kinds.
     outputs: [summary]                  # must match parent.outputs
 ```
 
-Branches dispatch through the engine's existing `ThreadPoolExecutor`. On a
-single-Ollama deployment the calls serialize at the network layer (the gain
-is context isolation, not wall-clock parallelism). Modes for true
-single-model concurrent / pseudo-parallel / sharded execution land in later
-phases — see the spec for the full plan.
+#### Execution modes
+
+| Mode                            | When to use                                           | Dispatch shape                                                                |
+|---------------------------------|-------------------------------------------------------|-------------------------------------------------------------------------------|
+| `auto`                          | Most workflows — let the engine pick                  | Resolves to `single_model_pseudo_parallel` if all branches share a model, else `multi_model_concurrent` |
+| `multi_model_concurrent`        | Heterogeneous specialist branches on a multi-model box | `ThreadPoolExecutor` (concurrent at the network layer)                        |
+| `single_model_concurrent`       | Same model, daemon has `OLLAMA_NUM_PARALLEL > 1`      | `ThreadPoolExecutor`; engine validates all branches resolve to the same model |
+| `single_model_pseudo_parallel`  | Same model, single-slot daemon (CPU-only is typical) | **Sequential** in declared order; keeps prompt cache warm between branches    |
+
+On a single-Ollama-slot CPU box (the default Enclave shape) all modes
+serialize at the `_LLM_SEMAPHORE`. The single-model modes still earn their
+keep:
+
+- `single_model_pseudo_parallel` gives **deterministic ordering** so Ollama's
+  prompt cache survives between branches — for prefix-heavy workflows this is
+  ~70% latency reduction on the second-and-later branches.
+- `single_model_concurrent` is the operator's promise that the daemon has
+  enough slots provisioned (`OLLAMA_NUM_PARALLEL > 1`); the engine asks the
+  daemon for them via the per-request `num_parallel` option. A clear warning
+  fires if the deployment can't honor the promise.
+- Both single-model modes refuse to run if branches accidentally resolve to
+  different models — better a clean failure than silent degradation.
 
 ### kind: loop
 

@@ -71,18 +71,30 @@ class StepHooks(BaseModel):
 class ParallelExecutionConfig(BaseModel):
     """Execution semantics for a `kind: parallel` step.
 
-    The Phase-1 implementation ships `multi_model_concurrent` only — branches
-    are dispatched to a ThreadPoolExecutor and run concurrently at the network
-    layer. Other modes from the spec
-    (`docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md` §3) land in
-    follow-up phases:
+    Modes (`docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md` §3):
 
-      * single_model_concurrent      — needs OLLAMA_NUM_PARALLEL plumbing
-      * single_model_pseudo_parallel — needs prompt-prefix-locking in composer
-      * sharded                      — needs sharder abstractions
+      * auto                          — engine selects based on branch model set
+      * multi_model_concurrent        — heterogeneous branches; concurrent dispatch
+      * single_model_concurrent       — same model, concurrent slots (needs
+                                        OLLAMA_NUM_PARALLEL > 1 on the daemon)
+      * single_model_pseudo_parallel  — same model, sequential dispatch with
+                                        prompt-cache reuse between branches
+      * sharded                       — single persona × N input shards (Phase 2b)
+
+    For single-model modes the engine validates at runtime that every branch
+    resolves to the same model name; mismatch raises a clean error rather than
+    silently degrading to multi_model_concurrent.
+
+    When mode is `auto` the engine picks `single_model_pseudo_parallel` if all
+    branches resolve to the same model and `multi_model_concurrent` otherwise.
     """
 
-    mode: Literal["multi_model_concurrent"] = "multi_model_concurrent"
+    mode: Literal[
+        "auto",
+        "multi_model_concurrent",
+        "single_model_concurrent",
+        "single_model_pseudo_parallel",
+    ] = "multi_model_concurrent"
     max_concurrency: int = 4
     failure_policy: Literal["fail_fast", "continue_on_partial"] = "fail_fast"
     timeout_per_branch: Optional[int] = None
