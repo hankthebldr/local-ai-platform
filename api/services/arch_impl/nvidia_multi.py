@@ -115,8 +115,14 @@ class NvidiaMultiArchitecture:
         )
 
     def schedule_ready(self, ready_steps: list) -> List[ScheduleDecision]:
-        """Sequential by operator policy: head step picks the GPU with most
-        free VRAM, the rest defer.
+        """Sequential by operator policy: head step picks a GPU, the rest defer.
+
+        Phase 5.3 — head step's `gpu_affinity` hint is honored:
+          - int N            → place on GPU N (when N < pool_count)
+          - "same_as:<id>"   → place on the GPU previously assigned to <id>
+                               if visible in `self._last_placements`; falls
+                               back to best-free otherwise
+          - "spread"/"any"/None → best-free (default)
 
         Pre-warm logic (in transition_plan) is where multi-GPU actually wins:
         we can load the NEXT model on a free GPU while the CURRENT step runs
@@ -125,12 +131,17 @@ class NvidiaMultiArchitecture:
         if not ready_steps:
             return []
         snap = self.snapshot()
-        # Pick the GPU with most free VRAM
-        best_gpu = max(snap.per_pool, key=lambda p: p.get("free_gb", 0))["pool_id"]
         head = ready_steps[0]
-        decisions = [
-            ScheduleDecision(step_id=getattr(head, "id", "unknown"), placement=best_gpu)
-        ]
+        affinity = getattr(head, "gpu_affinity", None)
+        placement = self._resolve_placement(affinity, snap)
+
+        # Track placement for future same_as: lookups within this run.
+        head_id = getattr(head, "id", "unknown")
+        if not hasattr(self, "_last_placements"):
+            self._last_placements: dict = {}
+        self._last_placements[head_id] = placement
+
+        decisions = [ScheduleDecision(step_id=head_id, placement=placement)]
         for rest in ready_steps[1:]:
             decisions.append(
                 ScheduleDecision(
@@ -141,6 +152,23 @@ class NvidiaMultiArchitecture:
                 )
             )
         return decisions
+
+    def _resolve_placement(self, affinity, snap):
+        """Phase 5.3 — resolve a step's gpu_affinity hint to a placement int."""
+        best_free = max(snap.per_pool, key=lambda p: p.get("free_gb", 0))["pool_id"]
+        if affinity is None or affinity == "any" or affinity == "spread":
+            return best_free
+        if isinstance(affinity, int) and not isinstance(affinity, bool):
+            # Bound-check; fall back to best-free on out-of-range
+            if 0 <= affinity < self.pool_count:
+                return affinity
+            return best_free
+        if isinstance(affinity, str) and affinity.startswith("same_as:"):
+            target_id = affinity[len("same_as:") :]
+            placements = getattr(self, "_last_placements", {})
+            if target_id in placements:
+                return placements[target_id]
+        return best_free
 
     def feasible(self, island: list) -> Feasibility:
         """For sequential workflows, every step is its own island.

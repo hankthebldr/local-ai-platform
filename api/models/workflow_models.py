@@ -168,6 +168,15 @@ class AgentStep(BaseModel):
     # MODEL_REGISTRY when not set). Common values: 7B Q4_K_M ≈ 4.5 GB,
     # 13B Q4_K_M ≈ 8 GB, 32B Q4_K_M ≈ 20 GB, 70B Q4_K_M ≈ 40 GB.
     est_size_gb: Optional[float] = None
+    # Phase 5.3 — GPU affinity hint for multi-GPU hosts. Honored only by
+    # NvidiaMultiArchitecture.schedule_ready; ignored on unified / single-GPU /
+    # CPU arches.
+    #   None         — no preference; arch picks (typically "GPU with most free VRAM")
+    #   "any"        — same as None
+    #   "spread"     — explicit "let the scheduler distribute"
+    #   "same_as:<step_id>" — co-locate with the named sibling step
+    #   int (0..N-1) — pin to a specific GPU index
+    gpu_affinity: Optional[Any] = None
 
     # v1 field
     system_prompt: Optional[str] = None
@@ -228,6 +237,38 @@ class AgentStep(BaseModel):
 
     @model_validator(mode="after")
     def _validate_kind_shape(self):
+        # Phase 5.3 — gpu_affinity grammar
+        if self.gpu_affinity is not None:
+            aff = self.gpu_affinity
+            if isinstance(aff, bool):
+                # bool is a subclass of int in Python; reject explicitly
+                raise ValueError(
+                    f"AgentStep(id={self.id!r}).gpu_affinity must be a string "
+                    "('any'|'spread'|'same_as:<id>') or an int, not bool"
+                )
+            if isinstance(aff, int):
+                if aff < 0:
+                    raise ValueError(
+                        f"AgentStep(id={self.id!r}).gpu_affinity int must be >= 0 "
+                        f"(got {aff})"
+                    )
+            elif isinstance(aff, str):
+                if aff not in ("any", "spread") and not aff.startswith("same_as:"):
+                    raise ValueError(
+                        f"AgentStep(id={self.id!r}).gpu_affinity string must be "
+                        f"'any', 'spread', or 'same_as:<id>' (got {aff!r})"
+                    )
+                if aff.startswith("same_as:") and len(aff) <= len("same_as:"):
+                    raise ValueError(
+                        f"AgentStep(id={self.id!r}).gpu_affinity 'same_as:' "
+                        "needs a step id (e.g. 'same_as:step_a')"
+                    )
+            else:
+                raise ValueError(
+                    f"AgentStep(id={self.id!r}).gpu_affinity must be str or int "
+                    f"(got {type(aff).__name__})"
+                )
+
         # Non-a2a kinds must not declare a2a fields.
         if self.kind != "a2a" and (self.agent_card_url or self.skill or self.auth):
             raise ValueError(
