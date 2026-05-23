@@ -1,13 +1,27 @@
 """Tests for workflow data models"""
+
 import pytest
 from api.models.workflow_models import (
     AgentStep,
-    WorkflowDefaults,
+    LoopTermination,
+    ParallelExecutionConfig,
     WorkflowDefinition,
     WorkflowContext,
-    StepResult,
     WorkflowRun,
 )
+
+
+def _llm(id_: str, **overrides) -> AgentStep:
+    """Test helper — minimal valid llm step."""
+    base = dict(
+        id=id_,
+        name=id_.upper(),
+        role="fast",
+        system_prompt="do the thing",
+        outputs=["result"],
+    )
+    base.update(overrides)
+    return AgentStep(**base)
 
 
 class TestAgentStep:
@@ -131,3 +145,197 @@ class TestWorkflowRun:
         assert run.status == "pending"
         assert run.run_id is not None
         assert run.step_results == []
+
+
+class TestAgentStepKind:
+    """Discriminator + composite-shape validation."""
+
+    def test_kind_defaults_to_llm_for_backwards_compat(self):
+        step = _llm("s1")
+        assert step.kind == "llm"
+
+    def test_parallel_happy_path(self):
+        parent = AgentStep(
+            id="p",
+            name="P",
+            kind="parallel",
+            outputs=["findings"],
+            execution=ParallelExecutionConfig(max_concurrency=2),
+            branches=[_llm("b1", outputs=["data"]), _llm("b2", outputs=["data"])],
+            gather=_llm("g", outputs=["findings"]),
+        )
+        assert parent.kind == "parallel"
+        assert len(parent.branches) == 2
+        assert parent.gather.id == "g"
+        assert parent.execution.max_concurrency == 2
+
+    def test_parallel_rejects_single_branch(self):
+        with pytest.raises(Exception, match="at least 2 branches"):
+            AgentStep(
+                id="p",
+                name="P",
+                kind="parallel",
+                outputs=["findings"],
+                branches=[_llm("b1", outputs=["data"])],
+                gather=_llm("g", outputs=["findings"]),
+            )
+
+    def test_parallel_rejects_missing_gather(self):
+        with pytest.raises(Exception, match="requires a gather"):
+            AgentStep(
+                id="p",
+                name="P",
+                kind="parallel",
+                outputs=["findings"],
+                branches=[
+                    _llm("b1", outputs=["data"]),
+                    _llm("b2", outputs=["data"]),
+                ],
+            )
+
+    def test_parallel_rejects_gather_output_mismatch(self):
+        with pytest.raises(Exception, match="do not match gather"):
+            AgentStep(
+                id="p",
+                name="P",
+                kind="parallel",
+                outputs=["findings"],
+                branches=[
+                    _llm("b1", outputs=["data"]),
+                    _llm("b2", outputs=["data"]),
+                ],
+                gather=_llm("g", outputs=["WRONG_KEY"]),
+            )
+
+    def test_parallel_rejects_duplicate_branch_ids(self):
+        with pytest.raises(Exception, match="duplicate branch ids"):
+            AgentStep(
+                id="p",
+                name="P",
+                kind="parallel",
+                outputs=["findings"],
+                branches=[
+                    _llm("dup", outputs=["data"]),
+                    _llm("dup", outputs=["data"]),
+                ],
+                gather=_llm("g", outputs=["findings"]),
+            )
+
+    def test_parallel_rejects_own_prompt(self):
+        with pytest.raises(Exception, match="must not declare a"):
+            AgentStep(
+                id="p",
+                name="P",
+                kind="parallel",
+                system_prompt="should not be here",
+                outputs=["findings"],
+                branches=[
+                    _llm("b1", outputs=["data"]),
+                    _llm("b2", outputs=["data"]),
+                ],
+                gather=_llm("g", outputs=["findings"]),
+            )
+
+    def test_llm_rejects_branches(self):
+        with pytest.raises(Exception, match="must not declare branches"):
+            AgentStep(
+                id="x",
+                name="X",
+                role="fast",
+                system_prompt="x",
+                outputs=["o"],
+                branches=[
+                    _llm("b1", outputs=["data"]),
+                    _llm("b2", outputs=["data"]),
+                ],
+            )
+
+    def test_loop_happy_path(self):
+        loop = AgentStep(
+            id="l",
+            name="L",
+            kind="loop",
+            outputs=["final"],
+            max_iterations=3,
+            until=LoopTermination(gate="critic.approved == True"),
+            body=[
+                _llm("draft", outputs=["text"]),
+                _llm("critic", outputs=["final"]),
+            ],
+        )
+        assert loop.kind == "loop"
+        assert loop.max_iterations == 3
+        assert loop.until.gate == "critic.approved == True"
+
+    def test_loop_rejects_missing_until(self):
+        with pytest.raises(Exception, match="requires `until`"):
+            AgentStep(
+                id="l",
+                name="L",
+                kind="loop",
+                outputs=["final"],
+                body=[_llm("draft", outputs=["text"])],
+            )
+
+    def test_loop_rejects_missing_body(self):
+        with pytest.raises(Exception, match="at least 1 body"):
+            AgentStep(
+                id="l",
+                name="L",
+                kind="loop",
+                outputs=["final"],
+                until=LoopTermination(gate="True"),
+            )
+
+    def test_loop_rejects_output_not_produced_by_last_body(self):
+        with pytest.raises(Exception, match="not produced by the last body"):
+            AgentStep(
+                id="l",
+                name="L",
+                kind="loop",
+                outputs=["missing_key"],
+                until=LoopTermination(gate="True"),
+                body=[_llm("draft", outputs=["produced_key"])],
+            )
+
+    def test_loop_rejects_zero_max_iterations(self):
+        with pytest.raises(Exception, match="max_iterations must be"):
+            AgentStep(
+                id="l",
+                name="L",
+                kind="loop",
+                outputs=["final"],
+                max_iterations=0,
+                until=LoopTermination(gate="True"),
+                body=[_llm("draft", outputs=["final"])],
+            )
+
+
+class TestNestedDuplicateIds:
+    """Branch and body step ids must not collide across nesting."""
+
+    def test_branch_collides_with_top_level_step(self):
+        # The model itself can't catch this — it shows up at validate() time.
+        # We just confirm the model accepts the duplicate locally; the engine
+        # validator (tested separately) is responsible for the cross-tree check.
+        top = AgentStep(
+            id="dup",
+            name="Top",
+            role="fast",
+            system_prompt="x",
+            outputs=["o"],
+        )
+        composite = AgentStep(
+            id="par",
+            name="Par",
+            kind="parallel",
+            outputs=["o"],
+            branches=[
+                _llm("dup", outputs=["o"]),  # collides with `top`
+                _llm("b2", outputs=["o"]),
+            ],
+            gather=_llm("g", outputs=["o"]),
+        )
+        # Both parse individually
+        assert top.id == "dup"
+        assert composite.branches[0].id == "dup"
