@@ -32,16 +32,22 @@ class _StubOllama:
         self._responses = list(responses)
         self.calls = []
 
-    def chat(self, model, messages, temperature=None, max_tokens=None):
+    def chat(self, model, messages, temperature=None, max_tokens=None, **kwargs):
+        # **kwargs absorbs Phase 3's keep_alive and any future additions —
+        # the stub doesn't need to model the real behavior, just not crash.
         self.calls.append({"model": model, "messages": messages})
         if not self._responses:
             return {"content": "", "prompt_eval_count": 0, "eval_count": 0}
         resp = self._responses.pop(0)
-        return resp if isinstance(resp, dict) else {
-            "content": resp,
-            "prompt_eval_count": 5,
-            "eval_count": 5,
-        }
+        return (
+            resp
+            if isinstance(resp, dict)
+            else {
+                "content": resp,
+                "prompt_eval_count": 5,
+                "eval_count": 5,
+            }
+        )
 
     def health_check(self):
         return True
@@ -199,9 +205,7 @@ def test_initial_checkpoint_persists_running_state(isolated_workflow_dir):
     real_checkpoint = engine._checkpoint
 
     def _spy(run):
-        snapshots.append(
-            {"status": run.status, "n_results": len(run.step_results)}
-        )
+        snapshots.append({"status": run.status, "n_results": len(run.step_results)})
         return real_checkpoint(run)
 
     engine._checkpoint = _spy
