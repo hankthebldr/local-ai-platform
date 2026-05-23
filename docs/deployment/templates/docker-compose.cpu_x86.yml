@@ -1,0 +1,49 @@
+# Enclave — x86 CPU-only (cpu_x86) deployment template
+#
+# Use case: Linux x86 host with no NVIDIA GPU (MS-01 with iGPU only,
+# generic homelab box, cloud VM without GPU passthrough). Runs Ollama
+# in CPU inference mode with thread pinning.
+#
+# Key tuning knob: OLLAMA_NUM_THREAD. Set to your PHYSICAL core count
+# (not logical / SMT threads). On Ryzen 9 7945HX with 16P/32T, use 16.
+#
+# Validate the snippet without running:
+#   docker-compose -f docker-compose.cpu_x86.yml config
+
+services:
+  ollama:
+    image: ollama/ollama:0.23.4
+    container_name: enclave-ollama
+    environment:
+      # ── CPU x86 recommendations ──────────────────────────────────────
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_MAX_LOADED_MODELS=1             # CPU prefill dominates; 1 resident
+      - OLLAMA_NUM_PARALLEL=1                  # no surplus capacity
+      - OLLAMA_NUM_THREAD=${HOST_PHYS_CORES:-8}  # physical, not logical
+      - OLLAMA_KEEP_ALIVE=30m                  # reload cost is huge on CPU
+      # ── Explicit non-set: CUDA_*, NVIDIA_* (validator flags these
+      #    as arch_env_mismatch if present on CPU-only deployment)
+    volumes:
+      - ./data/ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    # Resource limits — adjust to your host
+    deploy:
+      resources:
+        limits:
+          memory: 64G
+        reservations:
+          memory: 32G
+
+  api:
+    image: ghcr.io/hankthebldr/local-ai-platform:latest
+    container_name: enclave-api
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - ENABLE_API_AUTH=false
+    depends_on:
+      - ollama
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
