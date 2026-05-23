@@ -8,10 +8,9 @@ and execution tracking. Supports both v1 (system_prompt string) and v2
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-
 
 # ── Step Config ────────────────────────────────────────────────────────────
 
@@ -66,12 +65,64 @@ class StepHooks(BaseModel):
     on_failure: List[HookSpec] = Field(default_factory=list)
 
 
+# ── Composite step config (kind=parallel, kind=loop) ───────────────────────
+
+
+class ParallelExecutionConfig(BaseModel):
+    """Execution semantics for a `kind: parallel` step.
+
+    The Phase-1 implementation ships `multi_model_concurrent` only — branches
+    are dispatched to a ThreadPoolExecutor and run concurrently at the network
+    layer. Other modes from the spec
+    (`docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md` §3) land in
+    follow-up phases:
+
+      * single_model_concurrent      — needs OLLAMA_NUM_PARALLEL plumbing
+      * single_model_pseudo_parallel — needs prompt-prefix-locking in composer
+      * sharded                      — needs sharder abstractions
+    """
+
+    mode: Literal["multi_model_concurrent"] = "multi_model_concurrent"
+    max_concurrency: int = 4
+    failure_policy: Literal["fail_fast", "continue_on_partial"] = "fail_fast"
+    timeout_per_branch: Optional[int] = None
+
+
+class LoopTermination(BaseModel):
+    """Predicate evaluated after each loop iteration to decide whether to stop.
+
+    `gate` — boolean expression over the iteration's workspace. Supported ops:
+        ==, !=, >, <, >=, <=, in, not in, and, or, not. References use the
+        same dotted-path syntax as AgentStep.inputs (e.g. `critic.approved`
+        resolves to workspace.{loop_id}.iterations.{n}.critic.approved).
+
+    `max_iterations` is enforced by the loop step itself, not by this predicate.
+    """
+
+    type: Literal["gate"] = "gate"
+    gate: str
+    on_max_iterations: Literal["emit_best", "fail"] = "emit_best"
+
+
 # ── Agent Step ─────────────────────────────────────────────────────────────
 
 
 class AgentStep(BaseModel):
+    """A unit of work in a workflow.
+
+    The `kind` discriminator selects execution semantics:
+
+      * llm       — single LLM call (default; backwards-compatible)
+      * parallel  — fan-out to `branches`, then `gather` synthesizes results
+      * loop      — re-run `body` until `until` predicate is satisfied or
+                    `max_iterations` is reached
+
+    Spec: docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md
+    """
+
     id: str
     name: str
+    kind: Literal["llm", "parallel", "loop"] = "llm"
     model: Optional[str] = None
     role: Optional[str] = None
     # Phase 4 — operator-supplied estimate of the model's GGUF size in GB.
@@ -102,18 +153,115 @@ class AgentStep(BaseModel):
     # blob instead of a connected flow.
     depends_on: List[str] = Field(default_factory=list)
 
+    # ── kind: parallel ────────────────────────────────────────────────
+    # Child steps that fan out from this parent. Each branch is itself a full
+    # AgentStep (recursive), gets its own workspace namespace under
+    # workspace.{parent.id}.branches.{branch.id}, and may have its own DAG via
+    # `depends_on` referencing sibling branch ids.
+    branches: Optional[List["AgentStep"]] = None
+    # The synthesis step that runs after all branches complete. Reads each
+    # branch's outputs (referenced as e.g. `extract_schema.fields`) and writes
+    # to workspace.{parent.id}.{key} — i.e. the parent's declared outputs.
+    gather: Optional["AgentStep"] = None
+    execution: Optional[ParallelExecutionConfig] = None
+
+    # ── kind: loop ────────────────────────────────────────────────────
+    # Steps run on each iteration, in order. Body steps see prior iterations
+    # via `$loop.previous_iteration.{step_id}.{key}` and may also reference
+    # the loop's own declared `inputs` (which are resolved once on iter 0).
+    body: Optional[List["AgentStep"]] = None
+    until: Optional[LoopTermination] = None
+    max_iterations: int = 5
+
     @model_validator(mode="after")
-    def _validate_prompt_shape(self):
-        if not self.system_prompt and not self.prompt:
-            raise ValueError(
-                "AgentStep requires either prompt or system_prompt (v2 prompt block or v1 system_prompt)"
-            )
-        if self.system_prompt and self.prompt:
-            raise ValueError(
-                "AgentStep has both `prompt` and `system_prompt` — use one"
-            )
-        if self.system_prompt is not None and not self.system_prompt.strip():
-            raise ValueError("system_prompt must not be empty")
+    def _validate_kind_shape(self):
+        if self.kind == "llm":
+            if not self.system_prompt and not self.prompt:
+                raise ValueError(
+                    "AgentStep(kind=llm) requires either prompt or system_prompt"
+                )
+            if self.system_prompt and self.prompt:
+                raise ValueError(
+                    "AgentStep has both `prompt` and `system_prompt` — use one"
+                )
+            if self.system_prompt is not None and not self.system_prompt.strip():
+                raise ValueError("system_prompt must not be empty")
+            if self.branches or self.gather or self.body or self.until:
+                raise ValueError(
+                    f"AgentStep(kind=llm) must not declare branches/gather/body/until "
+                    f"(got id={self.id!r})"
+                )
+        elif self.kind == "parallel":
+            if not self.branches or len(self.branches) < 2:
+                raise ValueError(
+                    f"AgentStep(kind=parallel, id={self.id!r}) requires at least 2 branches"
+                )
+            if self.gather is None:
+                raise ValueError(
+                    f"AgentStep(kind=parallel, id={self.id!r}) requires a gather step"
+                )
+            if self.system_prompt or self.prompt:
+                raise ValueError(
+                    f"AgentStep(kind=parallel, id={self.id!r}) must not declare a "
+                    f"prompt — the gather step holds the synthesis prompt"
+                )
+            if self.body or self.until:
+                raise ValueError(
+                    f"AgentStep(kind=parallel, id={self.id!r}) must not declare body/until"
+                )
+            # Branch IDs must be unique within the parent.
+            branch_ids = [b.id for b in self.branches]
+            if len(set(branch_ids)) != len(branch_ids):
+                raise ValueError(
+                    f"AgentStep(kind=parallel, id={self.id!r}) has duplicate branch ids: "
+                    f"{[b for b in branch_ids if branch_ids.count(b) > 1]}"
+                )
+            # The gather step's outputs must match the parent's declared outputs
+            # exactly — gather is the unit that materializes the parent's contract.
+            if set(self.gather.outputs) != set(self.outputs):
+                raise ValueError(
+                    f"AgentStep(kind=parallel, id={self.id!r}) outputs {sorted(self.outputs)} "
+                    f"do not match gather step outputs {sorted(self.gather.outputs)}"
+                )
+        elif self.kind == "loop":
+            if not self.body or len(self.body) < 1:
+                raise ValueError(
+                    f"AgentStep(kind=loop, id={self.id!r}) requires at least 1 body step"
+                )
+            if self.until is None:
+                raise ValueError(
+                    f"AgentStep(kind=loop, id={self.id!r}) requires `until` termination"
+                )
+            if self.system_prompt or self.prompt:
+                raise ValueError(
+                    f"AgentStep(kind=loop, id={self.id!r}) must not declare a prompt"
+                )
+            if self.branches or self.gather:
+                raise ValueError(
+                    f"AgentStep(kind=loop, id={self.id!r}) must not declare branches/gather"
+                )
+            if self.max_iterations < 1:
+                raise ValueError(
+                    f"AgentStep(kind=loop, id={self.id!r}) max_iterations must be >= 1"
+                )
+            # Body step IDs must be unique.
+            body_ids = [s.id for s in self.body]
+            if len(set(body_ids)) != len(body_ids):
+                raise ValueError(
+                    f"AgentStep(kind=loop, id={self.id!r}) has duplicate body step ids"
+                )
+            # On loop termination, each of the loop's declared outputs is
+            # taken from the last body step's workspace by NAME. Every loop
+            # output must therefore be produced by the last body step —
+            # this makes the loop's contract knowable at validate time.
+            last_body = self.body[-1]
+            missing = set(self.outputs) - set(last_body.outputs)
+            if missing:
+                raise ValueError(
+                    f"AgentStep(kind=loop, id={self.id!r}) outputs "
+                    f"{sorted(missing)} are not produced by the last body "
+                    f"step '{last_body.id}' (which produces {last_body.outputs})"
+                )
         return self
 
 

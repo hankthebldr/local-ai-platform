@@ -18,13 +18,16 @@ class FakeOllamaClient:
         self._responses = list(responses or [])
         self.calls = []
 
-    def chat(self, model, messages, temperature=None, max_tokens=None):
-        self.calls.append({
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        })
+    def chat(self, model, messages, temperature=None, max_tokens=None, **kwargs):
+        self.calls.append(
+            {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                **kwargs,
+            }
+        )
         if not self._responses:
             return {"content": "", "prompt_eval_count": 0, "eval_count": 0}
         resp = self._responses.pop(0)
@@ -59,4 +62,5 @@ def make_executor(composer):
             composer=composer,
             hook_bus=bus,
         )
+
     return _make

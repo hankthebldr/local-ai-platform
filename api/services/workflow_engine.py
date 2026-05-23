@@ -6,8 +6,10 @@ Integrates with ModelResolver for role-based model selection and
 StepExecutor for individual step execution with retry logic.
 """
 
+import ast
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -38,6 +40,83 @@ DATA_DIR = os.getenv("WORKFLOW_DATA_DIR", "./data/workflows")
 # rather than warm reuse. ~100ms is a generous bar — true warm reuse is <50ms
 # on every arch; values between 50-100ms are typically warm w/ small overhead.
 _COLD_LOAD_THRESHOLD_MS = 100.0
+
+
+# Whitelist of AST node types allowed in a loop `until.gate` expression after
+# dotted refs are substituted out. This keeps gate evaluation from being a
+# generic eval() — only comparison/boolean/literal logic survives the walk.
+_SAFE_GATE_NODES = (
+    ast.Expression,
+    ast.BoolOp,
+    ast.And,
+    ast.Or,
+    ast.Not,
+    ast.UnaryOp,
+    ast.USub,
+    ast.UAdd,
+    ast.Compare,
+    ast.Eq,
+    ast.NotEq,
+    ast.Gt,
+    ast.GtE,
+    ast.Lt,
+    ast.LtE,
+    ast.In,
+    ast.NotIn,
+    ast.Name,
+    ast.Load,
+    ast.Constant,
+    ast.List,
+    ast.Tuple,
+    ast.Set,
+)
+
+_GATE_REF_RE = re.compile(r"\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+\b")
+
+
+def _evaluate_gate(gate_expr: str, context: WorkflowContext) -> bool:
+    """Safely evaluate a loop termination gate against the workspace.
+
+    The gate is a small boolean expression. Dotted refs (e.g. `critic.approved`)
+    are resolved against the workspace before evaluation; the residual
+    expression is parsed with the `ast` module and rejected unless every node
+    is in `_SAFE_GATE_NODES`. No attribute access, no function calls, no
+    subscripts — just literals, names, comparisons, and boolean composition.
+
+    Returns the boolean result. Raises ValueError on parse/eval failure so the
+    caller can surface a clean engine-level error.
+    """
+    refs = sorted(set(_GATE_REF_RE.findall(gate_expr)))
+    ref_to_var: Dict[str, str] = {}
+    sub_expr = gate_expr
+    for i, ref in enumerate(refs):
+        var = f"__gate_{i}"
+        ref_to_var[ref] = var
+        sub_expr = re.sub(rf"\b{re.escape(ref)}\b", var, sub_expr)
+
+    eval_locals: Dict[str, Any] = {}
+    for ref, var in ref_to_var.items():
+        eval_locals[var] = context.resolve_input(ref)
+
+    try:
+        tree = ast.parse(sub_expr, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"gate expression has invalid syntax: {e}")
+
+    for node in ast.walk(tree):
+        if not isinstance(node, _SAFE_GATE_NODES):
+            raise ValueError(
+                f"gate expression uses disallowed construct: {type(node).__name__}"
+            )
+
+    try:
+        return bool(
+            eval(
+                compile(tree, "<loop-gate>", "eval"), {"__builtins__": {}}, eval_locals
+            )
+        )
+    except Exception as e:
+        raise ValueError(f"gate evaluation raised: {e}")
 
 
 def _aggregate_telemetry(
@@ -297,38 +376,77 @@ class WorkflowEngine:
 
         errors = []
 
-        for step in definition.steps:
-            # Hook-provided virtual inputs: a before_step plugin_tool_invoker
-            # writes its result to `<step.id>.<store_as>`, which the step is
-            # then allowed to reference as one of its own inputs.
+        def _validate_step(step, available: Set[str]) -> None:
+            """Validate one step recursively.
+
+            `available` is the set of `<namespace>.<key>` strings the step is
+            allowed to reference as inputs. For composite kinds, child steps
+            inherit the parent's available set plus whatever earlier
+            children/branches have produced.
+            """
             hooks_block = getattr(step, "hooks", None)
             if hooks_block is not None:
                 for spec in getattr(hooks_block, "before_step", []) or []:
                     if getattr(spec, "name", None) == "plugin_tool_invoker":
                         store_as = (spec.config or {}).get("store_as")
                         if store_as:
-                            available_outputs.add(f"{step.id}.{store_as}")
+                            available.add(f"{step.id}.{store_as}")
 
-            # Check all inputs are available
             for input_ref in step.inputs:
-                if input_ref not in available_outputs:
-                    # Allow seed.* references even if we don't know exact keys
+                if input_ref not in available:
                     if input_ref.startswith("seed.") and seed_keys is None:
                         continue
                     errors.append(
                         f"Step '{step.id}' input '{input_ref}' has no producer. "
-                        f"Available: {sorted(available_outputs)}"
+                        f"Available: {sorted(available)}"
                     )
 
-            # Register this step's outputs as available
-            for output_key in step.outputs:
-                available_outputs.add(f"{step.id}.{output_key}")
+            if step.kind == "parallel":
+                # Each branch sees: parent's available set + sibling branches'
+                # outputs produced before it. Branches without depends_on are
+                # treated as DAG-parallel and only see seed/external inputs.
+                branch_available = set(available)
+                for branch in step.branches or []:
+                    _validate_step(branch, branch_available)
+                    for k in branch.outputs:
+                        branch_available.add(f"{branch.id}.{k}")
+                # Gather sees the parent's `available` plus all branches.
+                _validate_step(step.gather, branch_available)
+            elif step.kind == "loop":
+                # Body sees parent available + the loop's own declared inputs
+                # (already in `available` via the parent's input declaration)
+                # plus prior body steps' outputs. Each body step's outputs are
+                # registered for downstream body steps in the same iteration.
+                body_available = set(available)
+                for body_step in step.body or []:
+                    _validate_step(body_step, body_available)
+                    for k in body_step.outputs:
+                        body_available.add(f"{body_step.id}.{k}")
 
-        # Check for duplicate step IDs
-        step_ids = [s.id for s in definition.steps]
-        dupes = [sid for sid in step_ids if step_ids.count(sid) > 1]
+            for output_key in step.outputs:
+                available.add(f"{step.id}.{output_key}")
+
+        for step in definition.steps:
+            _validate_step(step, available_outputs)
+
+        # Check for duplicate step IDs (recursive: branches and body steps must
+        # not collide with top-level ids or with each other).
+        def _collect_ids(step) -> List[str]:
+            ids = [step.id]
+            for child in step.branches or []:
+                ids.extend(_collect_ids(child))
+            if step.gather is not None:
+                ids.extend(_collect_ids(step.gather))
+            for child in step.body or []:
+                ids.extend(_collect_ids(child))
+            return ids
+
+        all_ids: List[str] = []
+        for step in definition.steps:
+            all_ids.extend(_collect_ids(step))
+        dupes = [sid for sid in set(all_ids) if all_ids.count(sid) > 1]
         if dupes:
-            errors.append(f"Duplicate step IDs: {set(dupes)}")
+            errors.append(f"Duplicate step IDs (including nested): {sorted(dupes)}")
 
         # Phase 4 — arch-aware feasibility. No-op when no step has est_size_gb
         # set (preserves the pre-Phase-4 acceptance surface). Failures here
@@ -854,11 +972,27 @@ class WorkflowEngine:
         """Run a single step end-to-end. Extracted from _execute_steps for
         Phase 4b so it can be submitted to a ThreadPoolExecutor.
 
+        Dispatches on `step.kind`:
+          * llm      — single LLM call via StepExecutor
+          * parallel — fan out to branches + run gather (composite)
+          * loop     — run body repeatedly until predicate satisfied
+                       or max_iterations reached (composite)
+
+        Composite kinds recursively call this method for their children. The
+        composite returns ONE aggregated StepResult that summarizes the whole
+        sub-tree; per-child telemetry lives in the workspace artifacts on disk.
+
         Builds the step-scoped hook bus and a fresh StepExecutor (executors
         are cheap; sharing one across threads would risk contaminating
         per-attempt state in retry_with_feedback). Errors propagate to the
         future; the caller synthesizes a failed StepResult.
         """
+        if step.kind == "parallel":
+            return self._execute_parallel_step(step, definition, context, workflow_run)
+        if step.kind == "loop":
+            return self._execute_loop_step(step, definition, context, workflow_run)
+
+        # kind == "llm" — the default
         step_bus = self._build_step_bus(step)
         step_executor = StepExecutor(
             ollama_service=self.ollama,
@@ -874,6 +1008,316 @@ class WorkflowEngine:
             defaults=definition.defaults,
             workflow_run=workflow_run,
         )
+
+    # ── Composite step executors (kind=parallel, kind=loop) ───────────
+
+    def _execute_parallel_step(
+        self,
+        parent: AgentStep,
+        definition: WorkflowDefinition,
+        context: WorkflowContext,
+        workflow_run: WorkflowRun,
+    ) -> StepResult:
+        """Run a fan-out / gather composite.
+
+        Branches dispatch concurrently via ThreadPoolExecutor (multi-model
+        concurrency). When all branches resolve, the gather step runs
+        synchronously and its outputs are materialized into the parent's
+        workspace namespace. Failure policy controls whether a single branch
+        failure aborts the parent or whether gather sees partial input.
+        """
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        agg = StepResult(
+            step_id=parent.id, status="running", started_at=datetime.utcnow()
+        )
+        execution_cfg = parent.execution
+        max_concurrency = execution_cfg.max_concurrency if execution_cfg else 4
+        failure_policy = execution_cfg.failure_policy if execution_cfg else "fail_fast"
+
+        # Pre-resolve a model for each branch. Failures here are workflow-level —
+        # we never start any branch if one can't be resolved.
+        branch_models: Dict[str, str] = {}
+        for branch in parent.branches:
+            if branch.kind == "llm":
+                try:
+                    branch_models[branch.id] = self.resolver.resolve(
+                        model=branch.model,
+                        role=branch.role,
+                        default_role=definition.defaults.role,
+                    )
+                except Exception as e:
+                    agg.status = "failed"
+                    agg.error = (
+                        f"Parallel branch '{branch.id}' model resolution failed: {e}"
+                    )
+                    agg.completed_at = datetime.utcnow()
+                    agg.duration_seconds = (
+                        agg.completed_at - agg.started_at
+                    ).total_seconds()
+                    logger.error(agg.error)
+                    return agg
+            else:
+                # Nested composite branches (rare in phase 1, but the validator
+                # already accepts them — recursive _execute_one_step handles it).
+                branch_models[branch.id] = ""
+
+        branch_results: Dict[str, StepResult] = {}
+        lock = threading.Lock()
+
+        logger.info(
+            f"Parallel step '{parent.id}' fanning out to "
+            f"{len(parent.branches)} branch(es) (max_concurrency={max_concurrency})"
+        )
+
+        with ThreadPoolExecutor(
+            max_workers=min(max_concurrency, len(parent.branches)),
+            thread_name_prefix=f"par-{parent.id[:16]}",
+        ) as ex:
+            futures = {
+                ex.submit(
+                    self._execute_one_step,
+                    branch,
+                    definition,
+                    context,
+                    workflow_run,
+                    branch_models[branch.id],
+                ): branch
+                for branch in parent.branches
+            }
+            for fut in as_completed(futures):
+                branch = futures[fut]
+                try:
+                    res = fut.result()
+                except Exception as e:
+                    res = StepResult(
+                        step_id=branch.id,
+                        status="failed",
+                        error=f"Branch raised: {e}",
+                        started_at=datetime.utcnow(),
+                        completed_at=datetime.utcnow(),
+                    )
+                with lock:
+                    branch_results[branch.id] = res
+
+        # Roll up token counts + durations into the composite result.
+        total_prompt = sum(
+            r.token_count.get("prompt_tokens", 0) for r in branch_results.values()
+        )
+        total_completion = sum(
+            r.token_count.get("completion_tokens", 0) for r in branch_results.values()
+        )
+        agg.token_count = {
+            "prompt_tokens": total_prompt,
+            "completion_tokens": total_completion,
+            "total_tokens": total_prompt + total_completion,
+        }
+
+        failed_branches = [
+            b for b, r in branch_results.items() if r.status != "completed"
+        ]
+        if failed_branches and failure_policy == "fail_fast":
+            agg.status = "failed"
+            agg.error = (
+                f"Parallel step '{parent.id}' aborted: "
+                f"{len(failed_branches)} branch(es) failed "
+                f"({', '.join(failed_branches)}) under fail_fast policy"
+            )
+            agg.completed_at = datetime.utcnow()
+            agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+            logger.error(agg.error)
+            return agg
+        if failed_branches:
+            logger.warning(
+                f"Parallel step '{parent.id}' continuing with "
+                f"{len(failed_branches)} failed branch(es) under "
+                f"continue_on_partial policy: {failed_branches}"
+            )
+
+        # Run gather synchronously. Gather is always llm-kind (validator).
+        try:
+            gather_model = self.resolver.resolve(
+                model=parent.gather.model,
+                role=parent.gather.role,
+                default_role=definition.defaults.role,
+            )
+        except Exception as e:
+            agg.status = "failed"
+            agg.error = f"Gather model resolution failed: {e}"
+            agg.completed_at = datetime.utcnow()
+            agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+            logger.error(agg.error)
+            return agg
+
+        gather_res = self._execute_one_step(
+            parent.gather, definition, context, workflow_run, gather_model
+        )
+        agg.token_count["prompt_tokens"] += gather_res.token_count.get(
+            "prompt_tokens", 0
+        )
+        agg.token_count["completion_tokens"] += gather_res.token_count.get(
+            "completion_tokens", 0
+        )
+        agg.token_count["total_tokens"] = (
+            agg.token_count["prompt_tokens"] + agg.token_count["completion_tokens"]
+        )
+        agg.model_used = gather_res.model_used
+
+        if gather_res.status != "completed":
+            agg.status = "failed"
+            agg.error = f"Gather step '{parent.gather.id}' failed: {gather_res.error}"
+            agg.completed_at = datetime.utcnow()
+            agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+            logger.error(agg.error)
+            return agg
+
+        # Materialize the parent's outputs from gather's workspace. Validator
+        # guarantees gather.outputs == parent.outputs (set equality).
+        gather_ws = context.workspace.get(parent.gather.id, {})
+        for key in parent.outputs:
+            context.set_workspace(parent.id, key, gather_ws.get(key))
+
+        agg.status = "completed"
+        agg.completed_at = datetime.utcnow()
+        agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+        logger.info(
+            f"Parallel step '{parent.id}' completed in "
+            f"{agg.duration_seconds:.1f}s ({len(branch_results)} branches + gather)"
+        )
+        return agg
+
+    def _execute_loop_step(
+        self,
+        parent: AgentStep,
+        definition: WorkflowDefinition,
+        context: WorkflowContext,
+        workflow_run: WorkflowRun,
+    ) -> StepResult:
+        """Run a refine-until-good loop.
+
+        Each iteration runs every body step in order. After the body, the
+        `until` predicate (a boolean expression over the latest workspace) is
+        evaluated. If satisfied the loop terminates and the last body step's
+        outputs are positionally mapped onto the parent's declared outputs.
+        If max_iterations is hit without satisfaction, on_max_iterations decides
+        whether to emit the best-so-far state or fail.
+        """
+        agg = StepResult(
+            step_id=parent.id, status="running", started_at=datetime.utcnow()
+        )
+        iter_count = 0
+        satisfied = False
+        last_body_step = parent.body[-1]
+
+        for iteration in range(parent.max_iterations):
+            iter_count = iteration + 1
+            logger.info(
+                f"Loop '{parent.id}' iteration {iter_count}/{parent.max_iterations}"
+            )
+
+            for body_step in parent.body:
+                # Each body step needs its own model resolution. Composite bodies
+                # recurse through _execute_one_step which handles its own resolution.
+                if body_step.kind == "llm":
+                    try:
+                        body_model = self.resolver.resolve(
+                            model=body_step.model,
+                            role=body_step.role,
+                            default_role=definition.defaults.role,
+                        )
+                    except Exception as e:
+                        agg.status = "failed"
+                        agg.error = (
+                            f"Loop body step '{body_step.id}' model resolution "
+                            f"failed on iteration {iter_count}: {e}"
+                        )
+                        agg.completed_at = datetime.utcnow()
+                        agg.duration_seconds = (
+                            agg.completed_at - agg.started_at
+                        ).total_seconds()
+                        logger.error(agg.error)
+                        return agg
+                else:
+                    body_model = ""
+
+                body_res = self._execute_one_step(
+                    body_step, definition, context, workflow_run, body_model
+                )
+                agg.token_count["prompt_tokens"] += body_res.token_count.get(
+                    "prompt_tokens", 0
+                )
+                agg.token_count["completion_tokens"] += body_res.token_count.get(
+                    "completion_tokens", 0
+                )
+                agg.token_count["total_tokens"] = (
+                    agg.token_count["prompt_tokens"]
+                    + agg.token_count["completion_tokens"]
+                )
+                agg.model_used = body_res.model_used
+
+                if body_res.status != "completed":
+                    agg.status = "failed"
+                    agg.error = (
+                        f"Loop body step '{body_step.id}' failed on "
+                        f"iteration {iter_count}: {body_res.error}"
+                    )
+                    agg.completed_at = datetime.utcnow()
+                    agg.duration_seconds = (
+                        agg.completed_at - agg.started_at
+                    ).total_seconds()
+                    logger.error(agg.error)
+                    return agg
+
+            # After the body, evaluate the gate.
+            try:
+                satisfied = _evaluate_gate(parent.until.gate, context)
+            except Exception as e:
+                agg.status = "failed"
+                agg.error = (
+                    f"Loop '{parent.id}' gate evaluation failed on "
+                    f"iteration {iter_count}: {e}"
+                )
+                agg.completed_at = datetime.utcnow()
+                agg.duration_seconds = (
+                    agg.completed_at - agg.started_at
+                ).total_seconds()
+                logger.error(agg.error)
+                return agg
+
+            if satisfied:
+                logger.info(
+                    f"Loop '{parent.id}' gate satisfied after iteration {iter_count}"
+                )
+                break
+
+        # Map the last body step's outputs onto the parent's declared outputs.
+        # Validator guarantees every parent output key is produced by the
+        # last body step.
+        last_ws = context.workspace.get(last_body_step.id, {})
+        for parent_key in parent.outputs:
+            context.set_workspace(parent.id, parent_key, last_ws.get(parent_key))
+
+        if not satisfied and parent.until.on_max_iterations == "fail":
+            agg.status = "failed"
+            agg.error = (
+                f"Loop '{parent.id}' hit max_iterations={parent.max_iterations} "
+                f"without satisfying gate '{parent.until.gate}'"
+            )
+            agg.completed_at = datetime.utcnow()
+            agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+            logger.error(agg.error)
+            return agg
+
+        agg.status = "completed"
+        agg.completed_at = datetime.utcnow()
+        agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+        agg.retries = iter_count - 1  # repurpose: iterations beyond the first
+        logger.info(
+            f"Loop '{parent.id}' completed in {agg.duration_seconds:.1f}s "
+            f"({iter_count} iteration(s){', gate satisfied' if satisfied else ', emit_best'})"
+        )
+        return agg
 
     # ── Hook Bus Assembly ──────────────────────────────────────────────
 
