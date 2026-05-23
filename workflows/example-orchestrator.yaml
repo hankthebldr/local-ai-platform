@@ -1,0 +1,122 @@
+# ── Example: kind=orchestrator — dynamic lead-agent delegation ──────────
+#
+# Demonstrates the kind=orchestrator step shipped in Phase 3b of the
+# multi-agent workflow patterns spec. Spec:
+#   docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md
+#
+# Shape: ONE step. The lead agent (planner) receives an incident alert,
+# decides at runtime which specialists to call, and synthesizes a final
+# findings report. The engine doesn't know the decomposition ahead of time —
+# the lead does.
+#
+# Why this matters: kind=parallel is great when you know the fan-out shape
+# at YAML write time. kind=orchestrator is for open-ended investigations
+# where the decomposition depends on what's in the inputs. The lead can
+# spawn workers in waves, learn from earlier results, and decide when
+# enough information has been gathered.
+#
+# Worker isolation: each spawn runs in a CHILD WorkflowContext. The seed
+# layer of that child context is built from the spawn directive's `inputs`.
+# Worker outputs don't pollute the parent workspace — the lead synthesizes
+# them and emits the final answer via the `complete` directive.
+
+id: example-orchestrator
+name: "Example: Lead-Agent Incident Investigation"
+schema_version: 1
+description: |
+  One orchestrator step that delegates to a catalog of specialist workers.
+  The lead decides at runtime which workers to spawn and when to stop.
+
+defaults:
+  role: reasoning
+  temperature: 0.4
+  max_tokens: 2048
+
+steps:
+  - id: investigate
+    name: "Investigate Alert"
+    kind: orchestrator
+    # The orchestrator's surface contract: outputs the lead must produce via
+    # its final `complete` directive.
+    outputs:
+      - findings
+      - recommended_actions
+
+    # The lead's persona. The engine appends a protocol description + the
+    # worker catalog automatically, so operators don't reproduce that here.
+    planner:
+      role_inline: |
+        You are the lead security incident investigator. You have a catalog
+        of specialist workers — call them as needed to gather evidence,
+        then synthesize a findings report and recommended actions.
+
+        Spawn workers in waves: gather information, look at the results,
+        decide whether to spawn follow-ups. Stop as soon as you have enough
+        to write the findings — don't spawn workers for the sake of it.
+      task: |
+        A security alert has fired. Investigate the alert text, gather
+        evidence via the available specialists, and produce findings +
+        recommended actions for the on-call analyst.
+
+    # Worker catalog. Each worker template's inputs MUST be declared as
+    # seed.<name> refs — the engine builds a child context whose seed layer
+    # holds the spawn directive's inputs object plus the `task` string.
+    workers:
+      # ── Log correlator: search related events around the alert ────
+      log_correlator:
+        id: w_log_correlator
+        name: "Log Correlator"
+        role: reasoning
+        prompt:
+          role_inline: |
+            You are a log correlation specialist. Given an alert and a
+            time window, find related events.
+          task: "Correlate logs against the alert"
+        inputs:
+          - seed.task
+          - seed.alert_text
+          - seed.time_window
+        outputs:
+          - correlated_events
+          - timeline
+
+      # ── IOC extractor: parse IOCs from raw text ────────────────────
+      ioc_extractor:
+        id: w_ioc_extractor
+        name: "IOC Extractor"
+        role: fast
+        prompt:
+          role_inline: |
+            You are an IOC extractor. Pull IPs, domains, URLs, and hashes
+            from raw text. Return a JSON array of {value, type} entries.
+          task: "Extract IOCs"
+        inputs:
+          - seed.task
+          - seed.raw_text
+        outputs:
+          - iocs
+
+      # ── Asset enricher: look up host/user context from internal data
+      asset_enricher:
+        id: w_asset_enricher
+        name: "Asset Enricher"
+        role: fast
+        prompt:
+          role_inline: |
+            You are an asset enricher. Given a hostname or username,
+            return what we know about it from internal systems
+            (owner, business unit, criticality, recent changes).
+          task: "Enrich asset identifier"
+        inputs:
+          - seed.task
+          - seed.asset_identifier
+        outputs:
+          - asset_context
+
+    # Hard budget. The lead is told these limits in its system prompt and
+    # the engine enforces them — any cap exceeded fails the step cleanly.
+    budget:
+      max_workers_spawned: 8         # total spawn count across all turns
+      max_planner_turns: 12          # planner LLM calls (each turn = one directive)
+      max_total_tokens: 200000       # rolled up: lead + all workers
+      max_wall_seconds: 600          # 10 min hard cap

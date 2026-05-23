@@ -5,7 +5,9 @@ from api.models.workflow_models import (
     A2AAuth,
     AgentStep,
     LoopTermination,
+    OrchestratorBudget,
     ParallelExecutionConfig,
+    StepPrompt,
     WorkflowDefinition,
     WorkflowContext,
     WorkflowRun,
@@ -431,3 +433,94 @@ class TestA2AAgentStep:
     def test_bearer_auth_requires_token_env(self):
         with pytest.raises(Exception, match="requires token_env"):
             A2AAuth(type="bearer")
+
+
+class TestOrchestratorAgentStep:
+    """kind=orchestrator shape validation."""
+
+    @staticmethod
+    def _worker(id_, **overrides) -> AgentStep:
+        base = dict(
+            name=id_,
+            role="fast",
+            system_prompt="do the thing",
+            inputs=["seed.task", "seed.context"],
+            outputs=["result"],
+        )
+        base.update(overrides)
+        return AgentStep(id=id_, **base)
+
+    def _planner(self) -> StepPrompt:
+        return StepPrompt(role_inline="You are the lead.", task="investigate")
+
+    def test_orchestrator_happy_path(self):
+        step = AgentStep(
+            id="invest",
+            name="Investigate",
+            kind="orchestrator",
+            outputs=["findings"],
+            planner=self._planner(),
+            workers={"extractor": self._worker("w_ext")},
+            budget=OrchestratorBudget(max_workers_spawned=4),
+        )
+        assert step.kind == "orchestrator"
+        assert len(step.workers) == 1
+        assert step.budget.max_workers_spawned == 4
+
+    def test_orchestrator_rejects_missing_planner(self):
+        with pytest.raises(Exception, match="requires a\\s+planner"):
+            AgentStep(
+                id="invest",
+                name="I",
+                kind="orchestrator",
+                outputs=["o"],
+                workers={"w": self._worker("w")},
+            )
+
+    def test_orchestrator_rejects_empty_workers(self):
+        with pytest.raises(Exception, match="at least one worker"):
+            AgentStep(
+                id="invest",
+                name="I",
+                kind="orchestrator",
+                outputs=["o"],
+                planner=self._planner(),
+                workers={},
+            )
+
+    def test_orchestrator_rejects_own_prompt(self):
+        with pytest.raises(Exception, match="must not declare a"):
+            AgentStep(
+                id="invest",
+                name="I",
+                kind="orchestrator",
+                outputs=["o"],
+                system_prompt="should be in planner",
+                planner=self._planner(),
+                workers={"w": self._worker("w")},
+            )
+
+    def test_orchestrator_rejects_worker_with_non_seed_inputs(self):
+        with pytest.raises(Exception, match="not declared as seed"):
+            AgentStep(
+                id="invest",
+                name="I",
+                kind="orchestrator",
+                outputs=["o"],
+                planner=self._planner(),
+                workers={
+                    "w": self._worker("w", inputs=["other_step.x"]),
+                },
+            )
+
+    def test_non_orchestrator_kinds_reject_orchestrator_fields(self):
+        # An llm step accidentally including a planner block should fail.
+        with pytest.raises(Exception, match="planner/workers/budget"):
+            AgentStep(
+                id="bad",
+                name="B",
+                kind="llm",
+                system_prompt="x",
+                outputs=["o"],
+                planner=self._planner(),
+            )

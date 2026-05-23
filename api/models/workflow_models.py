@@ -139,6 +139,20 @@ class A2AAuth(BaseModel):
         return self
 
 
+# ── Orchestrator step (kind: orchestrator) ─────────────────────────────────
+
+
+class OrchestratorBudget(BaseModel):
+    """Hard caps on a `kind: orchestrator` step. Any limit hit fails the step
+    cleanly; the lead's `complete` directive never being emitted within the
+    budget is itself the failure signal."""
+
+    max_workers_spawned: int = 8
+    max_planner_turns: int = 12
+    max_total_tokens: int = 200_000
+    max_wall_seconds: int = 600
+
+
 # ── Agent Step ─────────────────────────────────────────────────────────────
 
 
@@ -147,18 +161,20 @@ class AgentStep(BaseModel):
 
     The `kind` discriminator selects execution semantics:
 
-      * llm       — single LLM call (default; backwards-compatible)
-      * parallel  — fan-out to `branches`, then `gather` synthesizes results
-      * loop      — re-run `body` until `until` predicate is satisfied or
-                    `max_iterations` is reached
-      * a2a       — delegate to an external A2A-protocol agent
+      * llm           — single LLM call (default; backwards-compatible)
+      * parallel      — fan-out to `branches`, then `gather` synthesizes results
+      * loop          — re-run `body` until `until` predicate is satisfied or
+                        `max_iterations` is reached
+      * a2a           — delegate to an external A2A-protocol agent
+      * orchestrator  — lead agent dynamically spawns workers from a catalog;
+                        emits a text-protocol JSON directive each turn
 
     Spec: docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md
     """
 
     id: str
     name: str
-    kind: Literal["llm", "parallel", "loop", "a2a"] = "llm"
+    kind: Literal["llm", "parallel", "loop", "a2a", "orchestrator"] = "llm"
     model: Optional[str] = None
     role: Optional[str] = None
     # Phase 4 — operator-supplied estimate of the model's GGUF size in GB.
@@ -226,6 +242,19 @@ class AgentStep(BaseModel):
     # underlying HTTP client still has its own connect/read timeouts).
     timeout: Optional[int] = None
 
+    # ── kind: orchestrator ────────────────────────────────────────────
+    # The lead agent's prompt block. Becomes the planner's system prompt
+    # augmented at runtime with a protocol description listing every worker
+    # in the catalog plus the JSON-directive grammar.
+    planner: Optional[StepPrompt] = None
+    # Catalog of worker templates the lead may spawn. Map of worker_id ->
+    # AgentStep template. Each template's `inputs` must be declared as
+    # `seed.<name>` refs — the engine builds a child WorkflowContext for
+    # each spawned worker with seed = the spawn directive's inputs.
+    workers: Optional[Dict[str, "AgentStep"]] = None
+    # Hard caps on the orchestration. Any cap hit fails the step.
+    budget: Optional[OrchestratorBudget] = None
+
     @model_validator(mode="after")
     def _validate_kind_shape(self):
         # Non-a2a kinds must not declare a2a fields.
@@ -233,6 +262,14 @@ class AgentStep(BaseModel):
             raise ValueError(
                 f"AgentStep(kind={self.kind}, id={self.id!r}) must not declare "
                 f"agent_card_url/skill/auth (those are kind=a2a only)"
+            )
+        # Non-orchestrator kinds must not declare orchestrator fields.
+        if self.kind != "orchestrator" and (
+            self.planner or self.workers or self.budget
+        ):
+            raise ValueError(
+                f"AgentStep(kind={self.kind}, id={self.id!r}) must not declare "
+                f"planner/workers/budget (those are kind=orchestrator only)"
             )
 
         if self.kind == "llm":
@@ -344,6 +381,47 @@ class AgentStep(BaseModel):
                     f"AgentStep(kind=a2a, id={self.id!r}) must not declare "
                     f"model/role — the remote agent selects its own model"
                 )
+        elif self.kind == "orchestrator":
+            if self.planner is None:
+                raise ValueError(
+                    f"AgentStep(kind=orchestrator, id={self.id!r}) requires a "
+                    f"planner block (the lead agent's persona)"
+                )
+            if not self.workers or len(self.workers) < 1:
+                raise ValueError(
+                    f"AgentStep(kind=orchestrator, id={self.id!r}) requires at "
+                    f"least one worker template in `workers`"
+                )
+            if self.system_prompt or self.prompt:
+                raise ValueError(
+                    f"AgentStep(kind=orchestrator, id={self.id!r}) must not "
+                    f"declare a prompt — the `planner` block holds the lead's prompt"
+                )
+            if self.branches or self.gather or self.body or self.until:
+                raise ValueError(
+                    f"AgentStep(kind=orchestrator, id={self.id!r}) must not "
+                    f"declare branches/gather/body/until"
+                )
+            # Every worker template must declare its inputs as seed.<name>
+            # so the engine can build a child WorkflowContext with seed =
+            # the spawn directive's inputs. Anything else (e.g. workspace
+            # refs to siblings) breaks the isolation invariant.
+            for worker_id, worker in self.workers.items():
+                # The worker_id key is what the planner emits in
+                # spawn_worker directives — its AgentStep.id can differ.
+                # Non-llm workers (a2a, parallel, etc) are allowed; the
+                # engine recurses through _execute_one_step for them.
+                non_seed = [
+                    ref for ref in worker.inputs if ref and not ref.startswith("seed.")
+                ]
+                if non_seed:
+                    raise ValueError(
+                        f"AgentStep(kind=orchestrator, id={self.id!r}) worker "
+                        f"{worker_id!r} has inputs not declared as seed.* "
+                        f"({non_seed}); orchestrator workers receive inputs "
+                        f"via the spawn directive, which the engine maps onto "
+                        f"a child context's seed layer"
+                    )
         return self
 
 
