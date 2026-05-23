@@ -40,9 +40,11 @@ patterns spec keeps working without changes.
 | `llm`      | Single LLM call (the default — what every step was before)          | core  |
 | `parallel` | Fan out to N `branches`, then a `gather` step synthesizes results   | 1     |
 | `loop`     | Re-run `body` until `until.gate` is true or `max_iterations` is hit | 1     |
+| `a2a`      | Delegate to an external A2A-protocol agent                          | 3a    |
 
-See `workflows/example-parallel-loop.yaml` for a worked example combining both
-new kinds.
+See `workflows/example-parallel-loop.yaml` for a worked example combining
+`parallel` + `loop`, and `workflows/example-a2a-enrichment.yaml` for the
+`a2a` step shape.
 
 ### kind: parallel
 
@@ -124,3 +126,44 @@ The gate expression supports `==`, `!=`, `>`, `<`, `>=`, `<=`, `in`, `not in`,
 `and`, `or`, `not`, and literal values. Dotted refs like `critic.approved`
 resolve against the workspace exactly the way step `inputs:` do. Attribute
 access, function calls, and lambdas are rejected at parse time.
+
+### kind: a2a
+
+Delegate to an external A2A-protocol agent — anything that advertises an
+Agent Card at `/.well-known/agent.json` and speaks the JSON-RPC `tasks/*`
+methods.
+
+```yaml
+- id: enrich
+  kind: a2a
+  agent_card_url: https://intel.corp.local/.well-known/agent.json
+  skill: enrich_iocs
+  auth:
+    type: bearer                       # or `none` (the default)
+    token_env: INTEL_API_TOKEN         # name of the env var holding the token
+  inputs:
+    - extract_iocs.iocs
+  outputs:
+    - enriched
+  timeout: 120                         # whole-step wall-clock cap (seconds)
+  streaming: false                     # reserved for SSE; Phase 3a polls
+```
+
+Lifecycle:
+
+1. The engine fetches the Agent Card from `agent_card_url`.
+2. Validates `skill` is advertised (fails the step if not, before any work).
+3. Packages step inputs as a Message — string inputs become a single TextPart,
+   structured inputs become a single DataPart with the input names as keys.
+4. POSTs `tasks/send`, then polls `tasks/get` until terminal.
+5. Maps returned Artifacts onto declared `outputs` (exact name match first,
+   then best-effort: single-artifact-single-output → use it; multi-output →
+   walk DataParts looking for matching keys).
+
+Enclave's own A2A surface is symmetric — every loaded workflow auto-advertises
+as a skill at `/.well-known/agent.json`, so two Enclave instances can call
+each other's workflows over A2A. See the live card at `GET /a2a/.well-known/agent.json`.
+
+Auth supported in Phase 3a: `none` and `bearer` (token resolved from env var
+at request time; the token itself never appears in YAML). mTLS / OAuth /
+custom-header schemes land in follow-up phases.

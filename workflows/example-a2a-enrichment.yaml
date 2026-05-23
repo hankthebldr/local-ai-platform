@@ -1,0 +1,81 @@
+# ── Example: kind=a2a — delegate to an external A2A agent ───────────────
+#
+# Demonstrates the kind=a2a step shipped in Phase 3a of the multi-agent
+# workflow patterns spec. Spec:
+#   docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md
+#
+# Shape:
+#   1. A local llm step extracts IOCs (IPs/domains/hashes) from input text.
+#   2. An a2a step delegates IOC enrichment to a remote Threat Intel agent.
+#      The remote agent owns its own model, prompts, and data sources —
+#      Enclave just passes inputs and reads back the enriched artifact.
+#   3. A local llm step assembles a human-readable summary.
+#
+# This pattern is how Enclave composes with the broader A2A ecosystem
+# (Google ADK agents, vendor-hosted intel services, sibling Enclave instances
+# advertising their own workflows as skills) without baking those vendors'
+# auth/API quirks into workflow YAML.
+
+id: example-a2a-enrichment
+name: "Example: A2A Threat Intel Enrichment"
+schema_version: 1
+description: |
+  Three-step pipeline that extracts IOCs locally, delegates enrichment to a
+  remote A2A agent, then summarizes locally. Uses bearer-token auth via env var.
+
+defaults:
+  role: reasoning
+  temperature: 0.3
+  max_tokens: 2048
+  retries: 1
+
+steps:
+  # ── Stage 1: local extraction ───────────────────────────────────────
+  - id: extract_iocs
+    name: "Extract IOCs"
+    role: fast
+    prompt:
+      role_inline: |
+        You are an IOC extractor. Read the input and emit a JSON array of
+        every distinct IP address, domain, URL, or file hash you find.
+        Each entry is an object: { "value": "...", "type": "ipv4|domain|url|sha256" }
+      task: "Extract IOCs from seed.report_text"
+    inputs:
+      - seed.report_text
+    outputs:
+      - iocs
+
+  # ── Stage 2: remote enrichment via A2A ───────────────────────────────
+  - id: enrich
+    name: "Enrich via External Threat Intel"
+    kind: a2a
+    depends_on: [extract_iocs]
+    agent_card_url: https://intel.corp.local/.well-known/agent.json
+    skill: enrich_iocs
+    # The token never appears in YAML. The engine reads INTEL_API_TOKEN at
+    # request time and fails the step cleanly if the env var is unset.
+    auth:
+      type: bearer
+      token_env: INTEL_API_TOKEN
+    inputs:
+      - extract_iocs.iocs
+    outputs:
+      - enriched_iocs
+    timeout: 60
+
+  # ── Stage 3: local synthesis ─────────────────────────────────────────
+  - id: summarize
+    name: "Summarize Findings"
+    role: reasoning
+    depends_on: [enrich]
+    prompt:
+      role_inline: |
+        You are a security analyst. Given a list of enriched IOCs (each with
+        a verdict, confidence, and supporting evidence), produce a 2-3
+        paragraph analyst summary covering: highest-severity findings, any
+        observed clustering or pivots, and recommended next actions.
+      task: "Summarize the enriched IOC list for an analyst"
+    inputs:
+      - enrich.enriched_iocs
+    outputs:
+      - analyst_summary

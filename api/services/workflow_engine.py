@@ -754,6 +754,14 @@ class WorkflowEngine:
             resolution_failed_step: Optional[AgentStep] = None
             resolution_error: Optional[str] = None
             for step in dispatch_steps:
+                # a2a steps delegate to remote agents and don't need a local
+                # model resolved. The composite executors (parallel/loop)
+                # resolve their own children's models internally, so the
+                # placeholder here is unused. Skip resolution to avoid
+                # erroring on a2a-only workflows where no local models exist.
+                if step.kind in ("a2a", "parallel", "loop"):
+                    resolved_models[step.id] = ""
+                    continue
                 try:
                     resolved_models[step.id] = self.resolver.resolve(
                         model=step.model,
@@ -1102,6 +1110,7 @@ class WorkflowEngine:
           * parallel — fan out to branches + run gather (composite)
           * loop     — run body repeatedly until predicate satisfied
                        or max_iterations reached (composite)
+          * a2a      — delegate to an external A2A-protocol agent
 
         Composite kinds recursively call this method for their children. The
         composite returns ONE aggregated StepResult that summarizes the whole
@@ -1116,6 +1125,8 @@ class WorkflowEngine:
             return self._execute_parallel_step(step, definition, context, workflow_run)
         if step.kind == "loop":
             return self._execute_loop_step(step, definition, context, workflow_run)
+        if step.kind == "a2a":
+            return self._execute_a2a_step(step, context)
 
         # kind == "llm" — the default
         step_bus = self._build_step_bus(step)
@@ -1576,6 +1587,83 @@ class WorkflowEngine:
             f"({iter_count} iteration(s){', gate satisfied' if satisfied else ', emit_best'})"
         )
         return agg
+
+    def _execute_a2a_step(
+        self,
+        step: AgentStep,
+        context: WorkflowContext,
+    ) -> StepResult:
+        """Delegate to an external A2A-protocol agent.
+
+        Flow:
+          1. Resolve declared inputs against the workflow context
+          2. Fetch the remote AgentCard, validate the skill exists
+          3. POST tasks/send, then poll tasks/get until terminal
+          4. Map artifacts onto declared outputs and write to workspace
+
+        Returns one StepResult; token counts stay at zero (the remote agent
+        owns its own model billing). The step's `model_used` field records
+        the remote skill in `agent_url::skill_id` form so operators can see
+        which agent ran the step at a glance.
+        """
+        from .a2a_client import A2AClient, A2AClientError
+
+        result = StepResult(
+            step_id=step.id, status="running", started_at=datetime.utcnow()
+        )
+        result.model_used = f"a2a:{step.skill}@{step.agent_card_url}"
+
+        resolved_inputs = {ref: context.resolve_input(ref) for ref in step.inputs}
+        resolved_inputs = {k: v for k, v in resolved_inputs.items() if v is not None}
+
+        logger.info(
+            f"A2A step '{step.id}' delegating to skill '{step.skill}' at "
+            f"{step.agent_card_url}"
+        )
+
+        client = A2AClient()
+        try:
+            outputs, _task = client.call_skill(
+                agent_card_url=step.agent_card_url,
+                skill_id=step.skill,
+                resolved_inputs=resolved_inputs,
+                declared_outputs=step.outputs,
+                auth=step.auth,
+                timeout=step.timeout,
+            )
+        except A2AClientError as exc:
+            result.status = "failed"
+            result.error = str(exc)
+            result.completed_at = datetime.utcnow()
+            result.duration_seconds = (
+                result.completed_at - result.started_at
+            ).total_seconds()
+            logger.error(f"A2A step '{step.id}' failed: {exc}")
+            return result
+        except Exception as exc:  # noqa: BLE001
+            result.status = "failed"
+            result.error = f"A2A step raised: {exc}"
+            result.completed_at = datetime.utcnow()
+            result.duration_seconds = (
+                result.completed_at - result.started_at
+            ).total_seconds()
+            logger.exception(f"A2A step '{step.id}' raised")
+            return result
+
+        for key, value in outputs.items():
+            context.set_workspace(step.id, key, value)
+
+        result.status = "completed"
+        result.completed_at = datetime.utcnow()
+        result.duration_seconds = (
+            result.completed_at - result.started_at
+        ).total_seconds()
+        logger.info(
+            f"A2A step '{step.id}' completed in {result.duration_seconds:.1f}s "
+            f"({len([v for v in outputs.values() if v is not None])} of "
+            f"{len(step.outputs)} outputs populated)"
+        )
+        return result
 
     # ── Hook Bus Assembly ──────────────────────────────────────────────
 
