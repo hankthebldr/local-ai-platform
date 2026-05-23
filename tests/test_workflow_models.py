@@ -2,6 +2,7 @@
 
 import pytest
 from api.models.workflow_models import (
+    A2AAuth,
     AgentStep,
     LoopTermination,
     ParallelExecutionConfig,
@@ -339,3 +340,94 @@ class TestNestedDuplicateIds:
         # Both parse individually
         assert top.id == "dup"
         assert composite.branches[0].id == "dup"
+
+
+class TestA2AAgentStep:
+    """kind=a2a shape validation."""
+
+    def test_a2a_happy_path(self):
+        step = AgentStep(
+            id="ext",
+            name="External",
+            kind="a2a",
+            agent_card_url="https://intel.local/.well-known/agent.json",
+            skill="enrich_iocs",
+            outputs=["enriched"],
+        )
+        assert step.kind == "a2a"
+        assert step.skill == "enrich_iocs"
+        assert step.streaming is False
+        assert step.auth is None
+
+    def test_a2a_with_bearer_auth(self):
+        step = AgentStep(
+            id="ext",
+            name="External",
+            kind="a2a",
+            agent_card_url="https://x/.well-known/agent.json",
+            skill="do_thing",
+            auth=A2AAuth(type="bearer", token_env="INTEL_API_TOKEN"),
+            outputs=["result"],
+        )
+        assert step.auth.type == "bearer"
+        assert step.auth.token_env == "INTEL_API_TOKEN"
+
+    def test_a2a_rejects_missing_url(self):
+        with pytest.raises(Exception, match="requires agent_card_url"):
+            AgentStep(
+                id="ext",
+                name="E",
+                kind="a2a",
+                skill="x",
+                outputs=["o"],
+            )
+
+    def test_a2a_rejects_missing_skill(self):
+        with pytest.raises(Exception, match="requires skill"):
+            AgentStep(
+                id="ext",
+                name="E",
+                kind="a2a",
+                agent_card_url="https://x",
+                outputs=["o"],
+            )
+
+    def test_a2a_rejects_local_model_pin(self):
+        with pytest.raises(Exception, match="must not declare model/role"):
+            AgentStep(
+                id="ext",
+                name="E",
+                kind="a2a",
+                agent_card_url="https://x",
+                skill="s",
+                model="mistral",
+                outputs=["o"],
+            )
+
+    def test_a2a_rejects_prompt(self):
+        with pytest.raises(Exception, match="must not declare a"):
+            AgentStep(
+                id="ext",
+                name="E",
+                kind="a2a",
+                agent_card_url="https://x",
+                skill="s",
+                system_prompt="no",
+                outputs=["o"],
+            )
+
+    def test_non_a2a_rejects_a2a_fields(self):
+        # An llm step accidentally including agent_card_url should fail.
+        with pytest.raises(Exception, match="agent_card_url/skill/auth"):
+            AgentStep(
+                id="bad",
+                name="Bad",
+                kind="llm",
+                system_prompt="x",
+                outputs=["o"],
+                agent_card_url="https://x",
+            )
+
+    def test_bearer_auth_requires_token_env(self):
+        with pytest.raises(Exception, match="requires token_env"):
+            A2AAuth(type="bearer")

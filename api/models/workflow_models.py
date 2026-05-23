@@ -116,6 +116,29 @@ class LoopTermination(BaseModel):
     on_max_iterations: Literal["emit_best", "fail"] = "emit_best"
 
 
+# ── A2A external delegation (kind: a2a) ────────────────────────────────────
+
+
+class A2AAuth(BaseModel):
+    """Authentication config for a `kind: a2a` step.
+
+    Only `bearer` is supported in Phase 3a. The actual token is never embedded
+    in the YAML — operators reference an env var name and the engine reads it
+    at request time. mTLS / OAuth / API key headers land in follow-ups.
+    """
+
+    type: Literal["bearer", "none"] = "none"
+    # Name of an env var that holds the bearer token (e.g. INTEL_API_TOKEN).
+    # Resolved at execution time; missing var raises a clean step failure.
+    token_env: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_token_env(self):
+        if self.type == "bearer" and not self.token_env:
+            raise ValueError("A2AAuth(type=bearer) requires token_env")
+        return self
+
+
 # ── Agent Step ─────────────────────────────────────────────────────────────
 
 
@@ -128,13 +151,14 @@ class AgentStep(BaseModel):
       * parallel  — fan-out to `branches`, then `gather` synthesizes results
       * loop      — re-run `body` until `until` predicate is satisfied or
                     `max_iterations` is reached
+      * a2a       — delegate to an external A2A-protocol agent
 
     Spec: docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md
     """
 
     id: str
     name: str
-    kind: Literal["llm", "parallel", "loop"] = "llm"
+    kind: Literal["llm", "parallel", "loop", "a2a"] = "llm"
     model: Optional[str] = None
     role: Optional[str] = None
     # Phase 4 — operator-supplied estimate of the model's GGUF size in GB.
@@ -185,8 +209,32 @@ class AgentStep(BaseModel):
     until: Optional[LoopTermination] = None
     max_iterations: int = 5
 
+    # ── kind: a2a ─────────────────────────────────────────────────────
+    # URL to the remote agent's Agent Card (typically ends in
+    # /.well-known/agent.json). The engine fetches this once per step
+    # execution, validates the requested skill is advertised, then dispatches
+    # the JSON-RPC `tasks/send` (or `tasks/sendSubscribe` when `streaming`).
+    agent_card_url: Optional[str] = None
+    # Advertised skill id to invoke on the remote agent.
+    skill: Optional[str] = None
+    # Optional auth config; bearer-token via env-var only in Phase 3a.
+    auth: Optional[A2AAuth] = None
+    # Whether to use SSE streaming (tasks/sendSubscribe). When false the
+    # engine issues tasks/send and reads the final Task result.
+    streaming: bool = False
+    # Hard wall-clock cap on the whole step, in seconds. None = no cap (the
+    # underlying HTTP client still has its own connect/read timeouts).
+    timeout: Optional[int] = None
+
     @model_validator(mode="after")
     def _validate_kind_shape(self):
+        # Non-a2a kinds must not declare a2a fields.
+        if self.kind != "a2a" and (self.agent_card_url or self.skill or self.auth):
+            raise ValueError(
+                f"AgentStep(kind={self.kind}, id={self.id!r}) must not declare "
+                f"agent_card_url/skill/auth (those are kind=a2a only)"
+            )
+
         if self.kind == "llm":
             if not self.system_prompt and not self.prompt:
                 raise ValueError(
@@ -273,6 +321,28 @@ class AgentStep(BaseModel):
                     f"AgentStep(kind=loop, id={self.id!r}) outputs "
                     f"{sorted(missing)} are not produced by the last body "
                     f"step '{last_body.id}' (which produces {last_body.outputs})"
+                )
+        elif self.kind == "a2a":
+            if not self.agent_card_url:
+                raise ValueError(
+                    f"AgentStep(kind=a2a, id={self.id!r}) requires agent_card_url"
+                )
+            if not self.skill:
+                raise ValueError(f"AgentStep(kind=a2a, id={self.id!r}) requires skill")
+            if self.system_prompt or self.prompt:
+                raise ValueError(
+                    f"AgentStep(kind=a2a, id={self.id!r}) must not declare a "
+                    f"prompt — the remote agent owns its own prompt"
+                )
+            if self.branches or self.gather or self.body or self.until:
+                raise ValueError(
+                    f"AgentStep(kind=a2a, id={self.id!r}) must not declare "
+                    f"branches/gather/body/until"
+                )
+            if self.model or self.role:
+                raise ValueError(
+                    f"AgentStep(kind=a2a, id={self.id!r}) must not declare "
+                    f"model/role — the remote agent selects its own model"
                 )
         return self
 
