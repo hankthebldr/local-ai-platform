@@ -35,16 +35,16 @@ Each step declares a `kind:` that selects execution semantics. `kind:` defaults
 to `llm` when omitted — every workflow written before Phase 1 of the multi-agent
 patterns spec keeps working without changes.
 
-| Kind       | What it does                                                        | Phase |
-|------------|---------------------------------------------------------------------|-------|
-| `llm`      | Single LLM call (the default — what every step was before)          | core  |
-| `parallel` | Fan out to N `branches`, then a `gather` step synthesizes results   | 1     |
-| `loop`     | Re-run `body` until `until.gate` is true or `max_iterations` is hit | 1     |
-| `a2a`      | Delegate to an external A2A-protocol agent                          | 3a    |
+| Kind           | What it does                                                                  | Phase |
+|----------------|-------------------------------------------------------------------------------|-------|
+| `llm`          | Single LLM call (the default — what every step was before)                    | core  |
+| `parallel`     | Fan out to N `branches`, then a `gather` step synthesizes results             | 1     |
+| `loop`         | Re-run `body` until `until.gate` is true or `max_iterations` is hit           | 1     |
+| `a2a`          | Delegate to an external A2A-protocol agent                                    | 3a    |
+| `orchestrator` | Lead agent dynamically spawns workers from a catalog via a JSON-directive protocol | 3b    |
 
-See `workflows/example-parallel-loop.yaml` for a worked example combining
-`parallel` + `loop`, and `workflows/example-a2a-enrichment.yaml` for the
-`a2a` step shape.
+See `workflows/example-parallel-loop.yaml`, `workflows/example-a2a-enrichment.yaml`,
+and `workflows/example-orchestrator.yaml` for worked examples.
 
 ### kind: parallel
 
@@ -167,3 +167,66 @@ each other's workflows over A2A. See the live card at `GET /a2a/.well-known/agen
 Auth supported in Phase 3a: `none` and `bearer` (token resolved from env var
 at request time; the token itself never appears in YAML). mTLS / OAuth /
 custom-header schemes land in follow-up phases.
+
+### kind: orchestrator
+
+Lead-agent pattern. The planner sees a catalog of worker templates and
+dispatches them dynamically by emitting a JSON directive each turn. The
+engine intercepts the directive, runs the worker in an isolated child
+context, and feeds the result back to the lead for the next turn.
+
+```yaml
+- id: investigate
+  kind: orchestrator
+  outputs: [findings, recommended_actions]
+  planner:
+    role_inline: |
+      You are the lead investigator. Spawn specialists as needed.
+    task: "Investigate the alert."
+  workers:
+    extractor:
+      id: w_extractor
+      role: fast
+      prompt: { role_inline: "...", task: "extract IOCs" }
+      inputs:  [seed.task, seed.raw_text]   # MUST be seed.* refs
+      outputs: [iocs]
+    classifier:
+      id: w_classifier
+      role: fast
+      prompt: { role_inline: "...", task: "classify" }
+      inputs:  [seed.task]
+      outputs: [labels]
+  budget:
+    max_workers_spawned: 6
+    max_planner_turns: 12
+    max_total_tokens: 200000
+    max_wall_seconds: 600
+```
+
+**Worker isolation**: each spawn runs in a CHILD `WorkflowContext` whose
+`seed` layer is the spawn directive's `inputs` object (plus `task`). Worker
+outputs go to the child workspace; the planner only sees them via the
+formatted tool-result message. The final answer comes from the lead's
+`complete` directive, not from the workers' outputs directly.
+
+**The text protocol** (rendered into the planner's system prompt
+automatically — operators don't write it):
+
+```json
+{"action": "spawn_worker", "worker_id": "<id>", "task": "<one-line directive>", "inputs": {...}}
+```
+```json
+{"action": "complete", "outputs": {<every declared output key>: <value>}}
+```
+
+The engine parses the LAST JSON-fenced block in the planner's response.
+Malformed output gets a feedback message nudging the lead to retry; the
+planner is given budget.max_planner_turns to converge.
+
+**Why a text protocol vs native function-calling**: many local Ollama models
+(uncensored finetunes, smaller quants, older releases) don't reliably emit
+function-call output. A JSON-fenced block works on every model that can hold
+the protocol in its system prompt. Native tool-calling can be layered on
+later for models that support it; the dispatch logic stays the same.
+
+See `workflows/example-orchestrator.yaml` for a complete worked example.
