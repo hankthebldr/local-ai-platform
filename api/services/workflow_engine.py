@@ -18,6 +18,7 @@ from ..logging_config import logger
 from ..exceptions import WorkflowValidationError
 from ..models.workflow_models import (
     AgentStep,
+    PreWarmEvent,
     RunTelemetrySummary,
     StepResult,
     WorkflowContext,
@@ -42,17 +43,22 @@ _COLD_LOAD_THRESHOLD_MS = 100.0
 
 def _aggregate_telemetry(
     step_results: List[StepResult],
+    pre_warm_events: Optional[List[PreWarmEvent]] = None,
 ) -> Optional[RunTelemetrySummary]:
-    """Roll up per-step Phase-2 telemetry into a per-run summary.
+    """Roll up per-step Phase-2 + Phase-5b telemetry into a per-run summary.
 
     Returns None when no step has telemetry populated — preserves the
     "no observability data" signal rather than reporting all zeros.
     """
-    has_any_telemetry = any(
+    has_step_telemetry = any(
         r.load_duration_ms is not None or r.eval_duration_ms is not None
         for r in step_results
     )
-    if not has_any_telemetry:
+    # Phase 5b — a run can have pre_warm telemetry even when steps don't
+    # (e.g. stub-Ollama tests, or a run that crashed before any step
+    # returned Ollama timing). Don't suppress the summary in that case.
+    has_pre_warm_telemetry = bool(pre_warm_events)
+    if not has_step_telemetry and not has_pre_warm_telemetry:
         return None
 
     summary = RunTelemetrySummary()
@@ -69,7 +75,59 @@ def _aggregate_telemetry(
             summary.total_prompt_eval_ms += r.prompt_eval_duration_ms
         if summary.arch_name is None and r.arch_name is not None:
             summary.arch_name = r.arch_name
+
+    # Phase 5b — pre-warm aggregation. Hit/miss is set on each event by
+    # _resolve_pre_warm_hits before this function is called.
+    for event in pre_warm_events or []:
+        summary.pre_warm_count += 1
+        if event.hit is True:
+            summary.pre_warm_hits += 1
+        elif event.hit is False:
+            summary.pre_warm_misses += 1
+        if event.load_duration_ms is not None:
+            summary.total_pre_warm_load_ms += event.load_duration_ms
+
     return summary
+
+
+def _resolve_pre_warm_hits(workflow_run: WorkflowRun) -> None:
+    """Phase 5b — walk pre_warm_events and decide hit/miss against step_results.
+
+    A pre-warm "hits" when the first downstream step that uses the pre-warmed
+    model:
+      1. Started AFTER the pre-warm was dispatched (timing-correct), AND
+      2. Has load_duration_ms < _COLD_LOAD_THRESHOLD_MS (Ollama reports warm).
+
+    A "miss" means we fired the pre-warm but the consuming step still paid
+    a cold load — Ollama evicted between pre-warm and consumption, or the
+    pre-warm itself failed. hit=None means we never found a consuming step
+    (rare; would mean the workflow short-circuited before reaching the next
+    tick).
+    """
+    for event in workflow_run.pre_warm_events:
+        if event.error is not None:
+            event.hit = False
+            continue
+        # Find the first step_result that uses this model AND started after
+        # the pre-warm dispatched. step_results is in completion order, not
+        # start order, but the `started_at` field is reliable here.
+        candidates = [
+            r
+            for r in workflow_run.step_results
+            if r.model_used == event.model
+            and r.started_at is not None
+            and r.started_at >= event.dispatched_at
+        ]
+        if not candidates:
+            event.hit = None
+            continue
+        # Pick the earliest-started — the pre-warm's intended consumer.
+        consumer = min(candidates, key=lambda r: r.started_at)
+        event.hit_step_id = consumer.step_id
+        if consumer.load_duration_ms is None:
+            event.hit = None
+        else:
+            event.hit = consumer.load_duration_ms < _COLD_LOAD_THRESHOLD_MS
 
 
 class WorkflowEngine:
@@ -558,8 +616,10 @@ class WorkflowEngine:
                     workflow_run.status = "failed"
                     workflow_run.error = f"Scheduler deadlock: arch deferred all {len(ready)} ready steps"
                     workflow_run.completed_at = datetime.utcnow()
+                    _resolve_pre_warm_hits(workflow_run)
                     workflow_run.telemetry_summary = _aggregate_telemetry(
-                        workflow_run.step_results
+                        workflow_run.step_results,
+                        workflow_run.pre_warm_events,
                     )
                     self._checkpoint(workflow_run)
                 logger.error(
@@ -600,8 +660,10 @@ class WorkflowEngine:
                     workflow_run.status = "failed"
                     workflow_run.error = f"Step '{resolution_failed_step.id}' failed: model resolution error"
                     workflow_run.completed_at = datetime.utcnow()
+                    _resolve_pre_warm_hits(workflow_run)
                     workflow_run.telemetry_summary = _aggregate_telemetry(
-                        workflow_run.step_results
+                        workflow_run.step_results,
+                        workflow_run.pre_warm_events,
                     )
                     self._checkpoint(workflow_run)
                 logger.error(
@@ -650,12 +712,16 @@ class WorkflowEngine:
                 # Phase 5 — kick off pre-warms for the next tick's models
                 # NOW, while the current tick's LLM calls are in flight.
                 # Fire-and-forget; arch.transition_plan gates safety.
+                # Phase 5b — workflow_run + defaults threaded through for
+                # event emission and disable_pre_warm opt-out.
                 self._fire_pre_warms_for_next_tick(
                     all_steps=all_steps,
                     scope_ids=scope_ids,
                     completed_ids=completed_ids,
                     current_dispatch_steps=dispatch_steps,
                     resolved_models=resolved_models,
+                    workflow_run=workflow_run,
+                    defaults=definition.defaults,
                 )
                 for future in as_completed(futures):
                     step = futures[future]
@@ -694,8 +760,10 @@ class WorkflowEngine:
                         f"{first.error}"
                     )
                     workflow_run.completed_at = datetime.utcnow()
+                    _resolve_pre_warm_hits(workflow_run)
                     workflow_run.telemetry_summary = _aggregate_telemetry(
-                        workflow_run.step_results
+                        workflow_run.step_results,
+                        workflow_run.pre_warm_events,
                     )
                     self._checkpoint(workflow_run)
                 logger.error(
@@ -706,7 +774,16 @@ class WorkflowEngine:
         # All scope steps succeeded.
         workflow_run.status = "completed"
         workflow_run.completed_at = datetime.utcnow()
-        workflow_run.telemetry_summary = _aggregate_telemetry(workflow_run.step_results)
+        # Phase 5b — brief wait for in-flight pre-warms so their timing
+        # makes it into the run's telemetry. Capped at 500ms — beyond that,
+        # the pre-warm is genuinely slow and the operator's better off
+        # seeing "completed_at=None" than waiting longer for the report.
+        self._wait_for_pre_warms(timeout_ms=500)
+        _resolve_pre_warm_hits(workflow_run)
+        workflow_run.telemetry_summary = _aggregate_telemetry(
+            workflow_run.step_results,
+            workflow_run.pre_warm_events,
+        )
         total_duration = sum(r.duration_seconds or 0 for r in workflow_run.step_results)
         total_tokens = sum(
             r.token_count.get("total_tokens", 0) for r in workflow_run.step_results
@@ -725,6 +802,23 @@ class WorkflowEngine:
             f"({total_tokens} total tokens{cold_load_summary})"
         )
 
+    def _wait_for_pre_warms(self, timeout_ms: int = 500) -> None:
+        """Phase 5b — poll the in-flight pre-warm set until empty or timeout.
+
+        Pre-warm worker threads are daemons; they don't block workflow exit.
+        But for telemetry accuracy at run-completion, we briefly wait so
+        events get their load_duration_ms populated. Capped to avoid
+        stalling a fast workflow behind a slow Ollama load.
+        """
+        import time
+
+        deadline = time.monotonic() + (timeout_ms / 1000.0)
+        while time.monotonic() < deadline:
+            with self._pre_warm_lock:
+                if not self._pre_warm_inflight:
+                    return
+            time.sleep(0.02)  # 20 ms poll interval
+
     def _fire_pre_warms_for_next_tick(
         self,
         all_steps: List[AgentStep],
@@ -732,6 +826,8 @@ class WorkflowEngine:
         completed_ids: Set[str],
         current_dispatch_steps: List[AgentStep],
         resolved_models: Dict[str, str],
+        workflow_run: WorkflowRun,
+        defaults: Any,
     ) -> None:
         """Phase 5 — fire background pre-warms for the next tick's models.
 
@@ -746,11 +842,20 @@ class WorkflowEngine:
           - If safe AND we haven't already kicked off a pre-warm for this
             model, fire ollama.pre_warm() in a daemon thread.
 
+        Phase 5b: records each dispatch as a PreWarmEvent on the run for
+        post-completion hit/miss resolution; honors defaults.disable_pre_warm.
+
         Fire-and-forget: pre-warm threads are daemons. If the workflow
         completes faster than the pre-warm, the wasted work is bounded
         (one model load).
         """
         import threading
+
+        # Phase 5b — workflow-level opt-out. Operators can disable pre-warm
+        # entirely via YAML `defaults.disable_pre_warm: true` (e.g. cold-cache
+        # benchmarks, GPU-pressure-sensitive runs).
+        if getattr(defaults, "disable_pre_warm", None) is True:
+            return
 
         try:
             from .architecture import _get_current as _get_arch
@@ -822,18 +927,38 @@ class WorkflowEngine:
             with self._pre_warm_lock:
                 self._pre_warm_inflight.add(next_model)
 
-            def _worker(model_to_warm: str):
+            # Phase 5b — record the dispatch on the run BEFORE firing the
+            # thread so the event is checkpoint-visible even if the engine
+            # exits before the worker returns. target_gpu_hint is advisory
+            # only (Ollama auto-places; per-request GPU pin is not in the
+            # /api/generate surface).
+            target_gpu = getattr(plan, "pre_warm_target_gpu", None)
+            event = PreWarmEvent(
+                model=next_model,
+                dispatched_at=datetime.utcnow(),
+                target_gpu_hint=target_gpu,
+            )
+            with self._pre_warm_lock:
+                workflow_run.pre_warm_events.append(event)
+
+            def _worker(model_to_warm: str, event_ref: PreWarmEvent):
                 try:
-                    self.ollama.pre_warm(model_to_warm)
+                    result = self.ollama.pre_warm(model_to_warm)
+                    with self._pre_warm_lock:
+                        event_ref.completed_at = datetime.utcnow()
+                        event_ref.load_duration_ms = result.get("load_duration_ms")
                 except Exception as e:
                     logger.warning(f"Pre-warm of '{model_to_warm}' failed: {e}")
+                    with self._pre_warm_lock:
+                        event_ref.completed_at = datetime.utcnow()
+                        event_ref.error = str(e)
                 finally:
                     with self._pre_warm_lock:
                         self._pre_warm_inflight.discard(model_to_warm)
 
             t = threading.Thread(
                 target=_worker,
-                args=(next_model,),
+                args=(next_model, event),
                 name=f"prewarm-{next_model[:24]}",
                 daemon=True,
             )

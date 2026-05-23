@@ -130,6 +130,12 @@ class WorkflowDefaults(BaseModel):
     # default (NVIDIA: "0" to free VRAM between steps; unified: "30m" to amortize
     # the high reload cost on systems where the swap is RAM-resident anyway).
     keep_alive: Optional[str] = None
+    # Phase 5b — workflow-level opt-out for pre-warm. Some workflows want
+    # fresh loads on every step (cold-cache benchmarks, freshness audits,
+    # GPU-pressure-sensitive runs). Default None = arch-detected behavior
+    # via arch.transition_plan() applies. True = engine never fires pre-warm
+    # for this workflow.
+    disable_pre_warm: Optional[bool] = None
 
 
 class WorkflowDefinition(BaseModel):
@@ -242,6 +248,41 @@ class RunTelemetrySummary(BaseModel):
     total_eval_ms: float = 0.0
     total_prompt_eval_ms: float = 0.0
     arch_name: Optional[str] = None
+    # Phase 5b — pre-warm summary fields. Aggregated from WorkflowRun.pre_warm_events
+    # at run completion. `pre_warm_hits` = events where the consuming step's
+    # load_duration was warm (<100 ms). `pre_warm_misses` = events where it
+    # was cold (model evicted between pre-warm and use, or pre-warm itself failed).
+    pre_warm_count: int = 0
+    pre_warm_hits: int = 0
+    pre_warm_misses: int = 0
+    total_pre_warm_load_ms: float = 0.0
+
+
+# ── Pre-Warm Event (Phase 5b) ─────────────────────────────────────────────
+
+
+class PreWarmEvent(BaseModel):
+    """One pre-warm dispatch.
+
+    Recorded when the engine fires a daemon thread to load a model that the
+    next tick will use. The thread updates the event in place with the load
+    duration once Ollama returns. Hit/miss is resolved at run completion by
+    walking the step_results: if the first downstream step that uses
+    `model` shows `load_duration_ms < 100`, the pre-warm hit; otherwise it
+    missed (evicted, or pre-warm failed).
+    """
+
+    model_config = {"protected_namespaces": ()}
+
+    model: str
+    dispatched_at: datetime
+    completed_at: Optional[datetime] = None
+    load_duration_ms: Optional[float] = None
+    target_gpu_hint: Optional[int] = None  # from arch.transition_plan; advisory only
+    error: Optional[str] = None
+    # Resolved at run completion in workflow_engine._resolve_pre_warm_hits.
+    hit: Optional[bool] = None
+    hit_step_id: Optional[str] = None
 
 
 # ── Workflow Run ──────────────────────────────────────────────────────────
@@ -257,3 +298,8 @@ class WorkflowRun(BaseModel):
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
     telemetry_summary: Optional[RunTelemetrySummary] = None
+    # Phase 5b — pre-warm dispatch log. Daemon threads update entries in
+    # place under the engine's state_lock. Empty list on runs where the
+    # arch said no pre-warm at every boundary, or where disable_pre_warm
+    # was set in the workflow defaults.
+    pre_warm_events: List[PreWarmEvent] = Field(default_factory=list)
