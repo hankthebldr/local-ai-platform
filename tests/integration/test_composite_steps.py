@@ -549,3 +549,282 @@ def test_validator_rejects_nested_duplicate_ids(isolated_dir):
     defn = engine.load(str(yaml_path))
     with pytest.raises(WorkflowValidationError, match="Duplicate step IDs"):
         engine.validate(defn, seed_keys=[])
+
+
+# ── Phase 2: single-model parallelism modes ─────────────────────────────
+
+
+_PSEUDO_PARALLEL_HAPPY = textwrap.dedent("""
+    id: test-pseudo-parallel
+    name: Pseudo Parallel
+    schema_version: 1
+    steps:
+      - id: par
+        name: Pseudo Parallel
+        kind: parallel
+        outputs: ["synth"]
+        execution:
+          mode: single_model_pseudo_parallel
+          failure_policy: fail_fast
+        branches:
+          - id: branch_first
+            name: First
+            model: mistral
+            prompt:
+              role_inline: r
+              task: marker_first
+            outputs: ["data"]
+          - id: branch_second
+            name: Second
+            model: mistral
+            prompt:
+              role_inline: r
+              task: marker_second
+            outputs: ["data"]
+          - id: branch_third
+            name: Third
+            model: mistral
+            prompt:
+              role_inline: r
+              task: marker_third
+            outputs: ["data"]
+        gather:
+          id: gath
+          name: G
+          model: mistral
+          prompt:
+            role_inline: r
+            task: marker_gather
+          inputs:
+            - branch_first.data
+            - branch_second.data
+            - branch_third.data
+          outputs: ["synth"]
+    """)
+
+
+_SINGLE_MODEL_CONCURRENT_MIXED = textwrap.dedent("""
+    id: test-single-model-concurrent-bad
+    name: Mixed Model Rejection
+    schema_version: 1
+    steps:
+      - id: par
+        name: Bad
+        kind: parallel
+        outputs: ["synth"]
+        execution:
+          mode: single_model_concurrent
+        branches:
+          - id: branch_a
+            name: A
+            model: mistral
+            prompt:
+              role_inline: r
+              task: marker_a
+            outputs: ["data"]
+          - id: branch_b
+            name: B
+            model: llama3
+            prompt:
+              role_inline: r
+              task: marker_b
+            outputs: ["data"]
+        gather:
+          id: gath
+          name: G
+          model: mistral
+          prompt:
+            role_inline: r
+            task: marker_gather
+          inputs:
+            - branch_a.data
+            - branch_b.data
+          outputs: ["synth"]
+    """)
+
+
+_AUTO_SAME_MODEL = textwrap.dedent("""
+    id: test-auto-same
+    name: Auto Same Model
+    schema_version: 1
+    steps:
+      - id: par
+        name: Auto
+        kind: parallel
+        outputs: ["synth"]
+        execution:
+          mode: auto
+        branches:
+          - id: branch_a
+            name: A
+            model: mistral
+            prompt:
+              role_inline: r
+              task: marker_a
+            outputs: ["data"]
+          - id: branch_b
+            name: B
+            model: mistral
+            prompt:
+              role_inline: r
+              task: marker_b
+            outputs: ["data"]
+        gather:
+          id: gath
+          name: G
+          model: mistral
+          prompt:
+            role_inline: r
+            task: marker_gather
+          inputs:
+            - branch_a.data
+            - branch_b.data
+          outputs: ["synth"]
+    """)
+
+
+class _MultiModelOllama(_MarkerOllama):
+    """Ollama stub that advertises multiple models so resolver doesn't fold
+    distinct pinned names into the same canonical resolution."""
+
+    def list_models(self):
+        return [{"name": "mistral:latest"}, {"name": "llama3:latest"}]
+
+
+def test_pseudo_parallel_dispatches_in_declared_order(isolated_dir):
+    """single_model_pseudo_parallel must run branches sequentially in YAML
+    declaration order — the prompt cache between branches depends on
+    deterministic call ordering."""
+    yaml_path = _write_yaml(isolated_dir, _PSEUDO_PARALLEL_HAPPY)
+    ollama = _MarkerOllama(
+        {
+            "marker_first": "first_result",
+            "marker_second": "second_result",
+            "marker_third": "third_result",
+            "marker_gather": "synth_result",
+        },
+        delay_seconds=0.01,
+    )
+    engine = WorkflowEngine(ollama)
+    defn = engine.load(str(yaml_path))
+    engine.validate(defn, seed_keys=[])
+
+    run = engine.run(defn, seed={})
+
+    assert run.status == "completed", run.error
+    # 3 branches + 1 gather = 4 calls.
+    assert len(ollama.call_order) == 4
+    # Branches in declared order, gather last.
+    assert ollama.call_order == [
+        "marker_first",
+        "marker_second",
+        "marker_third",
+        "marker_gather",
+    ]
+
+
+def test_single_model_concurrent_rejects_mixed_models(isolated_dir):
+    """Branches resolving to different models under single_model_concurrent
+    surface a clear engine-level error rather than silently running."""
+    yaml_path = _write_yaml(isolated_dir, _SINGLE_MODEL_CONCURRENT_MIXED)
+    ollama = _MultiModelOllama(
+        {
+            "marker_a": "should_not_run",
+            "marker_b": "should_not_run",
+            "marker_gather": "should_not_run",
+        }
+    )
+    engine = WorkflowEngine(ollama)
+    defn = engine.load(str(yaml_path))
+
+    run = engine.run(defn, seed={})
+
+    assert run.status == "failed"
+    assert "different" in (run.error or "").lower() or "mode=" in (run.error or "")
+    # No LLM calls should have been issued at all — pre-flight check rejected.
+    assert ollama.call_order == []
+
+
+def test_auto_mode_picks_pseudo_parallel_for_same_model(isolated_dir):
+    """When all branches resolve to the same model, `mode: auto` resolves to
+    `single_model_pseudo_parallel` — branches run in declared order."""
+    yaml_path = _write_yaml(isolated_dir, _AUTO_SAME_MODEL)
+    ollama = _MarkerOllama(
+        {
+            "marker_a": "a_result",
+            "marker_b": "b_result",
+            "marker_gather": "synth_result",
+        },
+        delay_seconds=0.01,
+    )
+    engine = WorkflowEngine(ollama)
+    defn = engine.load(str(yaml_path))
+
+    run = engine.run(defn, seed={})
+
+    assert run.status == "completed", run.error
+    # Sequential dispatch: a, b, gather (in declared order).
+    assert ollama.call_order == ["marker_a", "marker_b", "marker_gather"]
+
+
+def test_auto_mode_picks_multi_model_concurrent_for_mixed(isolated_dir):
+    """When branches resolve to different models, `mode: auto` resolves to
+    `multi_model_concurrent` — branches may complete in any order."""
+    yaml_text = _AUTO_SAME_MODEL.replace(
+        "model: mistral\n            prompt:\n              role_inline: r\n              task: marker_b",
+        "model: llama3\n            prompt:\n              role_inline: r\n              task: marker_b",
+    )
+    yaml_path = _write_yaml(isolated_dir, yaml_text)
+    ollama = _MultiModelOllama(
+        {
+            "marker_a": "a_result",
+            "marker_b": "b_result",
+            "marker_gather": "synth_result",
+        },
+        delay_seconds=0.01,
+    )
+    engine = WorkflowEngine(ollama)
+    defn = engine.load(str(yaml_path))
+
+    run = engine.run(defn, seed={})
+
+    assert run.status == "completed", run.error
+    # Both branches ran, then gather. Order of branches is non-deterministic
+    # under concurrent dispatch — assert by set rather than sequence.
+    assert len(ollama.call_order) == 3
+    assert set(ollama.call_order[:2]) == {"marker_a", "marker_b"}
+    assert ollama.call_order[-1] == "marker_gather"
+
+
+def test_single_model_concurrent_accepts_same_model_branches(isolated_dir):
+    """single_model_concurrent passes pre-flight validation when every branch
+    resolves to the same model, then executes (subject to the daemon's
+    semaphore). The MAX_CONCURRENT_LLM=1 warning is best-effort log output;
+    we assert behavior rather than log content to keep the test robust."""
+    yaml_text = _PSEUDO_PARALLEL_HAPPY.replace(
+        "mode: single_model_pseudo_parallel",
+        "mode: single_model_concurrent",
+    )
+    yaml_path = _write_yaml(isolated_dir, yaml_text)
+    ollama = _MarkerOllama(
+        {
+            "marker_first": "a",
+            "marker_second": "b",
+            "marker_third": "c",
+            "marker_gather": "synth",
+        }
+    )
+    engine = WorkflowEngine(ollama)
+    defn = engine.load(str(yaml_path))
+
+    run = engine.run(defn, seed={})
+
+    assert run.status == "completed", run.error
+    # All 3 branches + gather invoked.
+    assert len(ollama.call_order) == 4
+    assert set(ollama.call_order[:3]) == {
+        "marker_first",
+        "marker_second",
+        "marker_third",
+    }
+    assert ollama.call_order[-1] == "marker_gather"
