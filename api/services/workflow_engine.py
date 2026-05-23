@@ -101,6 +101,13 @@ class WorkflowEngine:
         # needs to honour cancels via the persisted run.status field
         # instead — the loop checks both.
         self._cancel_set: set = set()
+        # Phase 5 — pre-warm in-flight tracker. Keyed by resolved model name;
+        # the daemon worker thread clears its entry on completion. Lock guards
+        # the set against the tick loop firing duplicate pre-warms.
+        import threading as _threading
+
+        self._pre_warm_lock = _threading.Lock()
+        self._pre_warm_inflight: set = set()
         # Startup reaper — orphaned runs from a previous crash/restart
         # get marked as failed so the UI's poller can stop chasing them.
         # Idempotent: subsequent boots are no-ops because the targets
@@ -640,6 +647,16 @@ class WorkflowEngine:
                     ): step
                     for step in dispatch_steps
                 }
+                # Phase 5 — kick off pre-warms for the next tick's models
+                # NOW, while the current tick's LLM calls are in flight.
+                # Fire-and-forget; arch.transition_plan gates safety.
+                self._fire_pre_warms_for_next_tick(
+                    all_steps=all_steps,
+                    scope_ids=scope_ids,
+                    completed_ids=completed_ids,
+                    current_dispatch_steps=dispatch_steps,
+                    resolved_models=resolved_models,
+                )
                 for future in as_completed(futures):
                     step = futures[future]
                     try:
@@ -707,6 +724,124 @@ class WorkflowEngine:
             f"Workflow '{definition.id}' completed in {total_duration:.1f}s "
             f"({total_tokens} total tokens{cold_load_summary})"
         )
+
+    def _fire_pre_warms_for_next_tick(
+        self,
+        all_steps: List[AgentStep],
+        scope_ids: Set[str],
+        completed_ids: Set[str],
+        current_dispatch_steps: List[AgentStep],
+        resolved_models: Dict[str, str],
+    ) -> None:
+        """Phase 5 — fire background pre-warms for the next tick's models.
+
+        Called after the current tick's LLM calls are dispatched but
+        before `as_completed` waits. Looks ahead in the DAG: steps whose
+        dependencies are in (completed_ids ∪ current_dispatch_ids) are
+        the "next likely tick". For each unique model in that set that
+        isn't also in the current dispatch:
+          - Ask arch.transition_plan(prev, next) whether pre-warm is safe.
+            On NVIDIA single with bandwidth contention the plan says no;
+            on unified (page cache) and NVIDIA multi (free GPU) it says yes.
+          - If safe AND we haven't already kicked off a pre-warm for this
+            model, fire ollama.pre_warm() in a daemon thread.
+
+        Fire-and-forget: pre-warm threads are daemons. If the workflow
+        completes faster than the pre-warm, the wasted work is bounded
+        (one model load).
+        """
+        import threading
+
+        try:
+            from .architecture import _get_current as _get_arch
+
+            arch = _get_arch()
+        except Exception:
+            return
+
+        current_dispatch_ids = {s.id for s in current_dispatch_steps}
+        current_dispatch_models = {
+            resolved_models.get(s.id) for s in current_dispatch_steps
+        }
+
+        # Find steps that would be ready as soon as the current tick completes.
+        next_ready: List[AgentStep] = []
+        for s in all_steps:
+            if s.id not in scope_ids:
+                continue
+            if s.id in completed_ids or s.id in current_dispatch_ids:
+                continue
+            deps = s.depends_on or []
+            if all(d in completed_ids or d in current_dispatch_ids for d in deps):
+                next_ready.append(s)
+        if not next_ready:
+            return
+
+        # Pick a stable "previous" anchor for transition_plan. Any step in
+        # the current tick works — the plan is about whether the boundary
+        # *type* (same-model vs swap) supports pre-warm, not about a
+        # specific from-to pair.
+        prev_anchor = current_dispatch_steps[0]
+
+        # Phase 1: build the unique to-warm set within this call.
+        # Two next-tick steps using the same model dedupe to ONE pre-warm.
+        # Without this, fast pre_warm completion could clear the in-flight
+        # set between two per-step checks and double-fire.
+        to_warm: List[tuple] = []  # (model_name, anchor_next_step)
+        seen_models: set = set()
+        for next_step in next_ready:
+            try:
+                next_model = self.resolver.resolve(
+                    model=next_step.model,
+                    role=next_step.role,
+                    default_role=None,
+                )
+            except Exception:
+                continue
+            if next_model in current_dispatch_models or next_model in seen_models:
+                continue
+            seen_models.add(next_model)
+            to_warm.append((next_model, next_step))
+
+        # Phase 2: gate each model through arch + in-flight set, then fire.
+        for next_model, next_step in to_warm:
+            # Skip if a previous tick's pre-warm for this model is still alive.
+            with self._pre_warm_lock:
+                if next_model in self._pre_warm_inflight:
+                    continue
+
+            # Ask the arch whether pre-warm is safe at this boundary.
+            try:
+                plan = arch.transition_plan(prev_anchor, next_step)
+            except Exception:
+                continue
+            if not getattr(plan, "pre_warm_next", False):
+                continue
+
+            # Mark in-flight; the worker clears it on completion.
+            with self._pre_warm_lock:
+                self._pre_warm_inflight.add(next_model)
+
+            def _worker(model_to_warm: str):
+                try:
+                    self.ollama.pre_warm(model_to_warm)
+                except Exception as e:
+                    logger.warning(f"Pre-warm of '{model_to_warm}' failed: {e}")
+                finally:
+                    with self._pre_warm_lock:
+                        self._pre_warm_inflight.discard(model_to_warm)
+
+            t = threading.Thread(
+                target=_worker,
+                args=(next_model,),
+                name=f"prewarm-{next_model[:24]}",
+                daemon=True,
+            )
+            t.start()
+            logger.info(
+                f"Pre-warm dispatched: model='{next_model}' "
+                f"(for next-tick step '{next_step.id}')"
+            )
 
     def _execute_one_step(
         self,
