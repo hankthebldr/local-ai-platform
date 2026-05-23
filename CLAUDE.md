@@ -55,21 +55,28 @@ Key files by responsibility:
 
 ## Release track
 
-Current: **`1.1.1`** — Cortex Console refresh (shipped 2026-05-15). Builds on `1.0.0` (first public release, 2026-04-18) — see [CHANGELOG.md](./CHANGELOG.md) for the full diff. Positioned as a single-operator sovereign appliance; multi-tenant production hardening is a 2.0 concern.
+Current: **`1.1.1`** — Cortex Console refresh (shipped 2026-05-15). Builds on `1.0.0` (first public release, 2026-04-18). Positioned as a **single-operator sovereign appliance**; multi-tenant / enterprise hardening is a deferred 2.x concern.
 
-What's in 1.0.0:
+What's shipped today (1.0.0 + 1.1.1):
 - Core infra (Ollama + systemd + macOS DMG)
 - 18-model registry · CLI chat · OpenAI-compatible API with streaming
 - 16 routers / 22 services · API-key auth + rotation + plugins
-- Multi-agent workflow engine (DAG, Jinja2 prompts, parsers, quality gates, checkpoint/resume, 6-hook lifecycle)
+- Multi-agent workflow engine (sequential DAG, Jinja2 prompts, parsers, quality gates, checkpoint/resume, 6-hook lifecycle)
 - RAG pipeline (Chroma + chunker + document service)
-- CI on Python 3.12/3.13 · Release (DMG) · Pages
+- Cortex Console UI · BUILD / OPERATE / LIBRARY / ADMIN tab grouping
+- CI on Python 3.12/3.13 · DMG release · Pages
 - 46 test files (unit/integration/e2e/hooks/ui)
 
-Roadmap:
-- `1.1.x` — workflow refinements, backlog wins, docs hygiene
-- `1.x` — additional inference engines (vLLM, llama.cpp), fine-tuning, Web UI polish
-- `2.0.0` — enterprise hardening: ≥70% coverage, full RBAC, Prometheus + Grafana, K8s/HA, distributed tracing
+In flight for **`1.3.0`** (see [CHANGELOG.md](./CHANGELOG.md) `[Unreleased]` for the full inventory):
+- **Architecture-aware orchestration** — `Architecture` + `Deployment` protocols (Apple unified / NVIDIA single / NVIDIA multi / x86 CPU), per-arch keep_alive defaults, parallel DAG dispatch driven by `arch.schedule_ready()`, pre-warm of next-step models during current step's inference, per-run telemetry summary (load duration, pressure delta, pre-warm hit/miss). PRs #88, #90, #91, #92, #93, #95 merged; UI summary (#97) draft.
+- **Composite workflow step kinds** — `kind: parallel` (fan-out → gather) + `kind: loop` (body → until predicate). Four parallelism modes including `single_model_pseudo_parallel` for prompt-cache reuse. PRs #94, #96, #98.
+
+Roadmap (single-operator-appliance track):
+- **`1.3.0`** — ship the arch-aware + composite-step-kinds work above. Cuts when PR #97 (UI summary) lands and the Memory tab + Runs view reflect the full pipeline end-to-end.
+- **`1.4.x`** — **fleet awareness.** Mac M4 (dev) + MS-01 (API) + BD790i (flagship) over Tailscale. One control plane, one operator, work routed to whichever box has the right RAM/VRAM. `HostRegistration` model, target-host selector on Composer, resume-on-other-host, opt-in Wake-on-LAN for the flagship.
+- **`1.5.x`** — **pluggable inference engines.** vLLM + llama.cpp parity with Ollama via the existing OpenAI-compatible surface. Per-host engine choice in the fleet registry.
+- **`1.x`** — UI module-split (the 30k-line `index.html` is overdue for ES-module fan-out), workflow YAML editor, plugin marketplace v1 (signed manifests), license-key surface beyond the current placeholder.
+- **`2.0.0`** — **TBD; depends on commercial direction.** If Enclave stays a hacker-delight free appliance: 2.0 is mostly aesthetic (deliberate UX refresh, "the appliance you'd put in a magazine"). If a commercial team SKU lands: 2.0 carries RBAC, audit log, multi-tenant storage, observability stack. The seams (storage layer, API key scopes) are intentionally future-proofed in 1.x so the decision can be deferred without painful migration.
 
 ## Pointers
 

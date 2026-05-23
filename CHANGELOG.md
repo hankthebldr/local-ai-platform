@@ -5,6 +5,123 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer: [sem
 
 ## [Unreleased]
 
+Earmarked for `1.3.0` — Architecture-aware orchestration. The workflow engine
+went from "execute steps in YAML order, blind to the hardware" to "schedule a
+DAG tick-by-tick on the detected arch, pre-warm next-step models during the
+current step's inference, and report hit/miss in the Runs view." Telemetry
+(`load_duration_ms`, `pressure_before/after`, per-step `keep_alive_used`) is
+captured on every run and aggregated into `RunTelemetrySummary`.
+
+### Added — Architecture-aware orchestration (Phases 1–5)
+
+- **Phase 1: Detection + abstractions (PR #88).** `Architecture` and
+  `Deployment` protocols + per-arch impls: `unified.py` (Apple Silicon /
+  x86 CPU), `nvidia_single.py`, `nvidia_multi.py`. Deployment impls cover
+  `host_native`, `container`, `dmg`. Detection runs at startup; results
+  exposed via `GET /api/system/architecture` (consolidated triple),
+  `GET /api/system/pressure`, `POST /api/system/architecture/refresh`.
+- **Phase 2: Step telemetry (PR #90).** `StepResult` gains eight optional
+  fields: `load_duration_ms`, `prompt_eval_duration_ms`, `eval_duration_ms`,
+  `total_duration_ms`, `arch_name`, `pressure_before`, `pressure_after`,
+  `keep_alive_used`. Runs view renders a per-step `warm` / `N.Ns load`
+  chip. Memory tab gains an Architecture & Pressure card with live VRAM
+  / RAM pressure polled every 5s and a "Re-detect" button.
+- **Phase 3: Per-step `keep_alive` (PR #91).** Four-tier resolver:
+  step.config → workflow.defaults → arch default → env var. Arch-detected
+  defaults: unified `"30m"`, NVIDIA `"0"`, unknown `"5m"`.
+- **Phase 4a: Scheduler facade + feasibility (PR #91).** `Scheduler`
+  wraps `arch.schedule_ready()` + `arch.feasible()`; `AgentStep.est_size_gb`
+  optional; validate-time feasibility raises `WorkflowValidationError` on
+  oversize steps; new `GET /api/workflows/<id>/schedule-preview` returns
+  the per-tick dispatch plan.
+- **Phase 4b: Parallel DAG dispatch (PR #92).** Engine's
+  `_execute_steps` rewritten as a tick loop. Non-deferred steps in each
+  tick run concurrently via `ThreadPoolExecutor`; `OllamaService._LLM_SEMAPHORE`
+  serializes at the model layer. Workflows without `depends_on` behave
+  identically to pre-Phase-4b.
+- **Phase 5: Pre-warm (PR #93).** `OllamaService.pre_warm(model, keep_alive)`
+  bypasses `_LLM_SEMAPHORE` and POSTs `/api/generate` with empty prompt +
+  `num_predict=0`. Engine fires daemon-thread pre-warms for next-tick models
+  between `submit()` and `as_completed`; gated by `arch.transition_plan().pre_warm_next`.
+- **Phase 5b: Pre-warm telemetry + opt-out (PR #95).** New `PreWarmEvent`
+  model recorded on `WorkflowRun.pre_warm_events`. Hit/miss resolved at
+  run completion by matching consuming step's `load_duration_ms < 100`.
+  `RunTelemetrySummary` gains `pre_warm_count`, `pre_warm_hits`,
+  `pre_warm_misses`, `total_pre_warm_load_ms`. `WorkflowDefaults.disable_pre_warm`
+  lets operators turn pre-warm off per workflow.
+- **Phase 5c: Pre-warm summary UI (PR #97 — draft).** Colored panel in
+  the Runs view between status header and step rows, showing hit ratio +
+  overlap cost.
+
+### Added — Composite workflow step kinds
+
+- **`kind: parallel` + `kind: loop` (PR #96).** Fan-out / loop step kinds
+  with recursive `branches`, `gather` synthesis step, `body` + `until`
+  predicate. Workspace namespacing: `workspace.{parent.id}.branches.{branch.id}`,
+  iteration history at `workspace.{loop.id}.iterations.{n}`.
+- **Single-model parallelism modes (PR #98).** `ParallelExecutionConfig.mode`:
+  `auto`, `multi_model_concurrent`, `single_model_concurrent`,
+  `single_model_pseudo_parallel`. Runtime validation that single-model modes
+  resolve to one model name. `auto` picks pseudo-parallel for same-model
+  branches (prompt-cache reuse), concurrent otherwise.
+- **Spec doc (PR #94).** `docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md`
+  documents parallel / loop / orchestrator / a2a / consolidate / ralph step
+  kinds for future phases.
+
+### Added — Platform UX refresh (PRs #69–72, #89)
+
+- Dedicated **Runs tab** with first-class run inspector, dark-mode demo
+  recorder, mini-DAG silhouette stacks (vertical for parallel ranks).
+- **Composer chat** in addition to the canvas — click-to-add agents,
+  multi-line description input, persisted chat in localStorage, explicit
+  Clear button with confirmation.
+- **Knowledge-graph zoom** + Models / Catalog tab fixes.
+- BD790i migration runbook at `docs/BD790I_MIGRATION.md`; E2E testing guide
+  at `docs/E2E_TESTING.md`; private overlay convention documented.
+
+### Added — Infrastructure
+
+- **Docker Hub publish CI (PR #82, #83).** `.github/workflows/docker-publish.yml`
+  reads `DOCKERHUB_USERNAME` from `vars.*` with `secrets.*` fallback.
+  `docker-compose.gpu.yml` + `docker-compose.webui.yml` variants ship.
+- **Playwright E2E harness** under `tests/playwright/` — 18 new scenarios
+  covering boot, chat, composer, kanban, RAG roundtrip, workflow execution,
+  release UI features.
+- **Ollama perf config** surfaced via `/api/inventory/system` (PR #85);
+  Memory tab shows LLM concurrency, keep-alive, request timeout, model
+  list TTL at a glance.
+- **REQUEST_TIMEOUT bumped 300 → 900s** (PR #79) — CPU prefill on 34B+
+  models was exceeding the old timeout.
+- **Workflow LLM-call serialization + per-step cache** (PR #84) — single
+  `_LLM_SEMAPHORE` prevents accidental two-model concurrency on
+  CPU/single-GPU hosts; cache eliminates redundant lookups on retry.
+
+### Changed — Engine internals
+
+- `_execute_steps` is no longer a `for step in steps` loop — it's a tick
+  driver. The previous behavior is preserved for workflows without
+  `depends_on` (arch's `schedule_ready` returns head + deferred-rest).
+- `Scheduler()` falls back to `UnknownArchitecture` when detection didn't
+  run (tests, degraded boot) instead of returning `None`. Avoids
+  false-positive deadlock detection.
+
+### Fixed
+
+- **`xdm-toolkit` relative imports + `model_list_ttl` surfacing + seed
+  placeholder** (PR #87).
+- **Composer chat agent response shape** (PR #81).
+- **Models tab empty after Catalog DOM relocation** (PR #73).
+- **Composer harsh-red on failed nodes / uncensored-role accents** (PR #76).
+- **Workflow-progress chip** moved from canvas → panel header → top-right
+  (PRs #78, #80) — three iterations to get the placement right.
+- **Agent chat persistence** — chats now survive tab nav + reloads via
+  localStorage (PR #74).
+
+### Endpoints removed
+
+- **`GET /api/system/deployment`** — verified-redundant subset of
+  `/api/system/architecture`'s `.deployment` field. Removed in PR #90.
+
 ## [1.1.1] — 2026-05-15
 
 ### Added — Cortex Console rebrand (PR #57)
