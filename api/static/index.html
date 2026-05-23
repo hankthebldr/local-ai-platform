@@ -3244,6 +3244,15 @@ textarea.composer-desc-area {
 .wf-result-step.completed { border-left: 2px solid var(--green-dim); }
 .wf-result-step.failed { border-left: 2px solid var(--red-dim); }
 
+/* Phase 5c — pre-warm run summary panel */
+.pre-warm-summary { display: flex; gap: 10px; align-items: center; padding: 5px 10px; margin: 6px 0 10px; border-radius: 3px; font-size: 0.7rem; letter-spacing: 0.02em; }
+.pre-warm-summary .pre-warm-label { font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.pre-warm-summary .pre-warm-stats { color: var(--text); }
+.pre-warm-summary.all-hits { background: rgba(0, 232, 123, 0.08); color: var(--green, #00E87B); }
+.pre-warm-summary.partial { background: rgba(250, 88, 45, 0.08); color: var(--orange, #FA582D); }
+.pre-warm-summary.all-misses { background: rgba(255, 82, 82, 0.08); color: var(--red, #ff5252); }
+.pre-warm-summary.indeterminate { background: rgba(127, 127, 127, 0.08); color: var(--text-dim); }
+
 .wf-run-item {
   display: flex;
   align-items: center;
@@ -10684,6 +10693,46 @@ function updateSeedPlaceholder(defn) {
   seedEl.placeholder = JSON.stringify(skeleton, null, 2);
 }
 
+/* Phase 5c — render the per-run pre-warm summary.
+ *
+ * Surfaces RunTelemetrySummary.pre_warm_count / hits / misses + the total
+ * overlap cost. Returns empty string when the run has no pre-warm events
+ * (the arch said no at every boundary, defaults.disable_pre_warm was set,
+ * or the workflow has only one model). Sits between the run-status row
+ * and the per-step rows so the operator gets the "did pre-warm pay off"
+ * answer before reading individual step chips.
+ *
+ * All interpolated values are numeric (counts, ms→s conversion) so
+ * template-literal interpolation is safe — no esc() needed.
+ */
+function _renderPreWarmSummary(run) {
+  const ts = run && run.telemetry_summary;
+  if (!ts || !ts.pre_warm_count) return '';
+  const hits = ts.pre_warm_hits || 0;
+  const misses = ts.pre_warm_misses || 0;
+  const total = ts.pre_warm_count;
+  const indeterminate = total - hits - misses;
+  const overlap_s = (ts.total_pre_warm_load_ms || 0) / 1000;
+  // Color by hit ratio; "indeterminate" wins when nothing resolved
+  // (workflow short-circuited before consumers ran).
+  let cls = 'indeterminate';
+  if (hits + misses > 0) {
+    if (misses === 0) cls = 'all-hits';
+    else if (hits === 0) cls = 'all-misses';
+    else cls = 'partial';
+  }
+  const overlap_text = overlap_s >= 0.05
+    ? ` · ${overlap_s.toFixed(1)}s overlap (hidden behind inference)`
+    : '';
+  const indet_text = indeterminate > 0 ? ` · ${indeterminate} unresolved` : '';
+  return `
+    <div class="pre-warm-summary ${cls}" title="Pre-warm aggregates from arch.transition_plan() decisions across the run">
+      <span class="pre-warm-label">Pre-warm</span>
+      <span class="pre-warm-stats">${hits} hit${hits !== 1 ? 's' : ''} / ${misses} miss${misses !== 1 ? 'es' : ''}${indet_text}${overlap_text}</span>
+    </div>
+  `;
+}
+
 function renderStepBox(step, status, result) {
   // Declared hooks (from WorkflowDefinition). Live hook execution status
   // will be added in a follow-up (requires engine instrumentation).
@@ -10787,6 +10836,7 @@ async function runWorkflow() {
         <span class="wf-run-id">${run.run_id}</span>
       </div>
     `;
+    html += _renderPreWarmSummary(run);  // Phase 5c — empty unless pre-warm fired
 
     (run.step_results || []).forEach(step => {
       const dur = step.duration_seconds ? step.duration_seconds.toFixed(1) + 's' : '-';
@@ -10935,6 +10985,7 @@ async function viewRun(runId) {
     const content = document.getElementById('wf-results-content');
     let statusColor = run.status === 'completed' ? 'var(--green)' : 'var(--red)';
     let html = `<div style="margin-bottom:12px;font-size:0.8rem;color:${statusColor};text-transform:uppercase;letter-spacing:0.1em;font-weight:600">${run.status}</div>`;
+    html += _renderPreWarmSummary(run);  // Phase 5c — empty unless pre-warm fired
     (run.step_results || []).forEach(step => {
       const dur = step.duration_seconds ? step.duration_seconds.toFixed(1) + 's' : '-';
       const tokens = step.token_count ? step.token_count.total_tokens : 0;
