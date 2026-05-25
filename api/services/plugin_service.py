@@ -38,109 +38,178 @@ def _parse_skill_md(path: Path) -> dict:
 
 
 class PluginService:
-    """Discovers and manages plugins from a directory convention"""
+    """Discovers and manages plugins from a directory convention.
 
-    def __init__(self, plugins_dir: Optional[str] = None):
-        self._dir = Path(plugins_dir) if plugins_dir else Path("plugins")
+    Phase 1.2 (Track B) — two-layer discovery:
+      system_dir   read-only OOTB plugins shipped with the app/image
+      user_dir     writable user-installed plugins; persists across updates
+
+    On id collision, user wins. The returned plugin dict carries:
+      origin: "system" | "user"          which layer the winning copy came from
+      overrides_system: bool             True if a user plugin shadowed a
+                                         system plugin with the same id
+    """
+
+    def __init__(
+        self,
+        plugins_dir: Optional[str] = None,
+        *,
+        system_dir: Optional[Path] = None,
+        user_dir: Optional[Path] = None,
+    ):
+        # Phase 1.2 — prefer the (system_dir, user_dir) two-layer API.
+        # Backwards-compatible: plugins_dir maps to system_dir when neither
+        # explicit layer is provided. Default falls back to the deployment-
+        # resolved storage roots; if detection failed, plugins/ relative
+        # to cwd (pre-Phase-1 behavior).
+        if system_dir is not None or user_dir is not None:
+            self._system_dir = Path(system_dir) if system_dir else None
+            self._user_dir = Path(user_dir) if user_dir else None
+        elif plugins_dir is not None:
+            # Legacy single-dir constructor — treat as system layer
+            self._system_dir = Path(plugins_dir)
+            self._user_dir = None
+        else:
+            # Auto-resolve from deployment
+            try:
+                from .deployment import _get_current as _get_dep
+
+                d = _get_dep()
+                self._system_dir = d.system_storage_root / "plugins"
+                self._user_dir = d.user_storage_root / "plugins"
+            except Exception:
+                self._system_dir = Path("plugins")
+                self._user_dir = None
+        # Legacy alias for code paths that still call self._dir
+        self._dir = self._system_dir or Path("plugins")
         self._plugins: dict = {}
         self._tools: dict = {}
 
     def scan_plugins(self) -> list:
-        """Scan the plugins directory for valid plugins."""
+        """Walk both layers (system first, then user). User overrides on id.
+
+        Returns the union as a list of plugin dicts. Each carries `origin`
+        and `overrides_system` so the UI can render which layer won.
+        """
         self._plugins.clear()
         self._tools.clear()
 
-        if not self._dir.exists():
-            logger.warning(f"Plugins directory not found: {self._dir}")
-            return []
+        layers = []
+        if self._system_dir is not None:
+            layers.append(("system", self._system_dir))
+        if self._user_dir is not None:
+            layers.append(("user", self._user_dir))
 
-        found = []
-        for child in sorted(self._dir.iterdir()):
-            if not child.is_dir():
+        for layer_name, base in layers:
+            if not base.exists():
+                if layer_name == "system":
+                    logger.warning(f"Plugins directory not found: {base}")
                 continue
-            if child.name.startswith("_"):
+            for child in sorted(base.iterdir()):
+                self._load_one_plugin(child, layer_name)
+
+        return list(self._plugins.values())
+
+    def _load_one_plugin(self, child: Path, layer_name: str) -> None:
+        """Load a single plugin directory into self._plugins.
+
+        Idempotent for the (id, layer) pair but NOT for (id, *) — a user
+        plugin with the same id as a previously-loaded system plugin
+        overwrites the system entry and marks overrides_system=True.
+        """
+        if not child.is_dir():
+            return
+        if child.name.startswith("_"):
+            return
+
+        manifest_path = child / "plugin.yaml"
+        if not manifest_path.exists():
+            logger.warning(f"Skipping {child.name}: no plugin.yaml")
+            return
+
+        try:
+            manifest = yaml.safe_load(manifest_path.read_text())
+        except yaml.YAMLError as e:
+            logger.error(f"Invalid YAML in {manifest_path}: {e}")
+            return
+
+        plugin_id = manifest.get("id", child.name)
+        overrides_system = layer_name == "user" and plugin_id in self._plugins
+
+        # Load skills
+        skills = []
+        for skill_def in manifest.get("skills", []):
+            skill_path = (child / skill_def["file"]).resolve()
+            if not str(skill_path).startswith(str(child.resolve())):
+                logger.error(
+                    f"Path traversal blocked: {skill_def['file']} in {plugin_id}"
+                )
                 continue
+            if skill_path.exists():
+                parsed = _parse_skill_md(skill_path)
+                skills.append(
+                    {
+                        "id": skill_def["id"],
+                        "triggers": skill_def.get("triggers", []),
+                        **parsed,
+                    }
+                )
+            else:
+                logger.warning(f"Skill file not found: {skill_path}")
 
-            manifest_path = child / "plugin.yaml"
-            if not manifest_path.exists():
-                logger.warning(f"Skipping {child.name}: no plugin.yaml")
+        # If we're loading a user plugin that overrides a system one,
+        # drop the system tools first so they don't linger in self._tools.
+        if overrides_system:
+            for key in list(self._tools.keys()):
+                if key[0] == plugin_id:
+                    del self._tools[key]
+
+        # Pre-load tool modules
+        tools = []
+        for tool_def in manifest.get("tools", []):
+            tool_path = (child / tool_def["file"]).resolve()
+            if not str(tool_path).startswith(str(child.resolve())):
+                logger.error(
+                    f"Path traversal blocked: {tool_def['file']} in {plugin_id}"
+                )
                 continue
+            if tool_path.exists():
+                module = self._load_tool_module(plugin_id, tool_def["id"], tool_path)
+                if module:
+                    self._tools[(plugin_id, tool_def["id"])] = {
+                        "module": module,
+                        "function": tool_def.get("function", "execute"),
+                    }
+                tools.append(
+                    {
+                        "id": tool_def["id"],
+                        "description": tool_def.get("description", ""),
+                        "parameters": tool_def.get("parameters", {}),
+                    }
+                )
+            else:
+                logger.warning(f"Tool file not found: {tool_path}")
 
-            try:
-                manifest = yaml.safe_load(manifest_path.read_text())
-            except yaml.YAMLError as e:
-                logger.error(f"Invalid YAML in {manifest_path}: {e}")
-                continue
-
-            plugin_id = manifest.get("id", child.name)
-
-            # Load skills
-            skills = []
-            for skill_def in manifest.get("skills", []):
-                skill_path = (child / skill_def["file"]).resolve()
-                if not str(skill_path).startswith(str(child.resolve())):
-                    logger.error(
-                        f"Path traversal blocked: {skill_def['file']} in {plugin_id}"
-                    )
-                    continue
-                if skill_path.exists():
-                    parsed = _parse_skill_md(skill_path)
-                    skills.append(
-                        {
-                            "id": skill_def["id"],
-                            "triggers": skill_def.get("triggers", []),
-                            **parsed,
-                        }
-                    )
-                else:
-                    logger.warning(f"Skill file not found: {skill_path}")
-
-            # Pre-load tool modules
-            tools = []
-            for tool_def in manifest.get("tools", []):
-                tool_path = (child / tool_def["file"]).resolve()
-                if not str(tool_path).startswith(str(child.resolve())):
-                    logger.error(
-                        f"Path traversal blocked: {tool_def['file']} in {plugin_id}"
-                    )
-                    continue
-                if tool_path.exists():
-                    module = self._load_tool_module(
-                        plugin_id, tool_def["id"], tool_path
-                    )
-                    if module:
-                        self._tools[(plugin_id, tool_def["id"])] = {
-                            "module": module,
-                            "function": tool_def.get("function", "execute"),
-                        }
-                    tools.append(
-                        {
-                            "id": tool_def["id"],
-                            "description": tool_def.get("description", ""),
-                            "parameters": tool_def.get("parameters", {}),
-                        }
-                    )
-                else:
-                    logger.warning(f"Tool file not found: {tool_path}")
-
-            plugin_data = {
-                "id": plugin_id,
-                "name": manifest.get("name", plugin_id),
-                "version": manifest.get("version", "0.0.0"),
-                "description": manifest.get("description", ""),
-                "author": manifest.get("author", "unknown"),
-                "path": str(child),
-                "skills": skills,
-                "tools": tools,
-            }
-            self._plugins[plugin_id] = plugin_data
-            found.append(plugin_data)
-            logger.info(
-                f"Loaded plugin: {plugin_id} "
-                f"({len(skills)} skills, {len(tools)} tools)"
-            )
-
-        return found
+        plugin_data = {
+            "id": plugin_id,
+            "name": manifest.get("name", plugin_id),
+            "version": manifest.get("version", "0.0.0"),
+            "description": manifest.get("description", ""),
+            "author": manifest.get("author", "unknown"),
+            "path": str(child),
+            "skills": skills,
+            "tools": tools,
+            # Phase 1.2 (Track B) layer metadata
+            "origin": layer_name,
+            "overrides_system": overrides_system,
+        }
+        self._plugins[plugin_id] = plugin_data
+        logger.info(
+            f"Loaded plugin: {plugin_id} from {layer_name} "
+            f"({len(skills)} skills, {len(tools)} tools"
+            + (", overrides system" if overrides_system else "")
+            + ")"
+        )
 
     def _load_tool_module(self, plugin_id: str, tool_id: str, path: Path):
         """Dynamically load a Python tool module.
