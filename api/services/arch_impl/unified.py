@@ -18,7 +18,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import time
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 import psutil
 
@@ -301,8 +301,19 @@ class UnifiedArchitecture:
             raw_error=msg,
         )
 
-    def transition_plan(self, prev_step: Any, next_step: Any) -> TransitionPlan:
+    def transition_plan(
+        self,
+        prev_step: Any,
+        next_step: Any,
+        recently_evicted: Optional[List[str]] = None,
+    ) -> TransitionPlan:
         """For unified pools, page cache makes warm re-load nearly free.
+
+        Phase 5.4 — when `recently_evicted` is passed (a list of model names
+        the engine evicted within the page-cache recency window, typically
+        ~5 minutes), and next_step.model is in that list, we mark the plan
+        as a `warm_eviction_candidate`. The engine can use this to skip the
+        pre-warm cost since the re-mmap from page cache is essentially free.
 
         Strategy:
         - Always evict at prev_step (freshness default)
@@ -317,12 +328,23 @@ class UnifiedArchitecture:
                 pre_warm_next=False,
                 rationale="terminal step",
             )
+
+        next_model = getattr(next_step, "model", None)
+        is_warm_candidate = bool(
+            recently_evicted and next_model and next_model in recently_evicted
+        )
+        rationale = (
+            "unified pool; next model recently evicted, still in page cache"
+            if is_warm_candidate
+            else "unified pool; page cache enables cheap pre-warm"
+        )
         return TransitionPlan(
             evict_at_prev_step=True,
             evict_via_keep_alive_zero=True,
             pre_warm_next=True,
             pre_warm_target_gpu=None,  # no GPU concept here
-            rationale="unified pool; page cache enables cheap pre-warm",
+            warm_eviction_candidate=is_warm_candidate,
+            rationale=rationale,
         )
 
     def default_keep_alive(self) -> str:

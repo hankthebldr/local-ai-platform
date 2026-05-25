@@ -151,6 +151,11 @@ class TransitionPlan(BaseModel):
     pre_warm_next: bool = False
     pre_warm_target_gpu: Optional[int] = None
     rationale: Optional[str] = None
+    # Phase 5.4 — set by UnifiedArchitecture when the next-step model was
+    # recently evicted (likely still in OS page cache, so re-mmap is cheap).
+    # On NVIDIA this stays False — evicting from VRAM doesn't leave a warm
+    # cache to read back from.
+    warm_eviction_candidate: bool = False
 
 
 # ── Protocol ──────────────────────────────────────────────────────────────
