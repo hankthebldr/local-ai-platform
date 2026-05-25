@@ -35,7 +35,9 @@
       </a>
       <nav>
         <a href="#features">Features</a>
+        <a href="#whats-new">What's new</a>
         <a href="#download">Download</a>
+        <a href="https://github.com/hankthebldr/local-ai-platform/wiki">Wiki</a>
         <a href="https://github.com/hankthebldr/local-ai-platform">GitHub</a>
       </nav>
     </div>
@@ -89,6 +91,77 @@
           </div>
         </div>
 
+      </div>
+    </section>
+
+    <!-- WHAT'S NEW -->
+    <section id="whats-new" class="features">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">v __ENCLAVE_VERSION__</div>
+            <h2>What's new <em>this release</em>.</h2>
+          </div>
+          <div class="index">RELEASE NOTES</div>
+        </div>
+
+        <div class="grid">
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">A</span>
+              <h3>Architecture-aware dispatch</h3>
+            </div>
+            <dl>
+              <dt>Detection</dt>
+              <dd>Per-host detection of memory topology (unified / single-GPU / multi-GPU) and deployment shape (DMG / Container / HostNative). Pluggable <code>Architecture</code> + <code>Deployment</code> protocols.</dd>
+              <dt>Dispatch</dt>
+              <dd>Tick-based parallel DAG dispatcher: each tick asks the detected arch which steps to run concurrently vs defer. Falls back to single-step-per-tick on workflows without <code>depends_on</code>.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">B</span>
+              <h3>Per-step keep_alive + telemetry</h3>
+            </div>
+            <dl>
+              <dt>Resolution</dt>
+              <dd>Four-tier resolver: step config &gt; workflow default &gt; arch-detected default &gt; <code>OLLAMA_KEEP_ALIVE</code>. Defaults are <code>30m</code> on CPU (reload dominates), <code>0</code> on single-GPU NVIDIA (VRAM is scarce).</dd>
+              <dt>Observability</dt>
+              <dd>Ollama load / prompt-eval / eval durations captured per workflow step. Live snapshot at <code>/api/system/architecture</code>.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">C</span>
+              <h3>Installable Python package</h3>
+            </div>
+            <dl>
+              <dt>Surface</dt>
+              <dd>Wheel + sdist attached to every release. Console scripts <code>enclave</code>, <code>enclave-api</code>, <code>enclave-chat</code>, <code>enclave-workflow</code>.</dd>
+              <dt>Install</dt>
+              <dd><code>pip install &lt;wheel-url&gt;</code> — no PyPI account required.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">D</span>
+              <h3>GHCR mirror, tarball, n8n</h3>
+            </div>
+            <dl>
+              <dt>Container</dt>
+              <dd>Every Docker Hub push mirrored to <code>ghcr.io/hankthebldr/enclave</code>. Linux source tarball with SHA-256 + SHA-512 sidecars on every stable release.</dd>
+              <dt>Automation</dt>
+              <dd>Importable n8n workflow under <code>workflows/n8n/</code> drives release prep through a local Ollama instance — no cloud LLM calls.</dd>
+            </dl>
+          </article>
+
+        </div>
+
+        <p style="margin-top:2rem; opacity:0.8;">Read the full <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/CHANGELOG.md">CHANGELOG entry</a> · explore the <a href="https://github.com/hankthebldr/local-ai-platform/wiki">Wiki</a> · jump to <a href="#download">Download</a>.</p>
       </div>
     </section>
 
@@ -177,9 +250,22 @@
             </div>
             <dl>
               <dt>Build</dt>
-              <dd>py2app + pywebview, signed-DMG pipeline ready.</dd>
+              <dd>py2app + pywebview, DMG pipeline with CI boot-probe gate.</dd>
               <dt>First run</dt>
-              <dd>Setup wizard installs Ollama and pulls a starter model. Linux supported via direct install.</dd>
+              <dd>Setup wizard installs Ollama and pulls a starter model. Linux supported via direct install + Docker stack.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">07</span>
+              <h3>Architecture-aware <span style="opacity:0.55">(1.3.0+)</span></h3>
+            </div>
+            <dl>
+              <dt>Detection</dt>
+              <dd>Per-host memory topology (unified / single-GPU / multi-GPU) and deployment shape (DMG / Container / HostNative).</dd>
+              <dt>Dispatch</dt>
+              <dd>Tick-based parallel DAG dispatcher with feasibility validation. Ollama timings captured per step.</dd>
             </dl>
           </article>
 
@@ -211,7 +297,37 @@
             </ul>
             <div class="cta-row">
               <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest" class="btn-primary">Download DMG</a>
-              <p class="micro">macOS&nbsp;12+ &middot; <a href="https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly">nightly build</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/README.md#quick-start">install guide</a></p>
+              <p class="micro">macOS&nbsp;12+ &middot; <a href="https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly">nightly build</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/wiki/Quickstart">quickstart</a></p>
+            </div>
+          </div>
+
+          <div class="license">
+            <h3>Docker</h3>
+            <div class="price">Container &middot; <em>any platform</em></div>
+            <ul>
+              <li>Two-container stack: <code>ollama</code> + <code>api</code></li>
+              <li>Mirrored to Docker Hub and GHCR — no Hub account required</li>
+              <li>Trivy-scanned on every push</li>
+              <li>One-command boot via <code>./run.sh</code></li>
+            </ul>
+            <div class="cta-row">
+              <a href="https://hub.docker.com/r/hankthebldrr/local-ai-platfrom" class="btn-secondary">Docker Hub</a>
+              <p class="micro"><code>docker pull ghcr.io/hankthebldr/enclave:__ENCLAVE_VERSION__</code> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/wiki/Deployment">deployment guide</a></p>
+            </div>
+          </div>
+
+          <div class="license">
+            <h3>Python (pip)</h3>
+            <div class="price">Wheel &middot; <em>embed it</em></div>
+            <ul>
+              <li>Installable wheel attached to every release</li>
+              <li>Console scripts: <code>enclave</code>, <code>enclave-api</code></li>
+              <li>Use the engine inside your own service</li>
+              <li>No PyPI account required</li>
+            </ul>
+            <div class="cta-row">
+              <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest" class="btn-secondary">Get the wheel</a>
+              <p class="micro"><code>pip install &lt;url&gt;.whl</code> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/CHANGELOG.md">changelog</a></p>
             </div>
           </div>
 
@@ -221,12 +337,12 @@
             <ul>
               <li>Full source on GitHub</li>
               <li>Python 3.12 / 3.13 supported</li>
-              <li>Docker compose stack included</li>
               <li>Linux + macOS install scripts</li>
+              <li>Source tarball + SHA-256 / SHA-512</li>
             </ul>
             <div class="cta-row">
               <a href="https://github.com/hankthebldr/local-ai-platform" class="btn-secondary">Read the source</a>
-              <p class="micro"><a href="https://github.com/hankthebldr/local-ai-platform/blob/master/README.md">quickstart</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/discussions">discussions</a></p>
+              <p class="micro"><a href="https://github.com/hankthebldr/local-ai-platform/wiki">wiki</a> &middot; <a href="https://github.com/hankthebldr/local-ai-platform/discussions">discussions</a></p>
             </div>
           </div>
 
@@ -244,9 +360,12 @@
 
   <footer>
     <div class="container">
-      <div class="col-l">enclave __ENCLAVE_VERSION__</div>
+      <div class="col-l">enclave __ENCLAVE_VERSION__ &middot; <span style="opacity:0.6">source-available, zero telemetry</span></div>
       <div class="col-r">
         <a href="https://github.com/hankthebldr/local-ai-platform">github</a>
+        <a href="https://github.com/hankthebldr/local-ai-platform/wiki">wiki</a>
+        <a href="https://github.com/hankthebldr/local-ai-platform/blob/master/CHANGELOG.md">changelog</a>
+        <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest">releases</a>
         <a href="https://github.com/hankthebldr/local-ai-platform/discussions">discussions</a>
       </div>
     </div>
