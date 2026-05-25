@@ -12,13 +12,24 @@
   <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest"><img src="https://img.shields.io/github/v/release/hankthebldr/local-ai-platform?label=release&labelColor=1a1a2e&color=00E87B&style=flat" alt="Latest release"></a>
   <a href="https://github.com/hankthebldr/local-ai-platform/releases?q=prerelease%3Atrue&expanded=true"><img src="https://img.shields.io/github/v/release/hankthebldr/local-ai-platform?include_prereleases&label=nightly&labelColor=1a1a2e&color=FA582D&style=flat" alt="Nightly"></a>
   <a href="https://github.com/hankthebldr/local-ai-platform/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/hankthebldr/local-ai-platform/ci.yml?branch=master&labelColor=1a1a2e&color=00C0E8&style=flat&label=ci" alt="CI"></a>
+  <a href="https://hub.docker.com/r/hankthebldrr/local-ai-platfrom"><img src="https://img.shields.io/docker/pulls/hankthebldrr/local-ai-platfrom?labelColor=1a1a2e&color=00C0E8&style=flat&label=docker%20pulls" alt="Docker pulls"></a>
+  <a href="https://github.com/hankthebldr/local-ai-platform/pkgs/container/enclave"><img src="https://img.shields.io/badge/ghcr.io-enclave-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="GHCR"></a>
   <img src="https://img.shields.io/badge/macOS%2012%2B-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="macOS">
   <img src="https://img.shields.io/badge/Linux-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="Linux">
+</p>
+
+<p align="center">
+  <a href="https://hankthebldr.github.io/local-ai-platform/"><strong>Product page</strong></a> ·
+  <a href="https://github.com/hankthebldr/local-ai-platform/wiki"><strong>Wiki</strong></a> ·
+  <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest"><strong>Latest release</strong></a> ·
+  <a href="CHANGELOG.md"><strong>Changelog</strong></a>
 </p>
 
 ---
 
 Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero cloud dependencies.
+
+> **What's new** — Architecture-aware orchestration (Phases 1–6): per-host detection of memory + deployment topology, four-tier `keep_alive` resolver with arch-detected defaults, scheduler facade with feasibility validation, and tick-based **parallel DAG dispatch** that uses the arch to decide what to run concurrently. Plus: installable Python wheel + sdist, mirrored Docker image on GHCR, Linux source tarball with SHA256/SHA512, n8n release-update workflow, and a curated Wiki seed. See the [CHANGELOG](CHANGELOG.md) for the full PR-by-PR detail.
 
 ## What it does
 
@@ -68,6 +79,31 @@ For non-developers on Linux / Windows, or anyone who wants Enclave fully isolate
 To stop: `./stop.sh` (data preserved) — or `./stop.sh --reset` to wipe models and chat history.
 
 > **Requirements:** ~4 GB free RAM and ~3 GB free disk for the starter model. Pick a different starter with `ENCLAVE_DEFAULT_MODEL=qwen2.5:3b ./run.sh`.
+
+Prefer to pull the published image directly? (Substitute `<version>` with the latest tag.)
+
+```bash
+# Docker Hub — canonical
+docker pull hankthebldrr/local-ai-platfrom:<version>
+
+# GHCR mirror — same digest, no Hub account required
+docker pull ghcr.io/hankthebldr/enclave:<version>
+```
+
+### pip install — embed in an existing Python app
+
+For developers who want to use the Enclave engine inside another Python service. Bundles the FastAPI app, workflow engine, RAG pipeline, and CLI dispatcher.
+
+```bash
+# From a GitHub Release asset (no PyPI required)
+pip install https://github.com/hankthebldr/local-ai-platform/releases/download/v<version>/enclave-<version>-py3-none-any.whl
+
+# Then run the API server with the same uvicorn settings the DMG uses:
+enclave-api                 # starts FastAPI on 127.0.0.1:8000
+enclave --help              # CLI dispatcher (chat, workflow, query, api)
+```
+
+You still need an Ollama runtime reachable at `OLLAMA_URL` (defaults to `http://localhost:11434`). The Python package does **not** install Ollama for you — see the [Wiki › Deployment](https://github.com/hankthebldr/local-ai-platform/wiki/Deployment) page for production setups.
 
 ### From source — for developers
 
@@ -169,6 +205,22 @@ Every master merge re-publishes a freshly smoke-tested DMG to the [`nightly`](ht
 
 ## Documentation
 
+The canonical operator-facing docs live on the [GitHub Wiki](https://github.com/hankthebldr/local-ai-platform/wiki) (sourced from [docs/wiki/](docs/wiki/) on every tag). Highlights:
+
+- [Quickstart](https://github.com/hankthebldr/local-ai-platform/wiki/Quickstart) — first 60 seconds
+- [Architecture](https://github.com/hankthebldr/local-ai-platform/wiki/Architecture) — request flow, services, workflow engine, arch-aware dispatch
+- [Workflows](https://github.com/hankthebldr/local-ai-platform/wiki/Workflows) — authoring YAML pipelines + composite step kinds
+- [Agents](https://github.com/hankthebldr/local-ai-platform/wiki/Agents) — Gems-style YAML personas
+- [Models](https://github.com/hankthebldr/local-ai-platform/wiki/Models) — registry, quantization, throughput
+- [Deployment](https://github.com/hankthebldr/local-ai-platform/wiki/Deployment) — DMG · Docker · pip · source · systemd
+- [Configuration](https://github.com/hankthebldr/local-ai-platform/wiki/Configuration) — env vars, auth, CORS, perf knobs
+- [Troubleshooting](https://github.com/hankthebldr/local-ai-platform/wiki/Troubleshooting) — common failure modes
+- [Release notes](https://github.com/hankthebldr/local-ai-platform/wiki/Release-Notes)
+
+Source-of-truth references inside the repo:
+
 - [MODELS.md](MODELS.md) — model registry and selection
 - [CLAUDE.md](CLAUDE.md) — developer guide
-- [docs/](docs/) — architecture, deployment, and API reference
+- [CHANGELOG.md](CHANGELOG.md) — every release, every PR
+- [docs/](docs/) — design docs, plans, deployment guides
+- Product page: [hankthebldr.github.io/local-ai-platform](https://hankthebldr.github.io/local-ai-platform/)
