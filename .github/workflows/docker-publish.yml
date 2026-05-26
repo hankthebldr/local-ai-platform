@@ -31,6 +31,9 @@ on:
 
 permissions:
   contents: read
+  # Needed so the same job can also push to ghcr.io/hankthebldr/enclave
+  # alongside the Docker Hub push. Read access on contents stays default.
+  packages: write
 
 jobs:
   publish:
@@ -53,23 +56,37 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          # Compute the version suffix(es) once, then expand into both
+          # registry coordinates. GHCR uses lowercase, no-typo image name
+          # ("enclave"); Docker Hub keeps its historical "local-ai-platfrom"
+          # typo since renaming would orphan published tags.
           if [[ "${EVENT_NAME}" == "workflow_dispatch" && -n "${INPUT_TAG}" ]]; then
-              # Validate the input — refuse anything outside the safe set.
               if [[ ! "${INPUT_TAG}" =~ ^[a-zA-Z0-9._-]+$ ]]; then
                   echo "::error::Tag '${INPUT_TAG}' contains unsafe characters. Allowed: [a-zA-Z0-9._-]"
                   exit 1
               fi
-              echo "tags=hankthebldrr/local-ai-platfrom:${INPUT_TAG}" >> "$GITHUB_OUTPUT"
-              echo "kind=manual" >> "$GITHUB_OUTPUT"
+              versions="${INPUT_TAG}"
+              kind="manual"
           elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
               version="${GITHUB_REF#refs/tags/v}"
-              echo "tags=hankthebldrr/local-ai-platfrom:${version},hankthebldrr/local-ai-platfrom:latest" >> "$GITHUB_OUTPUT"
-              echo "kind=tag" >> "$GITHUB_OUTPUT"
+              versions="${version},latest"
+              kind="tag"
           else
               short_sha="$(git rev-parse --short HEAD)"
-              echo "tags=hankthebldrr/local-ai-platfrom:master-${short_sha},hankthebldrr/local-ai-platfrom:latest" >> "$GITHUB_OUTPUT"
-              echo "kind=master" >> "$GITHUB_OUTPUT"
+              versions="master-${short_sha},latest"
+              kind="master"
           fi
+
+          tag_list=""
+          IFS=',' read -ra parts <<< "${versions}"
+          for v in "${parts[@]}"; do
+              if [ -n "${tag_list}" ]; then tag_list="${tag_list},"; fi
+              tag_list="${tag_list}hankthebldrr/local-ai-platfrom:${v}"
+              tag_list="${tag_list},ghcr.io/hankthebldr/enclave:${v}"
+          done
+
+          echo "tags=${tag_list}" >> "$GITHUB_OUTPUT"
+          echo "kind=${kind}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -84,6 +101,17 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Login to GHCR
+        # Mirror the same image to ghcr.io so users without a Docker Hub
+        # account can pull from GitHub's registry. Uses the workflow's
+        # GITHUB_TOKEN — no extra secrets required, just `packages: write`
+        # at the job level (declared above).
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build + push
         uses: docker/build-push-action@v5
         with:
@@ -94,14 +122,20 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
 
-      - name: Verify image is pullable
+      - name: Verify both registry images are pullable
         env:
           ALL_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
-          # Pick the first tag from the comma-list and verify it's resolvable.
-          first_tag="${ALL_TAGS%%,*}"
-          docker buildx imagetools inspect "${first_tag}" | head -10
+          # Probe one tag per registry so a misconfigured registry login
+          # surfaces here instead of as a silent partial publish later.
+          dockerhub_tag=$(echo "${ALL_TAGS}" | tr ',' '\n' | grep '^hankthebldrr/' | head -1)
+          ghcr_tag=$(echo "${ALL_TAGS}" | tr ',' '\n' | grep '^ghcr.io/' | head -1)
+          for t in "${dockerhub_tag}" "${ghcr_tag}"; do
+              [ -n "${t}" ] || continue
+              echo "→ inspecting ${t}"
+              docker buildx imagetools inspect "${t}" | head -10
+          done
 
       - name: Trivy vulnerability scan (non-blocking)
         uses: aquasecurity/trivy-action@master
@@ -114,9 +148,9 @@ jobs:
       - name: Notify (master push)
         if: steps.meta.outputs.kind == 'master'
         run: |
-          echo "::notice::Published rolling 'latest' image. Pin to master-<sha> for immutable references."
+          echo "::notice::Published rolling 'latest' image to Docker Hub + GHCR. Pin to master-<sha> for immutable references."
 
       - name: Notify (tag push)
         if: steps.meta.outputs.kind == 'tag'
         run: |
-          echo "::notice::Published versioned image. Production should pin to this tag, not :latest."
+          echo "::notice::Published versioned image to Docker Hub + GHCR. Production should pin to this tag, not :latest."

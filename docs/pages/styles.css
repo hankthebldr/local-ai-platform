@@ -507,7 +507,10 @@ nav a:hover { color: var(--accent); }
 
 .license-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Was `1fr 1fr` for the original two-card layout. Switched to
+     auto-fit so the 4-card lineup (DMG / Docker / pip / Source) flows
+     to one row on wide screens and reflows to 2-up / 1-up on narrow.   */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 20px;
 }
 .license {

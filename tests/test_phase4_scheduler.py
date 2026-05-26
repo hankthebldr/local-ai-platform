@@ -262,6 +262,90 @@ def test_agent_step_default_est_size_gb_is_none():
     assert s.est_size_gb is None
 
 
+# ── Phase 4.4 — starvation handling ──────────────────────────────────────
+
+
+class _DeferAllArch:
+    """Arch that defers every step it sees — simulates an over-pressured GPU
+    or an impossibly-large model. Used to trigger starvation."""
+
+    def __init__(self):
+        self.name = SimpleNamespace(value="defer_all")
+        self.total_memory_gb = 8.0
+
+    def schedule_ready(self, ready):
+        return [
+            SimpleNamespace(
+                step_id=s.id,
+                placement=None,
+                deferred=True,
+                defer_reason="forced defer",
+            )
+            for s in ready
+        ]
+
+    def feasible(self, island):
+        return SimpleNamespace(fits=True, reason=None)
+
+
+def test_scheduler_starvation_emits_capacity_starvation_after_max_defers():
+    """A step deferred more than max_defer_ticks gets annotated with
+    error_code='capacity_starvation' so the engine can promote it to a
+    real failure rather than spin forever."""
+    s = Scheduler(arch=_DeferAllArch(), max_defer_ticks=3)
+    step = _step("oversize")
+
+    # First 2 ticks: still deferred, no error annotation
+    for _ in range(2):
+        decisions = s.schedule([step])
+        assert getattr(decisions[0], "error_code", None) is None
+
+    # Third tick: defer count hits 3 (== max), starvation annotation appears
+    decisions = s.schedule([step])
+    assert getattr(decisions[0], "error_code", None) == "capacity_starvation"
+    assert "deferred 3 times" in getattr(decisions[0], "error_message", "")
+
+
+def test_scheduler_starvation_count_resets_on_dispatch():
+    """If the arch finally dispatches a step (not deferred), the counter
+    resets so a later defer doesn't carry stale weight."""
+    arch = _DeferAllArch()
+    s = Scheduler(arch=arch, max_defer_ticks=5)
+    step = _step("temp")
+
+    # Defer twice
+    for _ in range(2):
+        s.schedule([step])
+    assert s.defer_counts.get("temp") == 2
+
+    # Swap to a non-deferring arch — first call dispatches, counter clears
+    s.arch = _MockArch()
+    s.schedule([step])
+    assert s.defer_counts.get("temp") is None
+
+
+def test_scheduler_clear_defer_manual_reset():
+    """clear_defer() resets a single step's counter without touching others."""
+    s = Scheduler(arch=_DeferAllArch(), max_defer_ticks=10)
+    s.schedule([_step("a"), _step("b")])
+    assert s.defer_counts.get("a") == 1
+    assert s.defer_counts.get("b") == 1
+
+    s.clear_defer("a")
+    assert s.defer_counts.get("a") is None
+    assert s.defer_counts.get("b") == 1  # unchanged
+
+
+def test_scheduler_defer_counts_property_is_readonly_view():
+    """defer_counts returns a copy — mutating it doesn't affect scheduler state."""
+    s = Scheduler(arch=_DeferAllArch())
+    s.schedule([_step("x")])
+    view = s.defer_counts
+    view["x"] = 999
+    # Internal counter untouched
+    assert s.defer_counts["x"] == 1
+
+
 # ── Integration: validation rejects infeasible workflows ─────────────────
 
 

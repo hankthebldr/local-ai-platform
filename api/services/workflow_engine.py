@@ -245,6 +245,11 @@ class WorkflowEngine:
 
         self._pre_warm_lock = _threading.Lock()
         self._pre_warm_inflight: set = set()
+        # Phase 5.4 — page-cache recency window for warm_eviction_candidate
+        # decisions on UnifiedArchitecture. Models evicted within this many
+        # seconds are flagged as still-mmap-able. 5 min is the documented
+        # macOS page-cache "soft" lifetime; aggressive workloads can override.
+        self._page_cache_recency_seconds = 300.0
         # Startup reaper — orphaned runs from a previous crash/restart
         # get marked as failed so the UI's poller can stop chasing them.
         # Idempotent: subsequent boots are no-ops because the targets
@@ -945,6 +950,35 @@ class WorkflowEngine:
                     return
             time.sleep(0.02)  # 20 ms poll interval
 
+    def _recently_evicted_models(self, workflow_run: WorkflowRun) -> List[str]:
+        """Phase 5.4 — return model names completed within the recency window.
+
+        Walks workflow_run.step_results and returns the unique resolved
+        model names whose `completed_at` is within
+        `self._page_cache_recency_seconds` of now. Used by
+        UnifiedArchitecture.transition_plan to mark `warm_eviction_candidate`
+        plans when the next-step's model is likely still in page cache.
+
+        Quiet on missing data — returns [] if step_results is empty or no
+        steps have timestamps yet. Order is irrelevant; caller checks
+        membership, not position.
+        """
+        now = datetime.utcnow()
+        window = self._page_cache_recency_seconds
+        models: Set[str] = set()
+        for r in getattr(workflow_run, "step_results", []) or []:
+            completed = getattr(r, "completed_at", None)
+            model = getattr(r, "model_used", None)
+            if not completed or not model:
+                continue
+            try:
+                age = (now - completed).total_seconds()
+            except TypeError:
+                continue
+            if 0 <= age <= window:
+                models.add(model)
+        return sorted(models)
+
     def _fire_pre_warms_for_next_tick(
         self,
         all_steps: List[AgentStep],
@@ -1042,12 +1076,31 @@ class WorkflowEngine:
                     continue
 
             # Ask the arch whether pre-warm is safe at this boundary.
+            # Phase 5.4: pass recently_evicted so UnifiedArchitecture can
+            # flag warm_eviction_candidate when the next model was unloaded
+            # within the page-cache recency window (still mmap-able cheaply).
+            # NVIDIA arches ignore the kwarg (no equivalent cache concept).
+            recently_evicted = self._recently_evicted_models(workflow_run)
             try:
-                plan = arch.transition_plan(prev_anchor, next_step)
+                try:
+                    plan = arch.transition_plan(
+                        prev_anchor, next_step, recently_evicted=recently_evicted
+                    )
+                except TypeError:
+                    # Older arch impls don't accept recently_evicted yet.
+                    plan = arch.transition_plan(prev_anchor, next_step)
             except Exception:
                 continue
             if not getattr(plan, "pre_warm_next", False):
                 continue
+            if getattr(plan, "warm_eviction_candidate", False):
+                # Page-cache hit expected — log but still fire pre-warm.
+                # The pre-warm itself is the trigger that re-mmaps the
+                # weights; skipping it would defeat the optimization.
+                logger.debug(
+                    f"Pre-warm of '{next_model}' is a warm-eviction candidate "
+                    "(recent page-cache hit expected)"
+                )
 
             # Mark in-flight; the worker clears it on completion.
             with self._pre_warm_lock:

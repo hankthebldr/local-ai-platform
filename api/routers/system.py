@@ -3,9 +3,11 @@
 System router — exposes architecture / deployment / pressure detection state.
 
 Endpoints (all read-only except refresh):
-    GET  /api/system/architecture        — Detected arch + deployment + ollama triple
-    GET  /api/system/pressure            — Current pressure-poller snapshot
-    POST /api/system/architecture/refresh — Force re-detection (admin)
+    GET  /api/system/architecture           — Detected arch + deployment + ollama triple
+    GET  /api/system/pressure               — Current pressure-poller snapshot
+    POST /api/system/architecture/refresh   — Force re-detection (admin)
+    GET  /api/system/health                 — Phase 6.3: arch + config_validation
+    GET  /api/system/config/recommendations — Phase 6.3: env + compose/systemd snippets
 
 The legacy /api/system/deployment endpoint was removed in PR #90 — its
 payload was a strict subset of /api/system/architecture's `.deployment`
@@ -19,13 +21,13 @@ remains unauthenticated for v1 — Phase 6 may gate it behind master key.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 
 from ..logging_config import logger
 from ..services.architecture import detect_architecture, probe_ollama_version
-from ..services.deployment import detect_deployment
+from ..services.deployment import DeploymentMode, detect_deployment
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -150,3 +152,154 @@ def refresh_architecture() -> Dict[str, Any]:
         "deployment": _deployment_payload(deployment),
         "ollama": _ollama_payload(ollama_probe),
     }
+
+
+# ── Phase 6.3: Config validation surfaces ────────────────────────────────
+
+
+@router.get("/health")
+def system_health() -> Dict[str, Any]:
+    """Phase 6.3 — health endpoint with arch + deployment + config validation.
+
+    Distinct from the root /health endpoint (which is for liveness probes
+    on docker/k8s). This one is operator-facing: it tells you whether your
+    Ollama daemon environment matches the recommended settings for the
+    detected (architecture, deployment) pair.
+
+    Returns 200 even when config_validation has errors — the caller's job
+    to act on them. STRICT_CONFIG_VALIDATION=true at startup is the gate
+    that prevents the API from coming up in a misconfigured state.
+    """
+    from ..services.architecture import _get_current as _get_arch
+    from ..services.config_validator import probe_daemon_env, validate_config
+    from ..services.deployment import _get_current as _get_deployment
+
+    payload: Dict[str, Any] = {"status": "ok"}
+    try:
+        arch = _get_arch()
+        payload["arch"] = arch.name.value
+    except RuntimeError:
+        payload["arch"] = "unknown"
+        payload["status"] = "degraded"
+    try:
+        deployment = _get_deployment()
+        payload["deployment"] = deployment.mode.value
+    except RuntimeError:
+        payload["deployment"] = "unknown"
+        payload["status"] = "degraded"
+
+    if payload["arch"] != "unknown" and payload["deployment"] != "unknown":
+        daemon_env = probe_daemon_env()
+        result = validate_config(arch.name, deployment.mode, daemon_env)
+        payload["config_validation"] = {
+            "warnings": result.warnings,
+            "errors": result.errors,
+            "is_clean": result.is_clean,
+            "probed_keys": sorted(daemon_env.keys()),
+        }
+        if result.errors:
+            payload["status"] = "degraded"
+
+    return payload
+
+
+@router.get("/config/recommendations")
+def config_recommendations() -> Dict[str, Any]:
+    """Phase 6.3 — return recommended daemon env + deployment snippets
+    for the detected (architecture, deployment) pair.
+
+    Snippet generation is inline (Phase 6.3); Phase 6.4 ships parameterised
+    templates under docs/deployment/templates/ that supersede the inline
+    strings below.
+    """
+    from ..services.architecture import _get_current as _get_arch
+    from ..services.config_validator import RECOMMENDATIONS
+    from ..services.deployment import _get_current as _get_deployment
+
+    try:
+        arch = _get_arch()
+        deployment = _get_deployment()
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    recs = RECOMMENDATIONS.get((arch.name, deployment.mode), [])
+    recommended_env: Dict[str, Optional[str]] = {}
+    explanatory_notes: Dict[str, str] = {}
+    for r in recs:
+        if r.expected is not None:
+            recommended_env[r.key] = r.expected
+        if r.message:
+            explanatory_notes[r.key] = r.message
+
+    return {
+        "arch": arch.name.value,
+        "deployment": deployment.mode.value,
+        "recommended_env": recommended_env,
+        "explanatory_notes": explanatory_notes,
+        "docker_compose_snippet": _compose_snippet(arch.name, deployment.mode, recs),
+        "systemd_snippet": _systemd_snippet(arch.name, deployment.mode, recs),
+    }
+
+
+def _compose_snippet(arch_class, deployment_mode, recs) -> str:
+    """Inline docker-compose env block for the detected arch × deployment."""
+    if deployment_mode != DeploymentMode.CONTAINER:
+        return (
+            f"# (docker-compose not applicable to deployment={deployment_mode.value})"
+        )
+
+    env_lines = []
+    for r in recs:
+        if r.expected is None:
+            continue
+        # Use placeholder for fuzzy matchers
+        value = r.expected
+        if value == "physical-core-count":
+            value = "${HOST_PHYS_CORES:-8}"
+        elif value == "enumerate":
+            value = "0,1"
+        elif "-" in value and all(p.isdigit() for p in value.split("-")):
+            value = value.split("-")[0]  # use the lower bound
+        env_lines.append(f"      - {r.key}={value}")
+
+    gpu_block = ""
+    if arch_class.value.startswith("gpu_"):
+        gpu_block = """
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]"""
+
+    return (
+        "services:\n"
+        "  ollama:\n"
+        "    image: ollama/ollama:0.23.4\n"
+        "    environment:\n" + "\n".join(env_lines) + gpu_block
+    )
+
+
+def _systemd_snippet(arch_class, deployment_mode, recs) -> str:
+    """Inline systemd override fragment for host-native deployments."""
+    if deployment_mode != DeploymentMode.HOST_NATIVE:
+        return f"# (systemd not applicable to deployment={deployment_mode.value})"
+
+    env_lines = []
+    for r in recs:
+        if r.expected is None:
+            continue
+        value = r.expected
+        if value == "physical-core-count":
+            value = "$(nproc --all)"
+        elif value == "enumerate":
+            value = "0,1"
+        elif "-" in value and all(p.isdigit() for p in value.split("-")):
+            value = value.split("-")[0]
+        env_lines.append(f'Environment="{r.key}={value}"')
+
+    return (
+        "# /etc/systemd/system/ollama.service.d/override.conf\n"
+        "[Service]\n" + "\n".join(env_lines)
+    )

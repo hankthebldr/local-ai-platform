@@ -1,0 +1,43 @@
+# Enclave — Apple Silicon (apple_unified) deployment template
+#
+# Use case: Apple Silicon Mac running Enclave + Ollama in containers.
+# Note: this configuration runs Ollama under Docker Desktop's Linux VM,
+# which CANNOT see Metal/MPS. The daemon falls back to CPU. For real
+# Apple Silicon performance, prefer the DMG build — see docs/BD790I_MIGRATION.md
+# for the bare-metal path.
+#
+# The Enclave validator emits `docker_desktop_mac_vm` warning for this
+# deployment to remind operators of the VM limitation.
+#
+# Validate the snippet without running:
+#   docker-compose -f docker-compose.apple_unified.yml config
+
+services:
+  ollama:
+    image: ollama/ollama:0.23.4
+    container_name: enclave-ollama
+    environment:
+      # ── Apple unified recommendations ────────────────────────────────
+      - OLLAMA_HOST=0.0.0.0:11434              # in-container; bind to service network
+      - OLLAMA_MAX_LOADED_MODELS=3             # plenty of RAM headroom
+      - OLLAMA_NUM_PARALLEL=1                  # locality > concurrency
+      - OLLAMA_KEEP_ALIVE=30m                  # cheap to keep warm in unified RAM
+      # ── Explicit non-set (validator flags these as arch_env_mismatch
+      #    if present): CUDA_VISIBLE_DEVICES, NVIDIA_VISIBLE_DEVICES
+    volumes:
+      - ./data/ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/hankthebldr/local-ai-platform:latest
+    container_name: enclave-api
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - ENABLE_API_AUTH=false                  # change for non-local exposure
+    depends_on:
+      - ollama
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

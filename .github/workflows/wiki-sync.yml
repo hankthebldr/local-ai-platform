@@ -1,0 +1,89 @@
+name: Sync Wiki
+
+# Pushes docs/wiki/ → the github.com/hankthebldr/local-ai-platform.wiki
+# repo on every `vX.Y.Z` tag and on any master push that touches the
+# wiki source tree. Source of truth is the main repo; the rendered Wiki
+# is read-only — direct edits will be overwritten on the next sync.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "docs/wiki/**"
+      - ".github/workflows/wiki-sync.yml"
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Push docs/wiki/ to the Wiki repo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage wiki content
+        run: |
+          set -euo pipefail
+          if [ ! -d docs/wiki ]; then
+              echo "::error::docs/wiki/ not found — nothing to sync"
+              exit 1
+          fi
+          mkdir -p staged
+          cp -R docs/wiki/* staged/
+          ls -la staged/
+
+      - name: Push to wiki remote
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          wiki_dir="$(mktemp -d)"
+          wiki_url="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.wiki.git"
+
+          # GitHub auto-creates the Wiki repo the first time the operator
+          # enables Wikis + creates the Home page in the UI. If that
+          # hasn't happened yet, this clone fails and we surface a clear
+          # message — the operator just needs to enable Wikis once.
+          if ! git clone --depth=1 "${wiki_url}" "${wiki_dir}" 2>/tmp/clone.err; then
+              echo "::error::Could not clone ${REPO}.wiki.git"
+              echo "::error::Enable Wikis at Settings → General → Features → Wikis,"
+              echo "::error::then create any initial Home page via the UI. After that,"
+              echo "::error::re-run this workflow."
+              cat /tmp/clone.err
+              exit 1
+          fi
+
+          # Replace tracked wiki content with staged content. Use rsync
+          # so deleted pages also disappear from the wiki on next sync.
+          rsync -a --delete \
+              --exclude '.git' \
+              staged/ "${wiki_dir}/"
+
+          cd "${wiki_dir}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+              echo "::notice::Wiki already up to date — nothing to push."
+              exit 0
+          fi
+
+          git commit -m "sync(wiki): from ${REPO}@${SHA::8}
+
+          Automated push from docs/wiki/ on ${REPO}.
+          Edit docs/wiki/<page>.md in the main repo, not the wiki UI —
+          direct wiki edits will be overwritten on the next sync."
+
+          git push origin master
+          echo "::notice::Wiki updated: https://github.com/${REPO}/wiki"

@@ -1,0 +1,57 @@
+# Enclave — NVIDIA multi-GPU (gpu_nvidia_multi) deployment template
+#
+# Use case: Linux host with N>=2 NVIDIA GPUs. Common: 2× A100, 4× L40S
+# in a server build, or a workstation with primary + display card.
+#
+# THE CRITICAL VAR: OLLAMA_SCHED_SPREAD=1. Without it, Ollama loads
+# every model onto GPU 0 until it fills, then spills. With it, models
+# distribute across GPUs — which is the whole point of having N of them.
+#
+# The Enclave validator treats missing OLLAMA_SCHED_SPREAD as
+# severity=error (not warn). In STRICT_CONFIG_VALIDATION mode the API
+# refuses to start without it.
+#
+# Validate the snippet without running:
+#   docker-compose -f docker-compose.gpu_nvidia_multi.yml config
+
+services:
+  ollama:
+    image: ollama/ollama:0.23.4
+    container_name: enclave-ollama
+    environment:
+      # ── NVIDIA multi-GPU recommendations ─────────────────────────────
+      - OLLAMA_SCHED_SPREAD=1                  # ← REQUIRED. without this, GPU 0 only.
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_MAX_LOADED_MODELS=6             # 3 × gpu_count for 2-GPU host; scale up for more
+      - OLLAMA_NUM_PARALLEL=1                  # let the DAG drive parallelism
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_GPU_LAYERS=-1
+      - OLLAMA_KEEP_ALIVE=0                    # NVIDIA default: evict on completion
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    # Reserve ALL GPUs — Ollama picks per model load based on SCHED_SPREAD
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ./data/ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/hankthebldr/local-ai-platform:latest
+    container_name: enclave-api
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - ENABLE_API_AUTH=false
+      # STRICT_CONFIG_VALIDATION=true would refuse to start without SCHED_SPREAD
+    depends_on:
+      - ollama
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

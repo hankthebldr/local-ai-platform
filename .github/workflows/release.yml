@@ -1,5 +1,10 @@
 name: Release
 
+# Cuts a stable GitHub Release on every `vX.Y.Z` tag push, and a rolling
+# `nightly` pre-release on every `master` merge. Build jobs run in parallel
+# and upload artifacts; a publish job downloads everything and creates the
+# Release so users get DMG + wheel + sdist + tarball + checksums together.
+
 on:
   push:
     branches: [master]
@@ -11,34 +16,46 @@ permissions:
   contents: write
 
 jobs:
-  build-macos:
-    name: Build macOS DMG
-    runs-on: macos-14
 
+  # ── Shared metadata ───────────────────────────────────────────────────
+
+  meta:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
     outputs:
-      release_kind: ${{ steps.meta.outputs.release_kind }}
-      version: ${{ steps.meta.outputs.version }}
-
+      release_kind: ${{ steps.r.outputs.release_kind }}
+      version: ${{ steps.r.outputs.version }}
+      version_bare: ${{ steps.r.outputs.version_bare }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # Tags are needed so build_mac.sh's git describe sees them.
           fetch-depth: 0
-
       - name: Determine release kind + version
-        id: meta
-        # Tag push -> stable release named after the tag.
-        # Master push or manual run -> rolling "nightly" prerelease.
+        id: r
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               version="${GITHUB_REF#refs/tags/}"
               echo "release_kind=stable" >> "$GITHUB_OUTPUT"
               echo "version=${version}" >> "$GITHUB_OUTPUT"
+              echo "version_bare=${version#v}" >> "$GITHUB_OUTPUT"
           else
               short_sha="$(git rev-parse --short HEAD)"
               echo "release_kind=nightly" >> "$GITHUB_OUTPUT"
               echo "version=nightly-${short_sha}" >> "$GITHUB_OUTPUT"
+              echo "version_bare=nightly-${short_sha}" >> "$GITHUB_OUTPUT"
           fi
+
+  # ── macOS DMG ─────────────────────────────────────────────────────────
+
+  build-macos:
+    name: Build macOS DMG
+    needs: meta
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tags are needed so build_mac.sh's git describe sees them.
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -61,7 +78,7 @@ jobs:
 
       - name: Build DMG
         env:
-          ENCLAVE_VERSION: ${{ steps.meta.outputs.version }}
+          ENCLAVE_VERSION: ${{ needs.meta.outputs.version }}
         run: ./scripts/build_mac.sh
 
       - name: Verify DMG exists
@@ -101,75 +118,220 @@ jobs:
               echo "  ok  ${path} -> ${code}"
           done
 
-      - name: Publish stable release (tag push only)
-        if: steps.meta.outputs.release_kind == 'stable'
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: enclave-dmg
+          path: dist/Enclave.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── Python wheel + sdist ──────────────────────────────────────────────
+
+  build-python:
+    name: Build Python wheel + sdist
+    needs: meta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install build frontend
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+      - name: Build wheel + sdist
+        run: python -m build --wheel --sdist --outdir dist
+      - name: Validate package metadata
+        # twine check catches malformed long_description / classifiers /
+        # license fields before they break a `pip install` for somebody.
+        run: twine check dist/*
+      - name: Smoke-test wheel imports in a clean venv
+        run: |
+          python -m venv /tmp/wheel-check
+          /tmp/wheel-check/bin/pip install --quiet dist/*.whl
+          /tmp/wheel-check/bin/python -c "
+          import api, cli
+          from api import __version__
+          from cli import dispatcher
+          print(f'enclave {__version__} imports OK')
+          "
+      - name: Upload Python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: enclave-python
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── Linux source tarball + checksums ──────────────────────────────────
+
+  build-tarball:
+    name: Build Linux source tarball
+    needs: meta
+    runs-on: ubuntu-latest
+    env:
+      VERSION_BARE: ${{ needs.meta.outputs.version_bare }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pack source tree via git-archive
+        # Using git-archive (rather than `tar` on the working tree) means
+        # the tarball matches the tagged commit exactly — no stray local
+        # files, no venv, no built artifacts.
+        run: |
+          set -e
+          mkdir -p out
+          git archive --format=tar.gz \
+              --prefix="enclave-${VERSION_BARE}/" \
+              -o "out/enclave-source-${VERSION_BARE}.tar.gz" \
+              "${GITHUB_SHA}"
+          (cd out && \
+              shasum -a 256 "enclave-source-${VERSION_BARE}.tar.gz" \
+                  > "enclave-source-${VERSION_BARE}.tar.gz.sha256" && \
+              shasum -a 512 "enclave-source-${VERSION_BARE}.tar.gz" \
+                  > "enclave-source-${VERSION_BARE}.tar.gz.sha512")
+          ls -la out/
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: enclave-tarball
+          path: out/*
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── Publish stable release (tag push) ─────────────────────────────────
+
+  publish-stable:
+    name: Publish stable release
+    if: needs.meta.outputs.release_kind == 'stable'
+    needs: [meta, build-macos, build-python, build-tarball]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      VERSION_BARE: ${{ needs.meta.outputs.version_bare }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Flatten artifacts into one release dir
+        run: |
+          set -e
+          mkdir -p release
+          find artifacts -type f -exec cp -v {} release/ \;
+          ls -la release/
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Enclave ${{ steps.meta.outputs.version }}
+          name: Enclave ${{ needs.meta.outputs.version }}
           generate_release_notes: true
           body: |
-            ## Enclave ${{ steps.meta.outputs.version }}
+            ## Enclave ${{ needs.meta.outputs.version }}
 
-            Self-hosted AI inference. CPU-optimized.
+            Self-hosted AI inference. CPU-optimized. Source-available.
+
+            ### Pick an install path
+
+            | Path | File | Notes |
+            |---|---|---|
+            | macOS DMG | `Enclave.dmg` | drag to `/Applications`, then `xattr -dr com.apple.quarantine /Applications/Enclave.app` |
+            | Docker | `docker pull hankthebldrr/local-ai-platfrom:${{ needs.meta.outputs.version_bare }}` | mirrored to `ghcr.io/hankthebldr/enclave:${{ needs.meta.outputs.version_bare }}` |
+            | Python wheel | `enclave-${{ needs.meta.outputs.version_bare }}-py3-none-any.whl` | `pip install <url>` — no PyPI account required |
+            | Python sdist | `enclave-${{ needs.meta.outputs.version_bare }}.tar.gz` | source build from this tag |
+            | Linux source tarball | `enclave-source-${{ needs.meta.outputs.version_bare }}.tar.gz` (+ `.sha256` / `.sha512`) | full repo snapshot from this commit |
 
             ### Install (macOS app)
 
-            1. Download **Enclave.dmg** from the Assets below.
+            1. Download **Enclave.dmg** from Assets below.
             2. Open the DMG and drag **Enclave.app** to `/Applications`.
-            3. First launch — Gatekeeper will warn (the build is **not yet signed/notarized**). Bypass once with:
+            3. First launch — Gatekeeper will warn (build is **not yet signed/notarized**). Bypass once with:
                ```bash
                xattr -dr com.apple.quarantine /Applications/Enclave.app
                ```
-            4. Launch **Enclave** — the native window opens the first-run setup wizard at `/setup`, which installs Ollama and pulls a starter model. Then you land on the dashboard.
+            4. Launch **Enclave** — the native window opens the first-run setup wizard at `/setup`, which installs Ollama and pulls a starter model.
 
-            **Requirements:** macOS 12.0 (Monterey) or later · ~6 GB free disk for runtime + a small starter model.
+            **Requirements:** macOS 12.0 (Monterey) or later · ~6 GB free disk.
+
+            ### Install (Docker)
+
+            ```bash
+            docker pull hankthebldrr/local-ai-platfrom:${{ needs.meta.outputs.version_bare }}
+            # or the no-Hub-account mirror:
+            docker pull ghcr.io/hankthebldr/enclave:${{ needs.meta.outputs.version_bare }}
+            ```
+
+            ### Install (pip)
+
+            ```bash
+            pip install https://github.com/hankthebldr/local-ai-platform/releases/download/${{ needs.meta.outputs.version }}/enclave-${{ needs.meta.outputs.version_bare }}-py3-none-any.whl
+            enclave-api               # boots FastAPI on 127.0.0.1:8000
+            enclave version           # prints the installed version
+            ```
 
             ### Install (from source)
 
             ```bash
             git clone https://github.com/hankthebldr/local-ai-platform.git
             cd local-ai-platform
-            git checkout ${{ steps.meta.outputs.version }}
+            git checkout ${{ needs.meta.outputs.version }}
             ./setup/install.sh
-            ./scripts/start.sh             # browser dashboard
-            # or, on macOS:
-            ./scripts/start_desktop.sh     # native pywebview window (same as the DMG)
+            ./scripts/start.sh
             ```
 
-            See the [README](https://github.com/hankthebldr/local-ai-platform/blob/${{ steps.meta.outputs.version }}/README.md) for API usage, model registry, and the workflow engine.
+            See the [README](https://github.com/hankthebldr/local-ai-platform/blob/${{ needs.meta.outputs.version }}/README.md), [Wiki](https://github.com/hankthebldr/local-ai-platform/wiki), and the [CHANGELOG](https://github.com/hankthebldr/local-ai-platform/blob/${{ needs.meta.outputs.version }}/CHANGELOG.md).
 
             ### Verify the build
 
-            Every release passes a macOS boot probe in CI before publish: the DMG is built, the .app is launched, and the dashboard / setup wizard / API surfaces are all confirmed serving 200s. If you see this release, those checks passed.
+            Every release passes a macOS boot probe in CI before publish: the DMG is built, the .app is launched, and the dashboard / setup wizard / API surfaces all confirmed serving 200s. The Python wheel is also smoke-tested with a fresh-venv import. If you see this release, those checks passed.
           files: |
-            dist/Enclave.dmg
+            release/*
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish nightly release (master push / manual)
-        # Replaces the existing `nightly` tag + release on every master merge,
-        # so anyone who clicks "latest pre-release" always gets a fresh,
-        # smoke-tested DMG built from current master.
-        if: steps.meta.outputs.release_kind == 'nightly'
+  # ── Publish rolling nightly (master push) ─────────────────────────────
+
+  publish-nightly:
+    name: Publish nightly pre-release
+    if: needs.meta.outputs.release_kind == 'nightly'
+    needs: [meta, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: enclave-dmg
+          path: dist
+      - name: Replace the rolling nightly release
+        # Tears down the previous nightly so the new one becomes the
+        # canonical pre-release. --cleanup-tag removes the moving tag too.
+        # Only the DMG ships in nightly to keep the asset list short;
+        # wheel/sdist/tarball were built (above) to verify CI but aren't
+        # attached — use a stable tag if you need pinned non-DMG artifacts.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.meta.outputs.version }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          COMMIT_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
         run: |
           set -e
-          # Best-effort: tear down the previous nightly so the new one becomes
-          # the canonical pre-release. --cleanup-tag removes the moving tag too.
-          gh release delete nightly --yes --cleanup-tag 2>/dev/null || true
+          gh release delete nightly --yes --cleanup-tag --repo "$REPO" 2>/dev/null || true
 
           gh release create nightly \
+              --repo "$REPO" \
               --title "Enclave nightly (${VERSION})" \
               --notes "## Nightly build
 
-          Auto-built and smoke-tested from \`master\` @ \`${GITHUB_SHA}\`.
+          Auto-built and smoke-tested from \`master\` @ \`${COMMIT_SHA}\`.
 
-          **This release is replaced on every \`master\` merge.** For a pinned,
-          immutable build use a numbered \`vX.Y.Z\` release instead.
+          **This release is replaced on every \`master\` merge.** For a pinned, immutable build use a numbered \`vX.Y.Z\` release instead.
 
           ### Install
 
@@ -179,12 +341,12 @@ jobs:
              \`\`\`
              xattr -dr com.apple.quarantine /Applications/Enclave.app
              \`\`\`
-          4. Launch Enclave \xe2\x86\x92 setup wizard \xe2\x86\x92 dashboard.
+          4. Launch Enclave → setup wizard → dashboard.
 
           **Requirements:** macOS 12.0 (Monterey) or later.
 
-          See the [README](https://github.com/hankthebldr/local-ai-platform/blob/master/README.md) for full quickstart + dev setup.
+          For Docker, wheel, and tarball downloads, use the latest stable release — the nightly only ships the DMG. See the [README](https://github.com/hankthebldr/local-ai-platform/blob/master/README.md) for full quickstart.
           " \
               --prerelease \
-              --target "${GITHUB_SHA}" \
+              --target "${COMMIT_SHA}" \
               dist/Enclave.dmg

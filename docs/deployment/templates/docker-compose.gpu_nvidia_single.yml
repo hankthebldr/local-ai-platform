@@ -1,0 +1,54 @@
+# Enclave — NVIDIA single GPU (gpu_nvidia_single) deployment template
+#
+# Use case: Linux host with exactly one NVIDIA GPU (BD790i + RTX 4000
+# Blackwell, workstation with single 4090/A100, single-card cloud
+# instance). Loads models with full GPU offload.
+#
+# Prereqs on the host (see docs/BD790I_MIGRATION.md):
+#   nvidia-smi works
+#   nvidia-container-toolkit installed
+#   nvidia-ctk runtime configure --runtime=docker
+#   docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+#
+# Validate the snippet without running:
+#   docker-compose -f docker-compose.gpu_nvidia_single.yml config
+
+services:
+  ollama:
+    image: ollama/ollama:0.23.4
+    container_name: enclave-ollama
+    environment:
+      # ── NVIDIA single GPU recommendations ────────────────────────────
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_MAX_LOADED_MODELS=2             # KV cache competes with weights
+      - OLLAMA_NUM_PARALLEL=1                  # no concurrent generations
+      - OLLAMA_FLASH_ATTENTION=1               # faster prefill on Ampere+
+      - OLLAMA_GPU_LAYERS=-1                   # offload all layers
+      - OLLAMA_KEEP_ALIVE=0                    # NVIDIA default: evict on completion
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    # GPU device reservation (Compose v3.10+ standard)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ./data/ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/hankthebldr/local-ai-platform:latest
+    container_name: enclave-api
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - ENABLE_API_AUTH=false
+    depends_on:
+      - ollama
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

@@ -1,0 +1,197 @@
+{
+  "name": "Enclave — Release Update",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 320]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "repo_path",
+              "value": "={{ $env.ENCLAVE_REPO_PATH || '/home/henry/Github/Github_desktop/local-ai-platform' }}"
+            },
+            {
+              "name": "ollama_url",
+              "value": "={{ $env.ENCLAVE_OLLAMA_URL || 'http://localhost:11434' }}"
+            },
+            {
+              "name": "ollama_model",
+              "value": "={{ $env.ENCLAVE_OLLAMA_MODEL || 'qwen2.5:14b-instruct-q5_K_M' }}"
+            },
+            {
+              "name": "release_version",
+              "value": "={{ $env.ENCLAVE_RELEASE_VERSION || 'v1.3.0' }}"
+            },
+            {
+              "name": "branch",
+              "value": "={{ $env.ENCLAVE_BRANCH || 'master' }}"
+            },
+            {
+              "name": "create_release",
+              "value": "={{ $env.ENCLAVE_CREATE_RELEASE || 'false' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config",
+      "name": "Resolve config (env-overridable)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [460, 320],
+      "notes": "Reads from env so the same workflow runs against multiple repos / models. Override any field with ENCLAVE_* env vars in your n8n instance."
+    },
+    {
+      "parameters": {
+        "command": "=cd {{ $json.repo_path }} && git fetch --tags && git checkout {{ $json.branch }} && git pull --ff-only && git log --pretty=format:'%h %s' $(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD | head -200"
+      },
+      "id": "git-log",
+      "name": "Pull latest + collect commit log since last tag",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [720, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $node['Resolve config (env-overridable)'].json.ollama_url }}/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"{{ $node['Resolve config (env-overridable)'].json.ollama_model }}\",\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.3, \"num_predict\": 1500 },\n  \"prompt\": \"You are a release-notes writer. Given the git log below, produce a CHANGELOG entry for Enclave version {{ $node['Resolve config (env-overridable)'].json.release_version }}. Format strictly as Markdown using Keep a Changelog conventions. Group entries under: ### Added / ### Changed / ### Fixed / ### Removed. Cite PR numbers where present. Be terse, factual, no marketing language.\\n\\nGit log:\\n{{ $json.stdout }}\"\n}",
+        "options": { "timeout": 600000 }
+      },
+      "id": "draft-changelog",
+      "name": "Draft CHANGELOG entry (local Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [980, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $node['Resolve config (env-overridable)'].json.ollama_url }}/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"{{ $node['Resolve config (env-overridable)'].json.ollama_model }}\",\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.4, \"num_predict\": 800 },\n  \"prompt\": \"You write release-announcement prose for Enclave. Given the git log below, write a 4-sentence announcement for version {{ $node['Resolve config (env-overridable)'].json.release_version }}. First sentence states the headline feature. Second covers other notable changes. Third gives install paths (DMG, Docker, pip). Fourth links to the CHANGELOG. Tone: technical, terse, no exclamation marks.\\n\\nGit log:\\n{{ $json.stdout }}\"\n}",
+        "options": { "timeout": 600000 }
+      },
+      "id": "draft-announcement",
+      "name": "Draft announcement prose (local Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [980, 440]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "changelog_draft", "value": "={{ $node['Draft CHANGELOG entry (local Ollama)'].json.response }}" },
+            { "name": "announcement_draft", "value": "={{ $node['Draft announcement prose (local Ollama)'].json.response }}" },
+            { "name": "release_version", "value": "={{ $node['Resolve config (env-overridable)'].json.release_version }}" },
+            { "name": "repo_path", "value": "={{ $node['Resolve config (env-overridable)'].json.repo_path }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "consolidate",
+      "name": "Consolidate drafts",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1240, 320]
+    },
+    {
+      "parameters": {
+        "fileName": "={{ $json.repo_path }}/.release-prep/{{ $json.release_version }}-draft.md",
+        "fileContent": "=# Release {{ $json.release_version }} — draft\n\nGenerated by the n8n release-update workflow on {{ $now.toISO() }} via local Ollama. Review before committing.\n\n## CHANGELOG entry\n\n{{ $json.changelog_draft }}\n\n---\n\n## Announcement prose\n\n{{ $json.announcement_draft }}\n",
+        "options": { "encoding": "utf8" }
+      },
+      "id": "write-draft",
+      "name": "Write draft to .release-prep/",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [1500, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $node['Resolve config (env-overridable)'].json.create_release }}",
+              "operation": "equals",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "should-release",
+      "name": "Create GitHub release?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1760, 320]
+    },
+    {
+      "parameters": {
+        "command": "=cd {{ $node['Resolve config (env-overridable)'].json.repo_path }} && git tag -a {{ $node['Resolve config (env-overridable)'].json.release_version }} -m 'Release {{ $node['Resolve config (env-overridable)'].json.release_version }}' && git push origin {{ $node['Resolve config (env-overridable)'].json.release_version }}"
+      },
+      "id": "tag-push",
+      "name": "Tag + push (triggers release.yml in CI)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2020, 220]
+    },
+    {
+      "parameters": {
+        "content": "=Release prep complete for **{{ $node['Resolve config (env-overridable)'].json.release_version }}**.\n\nDraft written to `{{ $node['Resolve config (env-overridable)'].json.repo_path }}/.release-prep/{{ $node['Resolve config (env-overridable)'].json.release_version }}-draft.md`.\n\nReview the draft, paste the CHANGELOG section into `CHANGELOG.md`, then push the tag manually OR re-run this workflow with `ENCLAVE_CREATE_RELEASE=true`.\n\nAnnouncement preview:\n\n> {{ $node['Draft announcement prose (local Ollama)'].json.response }}"
+      },
+      "id": "summary",
+      "name": "Summary",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2020, 420]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Resolve config (env-overridable)", "type": "main", "index": 0 }]]
+    },
+    "Resolve config (env-overridable)": {
+      "main": [[{ "node": "Pull latest + collect commit log since last tag", "type": "main", "index": 0 }]]
+    },
+    "Pull latest + collect commit log since last tag": {
+      "main": [[
+        { "node": "Draft CHANGELOG entry (local Ollama)", "type": "main", "index": 0 },
+        { "node": "Draft announcement prose (local Ollama)", "type": "main", "index": 0 }
+      ]]
+    },
+    "Draft CHANGELOG entry (local Ollama)": {
+      "main": [[{ "node": "Consolidate drafts", "type": "main", "index": 0 }]]
+    },
+    "Draft announcement prose (local Ollama)": {
+      "main": [[{ "node": "Consolidate drafts", "type": "main", "index": 0 }]]
+    },
+    "Consolidate drafts": {
+      "main": [[{ "node": "Write draft to .release-prep/", "type": "main", "index": 0 }]]
+    },
+    "Write draft to .release-prep/": {
+      "main": [[{ "node": "Create GitHub release?", "type": "main", "index": 0 }]]
+    },
+    "Create GitHub release?": {
+      "main": [
+        [{ "node": "Tag + push (triggers release.yml in CI)", "type": "main", "index": 0 }],
+        [{ "node": "Summary", "type": "main", "index": 0 }]
+      ]
+    },
+    "Tag + push (triggers release.yml in CI)": {
+      "main": [[{ "node": "Summary", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "enclave-release-1.3.0",
+  "tags": [{ "name": "enclave" }, { "name": "release" }, { "name": "homelab" }]
+}

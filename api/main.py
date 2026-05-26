@@ -371,6 +371,26 @@ async def api_info():
 
 # ── Entrypoint ─────────────────────────────────────────────────────────────
 
+
+def run_server() -> None:
+    """Console-script entrypoint for the `enclave-api` command.
+
+    Same behaviour as `python api/main.py` — boots uvicorn against the
+    module-level FastAPI app using API_HOST / API_PORT / LOG_LEVEL.
+    Auto-reload is OFF when invoked via the console script (suited for
+    production / Docker / DMG); set `ENCLAVE_RELOAD=1` to opt in.
+    """
+    import uvicorn
+
+    uvicorn.run(
+        "api.main:app",
+        host=API_HOST,
+        port=API_PORT,
+        reload=os.getenv("ENCLAVE_RELOAD", "").lower() in {"1", "true", "yes"},
+        log_level=os.getenv("LOG_LEVEL", "info").lower(),
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
 
