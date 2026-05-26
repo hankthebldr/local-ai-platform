@@ -10,7 +10,13 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 
 # ── Step Config ────────────────────────────────────────────────────────────
 
@@ -153,6 +159,41 @@ class OrchestratorBudget(BaseModel):
     max_wall_seconds: int = 600
 
 
+# ── Consolidate step (kind: consolidate) ───────────────────────────────────
+
+
+class ConsolidateSpec(BaseModel):
+    """Config for a `kind: consolidate` step — Dreaming-style memory.
+
+    The step runs one LLM call (the consolidation prompt) over its declared
+    inputs, then writes the model's output into a durable memory store. The
+    same output is also written to the step's declared workspace outputs so
+    downstream steps in the same run can read it.
+
+    `target` selects the store; `target_name` is the file key within it
+    (playbook/concept name, or episodic log key). `merge_strategy` only
+    applies to the markdown stores (playbook/semantic); episodic always
+    appends a new record.
+    """
+
+    role: Optional[str] = None
+    model: Optional[str] = None
+    target: Literal["playbook", "semantic", "episodic"]
+    target_name: str
+    merge_strategy: Literal["replace", "append", "append_with_dedup"] = (
+        "append_with_dedup"
+    )
+    system_prompt: str
+
+    @model_validator(mode="after")
+    def _validate_consolidate(self):
+        if not self.target_name or not self.target_name.strip():
+            raise ValueError("ConsolidateSpec requires a non-empty target_name")
+        if not self.system_prompt or not self.system_prompt.strip():
+            raise ValueError("ConsolidateSpec requires a non-empty system_prompt")
+        return self
+
+
 # ── Agent Step ─────────────────────────────────────────────────────────────
 
 
@@ -168,13 +209,17 @@ class AgentStep(BaseModel):
       * a2a           — delegate to an external A2A-protocol agent
       * orchestrator  — lead agent dynamically spawns workers from a catalog;
                         emits a text-protocol JSON directive each turn
+      * consolidate   — distill inputs into durable cross-run memory
+                        (playbook / semantic / episodic store)
 
     Spec: docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md
     """
 
     id: str
     name: str
-    kind: Literal["llm", "parallel", "loop", "a2a", "orchestrator"] = "llm"
+    kind: Literal["llm", "parallel", "loop", "a2a", "orchestrator", "consolidate"] = (
+        "llm"
+    )
     model: Optional[str] = None
     role: Optional[str] = None
     # Phase 4 — operator-supplied estimate of the model's GGUF size in GB.
@@ -255,6 +300,11 @@ class AgentStep(BaseModel):
     # Hard caps on the orchestration. Any cap hit fails the step.
     budget: Optional[OrchestratorBudget] = None
 
+    # ── kind: consolidate ─────────────────────────────────────────────
+    # Memory-consolidation config. The step runs its system_prompt over the
+    # declared inputs, then writes the result into the named memory store.
+    consolidate: Optional[ConsolidateSpec] = None
+
     @model_validator(mode="after")
     def _validate_kind_shape(self):
         # Non-a2a kinds must not declare a2a fields.
@@ -270,6 +320,12 @@ class AgentStep(BaseModel):
             raise ValueError(
                 f"AgentStep(kind={self.kind}, id={self.id!r}) must not declare "
                 f"planner/workers/budget (those are kind=orchestrator only)"
+            )
+        # Non-consolidate kinds must not declare a consolidate block.
+        if self.kind != "consolidate" and self.consolidate is not None:
+            raise ValueError(
+                f"AgentStep(kind={self.kind}, id={self.id!r}) must not declare "
+                f"a consolidate block (kind=consolidate only)"
             )
 
         if self.kind == "llm":
@@ -422,6 +478,23 @@ class AgentStep(BaseModel):
                         f"via the spawn directive, which the engine maps onto "
                         f"a child context's seed layer"
                     )
+        elif self.kind == "consolidate":
+            if self.consolidate is None:
+                raise ValueError(
+                    f"AgentStep(kind=consolidate, id={self.id!r}) requires a "
+                    f"consolidate block"
+                )
+            if self.system_prompt or self.prompt:
+                raise ValueError(
+                    f"AgentStep(kind=consolidate, id={self.id!r}) must not declare "
+                    f"a top-level prompt — the consolidation prompt lives in the "
+                    f"consolidate block's system_prompt"
+                )
+            if self.branches or self.gather or self.body or self.until:
+                raise ValueError(
+                    f"AgentStep(kind=consolidate, id={self.id!r}) must not declare "
+                    f"branches/gather/body/until"
+                )
         return self
 
 
@@ -474,6 +547,15 @@ class WorkflowContext(BaseModel):
     shared: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
+    # The engine attaches a MemoryStore here at run start so steps can read
+    # `$memory.*` inputs. PrivateAttr keeps it out of model_dump / run.json —
+    # the store is a service handle, not run state. None means memory reads
+    # resolve to "" (a workflow run with no memory wiring still works).
+    _memory: Any = PrivateAttr(default=None)
+
+    def attach_memory(self, store: Any) -> None:
+        self._memory = store
+
     def get_seed(self, key: str) -> Any:
         return self.seed.get(key)
 
@@ -492,6 +574,13 @@ class WorkflowContext(BaseModel):
         return self.shared.get(key)
 
     def resolve_input(self, input_ref: str) -> Any:
+        # Memory accessor: $memory.<target>.<name>
+        #   $memory.playbook.<name>   → playbook markdown body
+        #   $memory.semantic.<concept>→ semantic markdown body
+        #   $memory.episodic.<key>    → recency digest of episodic records
+        if input_ref.startswith("$memory."):
+            return self._resolve_memory(input_ref)
+
         parts = input_ref.split(".", 1)
         if len(parts) != 2:
             return None
@@ -502,6 +591,26 @@ class WorkflowContext(BaseModel):
             return self.get_shared(key)
         else:
             return self.get_workspace(namespace, key)
+
+    def _resolve_memory(self, input_ref: str) -> Any:
+        """Resolve a $memory.<target>.<name> reference against the attached
+        MemoryStore. Returns "" when no store is attached or the entry is
+        missing — memory reads are best-effort, never fatal."""
+        if self._memory is None:
+            return ""
+        # Strip the "$memory." prefix, then split target / name on the first dot.
+        rest = input_ref[len("$memory.") :]
+        sub = rest.split(".", 1)
+        if len(sub) != 2:
+            return ""
+        target, name = sub
+        if target == "playbook":
+            return self._memory.read_playbook(name)
+        if target == "semantic":
+            return self._memory.read_semantic(name)
+        if target == "episodic":
+            return self._memory.read_episodic_digest(name)
+        return ""
 
 
 # ── Step Result (unchanged) ────────────────────────────────────────────────

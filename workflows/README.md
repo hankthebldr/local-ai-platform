@@ -42,9 +42,11 @@ patterns spec keeps working without changes.
 | `loop`         | Re-run `body` until `until.gate` is true or `max_iterations` is hit           | 1     |
 | `a2a`          | Delegate to an external A2A-protocol agent                                    | 3a    |
 | `orchestrator` | Lead agent dynamically spawns workers from a catalog via a JSON-directive protocol | 3b    |
+| `consolidate`  | Distill inputs into durable cross-run memory (playbook / semantic / episodic) | 4     |
 
 See `workflows/example-parallel-loop.yaml`, `workflows/example-a2a-enrichment.yaml`,
-and `workflows/example-orchestrator.yaml` for worked examples.
+`workflows/example-orchestrator.yaml`, and `workflows/example-consolidate.yaml`
+for worked examples.
 
 ### kind: parallel
 
@@ -230,3 +232,60 @@ the protocol in its system prompt. Native tool-calling can be layered on
 later for models that support it; the dispatch logic stays the same.
 
 See `workflows/example-orchestrator.yaml` for a complete worked example.
+
+### kind: consolidate
+
+Distill a run's findings into **durable cross-run memory** — the "Dreaming"
+pattern. The step runs one LLM call (its `system_prompt` over the declared
+inputs) and writes the output into a memory store that future runs can read
+via `$memory.*` inputs.
+
+```yaml
+- id: distill
+  kind: consolidate
+  depends_on: [investigate]
+  inputs:
+    - investigate.findings
+    - $memory.playbook.incident_response   # prior playbook (for merge context)
+  outputs:
+    - updated_playbook
+  consolidate:
+    target: playbook                       # playbook | semantic | episodic
+    target_name: incident_response         # file key within the store
+    merge_strategy: append_with_dedup      # replace | append | append_with_dedup
+    system_prompt: |
+      Extract durable, imperative rules from this run's findings. Phrase each
+      as "When X, prefer Y because Z". Skip anything already in the playbook.
+```
+
+**The three stores** (all local files under `MEMORY_DATA_DIR`, default `./data`):
+
+| Target | On disk | Use |
+|--------|---------|-----|
+| `playbook` | `playbooks/<name>.md` | Human-readable operating rules; editable, git-committable |
+| `semantic` | `memory/semantic/<concept>.md` | Distilled facts about a concept |
+| `episodic` | `memory/episodic/<key>.jsonl` | Append-only run digests (recency-ordered) |
+
+**Reading memory back** — any step (any kind) can declare a `$memory.*` input:
+
+```yaml
+inputs:
+  - $memory.playbook.incident_response   # → the playbook markdown body
+  - $memory.semantic.xdm_timestamps      # → the concept's markdown body
+  - $memory.episodic.incident_log        # → recency digest of recent records
+```
+
+A first run against an empty store reads `""` — never an error. The accessor
+resolves at input-resolution time, exactly like a `seed.*` or workspace ref.
+
+**Merge strategies** (playbook/semantic only; episodic always appends):
+- `replace` — overwrite the file
+- `append` — append under a timestamped heading
+- `append_with_dedup` — append only blocks not already present (whitespace/
+  case-insensitive comparison), so re-running a workflow doesn't duplicate
+  rules it already wrote
+
+This store is the foundation the autonomous `ralph` loop (a future phase)
+builds on for self-learning between iterations.
+
+See `workflows/example-consolidate.yaml` for a worked example.
