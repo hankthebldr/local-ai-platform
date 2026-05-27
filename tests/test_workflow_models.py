@@ -437,6 +437,20 @@ class TestA2AAgentStep:
         with pytest.raises(Exception, match="requires token_env"):
             A2AAuth(type="bearer")
 
+    def test_api_key_auth(self):
+        auth = A2AAuth(type="api_key", token_env="SVC_KEY", header_name="Api-Key")
+        assert auth.type == "api_key"
+        assert auth.token_env == "SVC_KEY"
+        assert auth.header_name == "Api-Key"
+
+    def test_api_key_default_header(self):
+        auth = A2AAuth(type="api_key", token_env="SVC_KEY")
+        assert auth.header_name == "X-API-Key"
+
+    def test_api_key_requires_token_env(self):
+        with pytest.raises(Exception, match="requires token_env"):
+            A2AAuth(type="api_key")
+
 
 class TestOrchestratorAgentStep:
     """kind=orchestrator shape validation."""

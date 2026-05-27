@@ -310,6 +310,55 @@ def test_a2a_bearer_token_is_attached(isolated_dir, patch_client, monkeypatch):
         ), f"missing auth header on {call['method']} {call['url']}"
 
 
+_A2A_APIKEY = textwrap.dedent("""
+    id: test-a2a-apikey
+    name: A2A With API Key
+    schema_version: 1
+    steps:
+      - id: enrich
+        name: Call remote with api key
+        kind: a2a
+        agent_card_url: https://intel.local/.well-known/agent.json
+        skill: enrich_iocs
+        auth:
+          type: api_key
+          token_env: TEST_A2A_TOKEN
+          header_name: X-Service-Key
+        inputs:
+          - seed.iocs
+        outputs:
+          - enriched
+        timeout: 5
+    """)
+
+
+def test_a2a_api_key_header_is_attached(isolated_dir, patch_client, monkeypatch):
+    """Auth=api_key sends the secret under the configured header on every call."""
+    monkeypatch.setenv("TEST_A2A_TOKEN", "key-secret")
+    patch_client["handler"] = _RecordingHandler(
+        artifacts=[
+            {
+                "name": "enriched",
+                "parts": [{"type": "data", "data": {"x": 1}}],
+                "index": 0,
+            }
+        ]
+    )
+    yaml_path = _write_yaml(isolated_dir, _A2A_APIKEY)
+    engine = WorkflowEngine(_StubOllama())
+    defn = engine.load(str(yaml_path))
+    run = engine.run(defn, seed={"iocs": ["x.com"]})
+
+    assert run.status == "completed", run.error
+    for call in patch_client["handler"].calls:
+        # httpx lowercases header keys in the recorded request.
+        assert (
+            call["headers"].get("x-service-key") == "key-secret"
+        ), f"missing api-key header on {call['method']} {call['url']}"
+        # And it must NOT have sent an Authorization header.
+        assert "authorization" not in call["headers"]
+
+
 def test_a2a_bearer_missing_token_fails_step(isolated_dir, patch_client, monkeypatch):
     """If the token env var is unset, the step fails before any HTTP call."""
     monkeypatch.delenv("TEST_A2A_TOKEN", raising=False)

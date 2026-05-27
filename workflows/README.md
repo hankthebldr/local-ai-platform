@@ -167,9 +167,18 @@ Enclave's own A2A surface is symmetric — every loaded workflow auto-advertises
 as a skill at `/.well-known/agent.json`, so two Enclave instances can call
 each other's workflows over A2A. See the live card at `GET /a2a/.well-known/agent.json`.
 
-Auth supported in Phase 3a: `none` and `bearer` (token resolved from env var
-at request time; the token itself never appears in YAML). mTLS / OAuth /
-custom-header schemes land in follow-up phases.
+Auth schemes: `none`, `bearer` (`Authorization: Bearer <token>`), and
+`api_key` (a configurable header, default `X-API-Key`, set via `header_name`).
+For both `bearer` and `api_key` the secret is resolved from the env var named
+in `token_env` at request time — it never appears in YAML. mTLS / OAuth land
+in follow-up phases.
+
+```yaml
+  auth:
+    type: api_key
+    token_env: INTEL_SERVICE_KEY
+    header_name: X-Service-Key      # optional; defaults to X-API-Key
+```
 
 ### kind: orchestrator
 
