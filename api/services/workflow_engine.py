@@ -470,6 +470,10 @@ class WorkflowEngine:
                     # first run against an empty store reads "".
                     if input_ref.startswith("$memory."):
                         continue
+                    # $shards / $shards.* are populated by the engine for a
+                    # sharded gather step; always available (→ [] otherwise).
+                    if input_ref == "$shards" or input_ref.startswith("$shards."):
+                        continue
                     errors.append(
                         f"Step '{step.id}' input '{input_ref}' has no producer. "
                         f"Available: {sorted(available)}"
@@ -480,6 +484,15 @@ class WorkflowEngine:
                 # outputs produced before it. Branches without depends_on are
                 # treated as DAG-parallel and only see seed/external inputs.
                 branch_available = set(available)
+                is_sharded = (
+                    step.execution is not None and step.execution.mode == "sharded"
+                )
+                if is_sharded:
+                    # The engine seeds each persona clone with the shard fields,
+                    # so the persona may reference them even when seed_keys is set.
+                    branch_available.update(
+                        ("seed.shard", "seed.shard_index", "seed.shard_count")
+                    )
                 for branch in step.branches or []:
                     _validate_step(branch, branch_available)
                     for k in branch.outputs:
@@ -1363,6 +1376,11 @@ class WorkflowEngine:
         )
         failure_policy = execution_cfg.failure_policy if execution_cfg else "fail_fast"
 
+        # Sharded mode generates its branches at runtime from one persona + a
+        # sharded input — a distinct enough path to handle separately.
+        if declared_mode == "sharded":
+            return self._execute_sharded_step(parent, definition, context, workflow_run)
+
         # Pre-resolve a model for each branch. Failures here are workflow-level —
         # we never start any branch if one can't be resolved.
         branch_models: Dict[str, str] = {}
@@ -1536,6 +1554,197 @@ class WorkflowEngine:
         logger.info(
             f"Parallel step '{parent.id}' completed in "
             f"{agg.duration_seconds:.1f}s ({len(branch_results)} branches + gather)"
+        )
+        return agg
+
+    def _execute_sharded_step(
+        self,
+        parent: AgentStep,
+        definition: WorkflowDefinition,
+        context: WorkflowContext,
+        workflow_run: WorkflowRun,
+    ) -> StepResult:
+        """Run a sharded parallel composite (mode=sharded).
+
+        One persona (the single declared branch) is cloned per shard of the
+        resolved `shard_input`. Each clone runs sequentially (single-model) in
+        a child context seeded with its shard, then the gather step synthesizes
+        all shard outputs via the `$shards` accessor. Sequential dispatch keeps
+        the model loaded across shards (prompt-cache reuse) and avoids
+        concurrent writes to the shared workspace.
+        """
+        import copy
+        from .sharders import shard as _shard
+
+        agg = StepResult(
+            step_id=parent.id, status="running", started_at=datetime.utcnow()
+        )
+        cfg = parent.execution
+        persona = parent.branches[0]
+
+        # Resolve + shard the input.
+        raw = context.resolve_input(cfg.shard_input)
+        shards = _shard(
+            cfg.sharder, raw, shard_size=cfg.shard_size, max_shards=cfg.max_shards
+        )
+        if not shards:
+            agg.status = "failed"
+            agg.error = (
+                f"Sharded step '{parent.id}': shard_input '{cfg.shard_input}' "
+                f"resolved to no shards (value was {raw!r:.80})"
+            )
+            agg.completed_at = datetime.utcnow()
+            agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+            logger.error(agg.error)
+            return agg
+
+        # Resolve the persona's model once (all shards share it).
+        persona_model = ""
+        if persona.kind == "llm":
+            try:
+                persona_model = self.resolver.resolve(
+                    model=persona.model,
+                    role=persona.role,
+                    default_role=definition.defaults.role,
+                )
+            except Exception as e:
+                agg.status = "failed"
+                agg.error = f"Sharded persona model resolution failed: {e}"
+                agg.completed_at = datetime.utcnow()
+                agg.duration_seconds = (
+                    agg.completed_at - agg.started_at
+                ).total_seconds()
+                logger.error(agg.error)
+                return agg
+
+        logger.info(
+            f"Sharded step '{parent.id}': '{cfg.sharder}' split "
+            f"'{cfg.shard_input}' into {len(shards)} shard(s); cloning persona "
+            f"'{persona.id}' per shard (sequential)"
+        )
+
+        shard_results: List[Dict[str, Any]] = []
+        failures: List[str] = []
+        for i, shard_value in enumerate(shards):
+            clone = copy.deepcopy(persona)
+            clone.id = f"{parent.id}__{persona.id}_shard{i}"
+            # Child context: parent seed + shard fields, sharing the live
+            # workspace/shared/memory so the persona can still read prior steps.
+            child = WorkflowContext(
+                seed={
+                    **context.seed,
+                    "shard": shard_value,
+                    "shard_index": i,
+                    "shard_count": len(shards),
+                },
+                workspace=context.workspace,
+                shared=context.shared,
+            )
+            if context._memory is not None:
+                child.attach_memory(context._memory)
+
+            try:
+                res = self._execute_one_step(
+                    clone, definition, child, workflow_run, persona_model
+                )
+            except Exception as e:  # noqa: BLE001
+                res = StepResult(
+                    step_id=clone.id,
+                    status="failed",
+                    error=f"Shard {i} raised: {e}",
+                    started_at=datetime.utcnow(),
+                    completed_at=datetime.utcnow(),
+                )
+
+            agg.token_count["prompt_tokens"] += res.token_count.get("prompt_tokens", 0)
+            agg.token_count["completion_tokens"] += res.token_count.get(
+                "completion_tokens", 0
+            )
+            agg.model_used = res.model_used
+
+            # Read from the CHILD context: Pydantic copies the workspace dict on
+            # construction, so the persona's writes land in `child`, not the
+            # parent. Each shard's outputs become one entry in the $shards list.
+            if res.status == "completed":
+                shard_results.append(dict(child.workspace.get(clone.id, {})))
+            else:
+                failures.append(f"shard {i}: {res.error}")
+                shard_results.append({"_shard_failed": True, "_error": res.error})
+
+        agg.token_count["total_tokens"] = (
+            agg.token_count["prompt_tokens"] + agg.token_count["completion_tokens"]
+        )
+
+        if failures and cfg.failure_policy == "fail_fast":
+            agg.status = "failed"
+            agg.error = (
+                f"Sharded step '{parent.id}' aborted: {len(failures)} shard(s) "
+                f"failed under fail_fast policy ({failures[0]})"
+            )
+            agg.completed_at = datetime.utcnow()
+            agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+            logger.error(agg.error)
+            return agg
+        if failures:
+            logger.warning(
+                f"Sharded step '{parent.id}' continuing with {len(failures)} "
+                f"failed shard(s) under continue_on_partial policy"
+            )
+
+        # Run gather with $shards populated.
+        try:
+            gather_model = self.resolver.resolve(
+                model=parent.gather.model,
+                role=parent.gather.role,
+                default_role=definition.defaults.role,
+            )
+        except Exception as e:
+            agg.status = "failed"
+            agg.error = f"Sharded gather model resolution failed: {e}"
+            agg.completed_at = datetime.utcnow()
+            agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+            logger.error(agg.error)
+            return agg
+
+        context.set_shards(shard_results)
+        try:
+            gather_res = self._execute_one_step(
+                parent.gather, definition, context, workflow_run, gather_model
+            )
+        finally:
+            context.set_shards(None)
+
+        agg.token_count["prompt_tokens"] += gather_res.token_count.get(
+            "prompt_tokens", 0
+        )
+        agg.token_count["completion_tokens"] += gather_res.token_count.get(
+            "completion_tokens", 0
+        )
+        agg.token_count["total_tokens"] = (
+            agg.token_count["prompt_tokens"] + agg.token_count["completion_tokens"]
+        )
+        agg.model_used = gather_res.model_used
+
+        if gather_res.status != "completed":
+            agg.status = "failed"
+            agg.error = (
+                f"Sharded gather '{parent.gather.id}' failed: {gather_res.error}"
+            )
+            agg.completed_at = datetime.utcnow()
+            agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+            logger.error(agg.error)
+            return agg
+
+        gather_ws = context.workspace.get(parent.gather.id, {})
+        for key in parent.outputs:
+            context.set_workspace(parent.id, key, gather_ws.get(key))
+
+        agg.status = "completed"
+        agg.completed_at = datetime.utcnow()
+        agg.duration_seconds = (agg.completed_at - agg.started_at).total_seconds()
+        logger.info(
+            f"Sharded step '{parent.id}' completed in {agg.duration_seconds:.1f}s "
+            f"({len(shards)} shard(s) + gather)"
         )
         return agg
 
