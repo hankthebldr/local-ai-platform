@@ -86,6 +86,7 @@ and `workflows/example-ralph.yaml` for worked examples.
 | `multi_model_concurrent`        | Heterogeneous specialist branches on a multi-model box | `ThreadPoolExecutor` (concurrent at the network layer)                        |
 | `single_model_concurrent`       | Same model, daemon has `OLLAMA_NUM_PARALLEL > 1`      | `ThreadPoolExecutor`; engine validates all branches resolve to the same model |
 | `single_model_pseudo_parallel`  | Same model, single-slot daemon (CPU-only is typical) | **Sequential** in declared order; keeps prompt cache warm between branches    |
+| `sharded`                       | One large input split across N shards, one persona | Declares **one** branch (the persona); engine clones it per shard, runs sequentially, gather reads `$shards` |
 
 On a single-Ollama-slot CPU box (the default Enclave shape) all modes
 serialize at the `_LLM_SEMAPHORE`. The single-model modes still earn their
@@ -100,6 +101,56 @@ keep:
   fires if the deployment can't honor the promise.
 - Both single-model modes refuse to run if branches accidentally resolve to
   different models — better a clean failure than silent degradation.
+
+#### Sharded mode
+
+For one large input that you want to process in pieces with a single persona
+(e.g. "summarize each of these 40 log files", "extract entities from each
+chunk of this huge document"). Unlike the other modes you don't enumerate
+branches — you declare **one** persona and a shard strategy, and the engine
+generates one branch per shard at runtime.
+
+```yaml
+- id: per_doc_extract
+  kind: parallel
+  outputs: [summary]
+  execution:
+    mode: sharded
+    sharder: by_file        # by_file | by_chunk | by_token_window
+    shard_input: ingest.documents   # context ref to the data to split
+    shard_size: 2000        # by_chunk: items/chars per shard; by_token_window: tokens
+    max_shards: 32          # hard cap; tail beyond this is dropped
+    failure_policy: continue_on_partial
+  branches:
+    - id: extractor         # exactly ONE persona — cloned per shard
+      role: fast
+      prompt: { role_inline: "...", task: "extract from this shard" }
+      inputs: [seed.shard]  # the engine seeds each clone with its shard
+      outputs: [extracted]
+  gather:
+    id: synth
+    role: reasoning
+    prompt: { role_inline: "...", task: "combine all shard extractions" }
+    inputs: [$shards.extracted]   # list of `extracted` from every shard
+    outputs: [summary]
+```
+
+Shard strategies (see `api/services/sharders.py`):
+- **`by_file`** — input is a list; one shard per element (the canonical
+  one-branch-per-document split).
+- **`by_chunk`** — list → groups of `shard_size` elements; string →
+  `shard_size`-char substrings.
+- **`by_token_window`** — string → ~`shard_size`-token windows, breaking on
+  whitespace so words aren't split.
+
+Each persona clone runs in a child context seeded with `seed.shard`,
+`seed.shard_index`, and `seed.shard_count`. Dispatch is always sequential
+(single-model) so the prompt cache stays warm and there are no concurrent
+workspace writes. The gather step reads every shard's output via the
+**`$shards`** accessor: `$shards` → the full list of per-shard output dicts,
+`$shards.<key>` → the list of that key from each shard.
+
+See `workflows/example-sharded.yaml` for a worked example.
 
 ### kind: loop
 

@@ -85,7 +85,13 @@ class ParallelExecutionConfig(BaseModel):
                                         OLLAMA_NUM_PARALLEL > 1 on the daemon)
       * single_model_pseudo_parallel  — same model, sequential dispatch with
                                         prompt-cache reuse between branches
-      * sharded                       — single persona × N input shards (Phase 2b)
+      * sharded                       — single persona × N input shards. The
+                                        step declares ONE branch (the persona)
+                                        + a sharder; the engine clones the
+                                        persona per shard and runs them
+                                        sequentially (single-model). The gather
+                                        step reads all shard results via the
+                                        `$shards` accessor.
 
     For single-model modes the engine validates at runtime that every branch
     resolves to the same model name; mismatch raises a clean error rather than
@@ -100,10 +106,42 @@ class ParallelExecutionConfig(BaseModel):
         "multi_model_concurrent",
         "single_model_concurrent",
         "single_model_pseudo_parallel",
+        "sharded",
     ] = "multi_model_concurrent"
     max_concurrency: int = 4
     failure_policy: Literal["fail_fast", "continue_on_partial"] = "fail_fast"
     timeout_per_branch: Optional[int] = None
+
+    # ── sharded mode only ──────────────────────────────────────────────
+    # How to split the input. See api/services/sharders.py.
+    sharder: Optional[Literal["by_file", "by_chunk", "by_token_window"]] = None
+    # Context ref (e.g. "ingest.documents", "seed.report") whose value is the
+    # data to shard. Resolved at execution time like any step input.
+    shard_input: Optional[str] = None
+    # Per-shard sizing: items-per-shard (by_chunk on a list), chars-per-shard
+    # (by_chunk on a string), or tokens-per-window (by_token_window).
+    shard_size: Optional[int] = None
+    # Hard cap on shard count — the tail beyond this is dropped. Protects
+    # against a huge input fanning out into thousands of LLM calls.
+    max_shards: int = 32
+
+    @model_validator(mode="after")
+    def _validate_sharded(self):
+        if self.mode == "sharded":
+            if not self.sharder:
+                raise ValueError(
+                    "ParallelExecutionConfig(mode=sharded) requires a `sharder`"
+                )
+            if not self.shard_input or not self.shard_input.strip():
+                raise ValueError(
+                    "ParallelExecutionConfig(mode=sharded) requires `shard_input`"
+                )
+        elif self.sharder or self.shard_input:
+            raise ValueError(
+                f"ParallelExecutionConfig sharder/shard_input only apply to "
+                f"mode=sharded (got mode={self.mode!r})"
+            )
+        return self
 
 
 class LoopTermination(BaseModel):
@@ -458,7 +496,16 @@ class AgentStep(BaseModel):
                     f"(got id={self.id!r})"
                 )
         elif self.kind == "parallel":
-            if not self.branches or len(self.branches) < 2:
+            is_sharded = self.execution is not None and self.execution.mode == "sharded"
+            # Sharded mode declares exactly ONE branch (the persona the engine
+            # clones per shard). Every other mode enumerates ≥2 branches.
+            if is_sharded:
+                if not self.branches or len(self.branches) != 1:
+                    raise ValueError(
+                        f"AgentStep(kind=parallel, id={self.id!r}, mode=sharded) "
+                        f"requires exactly 1 branch (the persona cloned per shard)"
+                    )
+            elif not self.branches or len(self.branches) < 2:
                 raise ValueError(
                     f"AgentStep(kind=parallel, id={self.id!r}) requires at least 2 branches"
                 )
@@ -706,9 +753,17 @@ class WorkflowContext(BaseModel):
     # the store is a service handle, not run state. None means memory reads
     # resolve to "" (a workflow run with no memory wiring still works).
     _memory: Any = PrivateAttr(default=None)
+    # Set by the engine around a sharded parallel step's gather call: the list
+    # of per-shard output dicts. Resolves the `$shards` accessor. Transient —
+    # set right before gather, cleared right after — so it's never serialized
+    # and never leaks between steps. None means "$shards" → [].
+    _shards: Any = PrivateAttr(default=None)
 
     def attach_memory(self, store: Any) -> None:
         self._memory = store
+
+    def set_shards(self, shards: Any) -> None:
+        self._shards = shards
 
     def get_seed(self, key: str) -> Any:
         return self.seed.get(key)
@@ -734,6 +789,12 @@ class WorkflowContext(BaseModel):
         #   $memory.episodic.<key>    → recency digest of episodic records
         if input_ref.startswith("$memory."):
             return self._resolve_memory(input_ref)
+
+        # Shards accessor (sharded parallel mode):
+        #   $shards          → the full list of per-shard output dicts
+        #   $shards.<key>    → list of that key pulled from each shard dict
+        if input_ref == "$shards" or input_ref.startswith("$shards."):
+            return self._resolve_shards(input_ref)
 
         parts = input_ref.split(".", 1)
         if len(parts) != 2:
@@ -765,6 +826,20 @@ class WorkflowContext(BaseModel):
         if target == "episodic":
             return self._memory.read_episodic_digest(name)
         return ""
+
+    def _resolve_shards(self, input_ref: str) -> Any:
+        """Resolve `$shards` / `$shards.<key>` for a sharded gather step.
+
+        `$shards` → the full list of per-shard output dicts.
+        `$shards.<key>` → the list of that key from each shard dict (missing
+        keys contribute None). Returns [] when no shards are set (the gather
+        ran outside a sharded context).
+        """
+        shards = self._shards or []
+        if input_ref == "$shards":
+            return shards
+        key = input_ref[len("$shards.") :]
+        return [(s.get(key) if isinstance(s, dict) else None) for s in shards]
 
 
 # ── Step Result (unchanged) ────────────────────────────────────────────────
