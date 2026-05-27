@@ -194,6 +194,60 @@ class ConsolidateSpec(BaseModel):
         return self
 
 
+# ── Ralph autonomous loop (kind: ralph) ────────────────────────────────────
+
+
+class RalphHalt(BaseModel):
+    """Halt conditions for a `kind: ralph` autonomous loop. The loop runs its
+    `body` until ANY of these fires. A loop that never satisfies `goal_gate`
+    within the budget terminates via one of the hard caps.
+
+    `halt_file` is the operator's emergency brake — touch the file and the
+    loop stops gracefully at the next iteration boundary (in-flight body
+    steps finish, the journal is flushed). This is one of the three ralph
+    safety rails; the others (branch isolation, read-only-until-promoted) are
+    tool-execution concerns enforced by the enclave-code layer, not the engine.
+    """
+
+    max_iterations: int = 50
+    max_wall_seconds: int = 28800  # 8h
+    max_total_tokens: int = 5_000_000
+    # Stop after this many consecutive iterations whose body failed. Resets to
+    # zero on any fully-successful iteration. Guards against burning the whole
+    # budget on a stuck loop.
+    max_consecutive_failures: int = 3
+    # Path to a sentinel file. If it exists at an iteration boundary, the loop
+    # halts gracefully (success). None disables the check.
+    halt_file: Optional[str] = None
+    # Optional gate expression evaluated after each iteration (same grammar as
+    # LoopTermination.gate). True = goal reached, stop with success. None means
+    # the loop runs until a hard cap.
+    goal_gate: Optional[str] = None
+
+
+class RalphSpec(BaseModel):
+    """Config for a `kind: ralph` step — the autonomous recursive loop.
+
+    Ralph = plan → execute → verify → reflect, repeated until a halt condition.
+    The body steps are regular AgentSteps (typically including a `consolidate`
+    step that writes lessons to a playbook the plan step reads back via
+    `$memory.*` — that's the self-learning loop).
+
+    `journal_path` is an append-only JSONL of per-iteration records. It gives
+    operators a human-readable audit trail and lets a restarted loop resume
+    past already-journaled iterations rather than re-running from zero.
+    """
+
+    journal_path: str
+    halt: RalphHalt = Field(default_factory=RalphHalt)
+
+    @model_validator(mode="after")
+    def _validate_ralph(self):
+        if not self.journal_path or not self.journal_path.strip():
+            raise ValueError("RalphSpec requires a non-empty journal_path")
+        return self
+
+
 # ── Agent Step ─────────────────────────────────────────────────────────────
 
 
@@ -211,15 +265,18 @@ class AgentStep(BaseModel):
                         emits a text-protocol JSON directive each turn
       * consolidate   — distill inputs into durable cross-run memory
                         (playbook / semantic / episodic store)
+      * ralph         — autonomous recursive loop (plan → execute → verify →
+                        reflect) with a journal + halt conditions; self-learns
+                        via a playbook the body reads/writes
 
     Spec: docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md
     """
 
     id: str
     name: str
-    kind: Literal["llm", "parallel", "loop", "a2a", "orchestrator", "consolidate"] = (
-        "llm"
-    )
+    kind: Literal[
+        "llm", "parallel", "loop", "a2a", "orchestrator", "consolidate", "ralph"
+    ] = "llm"
     model: Optional[str] = None
     role: Optional[str] = None
     # Phase 4 — operator-supplied estimate of the model's GGUF size in GB.
@@ -314,6 +371,11 @@ class AgentStep(BaseModel):
     # declared inputs, then writes the result into the named memory store.
     consolidate: Optional[ConsolidateSpec] = None
 
+    # ── kind: ralph ───────────────────────────────────────────────────
+    # Autonomous-loop config: journal path + halt conditions. The loop body
+    # reuses the `body` field (shared with kind=loop).
+    ralph: Optional[RalphSpec] = None
+
     @model_validator(mode="after")
     def _validate_kind_shape(self):
         # Phase 5.3 — gpu_affinity grammar
@@ -367,6 +429,12 @@ class AgentStep(BaseModel):
             raise ValueError(
                 f"AgentStep(kind={self.kind}, id={self.id!r}) must not declare "
                 f"a consolidate block (kind=consolidate only)"
+            )
+        # Non-ralph kinds must not declare a ralph block.
+        if self.kind != "ralph" and self.ralph is not None:
+            raise ValueError(
+                f"AgentStep(kind={self.kind}, id={self.id!r}) must not declare "
+                f"a ralph block (kind=ralph only)"
             )
 
         if self.kind == "llm":
@@ -535,6 +603,47 @@ class AgentStep(BaseModel):
                 raise ValueError(
                     f"AgentStep(kind=consolidate, id={self.id!r}) must not declare "
                     f"branches/gather/body/until"
+                )
+        elif self.kind == "ralph":
+            if self.ralph is None:
+                raise ValueError(
+                    f"AgentStep(kind=ralph, id={self.id!r}) requires a ralph block"
+                )
+            if not self.body or len(self.body) < 1:
+                raise ValueError(
+                    f"AgentStep(kind=ralph, id={self.id!r}) requires at least 1 "
+                    f"body step (the iteration's plan/execute/verify/reflect work)"
+                )
+            if self.system_prompt or self.prompt:
+                raise ValueError(
+                    f"AgentStep(kind=ralph, id={self.id!r}) must not declare a "
+                    f"top-level prompt — the body steps hold the prompts"
+                )
+            if self.branches or self.gather or self.until:
+                raise ValueError(
+                    f"AgentStep(kind=ralph, id={self.id!r}) must not declare "
+                    f"branches/gather/until"
+                )
+            # Body step IDs must be unique (same invariant as kind=loop).
+            body_ids = [s.id for s in self.body]
+            if len(set(body_ids)) != len(body_ids):
+                raise ValueError(
+                    f"AgentStep(kind=ralph, id={self.id!r}) has duplicate body step ids"
+                )
+            # The ralph step's declared outputs are materialized from whichever
+            # body step produced them (last-producer-wins). Unlike kind=loop,
+            # the meaningful output (e.g. `progress`) often comes from a middle
+            # body step while the last step is `reflect`/journal — so every
+            # declared output need only be produced by SOME body step.
+            produced = set()
+            for b in self.body:
+                produced.update(b.outputs)
+            missing = set(self.outputs) - produced
+            if missing:
+                raise ValueError(
+                    f"AgentStep(kind=ralph, id={self.id!r}) outputs "
+                    f"{sorted(missing)} are not produced by any body step "
+                    f"(body produces {sorted(produced)})"
                 )
         return self
 

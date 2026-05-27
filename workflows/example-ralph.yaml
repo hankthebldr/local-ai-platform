@@ -1,0 +1,136 @@
+# ── Example: kind=ralph — autonomous recursive loop ─────────────────────
+#
+# Demonstrates the kind=ralph step shipped in Phase 5 of the multi-agent
+# workflow patterns spec. Spec:
+#   docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md
+#
+# This is the end-state primitive for "almost fully autonomous development":
+# a loop that plans the next task, executes it, verifies the result, and
+# reflects lessons into a playbook it reads back on the next iteration. Over
+# many iterations the playbook accumulates the operator's repo-specific
+# competence — flat markdown a human can read, edit, or git-commit.
+#
+# IMPORTANT — what the engine does vs. what enclave-code does:
+#   The workflow engine runs the loop, the journal, the halt conditions, and
+#   the self-learning playbook cycle. It dispatches LLM steps, NOT OS tools.
+#   To give ralph real filesystem/git access (so `execute` actually writes
+#   code and `verify` actually runs tests), the body steps run under the
+#   enclave-code layer, which also enforces the two tool-level safety rails:
+#     - branch isolation: operate only on a dedicated branch, never push main
+#     - read-only-until-promoted: write tools gated for the first N iterations
+#   This YAML shows the engine-level shape; the tool wiring is enclave-code's.
+#
+# Safety rails the ENGINE enforces here:
+#   - halt_file: touch .enclave/HALT to stop gracefully at the next boundary
+#   - max_consecutive_failures: bail if the loop gets stuck
+#   - hard budgets: max_iterations / max_wall_seconds / max_total_tokens
+
+id: example-ralph
+name: "Example: Autonomous Development Loop"
+schema_version: 1
+description: |
+  A self-driving plan→execute→verify→reflect loop with playbook-based
+  self-learning, a journal for audit + resume, and the engine-level safety
+  rails (HALT file, consecutive-failure guard, hard budgets).
+
+defaults:
+  role: reasoning
+  temperature: 0.3
+  max_tokens: 4096
+  retries: 1
+
+steps:
+  - id: autopilot
+    name: "Autonomous Dev Loop"
+    kind: ralph
+    # The headline output — materialized from whichever body step produced it
+    # (here, `verify.summary`). Ralph uses last-producer-wins, so it doesn't
+    # have to come from the final body step.
+    outputs:
+      - summary
+
+    ralph:
+      journal_path: .enclave/journal.jsonl
+      halt:
+        max_iterations: 100
+        max_wall_seconds: 28800       # 8 hours
+        max_total_tokens: 5000000
+        max_consecutive_failures: 3
+        halt_file: .enclave/HALT
+        # Stop with success once the charter is satisfied. Omit to run until
+        # a hard cap.
+        goal_gate: "verify.charter_complete == True"
+
+    body:
+      # ── Plan: pick the next task, informed by accumulated lessons ──────
+      - id: plan
+        name: "Plan Next Task"
+        role: reasoning
+        prompt:
+          role_inline: |
+            You are the planner. Read the charter and the accumulated lessons,
+            then pick the single next most valuable task. Produce a concrete,
+            verifiable task description and a one-line progress note.
+          task: "Choose the next task to advance the charter"
+        inputs:
+          - seed.charter
+          - $memory.playbook.dev_lessons    # lessons from prior iterations
+        outputs:
+          - chosen_task
+
+      # ── Execute: do the task ───────────────────────────────────────────
+      # Under enclave-code this step gets real code-writing tools. Here it's
+      # an LLM step producing a result description.
+      - id: execute
+        name: "Execute Task"
+        role: coding
+        depends_on: [plan]
+        prompt:
+          role_inline: |
+            You are the executor. Carry out the planned task. Report what you
+            changed and any blockers.
+          task: "Execute the planned task"
+        inputs:
+          - plan.chosen_task
+        outputs:
+          - result
+
+      # ── Verify: independently check the work ───────────────────────────
+      - id: verify
+        name: "Verify Result"
+        role: reasoning
+        depends_on: [execute]
+        prompt:
+          role_inline: |
+            You are the verifier. Independently check that the task was
+            actually completed and didn't regress anything. Be skeptical.
+            Emit JSON: { "summary": str, "charter_complete": bool }
+          task: "Verify the execution result against the charter"
+        inputs:
+          - plan.chosen_task
+          - execute.result
+        outputs:
+          - summary
+          - charter_complete
+
+      # ── Reflect: distill lessons into the playbook (self-learning) ─────
+      - id: reflect
+        name: "Reflect Into Playbook"
+        kind: consolidate
+        depends_on: [verify]
+        inputs:
+          - plan.chosen_task
+          - execute.result
+          - verify.summary
+        outputs:
+          - lesson
+        consolidate:
+          target: playbook
+          target_name: dev_lessons
+          merge_strategy: append_with_dedup
+          system_prompt: |
+            What did this iteration teach us? Extract durable rules that would
+            have made the planner pick a better task or the executor produce
+            better work. Phrase each as an imperative ("When X, prefer Y
+            because Z"). Only emit rules with concrete evidence from this
+            iteration. If nothing new was learned, output "(no new lessons)".
