@@ -229,6 +229,12 @@ class WorkflowEngine:
             roles_dir=project_root / "prompts" / "roles",
             templates_dir=project_root / "prompts" / "templates",
         )
+        # Memory store for kind=consolidate steps + $memory.* accessors.
+        # Lazy import keeps the module load order tolerant; the store itself
+        # is stateless beyond its base dir.
+        from .memory_store import MemoryStore
+
+        self.memory = MemoryStore()
         # Hook bus default is built per-step in _build_step_bus()
         self._project_root = project_root
         # Cancel set — run_ids that have received a cancel request. The
@@ -459,6 +465,11 @@ class WorkflowEngine:
                 if input_ref not in available:
                     if input_ref.startswith("seed.") and seed_keys is None:
                         continue
+                    # $memory.* refs read from the durable memory store, not
+                    # from a prior step — always considered available. A
+                    # first run against an empty store reads "".
+                    if input_ref.startswith("$memory."):
+                        continue
                     errors.append(
                         f"Step '{step.id}' input '{input_ref}' has no producer. "
                         f"Available: {sorted(available)}"
@@ -559,6 +570,7 @@ class WorkflowEngine:
         URL before the engine starts work).
         """
         context = WorkflowContext(seed=seed)
+        context.attach_memory(self.memory)
         kwargs = {
             "workflow_id": definition.id,
             "context": context,
@@ -608,6 +620,9 @@ class WorkflowEngine:
         workflow_run = WorkflowRun.model_validate(raw)
         if workflow_run.status in {"completed", "failed", "canceled"}:
             return workflow_run
+        # The rehydrated context lost its (non-serialized) memory handle —
+        # reattach so $memory.* inputs and consolidate steps work on resume.
+        workflow_run.context.attach_memory(self.memory)
 
         if definition is None:
             definition = self.load(f"./workflows/{workflow_run.workflow_id}.yaml")
@@ -764,7 +779,13 @@ class WorkflowEngine:
                 # resolve their own children's models internally, so the
                 # placeholder here is unused. Skip resolution to avoid
                 # erroring on a2a-only workflows where no local models exist.
-                if step.kind in ("a2a", "parallel", "loop", "orchestrator"):
+                if step.kind in (
+                    "a2a",
+                    "parallel",
+                    "loop",
+                    "orchestrator",
+                    "consolidate",
+                ):
                     resolved_models[step.id] = ""
                     continue
                 try:
@@ -1184,6 +1205,8 @@ class WorkflowEngine:
             return self._execute_orchestrator_step(
                 step, definition, context, workflow_run
             )
+        if step.kind == "consolidate":
+            return self._execute_consolidate_step(step, definition, context)
 
         # kind == "llm" — the default
         step_bus = self._build_step_bus(step)
@@ -2043,6 +2066,141 @@ class WorkflowEngine:
             lines.append("")
         lines.append("Emit your first directive now.")
         return "\n".join(lines)
+
+    def _execute_consolidate_step(
+        self,
+        step: AgentStep,
+        definition: WorkflowDefinition,
+        context: WorkflowContext,
+    ) -> StepResult:
+        """Run a kind=consolidate step — Dreaming-style memory.
+
+        One LLM call over the declared inputs (which may include `$memory.*`
+        refs to prior memory), then writes the model output into the named
+        memory store via the configured merge strategy. The same output is
+        written to every declared workspace output so downstream steps in
+        this run can read it too.
+        """
+        spec = step.consolidate
+        result = StepResult(
+            step_id=step.id, status="running", started_at=datetime.utcnow()
+        )
+
+        # Resolve the consolidation model: spec.model/role override the
+        # workflow default role.
+        try:
+            model = self.resolver.resolve(
+                model=spec.model,
+                role=spec.role,
+                default_role=definition.defaults.role,
+            )
+        except Exception as exc:
+            result.status = "failed"
+            result.error = f"Consolidate model resolution failed: {exc}"
+            result.completed_at = datetime.utcnow()
+            result.duration_seconds = (
+                result.completed_at - result.started_at
+            ).total_seconds()
+            logger.error(result.error)
+            return result
+        result.model_used = model
+
+        # Resolve inputs (supports $memory.* via the attached store) and build
+        # the consolidation prompt. We render inputs into the user message and
+        # use spec.system_prompt as the system role.
+        resolved_inputs = {ref: context.resolve_input(ref) for ref in step.inputs}
+        resolved_inputs = {k: v for k, v in resolved_inputs.items() if v is not None}
+
+        user_lines: List[str] = ["## Material to consolidate", ""]
+        for ref, value in resolved_inputs.items():
+            user_lines.append(f"### {ref}")
+            user_lines.append(str(value))
+            user_lines.append("")
+        user_lines.append(
+            "Produce the consolidated memory. Output only the content to store."
+        )
+        messages = [
+            {"role": "system", "content": spec.system_prompt},
+            {"role": "user", "content": "\n".join(user_lines)},
+        ]
+
+        logger.info(
+            f"Consolidate step '{step.id}' → {spec.target}/{spec.target_name} "
+            f"(strategy={spec.merge_strategy})"
+        )
+
+        try:
+            llm_response = self.ollama.chat(
+                model=model,
+                messages=messages,
+                temperature=definition.defaults.temperature,
+                max_tokens=definition.defaults.max_tokens,
+            )
+        except Exception as exc:
+            result.status = "failed"
+            result.error = f"Consolidate LLM call failed: {exc}"
+            result.completed_at = datetime.utcnow()
+            result.duration_seconds = (
+                result.completed_at - result.started_at
+            ).total_seconds()
+            logger.error(result.error)
+            return result
+
+        consolidated = (llm_response or {}).get("content", "") or ""
+        prompt_tokens = int((llm_response or {}).get("prompt_eval_count", 0))
+        completion_tokens = int((llm_response or {}).get("eval_count", 0))
+        result.token_count = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        }
+
+        if not consolidated.strip():
+            result.status = "failed"
+            result.error = "Consolidate produced empty output — nothing to store"
+            result.completed_at = datetime.utcnow()
+            result.duration_seconds = (
+                result.completed_at - result.started_at
+            ).total_seconds()
+            logger.error(result.error)
+            return result
+
+        # Write to the target store.
+        try:
+            if spec.target == "playbook":
+                self.memory.write_playbook(
+                    spec.target_name, consolidated, strategy=spec.merge_strategy
+                )
+            elif spec.target == "semantic":
+                self.memory.write_semantic(
+                    spec.target_name, consolidated, strategy=spec.merge_strategy
+                )
+            elif spec.target == "episodic":
+                self.memory.append_episodic(spec.target_name, consolidated, run_id=None)
+        except Exception as exc:
+            result.status = "failed"
+            result.error = f"Consolidate store write failed: {exc}"
+            result.completed_at = datetime.utcnow()
+            result.duration_seconds = (
+                result.completed_at - result.started_at
+            ).total_seconds()
+            logger.error(result.error)
+            return result
+
+        # Mirror the consolidated content into every declared workspace output.
+        for key in step.outputs:
+            context.set_workspace(step.id, key, consolidated)
+
+        result.status = "completed"
+        result.completed_at = datetime.utcnow()
+        result.duration_seconds = (
+            result.completed_at - result.started_at
+        ).total_seconds()
+        logger.info(
+            f"Consolidate step '{step.id}' wrote {len(consolidated)} chars to "
+            f"{spec.target}/{spec.target_name}"
+        )
+        return result
 
     # ── Hook Bus Assembly ──────────────────────────────────────────────
 

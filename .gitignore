@@ -72,6 +72,10 @@ data/vectors/chroma_db/
 data/cache/**
 data/logs/*.log
 
+# Workflow memory stores (kind=consolidate runtime artifacts)
+data/playbooks/
+data/memory/
+
 # Fine-tuning outputs
 finetuning/outputs/**/*.bin
 finetuning/outputs/**/*.safetensors

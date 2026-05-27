@@ -4,6 +4,7 @@ import pytest
 from api.models.workflow_models import (
     A2AAuth,
     AgentStep,
+    ConsolidateSpec,
     LoopTermination,
     OrchestratorBudget,
     ParallelExecutionConfig,
@@ -524,3 +525,94 @@ class TestOrchestratorAgentStep:
                 outputs=["o"],
                 planner=self._planner(),
             )
+
+
+class TestConsolidateAgentStep:
+    """kind=consolidate shape validation."""
+
+    @staticmethod
+    def _spec(**overrides) -> ConsolidateSpec:
+        base = dict(
+            target="playbook",
+            target_name="incident_response",
+            system_prompt="Consolidate the lessons.",
+        )
+        base.update(overrides)
+        return ConsolidateSpec(**base)
+
+    def test_consolidate_happy_path(self):
+        step = AgentStep(
+            id="distill",
+            name="Distill",
+            kind="consolidate",
+            outputs=["updated_playbook"],
+            consolidate=self._spec(),
+        )
+        assert step.kind == "consolidate"
+        assert step.consolidate.target == "playbook"
+        assert step.consolidate.merge_strategy == "append_with_dedup"
+
+    def test_consolidate_rejects_missing_block(self):
+        with pytest.raises(Exception, match="requires a\\s+consolidate block"):
+            AgentStep(
+                id="distill",
+                name="D",
+                kind="consolidate",
+                outputs=["o"],
+            )
+
+    def test_consolidate_rejects_top_level_prompt(self):
+        with pytest.raises(Exception, match="must not declare\\s+a top-level prompt"):
+            AgentStep(
+                id="distill",
+                name="D",
+                kind="consolidate",
+                outputs=["o"],
+                system_prompt="should be in the consolidate block",
+                consolidate=self._spec(),
+            )
+
+    def test_non_consolidate_kinds_reject_consolidate_block(self):
+        with pytest.raises(Exception, match="must not declare\\s+a consolidate block"):
+            AgentStep(
+                id="bad",
+                name="B",
+                kind="llm",
+                system_prompt="x",
+                outputs=["o"],
+                consolidate=self._spec(),
+            )
+
+    def test_consolidate_spec_rejects_empty_target_name(self):
+        with pytest.raises(Exception, match="non-empty target_name"):
+            ConsolidateSpec(target="playbook", target_name="", system_prompt="p")
+
+    def test_consolidate_spec_rejects_empty_system_prompt(self):
+        with pytest.raises(Exception, match="non-empty system_prompt"):
+            ConsolidateSpec(target="playbook", target_name="n", system_prompt="  ")
+
+
+class TestMemoryAccessor:
+    """$memory.* input resolution on WorkflowContext."""
+
+    def test_memory_returns_empty_when_no_store_attached(self):
+        ctx = WorkflowContext(seed={})
+        assert ctx.resolve_input("$memory.playbook.anything") == ""
+
+    def test_memory_reads_from_attached_store(self, tmp_path):
+        from api.services.memory_store import MemoryStore
+
+        store = MemoryStore(base_dir=str(tmp_path))
+        store.write_playbook("inc", "Rule: check logs first", strategy="replace")
+        ctx = WorkflowContext(seed={})
+        ctx.attach_memory(store)
+        assert "check logs first" in ctx.resolve_input("$memory.playbook.inc")
+
+    def test_memory_handle_excluded_from_serialization(self, tmp_path):
+        from api.services.memory_store import MemoryStore
+
+        ctx = WorkflowContext(seed={"x": 1})
+        ctx.attach_memory(MemoryStore(base_dir=str(tmp_path)))
+        dumped = ctx.model_dump()
+        assert "_memory" not in dumped
+        assert dumped["seed"] == {"x": 1}
