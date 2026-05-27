@@ -66,16 +66,23 @@ _TERMINAL_STATES = {TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELED}
 
 
 def _resolve_auth_headers(auth: Optional[A2AAuth]) -> Dict[str, str]:
-    """Build the Authorization header for outbound calls. Empty dict for no-auth."""
+    """Build outbound auth headers. Empty dict for no-auth.
+
+    Both `bearer` and `api_key` resolve the secret from the named env var at
+    request time (never from YAML). `api_key` sends it under a configurable
+    header (default X-API-Key); `bearer` sends `Authorization: Bearer ...`.
+    """
     if auth is None or auth.type == "none":
         return {}
-    if auth.type == "bearer":
+    if auth.type in ("bearer", "api_key"):
         token = os.getenv(auth.token_env or "")
         if not token:
             raise A2AClientError(
-                f"bearer auth requested but env var {auth.token_env!r} is unset"
+                f"{auth.type} auth requested but env var {auth.token_env!r} is unset"
             )
-        return {"Authorization": f"Bearer {token}"}
+        if auth.type == "bearer":
+            return {"Authorization": f"Bearer {token}"}
+        return {auth.header_name: token}
     raise A2AClientError(f"unsupported auth type: {auth.type!r}")
 
 

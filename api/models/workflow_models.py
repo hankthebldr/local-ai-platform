@@ -128,20 +128,24 @@ class LoopTermination(BaseModel):
 class A2AAuth(BaseModel):
     """Authentication config for a `kind: a2a` step.
 
-    Only `bearer` is supported in Phase 3a. The actual token is never embedded
-    in the YAML — operators reference an env var name and the engine reads it
-    at request time. mTLS / OAuth / API key headers land in follow-ups.
+    Supported schemes: `none`, `bearer` (Authorization: Bearer <token>), and
+    `api_key` (a configurable header, default `X-API-Key`). The actual secret
+    is never embedded in the YAML — operators reference an env var name and the
+    engine reads it at request time. mTLS / OAuth land in follow-ups.
     """
 
-    type: Literal["bearer", "none"] = "none"
-    # Name of an env var that holds the bearer token (e.g. INTEL_API_TOKEN).
+    type: Literal["bearer", "api_key", "none"] = "none"
+    # Name of an env var that holds the secret (e.g. INTEL_API_TOKEN).
     # Resolved at execution time; missing var raises a clean step failure.
     token_env: Optional[str] = None
+    # Header name for api_key auth. Ignored by bearer/none. Defaults to the
+    # common X-API-Key; override for services that expect e.g. "Api-Key".
+    header_name: str = "X-API-Key"
 
     @model_validator(mode="after")
     def _validate_token_env(self):
-        if self.type == "bearer" and not self.token_env:
-            raise ValueError("A2AAuth(type=bearer) requires token_env")
+        if self.type in ("bearer", "api_key") and not self.token_env:
+            raise ValueError(f"A2AAuth(type={self.type}) requires token_env")
         return self
 
 
