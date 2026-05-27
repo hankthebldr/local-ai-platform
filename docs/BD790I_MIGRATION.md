@@ -87,6 +87,115 @@ pytest tests/playwright -v -m "not slow"
 pytest tests/playwright -v -m slow      # full workflow execution
 ```
 
+## Validate the multi-agent step kinds (parallel / loop / a2a / orchestrator / consolidate / ralph)
+
+The whole reason to move to the BD790i is to exercise the new workflow step
+kinds against real models. The unit + integration suites already cover the
+engine logic with a stubbed Ollama; this section is about a *live* shakedown.
+
+### 1. Run the new-kind suite first (no models, no daemon needed)
+
+These files cover the new step kinds with a stubbed Ollama + httpx mock, so
+they pass with only the dev deps installed — before you stand up the stack:
+
+```bash
+source venv/bin/activate           # or your env of choice
+pip install -r setup/requirements-dev.txt   # pulls pytest-asyncio etc.
+
+pytest -q \
+  tests/test_workflow_models.py \
+  tests/test_memory_store.py \
+  tests/integration/test_composite_steps.py \
+  tests/integration/test_a2a_step.py \
+  tests/integration/test_orchestrator_step.py \
+  tests/integration/test_consolidate_step.py \
+  tests/integration/test_ralph_step.py
+# Expect ~120 passed.
+```
+
+Then the broader engine suite once the stack is up (some tests need a live
+Ollama on :11434; RAG tests additionally need `setup/requirements-rag.txt`):
+
+```bash
+pip install -r setup/requirements-rag.txt        # langchain / chromadb / etc.
+pytest tests/ --ignore=tests/e2e -m "not slow" -q
+```
+
+### 2. Env knobs that matter on the BD790i (NVIDIA-single)
+
+Unlike the M4 (CPU, where `MAX_CONCURRENT_LLM=1` forces serialization), the
+RTX 4000 can actually run concurrent decode. Set these before `docker compose
+up` (or export in the host env / `.env`) to exercise the parallel modes for
+real:
+
+```bash
+# Daemon-side parallel slots. Each slot holds its own KV cache, so this
+# trades VRAM for concurrency. On a 24 GB card running a 34B (~20 GB), keep
+# this modest — 2 is realistic, higher risks OOM at large context.
+OLLAMA_NUM_PARALLEL=2
+
+# Let the ENGINE dispatch branches concurrently. Default is 1 (serialize at
+# the _LLM_SEMAPHORE — correct for CPU boxes). Bump to match NUM_PARALLEL so
+# kind=parallel mode=single_model_concurrent is genuinely concurrent here.
+MAX_CONCURRENT_LLM=2
+
+# Memory stores for kind=consolidate + kind=ralph. Defaults to ./data; point
+# it at a persistent path you want to inspect/commit. The ralph playbook is
+# the durable self-learning state.
+MEMORY_DATA_DIR=/srv/enclave/memory
+
+# keep_alive: the NVIDIA arch default is "0" (evict between steps to free
+# VRAM). That's right for VRAM-tight single-GPU, BUT it kills the prompt-cache
+# reuse that single_model_pseudo_parallel relies on. To test that mode's
+# cache benefit, keep the model warm for the duration of the parallel block:
+OLLAMA_KEEP_ALIVE=10m
+```
+
+### 3. Live smoke-test each kind
+
+Each example workflow ships in `workflows/`. Run them against the live stack
+(role-based steps resolve to whatever you pulled above):
+
+```bash
+KEY=$(cat data/config/first-run-key.txt)
+run() { curl -sS -X POST http://localhost:8000/api/workflows/run \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d "$1" | jq '.run_id'; }
+
+# parallel + loop — fan-out inspection then refine-until-good
+run '{"workflow_id":"example-parallel-loop","seed":{"document":"<paste a doc>"}}'
+
+# consolidate — writes lessons to the incident_response playbook, then check:
+run '{"workflow_id":"example-consolidate","seed":{"report":"<paste an incident report>"}}'
+cat "$MEMORY_DATA_DIR/playbooks/incident_response.md"   # should hold distilled rules
+
+# orchestrator — lead spawns workers dynamically (needs a model that follows
+# the JSON-directive protocol reliably; qwen2.5/llama3.3 do well)
+run '{"workflow_id":"example-orchestrator","seed":{"alert_text":"<alert>","time_window":"1h","raw_text":"<logs>","asset_identifier":"host-01"}}'
+
+# ralph — the autonomous loop. Start with a TIGHT budget for the first live
+# run (max_iterations in the YAML), and keep the HALT brake handy:
+run '{"workflow_id":"example-ralph","seed":{"charter":"<a small, verifiable goal>"}}'
+touch .enclave/HALT      # graceful stop at the next iteration boundary
+tail -f .enclave/journal.jsonl   # watch iterations land
+
+# a2a — only if you have a second A2A agent to call (or point it at this same
+# box: every loaded workflow is advertised as a skill). Inspect the card:
+curl -sS http://localhost:8000/a2a/.well-known/agent.json | jq '.skills[].id'
+```
+
+### 4. What to watch in the Runs view
+
+- **parallel**: branches should overlap in wall-clock on the GPU (they won't
+  on the M4). The Runs view mini-DAG shows the fan-out rank.
+- **single_model_concurrent**: if you set `MAX_CONCURRENT_LLM=1` you'll see a
+  warning in the logs that branches serialized — bump it to see real overlap.
+- **ralph**: the journal at the YAML's `ralph.journal_path` (the example uses
+  `.enclave/journal.jsonl`) records each iteration; kill the process mid-run
+  and re-trigger to confirm it resumes past completed iterations rather than
+  restarting from zero.
+- **consolidate dedup**: run `example-consolidate` twice on the same report —
+  the second run should NOT duplicate rules already in the playbook.
+
 ## Expected gains
 
 | Workload | Mac M4 Pro (Q4 CPU) | BD790i + RTX 4000 (Q4 GPU) |

@@ -64,9 +64,42 @@ captured on every run and aggregated into `RunTelemetrySummary`.
   `single_model_pseudo_parallel`. Runtime validation that single-model modes
   resolve to one model name. `auto` picks pseudo-parallel for same-model
   branches (prompt-cache reuse), concurrent otherwise.
+- **`kind: a2a` (PR #100).** Outbound delegation to external A2A-protocol
+  agents via `api/services/a2a_client.py` — fetch the remote Agent Card,
+  validate the skill, POST `tasks/send`, poll `tasks/get` to terminal, map
+  artifacts onto declared outputs. Bearer-token auth resolved from an env
+  var at request time (never in YAML). Enclave's own workflows are already
+  advertised symmetrically at `/a2a/.well-known/agent.json`.
+- **`kind: orchestrator` (PR #101).** Dynamic lead-agent delegation. The
+  planner emits JSON-fenced directives (`spawn_worker` / `complete`) parsed
+  by `api/services/orchestrator_protocol.py`; the engine runs each spawned
+  worker in an isolated child context and feeds the result back. Budget caps
+  (`max_workers_spawned`, `max_planner_turns`, `max_total_tokens`,
+  `max_wall_seconds`) + soft-recovery on parse errors / unknown workers /
+  missing output keys. Text protocol works on any local model without
+  native function-calling.
+- **`kind: consolidate` + durable memory (PR #105).** Dreaming-style
+  cross-run memory. New `api/services/memory_store.py` with three file-backed
+  stores under `MEMORY_DATA_DIR`: `playbooks/<name>.md`,
+  `memory/semantic/<concept>.md`, `memory/episodic/<key>.jsonl`. Merge
+  strategies `replace` / `append` / `append_with_dedup`. New `$memory.*`
+  input accessor (`$memory.playbook.<name>` etc.) readable by any step kind;
+  empty store resolves to `""`. `WorkflowContext` carries a non-serialized
+  memory handle attached at run start + on resume.
+- **`kind: ralph` autonomous loop (PR #106).** Plan → execute → verify →
+  reflect, repeated until a halt condition, self-learning via a playbook the
+  body reads/writes (`reflect` = a `consolidate` step; `plan` reads it back
+  via `$memory.*`). `RalphHalt`: `max_iterations`, `max_wall_seconds`,
+  `max_total_tokens`, `max_consecutive_failures` (failure), `halt_file`
+  (graceful brake), `goal_gate` (success predicate). Append-only JSONL
+  journal enables resume-past-completed-iterations across restarts. Engine
+  enforces halt-file / consecutive-failure / hard-budget rails; branch
+  isolation + read-only-until-promoted are enclave-code tool-layer concerns.
 - **Spec doc (PR #94).** `docs/plans/2026-05-23-multi-agent-workflow-patterns-spec.md`
-  documents parallel / loop / orchestrator / a2a / consolidate / ralph step
-  kinds for future phases.
+  documents the full parallel / loop / orchestrator / a2a / consolidate /
+  ralph taxonomy. All six step kinds are now implemented (rows 1–15 of the
+  spec's plan); remaining items are polish (sharded mode, prompt-prefix
+  locking, A2A streaming, composer UI renderers).
 
 ### Added — Platform UX refresh (PRs #69–72, #89)
 
