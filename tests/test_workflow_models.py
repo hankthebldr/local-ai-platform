@@ -8,6 +8,8 @@ from api.models.workflow_models import (
     LoopTermination,
     OrchestratorBudget,
     ParallelExecutionConfig,
+    RalphHalt,
+    RalphSpec,
     StepPrompt,
     WorkflowDefinition,
     WorkflowContext,
@@ -616,3 +618,110 @@ class TestMemoryAccessor:
         dumped = ctx.model_dump()
         assert "_memory" not in dumped
         assert dumped["seed"] == {"x": 1}
+
+
+class TestRalphAgentStep:
+    """kind=ralph shape validation."""
+
+    @staticmethod
+    def _body(id_, **overrides) -> AgentStep:
+        base = dict(
+            name=id_,
+            role="fast",
+            system_prompt="do the thing",
+            outputs=["result"],
+        )
+        base.update(overrides)
+        return AgentStep(id=id_, **base)
+
+    def _spec(self, **overrides) -> RalphSpec:
+        base = dict(journal_path="/tmp/ralph_journal.jsonl")
+        base.update(overrides)
+        return RalphSpec(**base)
+
+    def test_ralph_happy_path(self):
+        step = AgentStep(
+            id="auto",
+            name="Autonomous",
+            kind="ralph",
+            outputs=["summary"],
+            ralph=self._spec(halt=RalphHalt(max_iterations=10)),
+            body=[
+                self._body("plan", outputs=["plan"]),
+                self._body("reflect", outputs=["summary"]),
+            ],
+        )
+        assert step.kind == "ralph"
+        assert step.ralph.halt.max_iterations == 10
+        assert len(step.body) == 2
+
+    def test_ralph_default_halt(self):
+        step = AgentStep(
+            id="auto",
+            name="A",
+            kind="ralph",
+            outputs=["result"],
+            ralph=self._spec(),
+            body=[self._body("b", outputs=["result"])],
+        )
+        # Sensible defaults from RalphHalt.
+        assert step.ralph.halt.max_iterations == 50
+        assert step.ralph.halt.max_consecutive_failures == 3
+
+    def test_ralph_rejects_missing_block(self):
+        with pytest.raises(Exception, match="requires a ralph block"):
+            AgentStep(
+                id="auto",
+                name="A",
+                kind="ralph",
+                outputs=["o"],
+                body=[self._body("b", outputs=["o"])],
+            )
+
+    def test_ralph_rejects_missing_body(self):
+        with pytest.raises(Exception, match="at least 1\\s+body step"):
+            AgentStep(
+                id="auto",
+                name="A",
+                kind="ralph",
+                outputs=["o"],
+                ralph=self._spec(),
+            )
+
+    def test_ralph_rejects_top_level_prompt(self):
+        with pytest.raises(Exception, match="must not declare a\\s+top-level prompt"):
+            AgentStep(
+                id="auto",
+                name="A",
+                kind="ralph",
+                outputs=["o"],
+                system_prompt="should be in a body step",
+                ralph=self._spec(),
+                body=[self._body("b", outputs=["o"])],
+            )
+
+    def test_ralph_rejects_output_not_produced_by_any_body_step(self):
+        with pytest.raises(Exception, match="not produced by any body step"):
+            AgentStep(
+                id="auto",
+                name="A",
+                kind="ralph",
+                outputs=["missing"],
+                ralph=self._spec(),
+                body=[self._body("b", outputs=["produced"])],
+            )
+
+    def test_non_ralph_kinds_reject_ralph_block(self):
+        with pytest.raises(Exception, match="must not declare\\s+a ralph block"):
+            AgentStep(
+                id="bad",
+                name="B",
+                kind="llm",
+                system_prompt="x",
+                outputs=["o"],
+                ralph=self._spec(),
+            )
+
+    def test_ralph_spec_rejects_empty_journal_path(self):
+        with pytest.raises(Exception, match="non-empty journal_path"):
+            RalphSpec(journal_path="   ")

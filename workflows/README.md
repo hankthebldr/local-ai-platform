@@ -43,10 +43,11 @@ patterns spec keeps working without changes.
 | `a2a`          | Delegate to an external A2A-protocol agent                                    | 3a    |
 | `orchestrator` | Lead agent dynamically spawns workers from a catalog via a JSON-directive protocol | 3b    |
 | `consolidate`  | Distill inputs into durable cross-run memory (playbook / semantic / episodic) | 4     |
+| `ralph`        | Autonomous recursive loop (plan → execute → verify → reflect) with a journal + halt conditions; self-learns via a playbook | 5 |
 
 See `workflows/example-parallel-loop.yaml`, `workflows/example-a2a-enrichment.yaml`,
-`workflows/example-orchestrator.yaml`, and `workflows/example-consolidate.yaml`
-for worked examples.
+`workflows/example-orchestrator.yaml`, `workflows/example-consolidate.yaml`,
+and `workflows/example-ralph.yaml` for worked examples.
 
 ### kind: parallel
 
@@ -289,3 +290,80 @@ This store is the foundation the autonomous `ralph` loop (a future phase)
 builds on for self-learning between iterations.
 
 See `workflows/example-consolidate.yaml` for a worked example.
+
+### kind: ralph
+
+The **autonomous recursive loop** — plan → execute → verify → reflect,
+repeated until a halt condition. Named after the community "Ralph" pattern
+(`while :; do agent "do the next thing"; done`). Builds on `consolidate` +
+`$memory.*` for self-learning: the `reflect` body step appends lessons to a
+playbook the `plan` body step reads back on the next iteration.
+
+```yaml
+- id: autopilot
+  kind: ralph
+  outputs: [progress]
+  ralph:
+    journal_path: .enclave/journal.jsonl   # append-only iteration record
+    halt:
+      max_iterations: 50
+      max_wall_seconds: 28800              # 8h
+      max_total_tokens: 5000000
+      max_consecutive_failures: 3          # stuck-loop guard
+      halt_file: .enclave/HALT             # touch to stop gracefully
+      goal_gate: "verify.done == True"     # optional success predicate
+  body:
+    - id: plan
+      role: reasoning
+      prompt: { role_inline: "...", task: "pick the next task" }
+      inputs: [$memory.playbook.dev_lessons]   # read accumulated lessons
+      outputs: [chosen_task, progress]
+    - id: execute
+      role: coding
+      prompt: { role_inline: "...", task: "do the task" }
+      inputs: [plan.chosen_task]
+      outputs: [result]
+    - id: verify
+      role: reasoning
+      prompt: { role_inline: "...", task: "check it worked" }
+      inputs: [execute.result]
+      outputs: [done]
+    - id: reflect
+      kind: consolidate                    # writes lessons back to the playbook
+      inputs: [execute.result, verify.done]
+      outputs: [lesson]
+      consolidate:
+        target: playbook
+        target_name: dev_lessons
+        merge_strategy: append_with_dedup
+        system_prompt: "Extract durable lessons from this iteration."
+```
+
+**Halt conditions** (any fires → stop):
+
+| Condition | Outcome |
+|-----------|---------|
+| `goal_gate` true | success |
+| `halt_file` exists | success (graceful — operator's brake) |
+| `max_iterations` / `max_wall_seconds` / `max_total_tokens` | success (bounded work done) |
+| `max_consecutive_failures` | **failure** (stuck loop) |
+
+**Outputs** are materialized from whichever body step produced each declared
+key (last-producer-wins) — unlike `loop`, the headline output usually comes
+from a middle step (`plan`/`execute`) while the last step is `reflect`.
+
+**Resume**: the journal is read on entry; already-recorded iterations are
+skipped so a restarted loop continues rather than re-running from zero. The
+playbook on disk is the durable learning state — even a cold restart picks
+up the accumulated rules.
+
+**Safety rails**: the `halt_file`, `max_consecutive_failures`, and the hard
+budgets are the engine-enforced rails. The other two rails from the spec —
+**branch isolation** (operate only on a dedicated branch, never push to main)
+and **read-only-until-promoted** (restrict write tools for the first N
+iterations) — are tool-execution concerns enforced by the enclave-code layer
+that gives ralph body steps real filesystem/git access. The workflow engine
+itself dispatches LLM steps, not OS tools, so those rails live where the
+tools do.
+
+See `workflows/example-ralph.yaml` for a complete worked example.
