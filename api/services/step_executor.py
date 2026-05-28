@@ -119,6 +119,7 @@ class StepExecutor:
         resolved_model: str,
         defaults: WorkflowDefaults,
         workflow_run=None,
+        prefix_locked: bool = False,
     ) -> StepResult:
         result = StepResult(
             step_id=step.id, status="running", started_at=datetime.utcnow()
@@ -174,6 +175,7 @@ class StepExecutor:
                 "temperature": temperature,
                 "num_predict": max_tokens,
             },
+            prefix_locked=prefix_locked,
         )
 
         # --- Adapt for model family ------------------------------------------
@@ -356,6 +358,7 @@ class StepExecutor:
         workflow: WorkflowDefinition,
         resolved_inputs: dict,
         default_params: dict,
+        prefix_locked: bool = False,
     ) -> ComposedPrompt:
         workflow_context_str = self._render_context(workflow.context)
         # v2 path
@@ -370,6 +373,7 @@ class StepExecutor:
                 output_schema=output_schema,
                 resolved_inputs=resolved_inputs,
                 params=dict(default_params),
+                prefix_locked=prefix_locked,
             )
         # v1 path — wrap legacy system_prompt
         return self.composer.compose(
@@ -384,6 +388,7 @@ class StepExecutor:
             },
             resolved_inputs=resolved_inputs,
             params=dict(default_params),
+            prefix_locked=prefix_locked,
         )
 
     @staticmethod

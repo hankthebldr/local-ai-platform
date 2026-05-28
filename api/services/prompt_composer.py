@@ -66,7 +66,15 @@ class PromptComposer:
         few_shot_example: dict | None = None,
         template_name: str = "five_part.jinja",
         params: dict | None = None,
+        prefix_locked: bool = False,
     ) -> ComposedPrompt:
+        # Prefix-lock mode renders the shared `context` block FIRST so the
+        # leading bytes of the system message are byte-identical across
+        # sequential pseudo-parallel branches on the same model. The default
+        # template puts the divergent `role` block first; that's correct for
+        # one-off steps but defeats prompt-cache reuse across branches.
+        if prefix_locked and template_name == "five_part.jinja":
+            template_name = "five_part_prefix_locked.jinja"
         role_text = self._load_role(role_ref, role_inline)
         few_shot_rendered = None
         if few_shot_example:

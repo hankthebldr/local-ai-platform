@@ -94,7 +94,19 @@ keep:
 
 - `single_model_pseudo_parallel` gives **deterministic ordering** so Ollama's
   prompt cache survives between branches — for prefix-heavy workflows this is
-  ~70% latency reduction on the second-and-later branches.
+  ~70% latency reduction on the second-and-later branches. Pair it with
+  `prefix_lock: true` (opt-in, default off) to make the engine render every
+  branch with a byte-identical leading block (workflow `context` + output
+  schema) so Ollama's cache can actually reuse the KV state for the shared
+  prefix. The persona/task/constraints come **after** the shared block:
+
+  ```yaml
+  execution:
+    mode: single_model_pseudo_parallel
+    prefix_lock: true                  # opt-in cache-friendly layout
+  ```
+  Validator rejects `prefix_lock: true` for modes that can't benefit
+  (the concurrent modes don't share KV state between calls).
 - `single_model_concurrent` is the operator's promise that the daemon has
   enough slots provisioned (`OLLAMA_NUM_PARALLEL > 1`); the engine asks the
   daemon for them via the per-request `num_parallel` option. A clear warning

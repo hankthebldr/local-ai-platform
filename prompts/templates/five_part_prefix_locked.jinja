@@ -1,0 +1,26 @@
+## Context
+{{ context }}
+
+## Output Format
+Return a single JSON object matching this schema. No prose, no markdown fences:
+{{ output_schema_json }}
+
+{# ── Divergent block — per-branch persona/task/constraints come AFTER ── #}
+{# ── the shared context+schema above, so Ollama's prompt cache can     ── #}
+{# ── reuse the KV state for the byte-identical leading prefix between  ── #}
+{# ── sequential pseudo-parallel branches on the same model.            ── #}
+{{ role }}
+
+## Task
+{{ task }}
+
+## Constraints
+{% for c in constraints -%}
+- {{ c }}
+{% endfor %}
+{% if few_shot_example %}
+
+## Example
+Input: {{ few_shot_example.input }}
+Output: {{ few_shot_example.output_json }}
+{% endif %}
