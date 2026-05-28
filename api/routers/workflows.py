@@ -36,6 +36,65 @@ def get_ollama_service() -> OllamaService:
     return OllamaService(OLLAMA_HOST)
 
 
+def _collect_step_kinds(defn) -> Dict[str, str]:
+    """Walk a WorkflowDefinition and return {step_id: kind} for every step,
+    including children of composite kinds (parallel branches/gather, loop body,
+    ralph body, orchestrator workers). Used to decorate step_results in API
+    responses so the UI can show a kind chip without re-parsing YAML.
+    """
+    mapping: Dict[str, str] = {}
+
+    def _walk(step):
+        mapping[step.id] = step.kind
+        for child in getattr(step, "branches", None) or []:
+            _walk(child)
+        gather = getattr(step, "gather", None)
+        if gather is not None:
+            _walk(gather)
+        for child in getattr(step, "body", None) or []:
+            _walk(child)
+        for worker in (getattr(step, "workers", None) or {}).values():
+            _walk(worker)
+
+    for step in defn.steps:
+        _walk(step)
+    return mapping
+
+
+def _decorate_step_results(
+    step_results: List[Dict[str, Any]], kinds: Dict[str, str]
+) -> List[Dict[str, Any]]:
+    """Add `kind` to each step_result projection. Unknown step_ids (composite
+    children whose synthetic ids aren't in the YAML) default to 'llm' so the
+    UI can render a chip uniformly. Idempotent: pre-set kinds win."""
+    out = []
+    for r in step_results:
+        merged = dict(r)
+        if "kind" not in merged:
+            merged["kind"] = kinds.get(merged.get("step_id"), "llm")
+        out.append(merged)
+    return out
+
+
+def _try_kinds_for_workflow_id(
+    engine: "WorkflowEngine", workflow_id: Optional[str]
+) -> Dict[str, str]:
+    """Best-effort kind lookup by workflow_id. Returns {} when the workflow
+    YAML can't be found (renamed/deleted/private overlay shifted) — the UI
+    just renders no chips in that case."""
+    if not workflow_id:
+        return {}
+    try:
+        yaml_path = engine.resolve_workflow_path(workflow_id, WORKFLOWS_DIR)
+        if not yaml_path:
+            return {}
+        defn = engine.load(yaml_path)
+        return _collect_step_kinds(defn)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("kind-decoration skipped for %s: %s", workflow_id, exc)
+        return {}
+
+
 def get_engine() -> WorkflowEngine:
     """Get or create WorkflowEngine instance"""
     return WorkflowEngine(get_ollama_service())
@@ -279,18 +338,21 @@ async def run_workflow(req: WorkflowRunRequest, background_tasks: BackgroundTask
         "status": run.status,
         "started_at": str(run.started_at),
         "completed_at": str(run.completed_at),
-        "step_results": [
-            {
-                "step_id": r.step_id,
-                "status": r.status,
-                "model_used": r.model_used,
-                "duration_seconds": r.duration_seconds,
-                "token_count": r.token_count,
-                "retries": r.retries,
-                "error": r.error,
-            }
-            for r in run.step_results
-        ],
+        "step_results": _decorate_step_results(
+            [
+                {
+                    "step_id": r.step_id,
+                    "status": r.status,
+                    "model_used": r.model_used,
+                    "duration_seconds": r.duration_seconds,
+                    "token_count": r.token_count,
+                    "retries": r.retries,
+                    "error": r.error,
+                }
+                for r in run.step_results
+            ],
+            _collect_step_kinds(defn),
+        ),
         # Expose the three-layer context so the UI can render a context
         # inspector (seed = immutable input, workspace = per-step outputs,
         # shared = cross-cutting state).
@@ -395,6 +457,15 @@ async def get_run(run_id: str):
     run_data = engine.get_run(run_id)
     if not run_data:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+    # Decorate step_results with their kind so the UI's Runs view can render
+    # a per-step kind chip without re-fetching the workflow YAML. Best-effort
+    # — if the workflow YAML can't be located, step_results are returned as-is.
+    kinds = _try_kinds_for_workflow_id(engine, run_data.get("workflow_id"))
+    if kinds and isinstance(run_data.get("step_results"), list):
+        run_data = dict(run_data)
+        run_data["step_results"] = _decorate_step_results(
+            run_data["step_results"], kinds
+        )
     return run_data
 
 
@@ -419,18 +490,21 @@ async def resume_run(run_id: str):
         "status": run.status,
         "started_at": str(run.started_at),
         "completed_at": str(run.completed_at) if run.completed_at else None,
-        "step_results": [
-            {
-                "step_id": r.step_id,
-                "status": r.status,
-                "model_used": r.model_used,
-                "duration_seconds": r.duration_seconds,
-                "token_count": r.token_count,
-                "retries": r.retries,
-                "error": r.error,
-            }
-            for r in run.step_results
-        ],
+        "step_results": _decorate_step_results(
+            [
+                {
+                    "step_id": r.step_id,
+                    "status": r.status,
+                    "model_used": r.model_used,
+                    "duration_seconds": r.duration_seconds,
+                    "token_count": r.token_count,
+                    "retries": r.retries,
+                    "error": r.error,
+                }
+                for r in run.step_results
+            ],
+            _try_kinds_for_workflow_id(engine, run.workflow_id),
+        ),
         "context": {
             "seed": run.context.seed,
             "workspace": run.context.workspace,
@@ -505,8 +579,6 @@ async def get_workflow(workflow_id: str):
     the Runs tab render run details for private workflows without
     needing to ship them in the public repo.
     """
-    import os
-    from pathlib import Path
 
     if not workflow_id or not all(c.isalnum() or c in "_-" for c in workflow_id):
         raise HTTPException(status_code=400, detail="invalid workflow id")

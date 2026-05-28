@@ -4241,6 +4241,24 @@ textarea.composer-desc-area {
 .run-step-badge.starved { color: var(--amber); border-color: rgba(255,165,0,0.4); background: rgba(255,165,0,0.06); }
 .run-step-badge.dim     { color: var(--text-muted); }
 
+/* Per-step kind chip — at-a-glance signal of what kind of step this is in a
+   run row. Default (kind=llm) is hidden because it's the dominant case and
+   adds noise; only composite/external kinds show. Colors echo the role
+   palette so kind chips and role chips read as the same family. */
+.run-step-kind {
+  font-size: 0.5rem; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 2px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.run-step-kind.kind-llm          { display: none; }
+.run-step-kind.kind-parallel     { color: var(--cyan);   border-color: var(--cyan-dim); background: rgba(0, 220, 240, 0.06); }
+.run-step-kind.kind-loop         { color: var(--amber);  border-color: rgba(255, 165, 0, 0.4); background: rgba(255, 165, 0, 0.06); }
+.run-step-kind.kind-a2a          { color: var(--purple); border-color: rgba(179, 136, 255, 0.45); background: rgba(179, 136, 255, 0.06); }
+.run-step-kind.kind-orchestrator { color: var(--accent); border-color: rgba(0, 200, 120, 0.4); background: rgba(0, 200, 120, 0.06); }
+.run-step-kind.kind-consolidate  { color: var(--cyan);   border-color: var(--cyan-dim); background: rgba(0, 220, 240, 0.04); }
+.run-step-kind.kind-ralph        { color: var(--accent); border-color: rgba(0, 200, 120, 0.5); background: rgba(0, 200, 120, 0.10); }
+
 .run-step-expanded {
   margin: 0 4px 8px 26px;
   padding: 9px 12px;
@@ -17907,6 +17925,7 @@ const RunsTab = (function () {
              onclick="RunsTab.toggleStepExpand('${esc(s.step_id)}')">
           <span class="run-step-caret">${isExpanded ? '▾' : '▸'}</span>
           <span class="ws-run-step-id">${esc(s.step_id)}</span>
+          <span class="run-step-kind kind-${esc(s.kind || 'llm')}" title="step kind">${esc(s.kind || 'llm')}</span>
           <span class="ws-run-step-model">${esc(s.model_used || '—')}</span>
           ${badges.join('')}
           <span style="flex:1"></span>
