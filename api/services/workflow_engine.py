@@ -1922,6 +1922,7 @@ class WorkflowEngine:
                 declared_outputs=step.outputs,
                 auth=step.auth,
                 timeout=step.timeout,
+                streaming=step.streaming,
             )
         except A2AClientError as exc:
             result.status = "failed"

@@ -200,7 +200,7 @@ methods.
   outputs:
     - enriched
   timeout: 120                         # whole-step wall-clock cap (seconds)
-  streaming: false                     # reserved for SSE; Phase 3a polls
+  streaming: false                     # true → tasks/sendSubscribe + SSE
 ```
 
 Lifecycle:
@@ -209,7 +209,14 @@ Lifecycle:
 2. Validates `skill` is advertised (fails the step if not, before any work).
 3. Packages step inputs as a Message — string inputs become a single TextPart,
    structured inputs become a single DataPart with the input names as keys.
-4. POSTs `tasks/send`, then polls `tasks/get` until terminal.
+4. **Non-streaming** (`streaming: false`, the default): POSTs `tasks/send`,
+   then polls `tasks/get` until the task reaches a terminal state.
+   **Streaming** (`streaming: true`): POSTs `tasks/sendSubscribe` with
+   `Accept: text/event-stream` and consumes the SSE stream of
+   `TaskArtifactUpdateEvent` / `TaskStatusUpdateEvent` payloads. Artifacts
+   accumulate as they arrive; the client terminates on the first status
+   event with `final: true`. A stream that ends without any `final: true`
+   event fails the step cleanly rather than hanging.
 5. Maps returned Artifacts onto declared `outputs` (exact name match first,
    then best-effort: single-artifact-single-output → use it; multi-output →
    walk DataParts looking for matching keys).

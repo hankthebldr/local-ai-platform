@@ -17,10 +17,12 @@ Synchronous on purpose — the engine's step executor returns a synchronous
 StepResult and we don't want to leak async semantics into composite step
 dispatch (which already runs each step in a ThreadPoolExecutor worker).
 
-Phase 3a scope:
-  - bearer-token auth via env var name (no mTLS / OAuth / API keys yet)
-  - non-streaming tasks/send (streaming flag accepted but currently degrades
-    to polling — SSE in the sync client is a follow-up)
+Phase 3a/c scope:
+  - Auth: bearer (`Authorization: Bearer …`) or api_key (configurable header,
+    default `X-API-Key`); secret resolved from a named env var at request time
+  - tasks/send + polling tasks/get (default) OR tasks/sendSubscribe with SSE
+    streaming (`streaming=True` on the step); streaming accumulates artifacts
+    as they arrive and terminates on the first status event with final=true
   - Best-effort artifact → output mapping by name match; falls back to first
     artifact's text content when names don't align
 """
@@ -210,8 +212,14 @@ class A2AClient:
         declared_outputs: List[str],
         auth: Optional[A2AAuth] = None,
         timeout: Optional[int] = None,
+        streaming: bool = False,
     ) -> Tuple[Dict[str, Any], Task]:
         """End-to-end: fetch card, post task, wait for terminal, map outputs.
+
+        When `streaming` is True the client uses `tasks/sendSubscribe` and
+        consumes the SSE stream of TaskStatusUpdateEvent / TaskArtifactUpdateEvent
+        payloads until a status event marks the task `final: true`. Otherwise it
+        polls `tasks/get` until terminal.
 
         Returns (outputs_dict, final_task). Raises A2AClientError on any
         unrecoverable failure (card fetch failure, skill not advertised,
@@ -221,8 +229,13 @@ class A2AClient:
         self._assert_skill_advertised(card, skill_id)
 
         message = _inputs_to_message(resolved_inputs)
-        task = self._send_task(card, skill_id, message, auth=auth, timeout=timeout)
-        task = self._wait_for_terminal(card, task, auth=auth, timeout=timeout)
+        if streaming:
+            task = self._send_task_subscribe(
+                card, skill_id, message, auth=auth, timeout=timeout
+            )
+        else:
+            task = self._send_task(card, skill_id, message, auth=auth, timeout=timeout)
+            task = self._wait_for_terminal(card, task, auth=auth, timeout=timeout)
 
         if task.status.state == TaskState.FAILED:
             err = (
@@ -362,3 +375,105 @@ class A2AClient:
             if task.status.state in _TERMINAL_STATES:
                 return task
             time.sleep(_POLL_INTERVAL_SECONDS)
+
+    def _send_task_subscribe(
+        self,
+        card: AgentCard,
+        skill_id: str,
+        message: Message,
+        auth: Optional[A2AAuth] = None,
+        timeout: Optional[int] = None,
+    ) -> Task:
+        """Stream tasks/sendSubscribe and assemble a final Task from the
+        SSE events.
+
+        Event format mirrors what Enclave's own a2a router emits — each
+        line is `data: <JSON-RPC envelope whose result is either a
+        TaskStatusUpdateEvent or a TaskArtifactUpdateEvent>` with an
+        optional `data: [DONE]` sentinel at the end. We accumulate
+        artifacts as they arrive and terminate on the first status event
+        with `final: true`; whichever comes first.
+        """
+        task_id = str(uuid.uuid4())
+        payload = {
+            "jsonrpc": "2.0",
+            "id": str(uuid.uuid4()),
+            "method": "tasks/sendSubscribe",
+            "params": {
+                "id": task_id,
+                "skillId": skill_id,
+                "message": message.model_dump(by_alias=True),
+            },
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            **_resolve_auth_headers(auth),
+        }
+        url = _agent_rpc_url(card)
+
+        artifacts: List[Artifact] = []
+        final_status: Optional[Any] = None  # TaskStatus when set
+        saw_final = False  # whether ANY event arrived with final=True
+        from ..models.a2a_models import TaskStatus
+
+        try:
+            with self._client().stream(
+                "POST",
+                url,
+                json=payload,
+                headers=headers,
+                timeout=timeout or _DEFAULT_RPC_TIMEOUT,
+            ) as response:
+                response.raise_for_status()
+                for raw in response.iter_lines():
+                    line = raw.decode() if isinstance(raw, bytes) else raw
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[len("data:") :].strip()
+                    if not data or data == "[DONE]":
+                        if final_status is None:
+                            continue  # let the loop end naturally
+                        break
+                    try:
+                        envelope = json.loads(data)
+                    except json.JSONDecodeError:
+                        # Tolerate a stray non-JSON keepalive line.
+                        continue
+                    if isinstance(envelope, dict) and envelope.get("error"):
+                        raise A2AClientError(
+                            f"tasks/sendSubscribe RPC error: {envelope['error']}"
+                        )
+                    event = (
+                        envelope.get("result") if isinstance(envelope, dict) else None
+                    ) or {}
+                    if "artifact" in event:
+                        try:
+                            artifacts.append(Artifact.model_validate(event["artifact"]))
+                        except Exception:
+                            # An invalid artifact shouldn't poison the rest of
+                            # the stream — skip it and keep reading.
+                            continue
+                    elif "status" in event:
+                        try:
+                            status = TaskStatus.model_validate(event["status"])
+                        except Exception:
+                            continue
+                        final_status = status
+                        if event.get("final") is True:
+                            saw_final = True
+                            break
+        except httpx.HTTPStatusError as exc:
+            raise A2AClientError(
+                f"tasks/sendSubscribe failed: HTTP {exc.response.status_code} from {url}"
+            )
+        except httpx.HTTPError as exc:
+            raise A2AClientError(f"tasks/sendSubscribe failed: {exc}")
+
+        if not saw_final:
+            raise A2AClientError(
+                "SSE stream ended without a final status event "
+                "(no event carried final=true)"
+            )
+        return Task(id=task_id, status=final_status, artifacts=artifacts)

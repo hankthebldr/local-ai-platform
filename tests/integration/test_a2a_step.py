@@ -212,6 +212,81 @@ _A2A_BEARER = textwrap.dedent("""
     """)
 
 
+_A2A_STREAMING = textwrap.dedent("""
+    id: test-a2a-streaming
+    name: A2A Streaming
+    schema_version: 1
+    steps:
+      - id: enrich
+        name: Stream remote
+        kind: a2a
+        agent_card_url: https://intel.local/.well-known/agent.json
+        skill: enrich_iocs
+        streaming: true
+        inputs:
+          - seed.iocs
+        outputs:
+          - enriched
+        timeout: 5
+    """)
+
+
+def _sse_envelope(rpc_id, event):
+    """Wrap an event in a JSON-RPC envelope as the server router does."""
+    body = {"jsonrpc": "2.0", "id": rpc_id, "result": event}
+    return f"data: {json.dumps(body)}\n\n"
+
+
+def _sse_status(rpc_id, state, task_id, *, final=False, message_text=None):
+    status = {"state": state, "timestamp": "2026-05-28T00:00:00Z"}
+    if message_text:
+        status["message"] = {
+            "role": "agent",
+            "parts": [{"type": "text", "text": message_text}],
+        }
+    return _sse_envelope(rpc_id, {"id": task_id, "status": status, "final": final})
+
+
+def _sse_artifact(rpc_id, task_id, artifact):
+    return _sse_envelope(rpc_id, {"id": task_id, "artifact": artifact})
+
+
+class _StreamingHandler(_RecordingHandler):
+    """Variant that responds to tasks/sendSubscribe with a scripted SSE stream.
+
+    `events` is a list of pre-formatted `data: …\\n\\n` blocks (build them with
+    the `_sse_*` helpers). Falls back to the parent handler for tasks/send /
+    tasks/get / card fetches.
+    """
+
+    def __init__(self, *args, events=None, **kw):
+        super().__init__(*args, **kw)
+        self._events = events or []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if request.method == "POST" and url.endswith("/a2a"):
+            body = json.loads(request.content.decode())
+            if body.get("method") == "tasks/sendSubscribe":
+                # Record the call so tests can assert headers etc.
+                with self._lock:
+                    self.calls.append(
+                        {
+                            "method": request.method,
+                            "url": url,
+                            "headers": dict(request.headers),
+                            "body": request.content.decode(),
+                        }
+                    )
+                body_bytes = "".join(self._events).encode()
+                return httpx.Response(
+                    200,
+                    headers={"content-type": "text/event-stream"},
+                    content=body_bytes,
+                )
+        return super().__call__(request)
+
+
 # ── Tests ───────────────────────────────────────────────────────────────
 
 
@@ -440,3 +515,161 @@ def test_a2a_card_fetch_404_fails_step(isolated_dir, patch_client):
     assert run.status == "failed"
     err = (run.error or "").lower()
     assert "agentcard" in err or "404" in err
+
+
+# ── Streaming (Phase 3c) ────────────────────────────────────────────────
+
+
+def test_a2a_streaming_happy_path(isolated_dir, patch_client):
+    """tasks/sendSubscribe streams working → artifact → completed(final)."""
+    rpc = "rpc-1"
+    task_id = "task-stream-1"
+    events = [
+        _sse_status(rpc, "working", task_id),
+        _sse_artifact(
+            rpc,
+            task_id,
+            {
+                "name": "enriched",
+                "parts": [
+                    {
+                        "type": "data",
+                        "data": {"iocs": [{"v": "x.com", "verdict": "bad"}]},
+                    }
+                ],
+                "index": 0,
+            },
+        ),
+        _sse_status(rpc, "completed", task_id, final=True),
+        "data: [DONE]\n\n",
+    ]
+    patch_client["handler"] = _StreamingHandler(events=events)
+    yaml_path = _write_yaml(isolated_dir, _A2A_STREAMING)
+    engine = WorkflowEngine(_StubOllama())
+    defn = engine.load(str(yaml_path))
+    run = engine.run(defn, seed={"iocs": ["x.com"]})
+
+    assert run.status == "completed", run.error
+    # Streaming artifact was accumulated and mapped to the declared output.
+    assert run.context.get_workspace("enrich", "enriched") == {
+        "iocs": [{"v": "x.com", "verdict": "bad"}]
+    }
+    # Only tasks/sendSubscribe was used — no polling tasks/get calls.
+    posts = [
+        c
+        for c in patch_client["handler"].calls
+        if c["method"] == "POST" and c["url"].endswith("/a2a")
+    ]
+    methods = [json.loads(c["body"])["method"] for c in posts]
+    assert methods == ["tasks/sendSubscribe"]
+
+
+def test_a2a_streaming_accumulates_multiple_artifacts(isolated_dir, patch_client):
+    """Multiple artifact events arrive before the final status; the client
+    must collect them all before mapping outputs."""
+    rpc, task_id = "rpc-1", "task-stream-2"
+    events = [
+        _sse_status(rpc, "working", task_id),
+        _sse_artifact(
+            rpc,
+            task_id,
+            {
+                "name": "chunk1",
+                "parts": [{"type": "text", "text": "first"}],
+                "index": 0,
+            },
+        ),
+        _sse_artifact(
+            rpc,
+            task_id,
+            {
+                "name": "chunk2",
+                "parts": [{"type": "text", "text": "second"}],
+                "index": 1,
+            },
+        ),
+        _sse_artifact(
+            rpc,
+            task_id,
+            {
+                "name": "enriched",
+                "parts": [{"type": "data", "data": {"final": True}}],
+                "index": 2,
+            },
+        ),
+        _sse_status(rpc, "completed", task_id, final=True),
+    ]
+    patch_client["handler"] = _StreamingHandler(events=events)
+    yaml_path = _write_yaml(isolated_dir, _A2A_STREAMING)
+    engine = WorkflowEngine(_StubOllama())
+    defn = engine.load(str(yaml_path))
+    run = engine.run(defn, seed={"iocs": ["x.com"]})
+
+    assert run.status == "completed", run.error
+    # The named `enriched` artifact wins via the exact-name mapping rule.
+    assert run.context.get_workspace("enrich", "enriched") == {"final": True}
+
+
+def test_a2a_streaming_final_failed_propagates(isolated_dir, patch_client):
+    """Final status = failed with a message → step fails with the message."""
+    rpc, task_id = "rpc-1", "task-stream-3"
+    events = [
+        _sse_status(rpc, "working", task_id),
+        _sse_status(
+            rpc,
+            "failed",
+            task_id,
+            final=True,
+            message_text="upstream agent exploded",
+        ),
+    ]
+    patch_client["handler"] = _StreamingHandler(events=events)
+    yaml_path = _write_yaml(isolated_dir, _A2A_STREAMING)
+    engine = WorkflowEngine(_StubOllama())
+    defn = engine.load(str(yaml_path))
+    run = engine.run(defn, seed={"iocs": ["x.com"]})
+
+    assert run.status == "failed"
+    assert "upstream agent exploded" in (run.error or "")
+
+
+def test_a2a_streaming_no_final_status_fails(isolated_dir, patch_client):
+    """Stream ends without a final status → clean engine-level failure rather
+    than hanging or silently completing."""
+    rpc, task_id = "rpc-1", "task-stream-4"
+    events = [
+        _sse_status(rpc, "working", task_id),
+        "data: [DONE]\n\n",
+    ]
+    patch_client["handler"] = _StreamingHandler(events=events)
+    yaml_path = _write_yaml(isolated_dir, _A2A_STREAMING)
+    engine = WorkflowEngine(_StubOllama())
+    defn = engine.load(str(yaml_path))
+    run = engine.run(defn, seed={"iocs": ["x.com"]})
+
+    assert run.status == "failed"
+    assert "without a final status" in (run.error or "")
+
+
+def test_a2a_streaming_request_advertises_event_stream_accept(
+    isolated_dir, patch_client
+):
+    """The client must send Accept: text/event-stream so the remote knows
+    we're a streaming consumer."""
+    rpc, task_id = "rpc-1", "task-stream-5"
+    events = [_sse_status(rpc, "completed", task_id, final=True)]
+    patch_client["handler"] = _StreamingHandler(events=events)
+    yaml_path = _write_yaml(isolated_dir, _A2A_STREAMING)
+    engine = WorkflowEngine(_StubOllama())
+    defn = engine.load(str(yaml_path))
+    engine.run(defn, seed={"iocs": ["x.com"]})
+
+    streaming_calls = [
+        c
+        for c in patch_client["handler"].calls
+        if c["method"] == "POST"
+        and c["url"].endswith("/a2a")
+        and json.loads(c["body"]).get("method") == "tasks/sendSubscribe"
+    ]
+    assert streaming_calls
+    assert streaming_calls[0]["headers"].get("accept") == "text/event-stream"
