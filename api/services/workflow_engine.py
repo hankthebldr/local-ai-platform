@@ -1189,6 +1189,7 @@ class WorkflowEngine:
         context: WorkflowContext,
         workflow_run: WorkflowRun,
         resolved_model: str,
+        prefix_locked: bool = False,
     ) -> StepResult:
         """Run a single step end-to-end. Extracted from _execute_steps for
         Phase 4b so it can be submitted to a ThreadPoolExecutor.
@@ -1239,6 +1240,7 @@ class WorkflowEngine:
             resolved_model=resolved_model,
             defaults=definition.defaults,
             workflow_run=workflow_run,
+            prefix_locked=prefix_locked,
         )
 
     # ── Composite step executors (kind=parallel, kind=loop) ───────────
@@ -1278,12 +1280,21 @@ class WorkflowEngine:
         branch_results: Dict[str, StepResult] = {}
         execution_cfg = parent.execution
         max_concurrency = execution_cfg.max_concurrency if execution_cfg else 4
+        # prefix_lock only matters in pseudo-parallel mode (the concurrent modes
+        # don't share KV state between calls, so a byte-stable prefix can't
+        # earn a cache hit). The validator already rejects prefix_lock=True
+        # for the wrong modes.
+        prefix_locked = bool(
+            execution_cfg
+            and execution_cfg.prefix_lock
+            and mode == "single_model_pseudo_parallel"
+        )
 
         if mode == "single_model_pseudo_parallel":
             logger.info(
                 f"Parallel step '{parent.id}' dispatching "
                 f"{len(parent.branches)} branch(es) sequentially "
-                f"(mode=single_model_pseudo_parallel)"
+                f"(mode=single_model_pseudo_parallel, prefix_lock={prefix_locked})"
             )
             for branch in parent.branches:
                 try:
@@ -1293,6 +1304,7 @@ class WorkflowEngine:
                         context,
                         workflow_run,
                         branch_models[branch.id],
+                        prefix_locked=prefix_locked,
                     )
                 except Exception as e:
                     res = StepResult(
