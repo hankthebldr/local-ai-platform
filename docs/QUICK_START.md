@@ -177,7 +177,7 @@ OLLAMA_NUM_CTX=2048
 ## Resources
 
 - Full Documentation: [docs/](../docs/)
-- Project Plan: [PROJECT_PLAN.md](../PROJECT_PLAN.md)
+- Historical project plan: [docs/historical/PROJECT_PLAN.md](./historical/PROJECT_PLAN.md) (pre-1.0; see `CHANGELOG.md` for current direction)
 - API Reference: [docs/API_REFERENCE.md](../docs/API_REFERENCE.md)
 
 ---

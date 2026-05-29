@@ -1056,7 +1056,7 @@ Roadmap:
 - `0.4.x` — full RAG integration (langchain + chroma already partially in place)
 - `1.0.0` — auth, ≥70% test coverage, Docker/K8s, Prometheus, structured logging
 
-See [PROJECT_PLAN.md](./PROJECT_PLAN.md) for detail.
+See [historical PROJECT_PLAN.md](../../historical/PROJECT_PLAN.md) for detail (pre-1.0 plan; the current track lives in `CHANGELOG.md` and `CLAUDE.md`).
 
 ## Pointers
 

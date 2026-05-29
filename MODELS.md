@@ -351,7 +351,7 @@ Need uncensored output?
 
 If you are a coding agent operating on this repository:
 
-1. **This file is the single source of truth** for model operations. Do not make model decisions based on `PROJECT_PLAN.md` (outdated hardware specs) or `README.md`.
+1. **This file is the single source of truth** for model operations. Do not make model decisions based on `docs/historical/PROJECT_PLAN.md` (outdated hardware specs) or `README.md`.
 
 2. **Before any install/remove operation**, run `ollama list` and compare against the target state tables above.
 
