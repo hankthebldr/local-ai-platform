@@ -90,6 +90,42 @@ class MemoryStore:
     def episodic_path(self, key: str) -> Path:
         return self.base / "memory" / "episodic" / f"{_safe_name(key)}.jsonl"
 
+    # ── Listings (Memory tab UI) ──────────────────────────────────────
+
+    def list_playbooks(self) -> List[Dict[str, Any]]:
+        """All playbook files with name + size + modified timestamp."""
+        return _list_markdown_dir(self.base / "playbooks")
+
+    def list_semantic(self) -> List[Dict[str, Any]]:
+        """All semantic-concept files with name + size + modified timestamp."""
+        return _list_markdown_dir(self.base / "memory" / "semantic")
+
+    def list_episodic(self) -> List[Dict[str, Any]]:
+        """All episodic log keys with record count, size, modified timestamp."""
+        d = self.base / "memory" / "episodic"
+        if not d.is_dir():
+            return []
+        out: List[Dict[str, Any]] = []
+        for p in sorted(d.glob("*.jsonl")):
+            try:
+                stat = p.stat()
+                # Cheap record count — just count non-empty lines.
+                with open(p, "r", encoding="utf-8") as f:
+                    record_count = sum(1 for line in f if line.strip())
+            except OSError:
+                continue
+            out.append(
+                {
+                    "name": p.stem,
+                    "size_bytes": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(
+                        stat.st_mtime, tz=timezone.utc
+                    ).isoformat(),
+                    "record_count": record_count,
+                }
+            )
+        return out
+
     # ── Reads ─────────────────────────────────────────────────────────
 
     def read_playbook(self, name: str) -> str:
@@ -239,3 +275,25 @@ def _split_blocks(text: str) -> List[str]:
     if current:
         blocks.append("\n".join(current))
     return blocks
+
+
+def _list_markdown_dir(d: Path) -> List[Dict[str, Any]]:
+    """List all `*.md` files in a directory with name + size + modified."""
+    if not d.is_dir():
+        return []
+    out: List[Dict[str, Any]] = []
+    for p in sorted(d.glob("*.md")):
+        try:
+            stat = p.stat()
+        except OSError:
+            continue
+        out.append(
+            {
+                "name": p.stem,
+                "size_bytes": stat.st_size,
+                "modified_at": datetime.fromtimestamp(
+                    stat.st_mtime, tz=timezone.utc
+                ).isoformat(),
+            }
+        )
+    return out

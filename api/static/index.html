@@ -3253,6 +3253,26 @@ textarea.composer-desc-area {
 .pre-warm-summary.all-misses { background: rgba(255, 82, 82, 0.08); color: var(--red, #ff5252); }
 .pre-warm-summary.indeterminate { background: rgba(127, 127, 127, 0.08); color: var(--text-dim); }
 
+/* ── Workflow Memory panel (Memory tab) ───────────────────────────────── */
+/* Surfaces /api/workflows/memory/* — the playbook/semantic/episodic stores
+   written by kind=consolidate and read via $memory.* accessors. */
+.wm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px; }
+.wm-col { background: var(--bg-deep); border: 1px solid var(--border); border-radius: 4px; padding: 10px 12px; min-height: 120px; }
+.wm-col-head { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 6px; }
+.wm-col-count { float: right; color: var(--text-muted); font-weight: normal; letter-spacing: 0.02em; }
+.wm-col-help { font-size: 0.65rem; color: var(--text-dim); margin-bottom: 8px; line-height: 1.35; }
+.wm-col-help code { background: var(--bg-panel); padding: 0 3px; border-radius: 2px; font-size: 0.9em; color: var(--cyan); }
+.wm-list { display: flex; flex-direction: column; gap: 3px; }
+.wm-empty { font-size: 0.7rem; color: var(--text-dim); font-style: italic; padding: 4px 0; }
+.wm-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; border-radius: 2px; cursor: pointer; font-size: 0.75rem; }
+.wm-item:hover { background: rgba(0, 220, 240, 0.06); }
+.wm-item-name { color: var(--text); font-family: var(--mono); }
+.wm-item-meta { color: var(--text-muted); font-size: 0.65rem; }
+.wm-detail { margin-top: 12px; background: var(--bg-deep); border: 1px solid var(--cyan-dim); border-radius: 4px; padding: 10px 12px; }
+.wm-detail-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.wm-detail-label { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cyan); }
+.wm-detail-body { background: var(--bg-panel); padding: 10px; border-radius: 3px; max-height: 360px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; font-family: var(--mono); font-size: 0.72rem; color: var(--text); margin: 0; }
+
 .wf-run-item {
   display: flex;
   align-items: center;
@@ -6128,6 +6148,52 @@ textarea.composer-desc-area {
       </div>
     </div>
 
+    <!-- ── WORKFLOW MEMORY — consolidate / ralph stores ─────────────── -->
+    <!-- Surfaces api/services/memory_store.py's three durable stores so the
+         operator can see what their ralph loops + consolidate steps have
+         actually accumulated. Backed by /api/workflows/memory/*. -->
+    <div class="panel" id="workflow-memory-panel" style="margin-top:16px;">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">
+        Workflow Memory
+        <button type="button" class="action-btn" style="float:right;margin-top:-4px"
+          onclick="WorkflowMemory.refresh()"
+          title="Reload playbooks, semantic concepts, and episodic logs from disk">
+          Refresh
+        </button>
+      </div>
+      <div class="wm-grid">
+        <div class="wm-col">
+          <div class="wm-col-head">Playbooks <span class="wm-col-count" id="wm-playbooks-count">—</span></div>
+          <div class="wm-col-help">Durable rules; <code>kind=consolidate</code> writes here, <code>$memory.playbook.&lt;name&gt;</code> reads.</div>
+          <div class="wm-list" id="wm-playbooks-list">
+            <div class="wm-empty">Loading…</div>
+          </div>
+        </div>
+        <div class="wm-col">
+          <div class="wm-col-head">Semantic <span class="wm-col-count" id="wm-semantic-count">—</span></div>
+          <div class="wm-col-help">Distilled facts per concept; readable via <code>$memory.semantic.&lt;concept&gt;</code>.</div>
+          <div class="wm-list" id="wm-semantic-list">
+            <div class="wm-empty">Loading…</div>
+          </div>
+        </div>
+        <div class="wm-col">
+          <div class="wm-col-head">Episodic <span class="wm-col-count" id="wm-episodic-count">—</span></div>
+          <div class="wm-col-help">Append-only run digests; recency digest via <code>$memory.episodic.&lt;key&gt;</code>.</div>
+          <div class="wm-list" id="wm-episodic-list">
+            <div class="wm-empty">Loading…</div>
+          </div>
+        </div>
+      </div>
+      <div class="wm-detail" id="wm-detail" hidden>
+        <div class="wm-detail-head">
+          <span class="wm-detail-label" id="wm-detail-label">—</span>
+          <button class="action-btn" type="button" onclick="WorkflowMemory.closeDetail()">Close</button>
+        </div>
+        <pre class="wm-detail-body" id="wm-detail-body"></pre>
+      </div>
+    </div>
+
     <!-- ── SESSION HISTORY & FACTS ──────────────────────────────────── -->
     <div style="display:flex;gap:12px;margin-top:16px;margin-bottom:16px;">
       <input type="text" id="memory-search" placeholder="Search sessions and facts..."
@@ -7452,7 +7518,7 @@ function switchTab(name, el) {
     if (window.CatalogModelsShare) CatalogModelsShare.showInCatalog();
     if (!catalogLoaded) loadCatalog();
   }
-  if (name === 'memory') { loadMemory(); loadMemoryTab(); loadArchitecturePanel(); }
+  if (name === 'memory') { loadMemory(); loadMemoryTab(); loadArchitecturePanel(); WorkflowMemory && WorkflowMemory.refresh(); }
   else { _stopArchPressurePoll(); }
   // Discover was promoted-then-demoted into Models tab as a collapsible
   // sub-section. Legacy switchTab('discover', ...) calls (from old links
@@ -18257,6 +18323,89 @@ const RunsTab = (function () {
     zoomIn, zoomOut, zoomReset };
 })();
 window.RunsTab = RunsTab;
+
+// ── Workflow Memory panel ──────────────────────────────────────────────
+// Backs the Memory tab's "Workflow Memory" panel against the three durable
+// stores (playbooks / semantic / episodic). Lists each, click an item to
+// inspect its content inline. Reads only — writes happen via
+// kind=consolidate steps inside workflow runs.
+const WorkflowMemory = (function () {
+  const TARGETS = [
+    { kind: 'playbooks', list_id: 'wm-playbooks-list', count_id: 'wm-playbooks-count', read_path: 'playbooks' },
+    { kind: 'semantic',  list_id: 'wm-semantic-list',  count_id: 'wm-semantic-count',  read_path: 'semantic'  },
+    { kind: 'episodic',  list_id: 'wm-episodic-list',  count_id: 'wm-episodic-count',  read_path: 'episodic'  },
+  ];
+
+  async function refresh() {
+    for (const t of TARGETS) {
+      const listEl = document.getElementById(t.list_id);
+      const countEl = document.getElementById(t.count_id);
+      if (!listEl) continue;
+      try {
+        const resp = await fetch(`/api/workflows/memory/${t.kind}`, {
+          headers: typeof getAuthHeaders === 'function' ? getAuthHeaders() : {},
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        const items = data[t.kind] || [];
+        if (countEl) countEl.textContent = items.length;
+        if (!items.length) {
+          listEl.innerHTML = `<div class="wm-empty">No ${t.kind} written yet — run a workflow with a <code>kind: consolidate</code> step.</div>`;
+          continue;
+        }
+        listEl.innerHTML = items.map(it => {
+          const meta = (t.kind === 'episodic')
+            ? `${it.record_count} rec${it.record_count !== 1 ? 's' : ''}`
+            : `${(it.size_bytes || 0).toLocaleString()} B`;
+          return `<div class="wm-item" onclick="WorkflowMemory.open('${esc(t.kind)}', '${esc(it.name)}')">
+            <span class="wm-item-name">${esc(it.name)}</span>
+            <span class="wm-item-meta">${esc(meta)}</span>
+          </div>`;
+        }).join('');
+      } catch (e) {
+        listEl.innerHTML = `<div class="wm-empty">Failed: ${esc(String(e))}</div>`;
+        if (countEl) countEl.textContent = '!';
+      }
+    }
+  }
+
+  async function open(kind, name) {
+    const label = document.getElementById('wm-detail-label');
+    const body = document.getElementById('wm-detail-body');
+    const detail = document.getElementById('wm-detail');
+    if (!detail || !label || !body) return;
+    label.textContent = `${kind}: ${name}`;
+    body.textContent = 'Loading…';
+    detail.hidden = false;
+    detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    try {
+      const resp = await fetch(`/api/workflows/memory/${kind}/${encodeURIComponent(name)}`, {
+        headers: typeof getAuthHeaders === 'function' ? getAuthHeaders() : {},
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      if (kind === 'episodic') {
+        // Render the recency log as a readable digest.
+        const lines = (data.records || []).map(r =>
+          `### ${r.timestamp || '?'} (run ${r.run_id || '?'})\n${r.content || ''}`
+        );
+        body.textContent = lines.join('\n\n') || '(empty)';
+      } else {
+        body.textContent = data.body || '(empty)';
+      }
+    } catch (e) {
+      body.textContent = 'Failed to load: ' + String(e);
+    }
+  }
+
+  function closeDetail() {
+    const detail = document.getElementById('wm-detail');
+    if (detail) detail.hidden = true;
+  }
+
+  return { refresh, open, closeDetail };
+})();
+window.WorkflowMemory = WorkflowMemory;
 
 function renderWorkflowIndex() { WorkflowIndex && WorkflowIndex.refresh && document.getElementById('wfi-grid') && (function(){
   // Re-render with current cache by triggering a refresh of the chip filter.
