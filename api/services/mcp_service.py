@@ -59,23 +59,95 @@ def _mask(value: str) -> str:
     return value[:3] + "…" + value[-2:]
 
 
-def _config_dir() -> Path:
+def _legacy_config_dir() -> Path:
+    """Pre-Phase-1 location: data/config (cwd-relative, container-hostile)."""
     return Path(os.getenv("DATA_CONFIG_DIR", "data/config"))
 
 
+def _legacy_storage_path() -> Path:
+    return _legacy_config_dir() / "mcp_servers.json"
+
+
+def _mcp_user_dir() -> Optional[Path]:
+    """Resolve the deployment user-layer mcp/ directory, or None if the
+    deployment singleton hasn't been installed yet (e.g. unit tests that
+    construct MCPService directly without detect_deployment())."""
+    try:
+        from .deployment import _get_current as _get_dep
+
+        return _get_dep().user_storage_root / "mcp"
+    except Exception:
+        return None
+
+
 def _storage_path() -> Path:
-    return _config_dir() / "mcp_servers.json"
+    """Phase 1.3 — the MCP registry lives in the deployment user layer so it
+    persists across DMG reinstall / container image rebuild. Falls back to the
+    legacy data/config path when no deployment is detected (bare unit tests)."""
+    user_mcp = _mcp_user_dir()
+    if user_mcp is not None:
+        return user_mcp / "servers.json"
+    return _legacy_storage_path()
 
 
 class MCPService:
-    """In-memory registry of MCP server registrations, backed by JSON on disk."""
+    """In-memory registry of MCP server registrations, backed by JSON on disk.
+
+    Phase 1.3 (Track B): the registry and any user-installed MCP binaries live
+    under the deployment's user_storage_root (``~/Library/Application
+    Support/Enclave/mcp`` on DMG, ``/app/data/mcp`` in a container,
+    ``~/.enclave/mcp`` on host_native) so they survive app/image updates. A
+    one-time migration copies a legacy ``data/config/mcp_servers.json`` into
+    the user layer on first init.
+    """
 
     def __init__(self, storage_path: Optional[Path] = None):
         self._path = storage_path or _storage_path()
         self._lock = threading.RLock()
         self._servers: Dict[str, MCPServerConfig] = {}
         self._tools_cache: Dict[str, List[MCPTool]] = {}
+        if storage_path is None:
+            # Only auto-migrate when using the deployment-resolved path; an
+            # explicit storage_path (tests) opts out of legacy migration.
+            self._migrate_legacy()
         self._load()
+
+    # ── storage layout (Phase 1.3) ──────────────────────────────────
+
+    @property
+    def storage_path(self) -> Path:
+        """Absolute path to the registry JSON (user layer when available)."""
+        return self._path
+
+    @property
+    def binaries_dir(self) -> Path:
+        """Directory for user-installed MCP binaries/scripts. Created on first
+        access with 0700. Sits next to the registry under the user layer."""
+        d = self._path.parent / "binaries"
+        d.mkdir(parents=True, exist_ok=True, mode=0o700)
+        return d
+
+    def _migrate_legacy(self) -> None:
+        """One-time copy of a legacy data/config/mcp_servers.json into the
+        user layer. No-op if the user-layer file already exists (operator
+        intent wins) or the legacy file is absent."""
+        legacy = _legacy_storage_path()
+        new = self._path
+        try:
+            if (
+                legacy.exists()
+                and not new.exists()
+                and legacy.resolve() != new.resolve()
+            ):
+                new.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                new.write_text(legacy.read_text())
+                try:
+                    os.chmod(new, 0o600)
+                except OSError:
+                    pass
+                logger.info("Migrated MCP registry: %s -> %s", legacy, new)
+        except OSError as exc:  # pragma: no cover - defensive
+            logger.warning("MCP registry migration skipped: %s", exc)
 
     # ── persistence ─────────────────────────────────────────────────
 
@@ -120,6 +192,11 @@ class MCPService:
         with self._lock:
             s = self._servers.get(server_id)
             return self._public_view(s, mask_secrets) if s else None
+
+    def has_server(self, server_id: str) -> bool:
+        """True if a server with this id is registered (pre-flight check)."""
+        with self._lock:
+            return server_id in self._servers
 
     def register(self, create: MCPServerCreate) -> Dict[str, Any]:
         cfg = MCPServerConfig(**create.model_dump())
@@ -184,6 +261,25 @@ class MCPService:
         tools = self._list_tools(cfg)
         self._tools_cache[server_id] = tools
         return tools
+
+    def is_reachable(self, server_id: str) -> bool:
+        """True if the server handshakes successfully (spawns/pings). Used by
+        validate-time pre-flight; swallows all transport errors."""
+        if not self.has_server(server_id):
+            return False
+        return self.test_server(server_id).reachable
+
+    def has_tool(self, server_id: str, tool_name: str) -> bool:
+        """True if the server exposes ``tool_name``. Consults the tools cache
+        first; refreshes via handshake if the server is registered but uncached.
+        Returns False on any transport error rather than raising."""
+        if not self.has_server(server_id):
+            return False
+        try:
+            tools = self.list_tools(server_id)
+        except Exception:  # noqa: BLE001 - unreachable server → tool not found
+            return False
+        return any(t.name == tool_name for t in tools)
 
     def invoke_tool(
         self, server_id: str, tool: str, arguments: Dict[str, Any]
