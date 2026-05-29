@@ -565,6 +565,63 @@ async def get_artifact(run_id: str, step_id: str):
     return {"step_id": step_id, "run_id": run_id, "outputs": step_data}
 
 
+# ── Workflow memory inspection (Phase 4 stores: playbook / semantic / episodic) ───
+#
+# Lightweight read-only inspector for the durable memory stores written by
+# kind=consolidate steps and read back via the $memory.* accessor. Powers the
+# "Workflow Memory" panel in the Memory tab so operators can see what their
+# ralph loops and consolidate steps have actually accumulated.
+
+
+def _memory_store() -> "MemoryStore":  # noqa: F821
+    """Construct a MemoryStore against the live MEMORY_DATA_DIR. We don't reuse
+    the engine's store because the engine is request-scoped and constructing a
+    bare store is essentially free (just a path)."""
+    from ..services.memory_store import MemoryStore
+
+    return MemoryStore()
+
+
+@router.get("/memory/playbooks")
+async def list_playbook_files():
+    """List all playbook files with name + size + modified timestamp."""
+    return {"playbooks": _memory_store().list_playbooks()}
+
+
+@router.get("/memory/playbooks/{name}")
+async def read_playbook_file(name: str):
+    """Return the markdown body of a named playbook (or empty when missing)."""
+    body = _memory_store().read_playbook(name)
+    return {"name": name, "body": body, "exists": bool(body)}
+
+
+@router.get("/memory/semantic")
+async def list_semantic_files():
+    """List all semantic-concept files with name + size + modified timestamp."""
+    return {"semantic": _memory_store().list_semantic()}
+
+
+@router.get("/memory/semantic/{concept}")
+async def read_semantic_file(concept: str):
+    """Return the markdown body of a named semantic concept."""
+    body = _memory_store().read_semantic(concept)
+    return {"name": concept, "body": body, "exists": bool(body)}
+
+
+@router.get("/memory/episodic")
+async def list_episodic_files():
+    """List all episodic log keys with record count, size, modified timestamp."""
+    return {"episodic": _memory_store().list_episodic()}
+
+
+@router.get("/memory/episodic/{key}")
+async def read_episodic_file(key: str, limit: int = 50):
+    """Return the most recent `limit` records from an episodic log."""
+    store = _memory_store()
+    records = store.read_episodic(key, limit=limit)
+    return {"name": key, "records": records, "count": len(records)}
+
+
 # NOTE: Dynamic catch-all route kept at the END so /runs, /validate, /run, etc
 # match their static handlers first. Moving this up shadows /api/workflows/runs.
 @router.get("/{workflow_id}")
