@@ -401,7 +401,7 @@ Vector DB (Chroma): Embeddings (already in requirements)
 ### 14. Operational Documentation 📚 MEDIUM
 
 **Current State**:
-- Good README.md and PROJECT_PLAN.md
+- Good README.md and historical product plan (`docs/historical/PROJECT_PLAN.md`)
 - Missing operational guides
 
 **Gaps**:

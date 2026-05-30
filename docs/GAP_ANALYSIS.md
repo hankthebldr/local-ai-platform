@@ -622,7 +622,7 @@ class RAGService:
 **Referenced In**:
 - README.md (line 68)
 - CLAUDE.md (line 33)
-- PROJECT_PLAN.md (line 192)
+- docs/historical/PROJECT_PLAN.md (line 192)
 
 **Estimated Effort**: 6-8 hours total
 
@@ -642,7 +642,7 @@ class RAGService:
 
 **Referenced In**:
 - README.md (line 44)
-- PROJECT_PLAN.md (lines 206-209)
+- docs/historical/PROJECT_PLAN.md (lines 206-209)
 
 **Example `scripts/start.sh`**:
 ```bash
@@ -710,7 +710,7 @@ open-webui serve --port 8080
 
 **Existing Documentation**:
 - ✅ README.md (enterprise-grade, comprehensive)
-- ✅ PROJECT_PLAN.md (detailed roadmap)
+- ✅ docs/historical/PROJECT_PLAN.md (detailed roadmap)
 - ✅ CLAUDE.md (development guide)
 - ✅ docs/QUICK_START.md
 - ✅ docs/UNCENSORED_MODELS.md
@@ -762,7 +762,7 @@ open-webui serve --port 8080
 - No pytest.ini configuration
 - No test files
 
-**Missing Tests** (referenced in PROJECT_PLAN.md line 225):
+**Missing Tests** (referenced in docs/historical/PROJECT_PLAN.md line 225):
 - `tests/test_api.py`
 - `tests/test_inference.py`
 - `tests/test_finetuning.py`
@@ -847,7 +847,7 @@ def test_chat_completions():
 - `docker/docker-compose.yml`
 - `docker/.dockerignore`
 
-**Referenced In**: PROJECT_PLAN.md (lines 200-203)
+**Referenced In**: docs/historical/PROJECT_PLAN.md (lines 200-203)
 
 **Example `docker/docker-compose.yml`**:
 ```yaml
