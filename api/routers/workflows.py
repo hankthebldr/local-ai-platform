@@ -137,14 +137,30 @@ async def list_workflows():
 
 @router.post("/validate")
 async def validate_workflow(req: WorkflowValidateRequest):
-    """Validate a workflow definition without executing it"""
+    """Validate a workflow definition without executing it.
+
+    Phase 5 — when the workflow declares ``required_plugins`` /
+    ``required_mcps`` or any step's ``tools`` / ``skills`` list, the
+    response carries extension warnings (registered-but-unreachable MCP,
+    missing-skill plugin) so operators can fix them before run. Errors
+    still raise 422.
+    """
     engine = get_engine()
     try:
         defn = engine.load_from_dict(req.definition)
         engine.validate(defn, seed_keys=req.seed_keys)
-        return {"valid": True, "workflow_id": defn.id, "steps": len(defn.steps)}
     except WorkflowValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+    body = {"valid": True, "workflow_id": defn.id, "steps": len(defn.steps)}
+    ext = getattr(engine, "_last_extension_result", None)
+    if ext is not None and ext.has_warnings:
+        body["warnings"] = {
+            "plugin": ext.plugin_warnings,
+            "mcp": ext.mcp_warnings,
+            "skill": ext.skill_warnings,
+        }
+    return body
 
 
 @router.post("/save")

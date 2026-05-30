@@ -313,6 +313,42 @@ class RalphSpec(BaseModel):
         return self
 
 
+# ── Tool reference (Phase 5) ───────────────────────────────────────────────
+
+
+class ToolRef(BaseModel):
+    """Declarative reference to one tool a step may invoke.
+
+    Exactly one of ``plugin`` or ``mcp`` must be set; each is a dotted ref:
+
+      plugin: "<plugin_id>.<tool_id>"      # in-process Python tool
+      mcp:    "<server_id>.<tool_name>"    # external MCP-protocol tool
+
+    Pre-flight validation (Phase 5) walks every step's ``tools`` list at
+    compile time and verifies the named plugin/MCP exists and exposes
+    the named member. Engine-side dispatch (Phase 5 follow-up) reads
+    these refs when wiring up the step's tool surface.
+    """
+
+    plugin: Optional[str] = None
+    mcp: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _exactly_one(self):
+        set_count = sum(1 for v in (self.plugin, self.mcp) if v)
+        if set_count == 0:
+            raise ValueError("ToolRef must set exactly one of 'plugin' or 'mcp'")
+        if set_count > 1:
+            raise ValueError(
+                "ToolRef must set only one of 'plugin' or 'mcp' (got both)"
+            )
+        ref = self.plugin or self.mcp
+        # Dotted form so the validator can split into (owner, member).
+        if "." not in ref or ref.startswith(".") or ref.endswith("."):
+            raise ValueError(f"ToolRef must be '<id>.<member>' (got {ref!r})")
+        return self
+
+
 # ── Agent Step ─────────────────────────────────────────────────────────────
 
 
@@ -380,6 +416,27 @@ class AgentStep(BaseModel):
     # seeing every step with depends_on=None and rendering a stacked
     # blob instead of a connected flow.
     depends_on: List[str] = Field(default_factory=list)
+
+    # ── Extension surface (Phase 5) ───────────────────────────────────
+    # Declarative plugin / MCP tool refs the step intends to invoke. Used
+    # by validate-time pre-flight to fail fast when a required plugin or
+    # MCP server isn't installed/reachable. Engine-side dispatch (the
+    # follow-up that wires step_executor through MCPRunnerPool) reads
+    # this list to know which tools to expose to the LLM and which warm
+    # runners to acquire for the step.
+    tools: List[ToolRef] = Field(default_factory=list)
+    # Skill refs the step explicitly opts into: "<plugin_id>.<skill_id>".
+    # Empty list = inherit the workflow's skill_injection mode (auto =
+    # keyword-trigger discovery; off = no skills; explicit = only the
+    # skills named here). Validated at compile time.
+    skills: List[str] = Field(default_factory=list)
+    # Step archetype tag — declarative purpose hint (bash_script,
+    # documentation, xsiam_analysis, …). The compiler can also infer
+    # one from declared tools + role. Used by the resource-maximization
+    # pass (Phase 2b) for in-archetype model substitution and by the
+    # composer for companion suggestions. None = "no archetype declared
+    # or inferred"; downstream code treats this as a generic step.
+    archetype: Optional[str] = None
 
     # ── kind: parallel ────────────────────────────────────────────────
     # Child steps that fan out from this parent. Each branch is itself a full
@@ -741,6 +798,21 @@ class WorkflowDefaults(BaseModel):
     # via arch.transition_plan() applies. True = engine never fires pre-warm
     # for this workflow.
     disable_pre_warm: Optional[bool] = None
+    # ── Extension pre-flight (Phase 5 — MCP & Skills) ─────────────────
+    # Plugins the workflow requires. Empty list = no plugin gating.
+    # Missing required plugin → validate-time error; workflow refuses
+    # to run. Lenient mode (default) treats missing-but-not-required as
+    # a warning surfaced in the validate response.
+    required_plugins: List[str] = Field(default_factory=list)
+    # MCP servers the workflow requires. Missing-from-registry → error;
+    # registered-but-unreachable → warning (error in STRICT mode).
+    required_mcps: List[str] = Field(default_factory=list)
+    # How keyword-triggered skills are injected per step.
+    #   "auto"     — keyword triggers apply (default)
+    #   "explicit" — only step-declared skills inject
+    #   "manual"   — no auto-injection; step must call out skills
+    #   "off"      — disable injection entirely for this workflow
+    skill_injection: Literal["auto", "explicit", "manual", "off"] = "auto"
 
 
 class WorkflowDefinition(BaseModel):
