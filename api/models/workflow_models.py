@@ -954,6 +954,37 @@ class PreWarmEvent(BaseModel):
     hit_step_id: Optional[str] = None
 
 
+# ── MCP Runner Stats (Phase 2) ────────────────────────────────────────────
+
+
+class MCPRunnerStats(BaseModel):
+    """Per-MCP-runner record attached to a WorkflowRun.
+
+    One entry per (run_id, server_id) pair the workflow spawned. ``scope``
+    is the lifecycle the engine used: ``step`` (spawned + closed within one
+    step), ``region`` (held warm across a compiler-detected region of
+    contiguous same-MCP steps), or ``workflow`` (held for the whole run —
+    the initial integration shape; region scope lands in Phase 2b).
+
+    The fields cover what an operator needs to triage MCP overhead in a
+    run summary: how often the runner served requests, how much memory it
+    held, how fast it responded, whether it exited cleanly.
+    """
+
+    server_id: str
+    transport: Literal["stdio", "http"]
+    pid: Optional[int] = None
+    scope: Literal["step", "region", "workflow"] = "workflow"
+    started_at: datetime
+    closed_at: Optional[datetime] = None
+    handshake_duration_ms: float = 0.0
+    requests_handled: int = 0
+    errors: int = 0
+    peak_rss_mb: Optional[float] = None  # stdio only; None for HTTP
+    avg_response_ms: float = 0.0
+    exit_code: Optional[int] = None
+
+
 # ── Workflow Run ──────────────────────────────────────────────────────────
 
 
@@ -972,3 +1003,7 @@ class WorkflowRun(BaseModel):
     # arch said no pre-warm at every boundary, or where disable_pre_warm
     # was set in the workflow defaults.
     pre_warm_events: List[PreWarmEvent] = Field(default_factory=list)
+    # Phase 2 (MCP & Skills) — one entry per warm MCP runner the run used.
+    # Populated by MCPRunnerPool.release_workflow() at run end. Empty when
+    # the workflow declared no MCPs or when MCP routing wasn't enabled.
+    mcp_runners: List[MCPRunnerStats] = Field(default_factory=list)

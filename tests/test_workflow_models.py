@@ -152,6 +152,36 @@ class TestWorkflowRun:
         assert run.run_id is not None
         assert run.step_results == []
 
+    def test_run_defaults_empty_mcp_runners(self):
+        """Phase 2 — runs start with no MCP runners attached; pool fills the
+        list at workflow end."""
+        ctx = WorkflowContext(seed={})
+        run = WorkflowRun(workflow_id="test-wf", context=ctx)
+        assert run.mcp_runners == []
+
+    def test_run_accepts_mcp_runner_stats(self):
+        from datetime import datetime, timezone
+
+        from api.models.workflow_models import MCPRunnerStats
+
+        ctx = WorkflowContext(seed={})
+        stats = MCPRunnerStats(
+            server_id="fs",
+            transport="stdio",
+            pid=12345,
+            scope="workflow",
+            started_at=datetime.now(timezone.utc),
+            handshake_duration_ms=120.5,
+            requests_handled=3,
+            errors=0,
+            peak_rss_mb=42.0,
+            avg_response_ms=15.0,
+        )
+        run = WorkflowRun(workflow_id="test-wf", context=ctx, mcp_runners=[stats])
+        assert run.mcp_runners[0].server_id == "fs"
+        assert run.mcp_runners[0].transport == "stdio"
+        assert run.mcp_runners[0].requests_handled == 3
+
 
 class TestAgentStepKind:
     """Discriminator + composite-shape validation."""
