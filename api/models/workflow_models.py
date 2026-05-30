@@ -983,6 +983,9 @@ class MCPRunnerStats(BaseModel):
     peak_rss_mb: Optional[float] = None  # stdio only; None for HTTP
     avg_response_ms: float = 0.0
     exit_code: Optional[int] = None
+    # Phase 3 — health monitor + circuit breaker visibility.
+    health_check_failures: int = 0
+    circuit_breaker_tripped: bool = False
 
 
 # ── Workflow Run ──────────────────────────────────────────────────────────
