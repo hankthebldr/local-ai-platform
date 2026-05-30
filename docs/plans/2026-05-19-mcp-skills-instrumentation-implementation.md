@@ -64,8 +64,12 @@ therefore already satisfied; no engine change is needed to honor them.
 | 1.1 Deployment storage roots | ✅ shipped | `system_storage_root` / `user_storage_root` / `ensure_user_storage()` landed with the deployment abstraction (arch work) |
 | 1.2 PluginService two-layer discovery | ✅ shipped | `scan_plugins()` walks system→user, emits `origin` + `overrides_system` |
 | 1.3 MCPService user-layer storage + migration | ✅ this PR | registry → `user_storage_root/mcp/servers.json`; `binaries_dir`; one-time legacy `data/config` migration; `has_server` / `has_tool` / `is_reachable` pre-flight helpers |
-| 1.4 Install/uninstall endpoints + origin | ✅ this PR | `POST /api/plugins/install` (tarball→user layer, traversal-guarded), `DELETE /api/plugins/{id}` (system-layer protected, 403), `origin` surfaced; router now resolves both layers from the deployment |
-| 2–7 | ⬜ not started | see reconciliation above |
+| 1.4 Install/uninstall endpoints + origin | ✅ PR #116 | `POST /api/plugins/install` (tarball→user layer, traversal-guarded), `DELETE /api/plugins/{id}` (system-layer protected, 403), `origin` surfaced; router now resolves both layers from the deployment |
+| 2.1 `MCPRunnerPool` service | ✅ this PR | Warm stdio runner + HTTP session, keyed on `(run_id, server_id)`; `acquire` / `release_server` (step-scope) / `release_workflow` (workflow-scope); `total_runner_overhead_mb` for the Phase 6 arch hook; module singleton via `get_mcp_runner_pool()` |
+| 2.2 Wire pool into MCPService | ✅ this PR | `MCPService.invoke_tool(run_id=…, scope=…)` routes through the pool; legacy run_id-less callers (the direct router endpoint) still use the cold path |
+| 2 engine-side wiring | ⬜ deferred to Phase 5 | Today no step kind invokes MCPs directly — there's no `tools[]` field on `AgentStep` yet. When Phase 5 lands that schema, `step_executor` passes `workflow_run.run_id` to `invoke_tool` and `workflow_engine` calls `pool.release_workflow` in a `finally` block; the pool is already shaped for that integration |
+| 2b Compiler region promotion | ⬜ not started | Default ships as workflow-scope; promotion needs the leaf-step pressure walk from Phase 2b |
+| 3–7 | ⬜ not started | see reconciliation above |
 
 **Mac/Linux form-factor resolution (confirmed):**
 

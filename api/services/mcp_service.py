@@ -282,11 +282,36 @@ class MCPService:
         return any(t.name == tool_name for t in tools)
 
     def invoke_tool(
-        self, server_id: str, tool: str, arguments: Dict[str, Any]
+        self,
+        server_id: str,
+        tool: str,
+        arguments: Dict[str, Any],
+        *,
+        run_id: Optional[str] = None,
+        scope: str = "workflow",
     ) -> Dict[str, Any]:
+        """Invoke a tool on an MCP server.
+
+        When ``run_id`` is omitted the call goes through the cold path:
+        spawn → handshake → request → terminate (Phase 1 behavior, kept
+        for the direct router endpoint and any caller without a workflow
+        context).
+
+        When ``run_id`` is provided the call is routed through the warm
+        MCPRunnerPool so consecutive calls within the same run share one
+        subprocess (Phase 2). The ``scope`` controls who is responsible
+        for releasing the runner; see ``mcp_runner_pool`` docs.
+        """
         cfg = self._require(server_id)
         if not cfg.enabled:
             raise RuntimeError(f"server '{server_id}' is disabled")
+        if run_id is not None:
+            from .mcp_runner_pool import get_mcp_runner_pool
+
+            pool = get_mcp_runner_pool()
+            pool.attach_service(self)
+            runner = pool.acquire(run_id, server_id, scope=scope)
+            return runner.call("tools/call", {"name": tool, "arguments": arguments})
         return self._jsonrpc(
             cfg,
             method="tools/call",
