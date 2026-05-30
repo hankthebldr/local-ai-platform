@@ -62,6 +62,83 @@ from ..models.workflow_models import MCPRunnerStats
 PROTOCOL_VERSION = "2024-11-05"
 CLIENT_INFO = {"name": "enclave-runner-pool", "version": "1.0.0"}
 
+# Circuit breaker threshold: this many back-to-back failures and we stop
+# trying. A successful health_check() resets the counter and re-closes the
+# breaker. The threshold is per-runner; cross-runner state isn't tracked.
+DEFAULT_MAX_CONSECUTIVE_ERRORS = 3
+
+# Default cadence for the optional background health-monitor thread.
+DEFAULT_HEALTH_CHECK_INTERVAL_S = 30.0
+
+
+# ── Exceptions ────────────────────────────────────────────────────────────
+
+
+class MCPCircuitBreakerOpenError(RuntimeError):
+    """Raised when a runner has tripped its circuit breaker.
+
+    The pool / engine should treat this as a fast-fail: don't retry the
+    same runner, don't spawn a replacement automatically (the breaker
+    fires on logical errors that a fresh subprocess wouldn't fix —
+    typically a misconfigured tool or upstream service).
+    """
+
+    def __init__(self, server_id: str, consecutive_errors: int):
+        super().__init__(
+            f"MCP runner '{server_id}' circuit breaker open after "
+            f"{consecutive_errors} consecutive errors"
+        )
+        self.server_id = server_id
+        self.consecutive_errors = consecutive_errors
+
+
+# ── Circuit breaker ───────────────────────────────────────────────────────
+
+
+class CircuitBreaker:
+    """Tiny per-runner consecutive-error counter + open/closed flag.
+
+    Composed (not inherited) by every runner so the bookkeeping is
+    identical across transports. The runner records each ``call()``
+    outcome via ``record_success`` / ``record_failure``; ``check()``
+    raises ``MCPCircuitBreakerOpenError`` once the threshold has been
+    crossed. A successful ``health_check()`` calls ``reset()``.
+    """
+
+    def __init__(self, max_consecutive_errors: int = DEFAULT_MAX_CONSECUTIVE_ERRORS):
+        self._max = max_consecutive_errors
+        self._consecutive = 0
+        self._open = False
+        self._lock = threading.Lock()
+
+    def check(self, server_id: str) -> None:
+        """Raise if the breaker is open; otherwise no-op."""
+        if self._open:
+            raise MCPCircuitBreakerOpenError(server_id, self._consecutive)
+
+    def record_success(self) -> None:
+        with self._lock:
+            self._consecutive = 0
+            self._open = False
+
+    def record_failure(self) -> None:
+        with self._lock:
+            self._consecutive += 1
+            if self._consecutive >= self._max:
+                self._open = True
+
+    def reset(self) -> None:
+        """Force-close the breaker. Equivalent to record_success."""
+        self.record_success()
+
+    @property
+    def is_open(self) -> bool:
+        return self._open
+
+    @property
+    def consecutive_errors(self) -> int:
+        return self._consecutive
+
 
 # ── Runner protocol ───────────────────────────────────────────────────────
 
@@ -117,6 +194,9 @@ class StdioMCPRunner:
         self._closed = False
         self._closed_at: Optional[datetime] = None
         self._exit_code: Optional[int] = None
+        # Phase 3 — circuit breaker + health monitor bookkeeping.
+        self._circuit = CircuitBreaker()
+        self._health_check_failures = 0
 
     @classmethod
     def spawn(cls, cfg: MCPServerConfig, scope: str = "workflow") -> "StdioMCPRunner":
@@ -177,6 +257,21 @@ class StdioMCPRunner:
             raise RuntimeError(f"runner '{self.server_id}' already closed")
         if not self.is_alive():
             raise RuntimeError(f"runner '{self.server_id}' subprocess is dead")
+        # Phase 3 — circuit breaker. Fast-fail without sending the request
+        # once the trip threshold has been crossed; a successful health
+        # check (or manual reset) re-closes it.
+        self._circuit.check(self.server_id)
+        try:
+            result = self._raw_call(method, params)
+        except Exception:
+            self._circuit.record_failure()
+            raise
+        self._circuit.record_success()
+        return result
+
+    def _raw_call(self, method: str, params: Dict[str, object]) -> Dict[str, object]:
+        """Send one JSON-RPC frame; return ``result`` or raise. Bypasses the
+        circuit breaker so ``health_check`` can probe an open circuit."""
         with self._lock:
             t0 = time.monotonic()
             req_id = str(uuid.uuid4())
@@ -204,6 +299,23 @@ class StdioMCPRunner:
                 msg = err.get("message") if isinstance(err, dict) else str(err)
                 raise RuntimeError(msg or "MCP error")
             return resp.get("result", {}) or {}
+
+    def health_check(self) -> bool:
+        """Lightweight liveness probe — sends ``tools/list`` and resets the
+        circuit breaker on success. Used by the background health monitor and
+        as a manual recovery hook. Does NOT raise on failure; returns ``False``
+        so callers can decide whether to evict the runner."""
+        if self._closed or not self.is_alive():
+            self._health_check_failures += 1
+            return False
+        try:
+            self._raw_call("tools/list", {})
+        except Exception:  # noqa: BLE001
+            self._health_check_failures += 1
+            self._circuit.record_failure()
+            return False
+        self._circuit.reset()
+        return True
 
     def is_alive(self) -> bool:
         return self._proc.poll() is None and not self._closed
@@ -269,6 +381,8 @@ class StdioMCPRunner:
             peak_rss_mb=self._peak_rss_mb,
             avg_response_ms=avg,
             exit_code=self._exit_code,
+            health_check_failures=self._health_check_failures,
+            circuit_breaker_tripped=self._circuit.is_open,
         )
 
 
@@ -302,10 +416,25 @@ class HttpMCPSession:
         self._total_response_ms = 0.0
         # No handshake on HTTP — the spec relies on per-call params.
         self._handshake_ms = 0.0
+        # Phase 3 — circuit breaker + health monitor bookkeeping.
+        self._circuit = CircuitBreaker()
+        self._health_check_failures = 0
 
     def call(self, method: str, params: Dict[str, object]) -> Dict[str, object]:
         if self._closed:
             raise RuntimeError(f"http session '{self.server_id}' already closed")
+        self._circuit.check(self.server_id)
+        try:
+            result = self._raw_call(method, params)
+        except Exception:
+            self._circuit.record_failure()
+            raise
+        self._circuit.record_success()
+        return result
+
+    def _raw_call(self, method: str, params: Dict[str, object]) -> Dict[str, object]:
+        """POST one JSON-RPC frame; bypasses the circuit breaker so
+        ``health_check`` can probe an open circuit."""
         payload = {
             "jsonrpc": "2.0",
             "id": str(uuid.uuid4()),
@@ -336,6 +465,21 @@ class HttpMCPSession:
             msg = err.get("message") if isinstance(err, dict) else str(err)
             raise RuntimeError(msg or "MCP error")
         return data.get("result", {}) or {}
+
+    def health_check(self) -> bool:
+        """Probe via ``tools/list``. Resets the breaker on success; returns
+        ``False`` (does not raise) on failure."""
+        if self._closed:
+            self._health_check_failures += 1
+            return False
+        try:
+            self._raw_call("tools/list", {})
+        except Exception:  # noqa: BLE001
+            self._health_check_failures += 1
+            self._circuit.record_failure()
+            return False
+        self._circuit.reset()
+        return True
 
     def is_alive(self) -> bool:
         return not self._closed
@@ -369,6 +513,8 @@ class HttpMCPSession:
             peak_rss_mb=None,
             avg_response_ms=avg,
             exit_code=None,
+            health_check_failures=self._health_check_failures,
+            circuit_breaker_tripped=self._circuit.is_open,
         )
 
 
@@ -392,6 +538,10 @@ class MCPRunnerPool:
         self._runners: Dict[Tuple[str, str], MCPRunner] = {}
         self._stats: Dict[str, List[MCPRunnerStats]] = {}
         self._lock = threading.RLock()
+        # Phase 3 — optional background health monitor. ``start_health_monitor``
+        # starts a daemon thread; ``stop_health_monitor`` joins it. Without it,
+        # ``runner.health_check()`` remains callable manually.
+        self._health_thread: Optional["_HealthMonitorThread"] = None
 
     def attach_service(self, mcp_service) -> None:
         """Late-bind the MCPService handle (used when the pool is
@@ -477,6 +627,44 @@ class MCPRunnerPool:
                 for (run_id, server_id), runner in self._runners.items()
             ]
 
+    # ── health monitor (Phase 3) ───────────────────────────────────
+
+    def start_health_monitor(
+        self, interval_s: float = DEFAULT_HEALTH_CHECK_INTERVAL_S
+    ) -> None:
+        """Start a daemon thread that probes every live runner every
+        ``interval_s`` seconds. Idempotent — re-starting with a different
+        interval restarts the thread. The monitor is opt-in; call sites
+        decide whether the appliance wants a continuous background poll
+        or relies on per-step ``runner.health_check()`` only."""
+        with self._lock:
+            if self._health_thread is not None:
+                self._health_thread.stop()
+            self._health_thread = _HealthMonitorThread(self, interval_s)
+            self._health_thread.start()
+
+    def stop_health_monitor(self) -> None:
+        """Stop the background monitor if running. Safe to call repeatedly."""
+        with self._lock:
+            t = self._health_thread
+            self._health_thread = None
+        if t is not None:
+            t.stop()
+
+    def run_health_checks(self) -> Dict[Tuple[str, str], bool]:
+        """Probe every currently-live runner once. Returns
+        ``{(run_id, server_id): healthy}``. Used by the monitor thread and
+        by tests that want a deterministic sweep without spinning a thread."""
+        with self._lock:
+            items = list(self._runners.items())
+        results: Dict[Tuple[str, str], bool] = {}
+        for key, runner in items:
+            try:
+                results[key] = runner.health_check()
+            except Exception:  # noqa: BLE001 - never let monitor crash the pool
+                results[key] = False
+        return results
+
     # ── internals ──────────────────────────────────────────────────
 
     def _spawn(self, server_id: str, scope: str) -> MCPRunner:
@@ -534,6 +722,36 @@ def _read_frame(proc: subprocess.Popen, deadline: float) -> Dict[str, object]:
             return msg
 
 
+# ── Background health monitor (Phase 3) ──────────────────────────────────
+
+
+class _HealthMonitorThread(threading.Thread):
+    """Daemon thread that calls ``pool.run_health_checks()`` periodically.
+
+    Stops cleanly on ``stop()`` (sets the event; the loop checks at most
+    every ``interval_s`` so worst-case shutdown latency equals the interval).
+    """
+
+    def __init__(self, pool: "MCPRunnerPool", interval_s: float):
+        super().__init__(name=f"mcp-health-{int(interval_s * 1000)}ms", daemon=True)
+        self._pool = pool
+        self._interval = max(0.05, interval_s)
+        self._stop_event = threading.Event()
+
+    def run(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                self._pool.run_health_checks()
+            except Exception:  # noqa: BLE001 - keep the loop alive
+                logger.exception("MCP health monitor sweep failed")
+            self._stop_event.wait(self._interval)
+
+    def stop(self, join_timeout: float = 2.0) -> None:
+        self._stop_event.set()
+        if self.is_alive():
+            self.join(timeout=join_timeout)
+
+
 # ── Module singleton ─────────────────────────────────────────────────────
 
 _default_pool: Optional[MCPRunnerPool] = None
@@ -554,6 +772,7 @@ def reset_mcp_runner_pool() -> None:
     global _default_pool
     with _default_pool_lock:
         if _default_pool is not None:
+            _default_pool.stop_health_monitor()
             with _default_pool._lock:  # noqa: SLF001
                 for runner in list(_default_pool._runners.values()):  # noqa: SLF001
                     try:
