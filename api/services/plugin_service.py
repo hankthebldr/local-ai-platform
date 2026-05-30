@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import shutil
 import sys
+import tarfile
+import tempfile
 import types
 from pathlib import Path
 from typing import Optional
@@ -250,6 +253,100 @@ class PluginService:
     def list_plugins(self) -> list:
         """List all discovered plugins."""
         return list(self._plugins.values())
+
+    def get_plugin(self, plugin_id: str) -> Optional[dict]:
+        """Return the discovered plugin dict (with origin) or None."""
+        return self._plugins.get(plugin_id)
+
+    def has_plugin(self, plugin_id: str) -> bool:
+        return plugin_id in self._plugins
+
+    def has_tool(self, plugin_id: str, tool_id: str) -> bool:
+        """True if the (plugin, tool) pair was discovered."""
+        return (plugin_id, tool_id) in self._tools
+
+    def has_skill(self, plugin_id: str, skill_id: str) -> bool:
+        """True if the plugin ships a skill with this id."""
+        plugin = self._plugins.get(plugin_id)
+        if not plugin:
+            return False
+        return any(s["id"] == skill_id for s in plugin.get("skills", []))
+
+    # ── install / uninstall (Phase 1.4) ─────────────────────────────
+
+    def install_plugin(self, archive_path: Path) -> dict:
+        """Install a plugin tarball into the writable user layer.
+
+        The tarball must contain exactly one top-level directory holding a
+        ``plugin.yaml``. Path traversal (absolute paths, ``..`` members) is
+        rejected. Re-scans afterwards so the new plugin is immediately
+        discoverable. Returns the installed plugin dict.
+        """
+        if self._user_dir is None:
+            raise RuntimeError(
+                "no writable user plugin layer; deployment not initialised"
+            )
+        archive_path = Path(archive_path)
+        if not archive_path.exists():
+            raise ValueError(f"archive not found: {archive_path}")
+
+        with tempfile.TemporaryDirectory() as td:
+            staging = Path(td)
+            try:
+                with tarfile.open(archive_path) as tar:
+                    members = tar.getmembers()
+                    for m in members:
+                        mp = Path(m.name)
+                        if mp.is_absolute() or ".." in mp.parts:
+                            raise ValueError(f"unsafe path in archive: {m.name}")
+                    tar.extractall(staging)  # noqa: S202 - members vetted above
+            except tarfile.TarError as exc:
+                raise ValueError(f"invalid plugin archive: {exc}") from exc
+
+            # Locate the plugin directory (the one containing plugin.yaml).
+            manifests = list(staging.rglob("plugin.yaml"))
+            if not manifests:
+                raise ValueError("archive contains no plugin.yaml")
+            if len(manifests) > 1:
+                raise ValueError("archive contains multiple plugin.yaml files")
+            plugin_src = manifests[0].parent
+
+            try:
+                manifest = yaml.safe_load(manifests[0].read_text()) or {}
+            except yaml.YAMLError as exc:
+                raise ValueError(f"invalid plugin.yaml: {exc}") from exc
+            plugin_id = manifest.get("id")
+            if not plugin_id:
+                raise ValueError("plugin.yaml missing 'id'")
+
+            self._user_dir.mkdir(parents=True, exist_ok=True)
+            dest = self._user_dir / plugin_id
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(plugin_src, dest)
+            logger.info("Installed plugin %s to user layer: %s", plugin_id, dest)
+
+        self.scan_plugins()
+        installed = self._plugins.get(plugin_id)
+        if installed is None:
+            raise RuntimeError(f"plugin {plugin_id} installed but not discoverable")
+        return installed
+
+    def uninstall_plugin(self, plugin_id: str) -> None:
+        """Remove a user-layer plugin. Raises PermissionError for a plugin that
+        only exists in the read-only system layer, and KeyError if unknown."""
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            raise KeyError(plugin_id)
+        if plugin.get("origin") != "user":
+            raise PermissionError(f"system-layer plugin cannot be deleted: {plugin_id}")
+        if self._user_dir is None:
+            raise RuntimeError("no user plugin layer configured")
+        dest = self._user_dir / plugin_id
+        if dest.exists():
+            shutil.rmtree(dest)
+        logger.info("Uninstalled user plugin %s", plugin_id)
+        self.scan_plugins()
 
     def get_skills(self, user_message: str) -> list:
         """Find skills whose keyword triggers match the user message."""

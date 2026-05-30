@@ -26,6 +26,57 @@
 
 ---
 
+## Status & execution-flow reconciliation (updated 2026-05-29)
+
+This plan was drafted 2026-05-19, before the multi-agent workflow taxonomy
+landed. Two things changed under it; the remaining phases must build on the
+*shipped* shape, not the draft's assumptions.
+
+**1. The step model is now `kind`-discriminated, not a single `AgentStep` path.**
+Steps carry a `kind` discriminator (`llm`, `parallel`, `loop`, `a2a`,
+`orchestrator`, `consolidate`, `ralph`) and dispatch through lazily-imported
+per-kind modules under `api/services/engine_executors/`. Consequences for the
+unstarted phases:
+
+- **Phase 4 (instrumentation)** attaches `skills_activated` / `mcp_calls` /
+  `plugin_tools_called` to the `StepResult` that *every* kind already returns;
+  capture lives in `step_executor` (the `kind: llm` leaf path) and is
+  aggregated up by `workflow_engine` regardless of kind. Composite kinds
+  (`parallel`, `loop`) roll up their children's extension stats the same way
+  they already roll up token counts.
+- **Phase 5 (tool/skill refs)** — `tools[]` / `skills[]` / `archetype` are
+  fields on the `kind: llm` leaf step. Pre-flight validation walks every
+  leaf step regardless of nesting (parallel branches, loop bodies).
+- **Phase 2/2b/2c** — the runner pool keys on `(workflow_run_id, server_id)`,
+  which is kind-agnostic. The co-scheduler's pressure walk iterates the
+  flattened leaf-step order the compiler already produces.
+
+**2. Execution is sequential by default — already the shipped contract.**
+The arch-aware orchestration work (PRs #88–#103) made sequential execution the
+default with freshness-by-default eviction. The design's "execution model:
+sequential by default" section and the removal of `force_serialize` are
+therefore already satisfied; no engine change is needed to honor them.
+
+**Phase-by-phase status:**
+
+| Phase / Task | Status | Notes |
+|---|---|---|
+| 1.1 Deployment storage roots | ✅ shipped | `system_storage_root` / `user_storage_root` / `ensure_user_storage()` landed with the deployment abstraction (arch work) |
+| 1.2 PluginService two-layer discovery | ✅ shipped | `scan_plugins()` walks system→user, emits `origin` + `overrides_system` |
+| 1.3 MCPService user-layer storage + migration | ✅ this PR | registry → `user_storage_root/mcp/servers.json`; `binaries_dir`; one-time legacy `data/config` migration; `has_server` / `has_tool` / `is_reachable` pre-flight helpers |
+| 1.4 Install/uninstall endpoints + origin | ✅ this PR | `POST /api/plugins/install` (tarball→user layer, traversal-guarded), `DELETE /api/plugins/{id}` (system-layer protected, 403), `origin` surfaced; router now resolves both layers from the deployment |
+| 2–7 | ⬜ not started | see reconciliation above |
+
+**Mac/Linux form-factor resolution (confirmed):**
+
+| Deployment | system layer | user layer (writable, persists) | MCP registry |
+|---|---|---|---|
+| `dmg_native` (Mac) | `Enclave.app/Contents/Resources` | `~/Library/Application Support/Enclave` | `…/Enclave/mcp/servers.json` |
+| `container` (Linux) | `/app` | `/app/data` (bind-mount) | `/app/data/mcp/servers.json` |
+| `host_native` (Mac/Linux dev) | cwd | `~/.enclave` | `~/.enclave/mcp/servers.json` |
+
+---
+
 ## Phase 1: Deployment-Aware Storage Layering
 
 ### Task 1.1: Extend `Deployment` Protocol with system and user storage roots
