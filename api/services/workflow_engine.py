@@ -101,6 +101,12 @@ def _aggregate_telemetry(
     return summary
 
 
+def _strict_validation() -> bool:
+    """Phase 5 — when set, extension warnings (unreachable MCP, missing-skill
+    plugin) are promoted to validation errors that block the run."""
+    return os.getenv("STRICT_VALIDATION", "").lower() in ("1", "true", "yes")
+
+
 def _resolve_pre_warm_hits(workflow_run: WorkflowRun) -> None:
     """Phase 5b — walk pre_warm_events and decide hit/miss against step_results.
 
@@ -183,6 +189,11 @@ class WorkflowEngine:
 
         self._pre_warm_lock = _threading.Lock()
         self._pre_warm_inflight: set = set()
+        # Phase 5 (MCP & Skills) — most recent extension pre-flight result.
+        # Stored after each ``validate()`` call so the router can surface
+        # warnings (registered-but-unreachable MCPs, missing-skill plugin)
+        # alongside the success response.
+        self._last_extension_result = None
         # Phase 5.4 — page-cache recency window for warm_eviction_candidate
         # decisions on UnifiedArchitecture. Models evicted within this many
         # seconds are flagged as still-mmap-able. 5 min is the documented
@@ -485,6 +496,32 @@ class WorkflowEngine:
             # Scheduler/arch failures must not block workflow validation —
             # surface as a debug log and continue.
             logger.debug(f"Scheduler feasibility skipped: {e}")
+
+        # Phase 5 — extension pre-flight. Walk tools/skills/required_* and
+        # surface plugin/MCP gaps before the operator hits run. Errors
+        # block; warnings are non-fatal unless STRICT_VALIDATION=true. A
+        # bare workflow (no tools/skills/required_*) is a complete no-op.
+        try:
+            from .extension_preflight import check_workflow
+
+            ext = check_workflow(definition)
+            for line in ext.flatten_errors():
+                errors.append(line)
+            if ext.has_warnings and _strict_validation():
+                for w in ext.plugin_warnings + ext.mcp_warnings + ext.skill_warnings:
+                    errors.append(
+                        f"[strict] {w.get('code', 'warning')}: "
+                        + ", ".join(
+                            f"{k}={v}"
+                            for k, v in w.items()
+                            if k != "code" and v is not None
+                        )
+                    )
+            self._last_extension_result = ext  # for the validate endpoint
+        except Exception as e:
+            # Extension pre-flight must never crash validation — fail soft
+            # the same way the scheduler check does.
+            logger.debug(f"Extension pre-flight skipped: {e}")
 
         if errors:
             raise WorkflowValidationError(

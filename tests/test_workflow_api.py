@@ -1,11 +1,8 @@
 """Tests for workflow API endpoints"""
-import pytest
-import json
-import tempfile
-import os
-from unittest.mock import MagicMock, patch
-from fastapi.testclient import TestClient
 
+import pytest
+from unittest.mock import patch
+from fastapi.testclient import TestClient
 
 VALID_WORKFLOW = {
     "id": "test-api-workflow",
@@ -45,6 +42,7 @@ def client(mock_ollama):
     with patch("api.routers.workflows.get_ollama_service", return_value=mock_ollama):
         with patch("api.main.ollama_service", mock_ollama):
             from api.main import app
+
             return TestClient(app)
 
 
@@ -118,7 +116,9 @@ class TestWorkflowAPI:
         response = client.get("/api/workflows/..%2F..%2Fetc%2Fpasswd")
         assert response.status_code in (400, 404)
 
-    def test_save_workflow_writes_yaml_and_round_trips(self, client, tmp_path, monkeypatch):
+    def test_save_workflow_writes_yaml_and_round_trips(
+        self, client, tmp_path, monkeypatch
+    ):
         """POST /api/workflows/save persists a validated def to workflows/{id}.yaml."""
         monkeypatch.setattr("api.routers.workflows.WORKFLOWS_DIR", str(tmp_path))
         wf = {
@@ -148,30 +148,146 @@ class TestWorkflowAPI:
         assert "id: saved-workflow" in content
         assert "Do thing." in content
 
-    def test_save_workflow_refuses_clobber_without_overwrite(self, client, tmp_path, monkeypatch):
+    def test_save_workflow_refuses_clobber_without_overwrite(
+        self, client, tmp_path, monkeypatch
+    ):
         monkeypatch.setattr("api.routers.workflows.WORKFLOWS_DIR", str(tmp_path))
         wf = {
             "id": "existing",
             "name": "x",
             "defaults": {"role": "general", "retries": 0, "retry_delay": 0},
-            "steps": [{"id": "s1", "name": "S1", "role": "fast",
-                       "system_prompt": "p", "inputs": ["seed.x"], "outputs": ["y"]}],
+            "steps": [
+                {
+                    "id": "s1",
+                    "name": "S1",
+                    "role": "fast",
+                    "system_prompt": "p",
+                    "inputs": ["seed.x"],
+                    "outputs": ["y"],
+                }
+            ],
         }
-        assert client.post("/api/workflows/save", json={"definition": wf}).status_code == 200
-        assert client.post("/api/workflows/save", json={"definition": wf}).status_code == 409
-        assert client.post(
-            "/api/workflows/save",
-            json={"definition": wf, "overwrite": True},
-        ).status_code == 200
+        assert (
+            client.post("/api/workflows/save", json={"definition": wf}).status_code
+            == 200
+        )
+        assert (
+            client.post("/api/workflows/save", json={"definition": wf}).status_code
+            == 409
+        )
+        assert (
+            client.post(
+                "/api/workflows/save",
+                json={"definition": wf, "overwrite": True},
+            ).status_code
+            == 200
+        )
 
-    def test_save_workflow_validates_before_writing(self, client, tmp_path, monkeypatch):
+    def test_save_workflow_validates_before_writing(
+        self, client, tmp_path, monkeypatch
+    ):
         monkeypatch.setattr("api.routers.workflows.WORKFLOWS_DIR", str(tmp_path))
         broken = {
             "id": "broken-save",
             "name": "broken",
-            "steps": [{"id": "s1", "name": "S1", "role": "fast",
-                       "system_prompt": "p", "inputs": ["nonexistent.x"], "outputs": ["y"]}],
+            "steps": [
+                {
+                    "id": "s1",
+                    "name": "S1",
+                    "role": "fast",
+                    "system_prompt": "p",
+                    "inputs": ["nonexistent.x"],
+                    "outputs": ["y"],
+                }
+            ],
         }
         r = client.post("/api/workflows/save", json={"definition": broken})
         assert r.status_code == 422
         assert not (tmp_path / "broken-save.yaml").exists()
+
+
+class TestValidateExtensionWarnings:
+    """Phase 5 — validate response carries plugin/mcp/skill warnings when the
+    workflow declares required_* or tools/skills with non-fatal gaps."""
+
+    def test_unreachable_required_mcp_returns_warning_in_body(
+        self, client, monkeypatch
+    ):
+        monkeypatch.setenv("ENABLE_API_AUTH", "false")
+        from api.services import extension_preflight
+
+        class FakeMCP:
+            def has_server(self, sid):
+                return sid == "fs"
+
+            def is_reachable(self, sid):
+                return False
+
+            def has_tool(self, sid, tool):
+                return True
+
+        monkeypatch.setattr(
+            extension_preflight, "_default_mcp_service", lambda: FakeMCP()
+        )
+        wf = {
+            "id": "wmcp",
+            "name": "wmcp",
+            "defaults": {"required_mcps": ["fs"]},
+            "steps": [
+                {
+                    "id": "s1",
+                    "name": "S1",
+                    "role": "fast",
+                    "system_prompt": "p",
+                    "outputs": ["x"],
+                }
+            ],
+        }
+        r = client.post(
+            "/api/workflows/validate", json={"definition": wf, "seed_keys": []}
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["valid"] is True
+        assert "warnings" in body
+        assert any(w["code"] == "mcp_unreachable" for w in body["warnings"]["mcp"])
+
+    def test_missing_required_plugin_returns_422(self, client, monkeypatch):
+        monkeypatch.setenv("ENABLE_API_AUTH", "false")
+        from api.services import extension_preflight
+
+        class FakePlugins:
+            def has_plugin(self, pid):
+                return False
+
+            def has_tool(self, pid, tid):
+                return False
+
+            def has_skill(self, pid, sid):
+                return False
+
+            def list_plugins(self):
+                return []
+
+        monkeypatch.setattr(
+            extension_preflight, "_default_plugin_service", lambda: FakePlugins()
+        )
+        wf = {
+            "id": "wplug",
+            "name": "wplug",
+            "defaults": {"required_plugins": ["xdm-toolkit"]},
+            "steps": [
+                {
+                    "id": "s1",
+                    "name": "S1",
+                    "role": "fast",
+                    "system_prompt": "p",
+                    "outputs": ["x"],
+                }
+            ],
+        }
+        r = client.post(
+            "/api/workflows/validate", json={"definition": wf, "seed_keys": []}
+        )
+        assert r.status_code == 422
+        assert "plugin_missing" in r.json()["detail"]
