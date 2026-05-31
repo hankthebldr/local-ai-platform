@@ -146,6 +146,7 @@ class StepExecutor:
             step=step,
             prompt=None,
             attempt=0,
+            step_result=result,
         )
         pre_results = self.hook_bus.dispatch("before_step", pre_ctx)
         if self._short_circuit(pre_results):
@@ -212,6 +213,7 @@ class StepExecutor:
                 step=step,
                 prompt=composed,
                 attempt=attempt,
+                step_result=result,
             )
 
             # before_step (post-compose re-dispatch for prompt-aware hooks
