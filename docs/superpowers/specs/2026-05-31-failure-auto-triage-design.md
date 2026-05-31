@@ -13,6 +13,8 @@ The system is built as **two collectors → one triage core → many emitters**.
 
 This work also marks a **deliberate, scoped revision to Enclave's telemetry stance**. The product promise moves from absolute "no telemetry" to **operator-owned error reporting, opt-in and off by default**, where each deployed box reports to a sink *its own operator controls* (their GitHub repo, a homelab collector, a webhook). A vendor phone-home path exists but is **optional, explicit, and disabled by default**, behind a one-time in-product disclosure. Redaction of prompts, secrets, and home-directory paths is **mandatory and non-disableable** for anything that leaves the process. The net effect: aggressive automatic failure visibility for the operator's own fleet, with the "sovereign appliance" promise intact for everyone who doesn't opt in.
 
+Critically, that **opt-in selection is itself the scaling mechanism for bug reporting** — not merely a privacy gate. Enabling it (`ENABLE_ERROR_REPORTING=true`, `ERROR_SINK=github`) converts raw CI *and* field failures into a single **deduplicated, severity-labelled GitHub Issue backlog, generated automatically**: each distinct product bug becomes a tracked, triaged issue the moment it occurs — one issue per fingerprint, recurrences counted not duplicated — turning "we have logs somewhere" into a managed bug pipeline that scales without spam. See [Opt-in product-bug issue generation](#opt-in-product-bug-issue-generation--the-manageable-scaling-mechanism).
+
 Delivery is phased along the CI-first line: **Phase 1** (CI triage) ships with no application changes, no new runtime dependencies, and no network egress. **Phase 2** (runtime capture + operator-owned telemetry) adds the catch-all handler, redaction, opt-in gate, and operator sinks. **Phase 3** (optional vendor phone-home) is deferred and gated.
 
 ---
@@ -225,6 +227,28 @@ POST the redacted `TriageVerdict` JSON to `ERROR_SINK_URL`. Two envelope shapes:
 
 ---
 
+## Opt-in product-bug issue generation — the manageable scaling mechanism
+
+The single capability that makes this system *scale* bug reporting rather than merely *collect* errors is **operator opt-in to automatic, deduplicated GitHub Issue generation**, applied uniformly to both sources through one pipeline:
+
+- **CI test failures** generate issues in the repo (Phase 1, always-on in CI).
+- **Runtime/product bugs** from a deployed box generate issues in the operator's *own* repo once they opt in and select `ERROR_SINK=github` (Phase 2).
+
+Both run the *same* `fingerprint → classify → dedup → emit` core, so the operator gets **one tracker with one grouping scheme** spanning "broke in CI" and "broke in the field." There is no second bug system to reconcile.
+
+**Why this scales manageably (and is not issue spam):**
+
+| Scaling risk | Mitigation |
+|---|---|
+| Same bug recurs → N issues | One issue per fingerprint; recurrences add a comment + `seen ×N`, never a duplicate |
+| Backlog becomes unreadable | Every issue carries `severity:*` + `category:*` labels → filterable, triageable at a glance |
+| Volume escapes operator control | Opt-in gate + operator-owned sink: the operator chooses *whether*, *where*, and (via severity / `--fail-on`) *how loud* |
+| Sensitive payloads land in a tracker | Mandatory redaction — prompts/secrets/paths never reach the issue body |
+
+The opt-in *selection* is therefore the **control plane**: enabling it converts raw failures into a curated, deduplicated, severity-labelled bug backlog automatically — the difference between "we have logs somewhere" and "every distinct product bug is a triaged, tracked issue the moment it occurs." This is the operator-facing value of the whole system, and the reason the telemetry-stance revision was worth making.
+
+---
+
 ## Phase 3 — vendor phone-home (deferred, gated)
 
 The same `webhook.py` emitter pointed at a vendor URL, behind `ERROR_REPORTING_VENDOR=true` (default false) and a **one-time in-product disclosure** on first enable. Requires a published privacy policy and disclosure copy before it ships. Out of scope for the initial build; the seam exists so the decision can be made later without rework.
@@ -257,6 +281,7 @@ CI-side knobs are CLI args: `--emit annotations,summary,issues`, `--repo`, `--dr
 
 **Revised stance (operator decision, 2026-05-31):**
 - **Operator-owned error reporting is opt-in and off by default.** Each box reports to a sink its operator controls; the vendor never sees it.
+- **The opt-in selection is the scaling mechanism for bug reporting.** Selecting `ERROR_SINK=github` turns runtime/product failures into the *same* deduplicated, severity-labelled GitHub Issues as CI — one tracker, one grouping scheme, one issue per fingerprint plus a recurrence counter. This is the capability that lets bug reporting scale manageably instead of becoming log noise.
 - **Vendor phone-home is optional, explicit, disabled by default,** behind a disclosure (Phase 3).
 - **Redaction is mandatory** for everything that leaves the process; prompts and secrets are never transmitted.
 - **For any operator who does not opt in, behavior is identical to today** — fully local, zero egress.
