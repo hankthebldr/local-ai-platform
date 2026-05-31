@@ -101,6 +101,90 @@ captured on every run and aggregated into `RunTelemetrySummary`.
   spec's plan); remaining items are polish (sharded mode, prompt-prefix
   locking, A2A streaming, composer UI renderers).
 
+### Added — MCP & Skills instrumentation (PRs #116–127, all merged)
+
+Twelve-PR series that landed the [MCP & Skills design plan](docs/plans/2026-05-19-mcp-skills-instrumentation-design.md).
+Turns the plugin / MCP / skills subsystems into a first-class operator
+surface with deployment-aware storage, a warm-runner pool, validate-time
+pre-flight, per-step instrumentation, and security hardening.
+
+- **Phase 1 — deployment-aware extension storage (PR #116).** Plugin
+  registry + MCP `servers.json` moved into the writable user layer
+  (`~/.enclave/mcp` / `~/Library/Application Support/Enclave/mcp` /
+  `/app/data/mcp`) so they survive DMG reinstall and container rebuild.
+  Legacy `data/config/mcp_servers.json` auto-migrates on first init.
+  `POST /api/plugins/install` (tarball, traversal-guarded) +
+  `DELETE /api/plugins/{id}` (system-layer protected).
+- **Phase 2 — warm MCPRunnerPool (PR #117).** Long-lived stdio runners
+  + HTTP sessions keyed on `(run_id, server_id)`. One initialize
+  handshake serves many `tools/call` invocations; per-runner stats
+  (requests / errors / peak RSS / avg response). Cross-workflow isolation;
+  `release_server` / `release_workflow` decide step- vs workflow-scope.
+- **Phase 3 — circuit breaker + health monitor (PR #118).** N consecutive
+  failures trip a per-runner breaker; subsequent calls fast-fail without
+  hitting the wire. `runner.health_check()` re-closes on `tools/list`
+  success; opt-in `pool.start_health_monitor(interval_s)` daemon thread
+  sweeps every live runner periodically.
+- **Phase 5 — declarative pre-flight + `tools[]`/`skills[]` schema
+  (PR #119).** `ToolRef` Pydantic model; `AgentStep.tools` /
+  `.skills` / `.archetype`; `WorkflowDefaults.required_plugins` /
+  `.required_mcps` / `.skill_injection`. `api/services/extension_preflight.py`
+  walks every leaf step recursively; missing plugin/MCP/tool → 422;
+  registered-but-unreachable MCP → warning. `STRICT_VALIDATION=true`
+  promotes warnings to errors.
+- **Phase 7.1 — `/api/system/extensions` (PR #120).** One-stop GET
+  surfaces deployment-resolved plugin paths, MCP registry path +
+  binaries dir, live runner-pool state (count + total RSS + per-runner
+  snapshot), and cache paths.
+- **Phase 6 — arch-scheduler integration (PR #121).** Every
+  `Deployment.effective_memory_gb()` impl now subtracts live pool RSS
+  (`mcp_overhead_gb()` helper in `api/services/deployment.py`); clamped
+  at 0; surfaced in `/api/system/architecture`'s deployment block.
+- **Phase 4.1 + 4.4 — instrumentation schema + run rollup (PR #122).**
+  New `SkillActivation` / `MCPCall` / `PluginToolCall` models;
+  `StepResult.{skills_activated, mcp_calls, plugin_tools_called,
+  extension_overhead_ms}` fields; `WorkflowRun.{skills_activated_total,
+  mcp_invocations_total, plugin_tools_invoked_total, mcp_servers_used,
+  extension_overhead_seconds}` aggregates. `aggregate_extension_stats(run)`
+  rollup; `workflow_engine._persist_run` calls it before serializing.
+- **Phase 2c — lightweight role + archetypes + composer assist (PR #123).**
+  New `lightweight` entry in `ROLE_PATTERNS` (sub-3B candidates).
+  `api/services/archetypes.py` ships 9 built-in archetypes
+  (`bash_script`, `code_review`, `documentation`, `research_brief`,
+  `extraction`, `synthesis`, `data_lookup`, `xsiam_analysis`, `triage`);
+  `infer_archetype` scores MCP triggers × 2 + skill triggers + role
+  bonus. `POST /api/workflows/composer/assist` returns inferred archetype
+  + companion suggestions.
+- **Phase 2b — co-scheduler / resource-maximization compiler pass
+  (PR #124).** `api/services/co_scheduler.py` computes per-step pressure
+  (`model footprint × 1.15 KV + MCP RSS estimate`) against
+  `deployment.effective_memory_gb() × 85%`; flags contention steps;
+  picks action per priority: **archetype-aware substitution → split →
+  reorder → block**. `WorkflowDefaults.co_scheduling_policy` literal
+  (`off` / `recommend` / `warn_strict` / `reject` / `auto_substitute`).
+  Recommendations surfaced in the validate response body.
+- **Engine-side pool lifecycle (PR #125).** `_safe_drain_mcp_pool(run)`
+  helper called by `_persist_run` (normal path) and by `run()`/`resume()`
+  try-except (exception path) so warm runners never leak. Drained stats
+  attach to `WorkflowRun.mcp_runners`.
+- **Phase 7.2 + 7.3 — security defaults (PR #126).** `docker-compose.yml`
+  api service drops all Linux capabilities, forbids privilege escalation,
+  mounts `/tmp` as bounded tmpfs. `desktop/entitlements.plist` explicitly
+  declares the sandbox posture + JIT / unsigned-executable-memory /
+  network entitlements. New `docs/deployment/dmg-mcp-security.md`
+  documents the trust boundary.
+- **Phase 4.2 — plugin tool capture (PR #127).** `HookContext.step_result`
+  field; `step_executor` passes it. `plugin_tool_invoker` records a
+  `PluginToolCall` (ok / error + `error_class`) on every
+  `service.call_tool` invocation; `for_each` mode emits one record per
+  iteration; `extension_overhead_ms` accumulates.
+- **Phase 4.3 — MCP tool capture (this PR).** New
+  `api/hooks/builtins/mcp_tool_invoker.py` (mirrors `plugin_tool_invoker`)
+  routes invocations through `MCPService.invoke_tool(run_id=…, scope=…)`
+  so calls share the warm pool; records `MCPCall` (ok / error / timeout
+  + request/response sizes) on `ctx.step_result.mcp_calls`. Engine
+  factory + workflow validator recognize the new hook.
+
 ### Added — Platform UX refresh (PRs #69–72, #89)
 
 - Dedicated **Runs tab** with first-class run inspector, dark-mode demo
