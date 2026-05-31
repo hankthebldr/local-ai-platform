@@ -1,7 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Enclave DMG entitlements.
+
+  Phase 7.3 (MCP & Skills) — stdio MCP subprocesses spawned by the app
+  inherit these entitlements; see docs/deployment/dmg-mcp-security.md
+  for scope and the path to a stricter (sandboxed) build.
+
+  Notable choices:
+    com.apple.security.app-sandbox = false
+      v1 ships unsandboxed because user-installed MCP binaries under
+      ~/Library/Application Support/Enclave/mcp/binaries/ need free
+      access to the user's filesystem to do their job. Sandboxed
+      builds require per-binary user-selected file scopes — out of
+      v1 scope.
+
+    com.apple.security.cs.allow-jit / allow-unsigned-executable-memory
+      Required by py2app + the embedded Python interpreter so the
+      .app bundle can exec downstream MCP binaries without hardened-
+      runtime rejecting their pages.
+
+    com.apple.security.network.client / .server
+      Network client for outbound calls to Ollama + HTTP MCPs; server
+      so the API can bind 127.0.0.1:8000 for the Cortex Console UI.
+-->
 <plist version="1.0">
 <dict>
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
     <key>com.apple.security.cs.disable-library-validation</key>
