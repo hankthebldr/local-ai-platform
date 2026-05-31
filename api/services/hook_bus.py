@@ -34,6 +34,12 @@ class HookContext:
     parsed: Any = None  # set after successful validation
     error: Any = None  # ValidationError | None, set at on_failure
     attempt: int = 0
+    # Phase 4.2 (MCP & Skills) — the in-flight StepResult so hooks can
+    # append instrumentation records (PluginToolCall / MCPCall /
+    # SkillActivation) directly onto the run record without round-tripping
+    # through the engine. None during workflow-stage hooks; populated
+    # for every step-scoped dispatch from step_executor.
+    step_result: Any = None
 
 
 @dataclass

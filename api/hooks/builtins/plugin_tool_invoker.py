@@ -30,7 +30,6 @@ from typing import Any, Dict, List, Optional
 from api.logging_config import logger
 from api.services.hook_bus import HookContext, HookResult
 
-
 # ── Shared PluginService singleton ────────────────────────────────────────────
 #
 # Lazily scan plugins on first use.  Tests can override by injecting a custom
@@ -154,7 +153,7 @@ class PluginToolInvokerHook:
                             f"plugin_tool_invoker: param_template did not resolve "
                             f"to a dict at index {idx}"
                         )
-                    result = service.call_tool(self.plugin_id, self.tool_id, params)
+                    result = self._call_with_instrumentation(ctx, service, params)
                     results.append(result)
                 payload: Any = results
             else:
@@ -162,7 +161,7 @@ class PluginToolInvokerHook:
                 params: Dict[str, Any] = {}
                 for param_name, ref in params_from.items():
                     params[param_name] = context.resolve_input(ref)
-                payload = service.call_tool(self.plugin_id, self.tool_id, params)
+                payload = self._call_with_instrumentation(ctx, service, params)
 
             context.set_workspace(ctx.step.id, self.store_as, payload)
             return HookResult(action="continue")
@@ -173,3 +172,65 @@ class PluginToolInvokerHook:
                 f"tool={self.tool_id} step={getattr(ctx.step, 'id', '?')}): {e}"
             )
             return HookResult(action="fail", feedback=str(e))
+
+    def _call_with_instrumentation(
+        self, ctx: HookContext, service: Any, params: Dict[str, Any]
+    ) -> Any:
+        """Time one ``service.call_tool`` invocation and record a
+        ``PluginToolCall`` on the step result.
+
+        Phase 4.2 — extension instrumentation. The record is only written
+        when ``ctx.step_result`` is present (step_executor passes it on
+        every dispatch; workflow-stage callers may not). Errors are
+        captured as ``status="error"`` records so a failed tool still
+        shows up on the dashboard, then re-raised so the existing
+        try/except in __call__ converts the hook to a fail result.
+        """
+        import time
+
+        t0 = time.monotonic()
+        try:
+            result = service.call_tool(self.plugin_id, self.tool_id, params)
+            duration_ms = (time.monotonic() - t0) * 1000.0
+            self._record_call(ctx, duration_ms, status="ok")
+            return result
+        except Exception as exc:
+            duration_ms = (time.monotonic() - t0) * 1000.0
+            self._record_call(
+                ctx,
+                duration_ms,
+                status="error",
+                error_class=type(exc).__name__,
+            )
+            raise
+
+    def _record_call(
+        self,
+        ctx: HookContext,
+        duration_ms: float,
+        *,
+        status: str,
+        error_class: Optional[str] = None,
+    ) -> None:
+        """Append a PluginToolCall record onto the step result, no-op when the
+        result handle isn't attached (legacy callers, workflow-stage hooks)."""
+        result = getattr(ctx, "step_result", None)
+        if result is None:
+            return
+        try:
+            from api.models.workflow_models import PluginToolCall
+
+            result.plugin_tools_called.append(
+                PluginToolCall(
+                    plugin_id=self.plugin_id,
+                    tool_id=self.tool_id,
+                    duration_ms=round(duration_ms, 3),
+                    status=status,  # type: ignore[arg-type]
+                    error_class=error_class,
+                )
+            )
+            result.extension_overhead_ms = round(
+                result.extension_overhead_ms + duration_ms, 3
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"plugin_tool_invoker: instrumentation skipped: {exc}")
