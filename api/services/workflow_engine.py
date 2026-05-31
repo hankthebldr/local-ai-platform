@@ -194,6 +194,9 @@ class WorkflowEngine:
         # warnings (registered-but-unreachable MCPs, missing-skill plugin)
         # alongside the success response.
         self._last_extension_result = None
+        # Phase 2b (MCP & Skills) — co-scheduler's last output stashed for
+        # the validate endpoint to surface optimization recommendations.
+        self._last_co_scheduling_result = None
         # Phase 5.4 — page-cache recency window for warm_eviction_candidate
         # decisions on UnifiedArchitecture. Models evicted within this many
         # seconds are flagged as still-mmap-able. 5 min is the documented
@@ -522,6 +525,28 @@ class WorkflowEngine:
             # Extension pre-flight must never crash validation — fail soft
             # the same way the scheduler check does.
             logger.debug(f"Extension pre-flight skipped: {e}")
+
+        # Phase 2b — resource-maximization compiler pass. Walks per-step
+        # pressure (model footprint + MCP RSS estimate) against the
+        # arch / deployment budget; emits optimization recommendations
+        # under the workflow's co_scheduling_policy. Always fail-soft.
+        try:
+            from .co_scheduler import apply_co_scheduling_policy
+
+            cs = apply_co_scheduling_policy(
+                definition,
+                policy=definition.defaults.co_scheduling_policy,
+            )
+            self._last_co_scheduling_result = cs
+            for line in cs.errors:
+                errors.append(line)
+            # warn_strict warnings get promoted only when STRICT_VALIDATION is
+            # also on — keeps the policy hierarchy: reject > strict > recommend.
+            if cs.warnings and _strict_validation():
+                for w in cs.warnings:
+                    errors.append(w)
+        except Exception as e:
+            logger.debug(f"co-scheduler skipped: {e}")
 
         if errors:
             raise WorkflowValidationError(
