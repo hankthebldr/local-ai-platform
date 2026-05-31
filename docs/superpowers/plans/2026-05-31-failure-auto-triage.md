@@ -731,7 +731,9 @@ git commit -m "feat(triage): step-summary markdown emitter"
 
 ---
 
-### Task 7: Deduplicating GitHub Issue emitter
+### Task 7: Deduplicating, rate-limit-safe GitHub Issue emitter
+
+> **Operator guardrail (Henry, 2026-05-31): do NOT blow up the GitHub API.** GitHub's *search* API caps at **30 req/min** and content creation has secondary abuse limits. This emitter therefore: makes **one** `gh issue list` call per run (core REST, never `--search`), builds a fingerprint→issue map in memory, **dedupes verdicts before any API call**, **caps issues per run** (default 10, suppressed count logged), **throttles** between writes, and **hard-stops on the first API error** (no retry storm).
 
 **Files:**
 - Create: `triage/emitters/github_issues.py`
@@ -749,39 +751,67 @@ from triage.emitters.github_issues import GitHubIssueEmitter, MARKER
 from triage.models import FailureEvent, TriageVerdict, Severity, Category
 
 
-def _v(fp="abc123"):
+def _v(fp="abc123", sev=Severity.high):
     ev = FailureEvent(source="ci", exception_type="AssertionError", message="boom", test_id="t::a", fingerprint=fp)
-    return TriageVerdict(event=ev, severity=Severity.high, category=Category.assertion, rule_summary="regression")
+    return TriageVerdict(event=ev, severity=sev, category=Category.assertion, rule_summary="regression")
 
 
 class FakeGh:
-    def __init__(self, existing_body=None):
+    """Records gh calls. `existing` maps fingerprint -> issue number (pre-existing open issues)."""
+
+    def __init__(self, existing=None):
         self.calls = []
-        self._existing_body = existing_body
+        self._existing = existing or {}
 
     def __call__(self, args):
         self.calls.append(args)
         if "list" in args:
-            issues = [{"number": 7, "body": self._existing_body}] if self._existing_body else []
-            return json.dumps(issues)
+            return json.dumps([{"number": n, "body": MARKER.format(fp=fp)} for fp, n in self._existing.items()])
         return ""
 
 
-def test_new_failure_searches_then_creates():
-    gh = FakeGh(existing_body=None)
-    GitHubIssueEmitter(repo="o/r", runner=gh).emit([_v()])
-    kinds = [a[1] for a in gh.calls]  # gh <subcommand> ...
-    assert kinds[0] == "issue" and "list" in gh.calls[0]      # dedup search FIRST
-    assert any("create" in c for c in gh.calls)               # then create
-    create = [c for c in gh.calls if "create" in c][0]
-    assert "--label" in create
+def test_lists_once_then_creates_no_per_fingerprint_search():
+    gh = FakeGh(existing={})
+    GitHubIssueEmitter(repo="o/r", runner=gh, throttle_s=0).emit([_v()])
+    # Exactly ONE list call, and NO --search (the search API caps at 30/min — must avoid).
+    assert sum(1 for c in gh.calls if "list" in c) == 1
+    assert not any("--search" in c for c in gh.calls)
+    create = [c for c in gh.calls if "create" in c]
+    assert len(create) == 1 and "--label" in create[0]
 
 
 def test_recurrence_comments_not_duplicates():
-    gh = FakeGh(existing_body=MARKER.format(fp="abc123"))
-    GitHubIssueEmitter(repo="o/r", runner=gh).emit([_v()])
+    gh = FakeGh(existing={"abc123": 7})
+    GitHubIssueEmitter(repo="o/r", runner=gh, throttle_s=0).emit([_v()])
     assert any("comment" in c for c in gh.calls)
     assert not any("create" in c for c in gh.calls)
+
+
+def test_dedupe_collapses_same_fingerprint_to_one_create():
+    gh = FakeGh(existing={})
+    GitHubIssueEmitter(repo="o/r", runner=gh, throttle_s=0).emit([_v(fp="dup"), _v(fp="dup"), _v(fp="dup")])
+    assert sum(1 for c in gh.calls if "create" in c) == 1   # 3 same-fp verdicts -> 1 issue
+
+
+def test_caps_issues_per_run_and_warns(capsys):
+    gh = FakeGh(existing={})
+    verdicts = [_v(fp=f"fp{i}") for i in range(5)]
+    GitHubIssueEmitter(repo="o/r", runner=gh, throttle_s=0, max_issues=2).emit(verdicts)
+    assert sum(1 for c in gh.calls if "create" in c) == 2   # capped at 2
+    assert "3 more distinct failures not filed" in capsys.readouterr().out
+
+
+def test_api_error_stops_without_retry_storm(capsys):
+    class BoomGh(FakeGh):
+        def __call__(self, args):
+            if "create" in args:
+                raise RuntimeError("API rate limit exceeded")
+            return super().__call__(args)
+
+    gh = BoomGh(existing={})
+    GitHubIssueEmitter(repo="o/r", runner=gh, throttle_s=0).emit([_v(fp="a"), _v(fp="b")])
+    assert sum(1 for c in gh.calls if "create" in c) == 1   # stop after first error, no storm
+    assert "stopped" in capsys.readouterr().out
 
 
 def test_dry_run_emits_nothing(capsys):
@@ -803,17 +833,29 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'triage.emitters.github
 from __future__ import annotations
 
 import json
+import re
 import subprocess
+import time
 
-from ..models import TriageVerdict
+from ..models import TriageVerdict, Severity
 
 MARKER = "<!-- fp:{fp} -->"
+_FP_RE = re.compile(r"<!-- fp:([0-9a-f]+) -->")
+_SEVERITY_ORDER = {Severity.critical: 0, Severity.high: 1, Severity.medium: 2, Severity.low: 3}
 
 
 class GitHubIssueEmitter:
-    def __init__(self, *, repo: str | None = None, dry_run: bool = False, runner=None):
+    """Files deduplicated GitHub issues while staying well under GitHub API rate limits:
+    ONE `issue list` per run (core REST, never the 30/min search API), in-memory
+    fingerprint dedup, a per-run issue cap, throttling between writes, and a hard stop
+    on the first API error (no retry storm)."""
+
+    def __init__(self, *, repo: str | None = None, dry_run: bool = False, runner=None,
+                 max_issues: int = 10, throttle_s: float = 1.0):
         self.repo = repo
         self.dry_run = dry_run
+        self.max_issues = max_issues
+        self.throttle_s = throttle_s
         self._run = runner or self._default_run
 
     def _default_run(self, args: list[str]) -> str:
@@ -826,29 +868,54 @@ class GitHubIssueEmitter:
         return self._run(cmd)
 
     def emit(self, verdicts: list[TriageVerdict]) -> None:
-        for v in verdicts:
-            self._emit_one(v)
-
-    def _find_existing(self, fp: str) -> int | None:
-        marker = MARKER.format(fp=fp)
-        out = self._gh("issue", "list", "--label", "triage:auto", "--state", "open",
-                       "--search", fp, "--json", "number,body", "--limit", "50")
-        for issue in json.loads(out or "[]"):
-            if marker in (issue.get("body") or ""):
-                return issue["number"]
-        return None
-
-    def _emit_one(self, v: TriageVerdict) -> None:
-        fp = v.event.fingerprint
+        deduped = self._dedupe(verdicts)
         if self.dry_run:
-            print(f"[dry-run] would emit issue for fp={fp} ({v.severity.value})")
+            for v in deduped:
+                print(f"[dry-run] would emit issue for fp={v.event.fingerprint} ({v.severity.value})")
             return
-        existing = self._find_existing(fp)
-        if existing is not None:
-            self._gh("issue", "comment", str(existing), "--body", self._recurrence_body(v))
-            return
-        self._gh("issue", "create", "--title", self._title(v), "--body", self._body(v),
-                 "--label", self._labels(v))
+        existing = self._existing_map()  # ONE list call — never per-fingerprint search
+        ranked = sorted(deduped, key=lambda v: _SEVERITY_ORDER.get(v.severity, 9))
+        capped, suppressed = ranked[: self.max_issues], ranked[self.max_issues:]
+        for i, v in enumerate(capped):
+            try:
+                self._emit_one(v, existing)
+            except Exception as exc:  # rate limit / API failure → stop, don't retry-storm
+                print(f"::warning::triage issue emit stopped after {i} issue(s) (GitHub API error: {exc})")
+                return
+            if self.throttle_s and i < len(capped) - 1:
+                time.sleep(self.throttle_s)
+        if suppressed:
+            fps = ", ".join(v.event.fingerprint for v in suppressed)
+            print(f"::warning::{len(suppressed)} more distinct failures not filed this run "
+                  f"(cap={self.max_issues}, avoids GitHub rate limits): {fps}")
+
+    def _dedupe(self, verdicts: list[TriageVerdict]) -> list[TriageVerdict]:
+        by_fp: dict[str, TriageVerdict] = {}
+        for v in verdicts:
+            fp = v.event.fingerprint
+            if fp in by_fp:
+                by_fp[fp].seen_count += 1
+            else:
+                by_fp[fp] = v
+        return list(by_fp.values())
+
+    def _existing_map(self) -> dict[str, int]:
+        out = self._gh("issue", "list", "--label", "triage:auto", "--state", "open",
+                       "--json", "number,body", "--limit", "100")
+        mapping: dict[str, int] = {}
+        for issue in json.loads(out or "[]"):
+            m = _FP_RE.search(issue.get("body") or "")
+            if m:
+                mapping[m.group(1)] = issue["number"]
+        return mapping
+
+    def _emit_one(self, v: TriageVerdict, existing: dict[str, int]) -> None:
+        fp = v.event.fingerprint
+        if fp in existing:
+            self._gh("issue", "comment", str(existing[fp]), "--body", self._recurrence_body(v))
+        else:
+            self._gh("issue", "create", "--title", self._title(v), "--body", self._body(v),
+                     "--label", self._labels(v))
 
     def _title(self, v: TriageVerdict) -> str:
         return f"[{v.severity.value}] {v.category.value}: {v.event.message[:80]}"
@@ -877,7 +944,7 @@ class GitHubIssueEmitter:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/triage/test_github_issues.py -v`
-Expected: PASS (3 passed)
+Expected: PASS (6 passed)
 
 - [ ] **Step 5: Commit**
 
@@ -981,7 +1048,7 @@ def _run_ci(args) -> int:
         if _is_fork_pr():
             print("::notice::fork PR — skipping issue creation (read-only token)")
         else:
-            GitHubIssueEmitter(repo=args.repo).emit(verdicts)
+            GitHubIssueEmitter(repo=args.repo, max_issues=args.max_issues).emit(verdicts)
 
     if args.fail_on == "critical" and any(v.severity.value == "critical" for v in verdicts):
         return 2
@@ -998,6 +1065,8 @@ def main(argv=None) -> int:
     ci.add_argument("--repo-root", default=os.getcwd())
     ci.add_argument("--dry-run", action="store_true")
     ci.add_argument("--fail-on", choices=["none", "critical"], default="none")
+    ci.add_argument("--max-issues", type=int, default=10,
+                    help="cap issues filed per run (GitHub rate-limit guard)")
     args = p.parse_args(argv)
     if args.cmd == "ci":
         return _run_ci(args)

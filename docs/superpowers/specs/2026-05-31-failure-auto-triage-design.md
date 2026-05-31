@@ -177,9 +177,10 @@ pytest tests/ ... --junitxml=reports/junit.xml      # --junitxml is built into p
 
 - **`annotations.py`** — prints `::error file={file},line={line},title={severity}: {category}::{message}` (and `::warning::` for `low`). GitHub renders these inline on the PR diff and in the log. Stdout only, zero deps.
 - **`step_summary.py`** *(default-on, per operator decision 2026-05-31)* — appends a markdown table (severity · category · test · summary · issue link) to `$GITHUB_STEP_SUMMARY` for an at-a-glance run overview.
-- **`github_issues.py`** — dedup-aware via `gh`:
-  - Search open issues labelled `triage:auto` for the body marker `<!-- fp:{fingerprint} -->`.
-  - **Recurrence** → add a comment ("Recurred in {run_url}, now seen ×N") and bump `seen_count`; no duplicate opened.
+- **`github_issues.py`** — dedup-aware via `gh`, **engineered to stay under GitHub API rate limits** (operator guardrail, 2026-05-31):
+  - **One** `gh issue list --label triage:auto --state open` call per run (core REST), building an in-memory `{fingerprint → issue#}` map from `<!-- fp:… -->` markers. **Never** a per-failure `--search` (the search API caps at 30 req/min).
+  - **Dedupe verdicts by fingerprint before any API call**; **cap issues/run** (default 10, `--max-issues`, suppressed count logged via `::warning::`); **throttle** between writes; **hard-stop on the first API error** (no retry storm).
+  - **Recurrence** (fp already in map) → add a comment ("Recurred in {run_url}, now seen ×N") and bump `seen_count`; no duplicate opened.
   - **New** → create issue: title `[{severity}] {category}: {short message}`, labels `bug, triage:auto, severity:{x}, category:{y}`, body in the [bug_report.yml](../../../.github/ISSUE_TEMPLATE/bug_report.yml) shape (description / repro hint / version / os / logs=traceback) + fp marker + run link + enrichment if present.
   - A small idempotent label-bootstrap (`gh label create …`) ensures `severity:*`, `category:*`, `triage:auto` exist.
 
@@ -296,7 +297,7 @@ CI-side knobs are CLI args: `--emit annotations,summary,issues`, `--repo`, `--dr
 - **JUnit parser:** against `tests/fixtures/junit/*.xml` (pass, single failure, error, mass-failure fixtures).
 - **Classifier:** table-driven `event → (severity, category)` including the >50% escalation.
 - **Redaction:** leak-assertions — feed a payload containing a fake `sk-` key, a prompt, and a `/Users/henry/...` path; assert none survive.
-- **Emitters:** annotations format; step-summary markdown; `github_issues` mocks the `gh` subprocess and asserts a **dedup search precedes any create**; `webhook` mocks the HTTP client and asserts the payload is redacted.
+- **Emitters:** annotations format; step-summary markdown; `github_issues` mocks the `gh` subprocess and asserts **one `list` call precedes any create (no per-fingerprint `--search`)**, fingerprint dedup collapses duplicates, the per-run cap holds with a logged suppression, and an API error stops without a retry storm; `webhook` mocks the HTTP client and asserts the payload is redacted.
 - **Enrichment:** Ollama unreachable → `enriched=False`, no raise.
 - **Runtime handler:** a `TestClient` test raising in a route asserts the 500 envelope shape, that reporting is skipped when the flag is off, and (flag on, mock sink) that a redacted payload is delivered without blocking the response.
 
