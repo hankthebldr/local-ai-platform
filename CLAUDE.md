@@ -4,7 +4,7 @@ Guidance for Claude Code working on this repo.
 
 ## Project
 
-Enclave — self-hosted local LLM platform. CPU-first inference, privacy-first, no telemetry. Fleet:
+Enclave — self-hosted local LLM platform. CPU-first inference, privacy-first, no telemetry by default (opt-in operator-owned error reporting). Fleet:
 Mac M4 Pro 48GB (dev) · MS-01 64GB (API) · BD790i 96GB (flagship). Authoritative model catalog: [MODELS.md](./MODELS.md).
 
 ## Core workflow
@@ -99,4 +99,4 @@ Roadmap (single-operator-appliance track):
 - **CORS / Auth defaults:** CORS to `["*"]` only if `CORS_ORIGINS` unset (startup warning fires); auth off by default (`ENABLE_API_AUTH=false`) — set both before non-localhost exposure.
 - **Ollama version pinned to `0.23.4`** (see `docs/deployment/ollama-version.md`). The architecture-aware orchestration code (1.3.0+) requires this floor. Detector at `api/services/architecture.py` enforces it at startup.
 - **NVIDIA introspection:** `nvidia-ml-py` is a core dependency (in `setup/requirements-core.txt`). Imports cleanly on non-NVIDIA hosts; `pynvml.nvmlInit()` raises `NVMLError("Shared Library Not Found")` which the detector catches and treats as `cpu_x86` / `apple_unified` per platform.
-- **No telemetry. No cloud. All data local.**
+- **No telemetry by default. No cloud inference. All data local.** Error reporting is **opt-in and off by default** (`ENABLE_ERROR_REPORTING=false`); when enabled it is **operator-owned** (reports go to *your* sink) and **redaction is mandatory**. Optional vendor phone-home is separate, explicit, and disabled by default. See `docs/superpowers/specs/2026-05-31-failure-auto-triage-design.md` and `docs/deployment/error-reporting.md`.
