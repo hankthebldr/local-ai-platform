@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" tests="3" failures="1" errors="0">
+    <testcase classname="tests.unit.test_math" name="test_add" time="0.01"/>
+    <testcase classname="tests.unit.test_math" name="test_divide" time="0.01">
+      <failure message="assert 1 == 2" type="AssertionError">Traceback (most recent call last):
+  File "/repo/tests/unit/test_math.py", line 12, in test_divide
+    assert divide(4, 2) == 2
+AssertionError: assert 1 == 2</failure>
+    </testcase>
+    <testcase classname="tests.unit.test_io" name="test_read" time="0.01"/>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1">
+<testcase classname="tests.unit.test_real" name="test_thing" time="0.001"><failure message="assert 1 == 2">def test_thing():
+&gt;       assert 1 == 2
+E       assert 1 == 2
+
+/repo/tests/unit/test_real.py:2: AssertionError</failure></testcase>
+</testsuite></testsuites>
