@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" tests="5" failures="0" errors="4">
+    <testcase classname="tests.unit.test_a" name="test_1"><error message="No module named 'api.services.gone'" type="ModuleNotFoundError">ModuleNotFoundError: No module named 'api.services.gone'</error></testcase>
+    <testcase classname="tests.unit.test_b" name="test_2"><error message="No module named 'api.services.gone'" type="ModuleNotFoundError">x</error></testcase>
+    <testcase classname="tests.unit.test_c" name="test_3"><error message="No module named 'api.services.gone'" type="ModuleNotFoundError">x</error></testcase>
+    <testcase classname="tests.unit.test_d" name="test_4"><error message="No module named 'api.services.gone'" type="ModuleNotFoundError">x</error></testcase>
+    <testcase classname="tests.unit.test_e" name="test_5" time="0.01"/>
+  </testsuite>
+</testsuites>
