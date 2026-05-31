@@ -18,6 +18,7 @@ import api.services.deployment as deployment_mod
 from api.routers.system import router as system_router
 from api.services.deployment import detect_deployment
 from api.services.mcp_runner_pool import reset_mcp_runner_pool
+from api.services.mcp_service import reset_mcp_service
 from tests.mocks.deployment.mock_host_native import patch_host_native
 from tests.mocks.deployment.mock_container import patch_container
 
@@ -30,14 +31,23 @@ def _make_app() -> FastAPI:
 
 @contextlib.contextmanager
 def _isolated_deployment(patcher):
-    """Install a fresh deployment singleton, run, restore prior state."""
+    """Install a fresh deployment + MCP singletons, run, restore prior state.
+
+    Earlier tests in the suite may have cached an MCPService against a
+    different deployment's storage root (the singleton survives across
+    tests). We reset both the deployment and the MCP service so the
+    /extensions endpoint sees deployment-correct paths.
+    """
     saved = deployment_mod._current_deployment
+    reset_mcp_service()
+    reset_mcp_runner_pool()
     try:
         with patcher as ctx:
             detect_deployment()
             yield ctx
     finally:
         deployment_mod._current_deployment = saved
+        reset_mcp_service()
         reset_mcp_runner_pool()
 
 
