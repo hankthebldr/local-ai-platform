@@ -10,6 +10,9 @@ jobs:
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # triage issue emitter; fork PRs get a read-only token anyway
     strategy:
       fail-fast: false
       matrix:
@@ -37,12 +40,37 @@ jobs:
       #   -m "not rag" — RAG suite needs sentence-transformers + Chroma which
       #     are heavy to install on every CI run.
       # Coverage is reported but not yet enforced; the 2.0.0 bar is >=70%.
+      # `set +e` lets the triage step run even on failure; the real exit code is
+      # saved and re-asserted by the final "Enforce" step so job status is honest.
       - name: Run tests
+        id: pytest
         run: |
+          set +e
           pytest tests/ -v --tb=short \
             -k "not Integration and not TestAuthentication and not TestMultiKeyAuth" \
             -m "not rag" \
-            --cov=api --cov-report=term --cov-report=xml
+            --cov=api --cov-report=term --cov-report=xml \
+            --junitxml=reports/junit.xml
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # Auto-triage: annotations + run-summary on every run; deduped issues ONLY
+      # on master pushes (PR failures are expected during iteration). Fork PRs get
+      # a read-only token, so issue creation is detected + skipped by the CLI.
+      # Uses built-in $GITHUB_EVENT_NAME / $GITHUB_REF (no ${{ }} in the shell).
+      - name: Auto-triage failures
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ENCLAVE_VERSION: ${{ github.sha }}
+          TRIAGE_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          EMIT="annotations,summary"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            EMIT="annotations,summary,issues"
+          fi
+          echo "Triage emit set: $EMIT"
+          python -m triage ci --junit reports/junit.xml --emit "$EMIT"
 
       - name: Upload coverage artifact
         if: matrix.python-version == '3.12'
@@ -51,6 +79,10 @@ jobs:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: warn
+
+      - name: Enforce test result
+        if: always()
+        run: exit ${{ steps.pytest.outputs.rc }}
 
   lint:
     name: Lint
