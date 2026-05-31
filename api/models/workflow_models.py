@@ -813,6 +813,17 @@ class WorkflowDefaults(BaseModel):
     #   "manual"   — no auto-injection; step must call out skills
     #   "off"      — disable injection entirely for this workflow
     skill_injection: Literal["auto", "explicit", "manual", "off"] = "auto"
+    # Phase 2b (MCP & Skills) — how the compiler responds when it detects
+    # MCP / heavy-model contention. See api/services/co_scheduler.py.
+    #   "off"             — no analysis
+    #   "recommend"       — default; emit optimization_recommendations
+    #   "warn_strict"     — promote suggestions to warnings (still runs)
+    #   "reject"          — block compile on any contention step
+    #   "auto_substitute" — apply recommend_smaller_model automatically
+    #                       when available; leave the rest as recommendations
+    co_scheduling_policy: Literal[
+        "off", "recommend", "warn_strict", "reject", "auto_substitute"
+    ] = "recommend"
 
 
 class WorkflowDefinition(BaseModel):

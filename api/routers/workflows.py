@@ -172,6 +172,14 @@ async def validate_workflow(req: WorkflowValidateRequest):
             "mcp": ext.mcp_warnings,
             "skill": ext.skill_warnings,
         }
+    # Phase 2b — co-scheduler optimization recommendations. Always non-fatal
+    # at this point (any errors would have raised 422 above); the composer
+    # renders these inline so the operator can decide whether to apply.
+    cs = getattr(engine, "_last_co_scheduling_result", None)
+    if cs is not None and cs.recommendations:
+        body["optimization_recommendations"] = [
+            r.model_dump() for r in cs.recommendations
+        ]
     return body
 
 
