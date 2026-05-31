@@ -596,10 +596,17 @@ class WorkflowEngine:
         # Initial checkpoint so the run is discoverable mid-flight.
         self._checkpoint(workflow_run)
 
-        self._execute_steps(workflow_run, definition, context, definition.steps)
-
-        # Final terminal persist (full artifacts + summary).
-        self._persist_run(workflow_run, definition)
+        try:
+            self._execute_steps(workflow_run, definition, context, definition.steps)
+            # Final terminal persist (full artifacts + summary). _persist_run
+            # itself drains the MCP runner pool before serializing.
+            self._persist_run(workflow_run, definition)
+        except Exception:
+            # Defensive: if anything escapes _execute_steps before _persist_run
+            # runs, the pool's runners would leak. Drain them here; the drain
+            # is idempotent so this is harmless when _persist_run already ran.
+            self._safe_drain_mcp_pool(workflow_run)
+            raise
         return workflow_run
 
     def resume(
@@ -651,9 +658,14 @@ class WorkflowEngine:
         workflow_run.status = "running"
         self._checkpoint(workflow_run)
 
-        self._execute_steps(workflow_run, definition, workflow_run.context, remaining)
-
-        self._persist_run(workflow_run, definition)
+        try:
+            self._execute_steps(
+                workflow_run, definition, workflow_run.context, remaining
+            )
+            self._persist_run(workflow_run, definition)
+        except Exception:
+            self._safe_drain_mcp_pool(workflow_run)
+            raise
         return workflow_run
 
     def _execute_steps(
@@ -1311,6 +1323,28 @@ class WorkflowEngine:
 
     # ── Persist Phase ──────────────────────────────────────────────────
 
+    def _safe_drain_mcp_pool(self, run: WorkflowRun) -> None:
+        """Idempotent MCP pool drain. Used by the execute/resume safety
+        try/finally to guarantee no warm runners leak when an exception
+        escapes ``_execute_steps`` before ``_persist_run`` could drain
+        them. ``_persist_run`` calls this same drain at the top, so on
+        the normal path this is a cheap no-op (pool returns ``[]`` once
+        already drained)."""
+        try:
+            from .mcp_runner_pool import get_mcp_runner_pool
+
+            pool = get_mcp_runner_pool()
+            stats = pool.release_workflow(run.run_id)
+            if stats:
+                existing = run.mcp_runners or []
+                existing_keys = {(s.server_id, s.started_at) for s in existing}
+                for s in stats:
+                    if (s.server_id, s.started_at) not in existing_keys:
+                        existing.append(s)
+                run.mcp_runners = existing
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"MCP pool safety drain skipped: {e}")
+
     def _checkpoint(self, run: WorkflowRun) -> None:
         """
         Atomically write the current run.json. Cheap path used after every
@@ -1333,6 +1367,13 @@ class WorkflowEngine:
 
     def _persist_run(self, run: WorkflowRun, definition: WorkflowDefinition) -> None:
         """Terminal persist: run.json + per-step artifact JSONs + summary.md."""
+        # Phase 2 → 4 (MCP & Skills) — drain any warm MCP runners this run
+        # spawned. Subprocesses get terminated and reaped; the returned stats
+        # records land on workflow_run.mcp_runners so the aggregation below
+        # surfaces them on the dashboard. Idempotent for runs that didn't
+        # acquire any runners (the helper returns silently).
+        self._safe_drain_mcp_pool(run)
+
         # Phase 4 (MCP & Skills) — roll per-step extension counts into the
         # run-level totals before we serialize. Idempotent; cheap; runs on
         # every terminal persist (success or failure) so the UI always has
