@@ -39,7 +39,7 @@ Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero 
 - **Multi-agent workflows** — YAML-defined step pipelines with role-based model selection
 - **Web dashboard** — monitor models, system health, and API status
 - **macOS app** — native desktop wrapper with setup wizard
-- **Zero telemetry** — no data leaves your machine. No internet required for inference
+- **No telemetry by default** — no data leaves your machine unless you opt in; optional, operator-owned error reporting (your own sink, redaction mandatory — see [docs/deployment/error-reporting.md](docs/deployment/error-reporting.md)). No internet required for inference
 
 ## Quick start
 
