@@ -508,3 +508,11 @@ def get_mcp_service() -> MCPService:
     if _default_service is None:
         _default_service = MCPService()
     return _default_service
+
+
+def reset_mcp_service() -> None:
+    """Drop the cached singleton so the next get_mcp_service() rebuilds it
+    against whatever deployment is currently installed. Test-only — the
+    production code never calls this. Mirrors reset_mcp_runner_pool()."""
+    global _default_service
+    _default_service = None

@@ -303,3 +303,102 @@ def _systemd_snippet(arch_class, deployment_mode, recs) -> str:
         "# /etc/systemd/system/ollama.service.d/override.conf\n"
         "[Service]\n" + "\n".join(env_lines)
     )
+
+
+# ── Extensions overview (Phase 7.1, MCP & Skills) ────────────────────────
+
+
+@router.get("/extensions")
+def get_extensions() -> Dict[str, Any]:
+    """One-stop deployment-aware view of the extension subsystem.
+
+    Surfaces, for the operator dashboard and `enclave status` CLI:
+      - **deployment** mode (DMG / container / host_native)
+      - **plugin paths** (system layer + writable user layer) — Phase 1
+      - **MCP registry path** + binaries dir (the writable user-layer
+        locations migrated to during Phase 1.3) and live runner pool
+        state (Phase 2 / Phase 3)
+      - **cache paths** under the user layer
+
+    All paths are resolved from the active Deployment singleton so the
+    answer is correct on every form factor. Tolerates a missing pool
+    (no workflow has spawned a runner yet → empty active_runners).
+    """
+    from ..services.deployment import _get_current as _get_deployment
+
+    try:
+        d = _get_deployment()
+    except RuntimeError:
+        # detect_deployment() hasn't run yet — should be vanishingly rare in
+        # practice (api/main.py calls it at startup), but tests sometimes
+        # import this module before lifecycle setup.
+        raise HTTPException(
+            status_code=503,
+            detail="deployment not initialized; call detect_deployment() at startup",
+        )
+
+    # MCP service path + binaries dir
+    mcp_service_block: Dict[str, Any] = {}
+    try:
+        from ..services.mcp_service import get_mcp_service
+
+        svc = get_mcp_service()
+        mcp_service_block = {
+            "registry_path": str(svc.storage_path),
+            "binaries_dir": str(svc.binaries_dir),
+            "registered_count": len(svc.list_servers()),
+        }
+    except Exception as exc:  # noqa: BLE001 - tolerate transient init failures
+        logger.debug("mcp_service block skipped: %s", exc)
+        mcp_service_block = {"error": str(exc)}
+
+    # Live runner-pool stats
+    pool_block: Dict[str, Any] = {}
+    try:
+        from ..services.mcp_runner_pool import get_mcp_runner_pool
+
+        pool = get_mcp_runner_pool()
+        pool_block = {
+            "active_runners": pool.runner_count(),
+            "total_overhead_mb": round(pool.total_runner_overhead_mb(), 2),
+            "runners": pool.list_runners(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("runner_pool block skipped: %s", exc)
+        pool_block = {"error": str(exc)}
+
+    user_plugin_dir = d.user_storage_root / "plugins"
+    return {
+        "deployment": d.mode.value,
+        "plugin_paths": {
+            "system": str(d.system_storage_root / "plugins"),
+            "user": str(user_plugin_dir),
+            "user_writable": _is_writable(user_plugin_dir),
+        },
+        "mcp": {
+            **mcp_service_block,
+            "pool": pool_block,
+        },
+        "cache": {
+            "plugins_cache": str(d.user_storage_root / "cache" / "plugins.cache.json"),
+            "mcp_tools_cache": str(
+                d.user_storage_root / "cache" / "mcp-tools.cache.json"
+            ),
+        },
+    }
+
+
+def _is_writable(path) -> bool:
+    """Honest answer to "can we write here?" — exists + os.W_OK on the
+    directory itself, or on its parent if the dir hasn't been created yet."""
+    import os
+    from pathlib import Path
+
+    p = Path(path)
+    if p.exists():
+        return os.access(p, os.W_OK)
+    # Walk up to the first existing ancestor and test that.
+    for ancestor in p.parents:
+        if ancestor.exists():
+            return os.access(ancestor, os.W_OK)
+    return False
