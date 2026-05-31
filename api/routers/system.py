@@ -60,6 +60,8 @@ def _arch_payload(arch) -> Dict[str, Any]:
 
 def _deployment_payload(deployment) -> Dict[str, Any]:
     """Serialize a Deployment singleton for API response."""
+    from ..services.deployment import mcp_overhead_gb
+
     return {
         "mode": deployment.mode.value,
         "storage_root": str(deployment.storage_root),
@@ -68,6 +70,10 @@ def _deployment_payload(deployment) -> Dict[str, Any]:
         "ollama_url": deployment.ollama_url,
         "ollama_reachable": deployment.ollama_reachable,
         "effective_memory_gb": deployment.effective_memory_gb(),
+        # Phase 6 — what the effective figure reflects. Operators inspecting
+        # /api/system/architecture during a workflow with heavy MCPs should
+        # see why the budget dropped.
+        "mcp_overhead_gb": round(mcp_overhead_gb(), 3),
         "resource_limits": {
             "memory_gb": deployment.resource_limits.memory_gb,
             "cpu_cores": deployment.resource_limits.cpu_cores,
