@@ -272,6 +272,21 @@ class PluginService:
             return False
         return any(s["id"] == skill_id for s in plugin.get("skills", []))
 
+    def get_skill(self, plugin_id: str, skill_id: str) -> Optional[dict]:
+        """Return the full skill dict (id, name, description, content,
+        inject, triggers) for ``<plugin_id>.<skill_id>``, or None.
+
+        Used by ``skill_injector`` (Phase 4.2 — skill activation capture)
+        to look up a skill body when the operator listed it explicitly on
+        a step rather than relying on keyword triggers."""
+        plugin = self._plugins.get(plugin_id)
+        if not plugin:
+            return None
+        for skill in plugin.get("skills", []):
+            if skill["id"] == skill_id:
+                return skill
+        return None
+
     # ── install / uninstall (Phase 1.4) ─────────────────────────────
 
     def install_plugin(self, archive_path: Path) -> dict:
