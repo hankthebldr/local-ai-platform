@@ -24,6 +24,21 @@ ROLE_PATTERNS: Dict[str, List[str]] = {
     "coding": ["qwen3.5", "qwen2.5-coder", "deepseek-coder", "codellama", "dolphin"],
     "uncensored": ["dolphin", "uncensored", "abliterated", "nous-hermes"],
     "general": ["dolphin", "qwen", "mistral", "llama"],
+    # Phase 2c (MCP & Skills) — sub-3B models. The compiler picks this
+    # role when a step is tool-bound (declares MCPs / plugin tools) but
+    # doesn't name a model — the step's model just has to drive the tools,
+    # not reason deeply. Also the substitution target for archetype-aware
+    # downsizing on contention steps. Falls back to "general" when none of
+    # these are installed.
+    "lightweight": [
+        "qwen2.5:1.5b",
+        "qwen2.5-coder:1.5b",
+        "phi:2.7b",
+        "phi",
+        "llama3.2:3b",
+        "gemma:2b",
+        "qwen2.5:0.5b",
+    ],
 }
 
 
