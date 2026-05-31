@@ -178,12 +178,24 @@ pre-flight, per-step instrumentation, and security hardening.
   `PluginToolCall` (ok / error + `error_class`) on every
   `service.call_tool` invocation; `for_each` mode emits one record per
   iteration; `extension_overhead_ms` accumulates.
-- **Phase 4.3 — MCP tool capture (this PR).** New
+- **Phase 4.3 — MCP tool capture (PR #128).** New
   `api/hooks/builtins/mcp_tool_invoker.py` (mirrors `plugin_tool_invoker`)
   routes invocations through `MCPService.invoke_tool(run_id=…, scope=…)`
   so calls share the warm pool; records `MCPCall` (ok / error / timeout
   + request/response sizes) on `ctx.step_result.mcp_calls`. Engine
   factory + workflow validator recognize the new hook.
+- **Phase 4.2 — skill activation capture (this PR).** New
+  `api/hooks/builtins/skill_injector.py` at `transform_prompt` stage.
+  Honors the mode literal (`off` / `auto` / `explicit` / `manual`):
+  explicit `step.skills` refs always inject; auto mode also runs the
+  `PluginService.get_skills(prompt.user)` keyword match. Per-skill
+  injection site (`inject: system` prepends to `prompt.system`;
+  `inject: messages` appends to `prompt.user`). New
+  `PluginService.get_skill(plugin_id, skill_id)` lookup helper.
+  `max_skills` cap (default 3) prevents prompt bloat. Each activation
+  records a `SkillActivation` (trigger / trigger_match / injected_into
+  / injected_chars) on `ctx.step_result.skills_activated`. **All Phase
+  4 capture sites — plugin tools, MCP tools, skills — are now wired.**
 
 ### Added — Platform UX refresh (PRs #69–72, #89)
 

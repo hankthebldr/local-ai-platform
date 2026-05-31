@@ -1312,6 +1312,7 @@ class WorkflowEngine:
         from api.hooks.builtins.few_shot_injector import FewShotInjectorHook
         from api.hooks.builtins.plugin_tool_invoker import PluginToolInvokerHook
         from api.hooks.builtins.mcp_tool_invoker import MCPToolInvokerHook
+        from api.hooks.builtins.skill_injector import SkillInjectorHook
         from api.hooks.builtins.analyse_xql_gate import AnalyseXqlGateHook
 
         factory = {
@@ -1323,6 +1324,7 @@ class WorkflowEngine:
             "few_shot_injector": FewShotInjectorHook,
             "plugin_tool_invoker": PluginToolInvokerHook,
             "mcp_tool_invoker": MCPToolInvokerHook,
+            "skill_injector": SkillInjectorHook,
             "analyse_xql_gate": AnalyseXqlGateHook,
         }.get(spec.name)
         if factory is None:
