@@ -401,8 +401,14 @@ class WorkflowEngine:
             """
             hooks_block = getattr(step, "hooks", None)
             if hooks_block is not None:
+                # Both plugin_tool_invoker and mcp_tool_invoker write to
+                # workspace[step.id][store_as] before input resolution, so
+                # references to <step_id>.<store_as> resolve cleanly.
                 for spec in getattr(hooks_block, "before_step", []) or []:
-                    if getattr(spec, "name", None) == "plugin_tool_invoker":
+                    if getattr(spec, "name", None) in (
+                        "plugin_tool_invoker",
+                        "mcp_tool_invoker",
+                    ):
                         store_as = (spec.config or {}).get("store_as")
                         if store_as:
                             available.add(f"{step.id}.{store_as}")
@@ -1305,6 +1311,7 @@ class WorkflowEngine:
         from api.hooks.builtins.output_logger import OutputLoggerHook
         from api.hooks.builtins.few_shot_injector import FewShotInjectorHook
         from api.hooks.builtins.plugin_tool_invoker import PluginToolInvokerHook
+        from api.hooks.builtins.mcp_tool_invoker import MCPToolInvokerHook
         from api.hooks.builtins.analyse_xql_gate import AnalyseXqlGateHook
 
         factory = {
@@ -1315,6 +1322,7 @@ class WorkflowEngine:
             "output_logger": OutputLoggerHook,
             "few_shot_injector": FewShotInjectorHook,
             "plugin_tool_invoker": PluginToolInvokerHook,
+            "mcp_tool_invoker": MCPToolInvokerHook,
             "analyse_xql_gate": AnalyseXqlGateHook,
         }.get(spec.name)
         if factory is None:

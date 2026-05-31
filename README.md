@@ -201,7 +201,12 @@ Every master merge re-publishes a freshly smoke-tested DMG to the [`nightly`](ht
 |---------|-----|------|------------|
 | Mac M4 Pro | 48GB | Development | 7B @ 50 tok/s |
 | MS-01 (Ryzen 9 7945HX) | 64GB | API serving | 34B @ 12 tok/s |
-| BD790i (Ryzen 9 7945HX) | 96GB | Research | 70B @ 5 tok/s |
+| BD790i (Ryzen 9 7945HX) | 96GB | Research / 70B-class workflows | 70B @ 5 tok/s |
+
+The BD790i is the only host in the fleet that can exercise the full
+1.3.0 MCP & Skills co-scheduler against 70B-class models + multi-GB
+MCP RSS simultaneously. Bring-up + benchmark recipes:
+[docs/deployment/bd790i-testing.md](docs/deployment/bd790i-testing.md).
 
 ## Documentation
 
