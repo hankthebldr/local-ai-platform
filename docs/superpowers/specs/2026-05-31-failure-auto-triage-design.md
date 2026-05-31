@@ -15,7 +15,7 @@ This work also marks a **deliberate, scoped revision to Enclave's telemetry stan
 
 Critically, that **opt-in selection is itself the scaling mechanism for bug reporting** — not merely a privacy gate. Enabling it (`ENABLE_ERROR_REPORTING=true`, `ERROR_SINK=github`) converts raw CI *and* field failures into a single **deduplicated, severity-labelled GitHub Issue backlog, generated automatically**: each distinct product bug becomes a tracked, triaged issue the moment it occurs — one issue per fingerprint, recurrences counted not duplicated — turning "we have logs somewhere" into a managed bug pipeline that scales without spam. See [Opt-in product-bug issue generation](#opt-in-product-bug-issue-generation--the-manageable-scaling-mechanism).
 
-Delivery is phased along the CI-first line: **Phase 1** (CI triage) ships with no application changes, no new runtime dependencies, and no network egress. **Phase 2** (runtime capture + operator-owned telemetry) adds the catch-all handler, redaction, opt-in gate, and operator sinks. **Phase 3** (optional vendor phone-home) is deferred and gated.
+Delivery is phased along the CI-first line: **Phase 1** (CI triage) ships with no application changes, only one tiny security-hardening dependency (`defusedxml`, for XXE/billion-laughs-safe JUnit parsing), and no network egress. **Phase 2** (runtime capture + operator-owned telemetry) adds the catch-all handler, redaction, opt-in gate, and operator sinks. **Phase 3** (optional vendor phone-home) is deferred and gated.
 
 ---
 
@@ -156,7 +156,7 @@ runtime: sha256( route   | exception_type | top_3_app_frames "file:func" )[:16]
 
 ---
 
-## Phase 1 — CI path (ships first; no app changes, no new deps, no egress)
+## Phase 1 — CI path (ships first; no app changes, one tiny security dep, no egress)
 
 ### Flow
 
@@ -344,7 +344,7 @@ tests/fixtures/junit/*.xml
 
 | Phase | Scope | App changes | New deps | Egress |
 |---|---|---|---|---|
-| **1 — CI** | JUnit → annotations + summary + deduped issues | none | none | none |
+| **1 — CI** | JUnit → annotations + summary + deduped issues | none | `defusedxml` (tiny, security) | none |
 | **2 — Runtime** | catch-all handler + redaction + opt-in operator sink + Ollama enrichment | `api/exceptions.py`, `api/main.py` | none (`requests`, already a core dep) | only if opted in, redacted, operator-owned |
 | **3 — Vendor** | optional phone-home behind flag + disclosure | config + disclosure UI | none | only if explicitly enabled |
 
