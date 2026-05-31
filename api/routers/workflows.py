@@ -118,6 +118,18 @@ class WorkflowValidateRequest(BaseModel):
     seed_keys: Optional[List[str]] = None
 
 
+class ComposerAssistRequest(BaseModel):
+    """Phase 2c.3 — partial AgentStep the composer is editing.
+
+    Sent on every field edit so the composer can render "logical companion"
+    suggestions inline. Tolerant of incomplete shape: we only need
+    ``role`` / ``tools`` / ``skills`` / ``archetype`` to compute
+    suggestions; the rest is ignored.
+    """
+
+    step: Dict[str, Any]
+
+
 class WorkflowSaveRequest(BaseModel):
     """Request to persist a workflow definition as YAML."""
 
@@ -161,6 +173,53 @@ async def validate_workflow(req: WorkflowValidateRequest):
             "skill": ext.skill_warnings,
         }
     return body
+
+
+@router.post("/composer/assist")
+async def composer_assist(req: ComposerAssistRequest):
+    """Phase 2c.3 — suggest archetype companions for a partial step.
+
+    The composer calls this on every field edit. Given a partial
+    AgentStep (any subset of ``role`` / ``tools`` / ``skills`` /
+    ``archetype``), returns the inferred archetype + the
+    companion-MCPs / companion-skills the operator hasn't declared yet +
+    a suggested role (only when the step has no role of its own).
+
+    Tolerant: malformed step payloads return an empty-suggestion shape
+    rather than a 422, so the composer keeps working as the user types.
+    """
+    from ..services.archetypes import suggest_companions
+
+    raw = req.step or {}
+    # Coerce just enough of the payload into AgentStep shape — the helper only
+    # consults role / tools / skills / archetype. We provide harmless defaults
+    # for the required fields (id / name / outputs) so partial composer drafts
+    # validate.
+    # Bypass the llm-kind shape requirement (needs prompt/system_prompt) by
+    # supplying a placeholder; suggest_companions only reads role / tools /
+    # skills / archetype so the placeholder never reaches the operator.
+    skeleton: Dict[str, Any] = {
+        "id": raw.get("id") or "draft",
+        "name": raw.get("name") or "draft",
+        "outputs": raw.get("outputs") or ["draft"],
+        "system_prompt": raw.get("system_prompt") or "draft",
+    }
+    for key in ("role", "tools", "skills", "archetype", "model"):
+        if key in raw:
+            skeleton[key] = raw[key]
+    try:
+        from ..models.workflow_models import AgentStep
+
+        step = AgentStep.model_validate(skeleton)
+    except Exception:
+        return {
+            "inferred_archetype": None,
+            "suggested_role": None,
+            "suggested_mcps": [],
+            "suggested_skills": [],
+            "warnings": [],
+        }
+    return suggest_companions(step)
 
 
 @router.post("/save")
