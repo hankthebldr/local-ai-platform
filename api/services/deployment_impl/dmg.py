@@ -28,7 +28,6 @@ from ..deployment import (
 )
 from ...logging_config import logger
 
-
 _HEADROOM_PCT = 0.20  # reserve 20% for OS + other apps
 
 
@@ -88,10 +87,14 @@ class DmgDeployment:
     # ── runtime methods ─────────────────────────────────────────────────
 
     def effective_memory_gb(self) -> float:
-        """Host total minus 20% headroom for OS + other apps."""
+        """Host total minus 20% headroom for OS + other apps, minus any live
+        MCP runner RSS (Phase 6) so the scheduler sees the true free budget."""
         if self.resource_limits.memory_gb is None:
             return 0.0
-        return round(self.resource_limits.memory_gb * (1 - _HEADROOM_PCT), 2)
+        base = self.resource_limits.memory_gb * (1 - _HEADROOM_PCT)
+        from ..deployment import mcp_overhead_gb
+
+        return round(max(0.0, base - mcp_overhead_gb()), 2)
 
     def daemon_env(self) -> Dict[str, str]:
         """Parse OLLAMA_* from process env."""

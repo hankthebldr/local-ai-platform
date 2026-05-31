@@ -26,7 +26,6 @@ from typing import Any, List, Literal, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-
 # ── Enums ─────────────────────────────────────────────────────────────────
 
 
@@ -166,6 +165,27 @@ class Deployment(Protocol):
         with chmod 0700 if any are missing. Idempotent.
         """
         ...
+
+
+# ── MCP-overhead helper (Phase 6, MCP & Skills) ───────────────────────────
+
+
+def mcp_overhead_gb() -> float:
+    """Live RSS overhead of warm MCP runners, in GB.
+
+    Consulted by every ``Deployment.effective_memory_gb()`` impl so the
+    arch budget surfaces what's actually free. Returns 0.0 when the
+    runner-pool module isn't importable yet (early-boot order) or when
+    no workflow has spawned a runner. Never raises — accounting failures
+    must never block a memory query.
+    """
+    try:
+        from .mcp_runner_pool import get_mcp_runner_pool
+
+        pool = get_mcp_runner_pool()
+        return pool.total_runner_overhead_mb() / 1024.0
+    except Exception:  # noqa: BLE001 - defensive; bookkeeping never blocks
+        return 0.0
 
 
 # ── Singleton state ───────────────────────────────────────────────────────

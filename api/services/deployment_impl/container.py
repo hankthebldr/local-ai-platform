@@ -26,7 +26,6 @@ from ..deployment import (
 )
 from ...logging_config import logger
 
-
 _CONTAINER_HEADROOM_PCT = 0.10  # cgroup already constrains; smaller margin
 
 
@@ -137,12 +136,16 @@ class ContainerDeployment:
     # ── runtime methods ─────────────────────────────────────────────────
 
     def effective_memory_gb(self) -> float:
-        """cgroup limit (if any) with 10% headroom inside the container."""
+        """cgroup limit (if any) with 10% headroom inside the container, minus
+        any live MCP runner RSS (Phase 6) so the scheduler sees the true free
+        budget."""
+        from ..deployment import mcp_overhead_gb
+
         if self._cgroup_bytes is not None:
-            cgroup_gb = self._cgroup_bytes / (1024**3)
-            return round(cgroup_gb * (1 - _CONTAINER_HEADROOM_PCT), 2)
-        host_gb = self._host_total / (1024**3)
-        return round(host_gb * (1 - _CONTAINER_HEADROOM_PCT), 2)
+            base = (self._cgroup_bytes / (1024**3)) * (1 - _CONTAINER_HEADROOM_PCT)
+        else:
+            base = (self._host_total / (1024**3)) * (1 - _CONTAINER_HEADROOM_PCT)
+        return round(max(0.0, base - mcp_overhead_gb()), 2)
 
     def daemon_env(self) -> Dict[str, str]:
         """Read OLLAMA_* from the container's env."""
