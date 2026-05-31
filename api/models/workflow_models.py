@@ -970,6 +970,17 @@ class StepResult(BaseModel):
     pressure_after: Optional[Dict[str, Any]] = None
     keep_alive_used: Optional[str] = None
 
+    # ── Phase 4 (MCP & Skills) — per-step extension instrumentation. ──
+    # All optional/empty by default so pre-Phase-4 runs deserialize unchanged
+    # and steps that don't touch extensions don't bloat the run record.
+    skills_activated: List["SkillActivation"] = Field(default_factory=list)
+    mcp_calls: List["MCPCall"] = Field(default_factory=list)
+    plugin_tools_called: List["PluginToolCall"] = Field(default_factory=list)
+    # Cumulative time the step spent on skill rendering + MCP round-trips +
+    # plugin tool execution. Lets the operator ratio extension cost against
+    # pure-inference time (eval_duration_ms) without summing the arrays.
+    extension_overhead_ms: float = 0.0
+
 
 # ── Run-Level Telemetry Summary (Phase 2 task 2.4) ────────────────────────
 
@@ -1024,6 +1035,71 @@ class PreWarmEvent(BaseModel):
     # Resolved at run completion in workflow_engine._resolve_pre_warm_hits.
     hit: Optional[bool] = None
     hit_step_id: Optional[str] = None
+
+
+# ── Per-step instrumentation (Phase 4, MCP & Skills) ─────────────────────
+
+
+class SkillActivation(BaseModel):
+    """One skill body that was injected into a step's prompt.
+
+    Captured by ``step_executor`` when a skill triggers — either by a
+    keyword match (``trigger="keyword"`` plus the matched substring in
+    ``trigger_match``) or because the step explicitly listed it
+    (``trigger="explicit"``). ``injected_into`` distinguishes a system-
+    prompt prepend from a message-level insertion. ``injected_chars`` is
+    how much text the skill added (operators want to know when a single
+    skill doubled their prompt size).
+    """
+
+    plugin_id: str
+    skill_id: str
+    trigger: Literal["keyword", "manual", "explicit"]
+    trigger_match: Optional[str] = None
+    injected_into: Literal["system", "messages"]
+    injected_chars: int = 0
+
+
+class MCPCall(BaseModel):
+    """One tool call against an MCP server during a step.
+
+    ``status`` is one of:
+      * ``ok``      — server returned a result
+      * ``error``   — JSON-RPC error frame (the server replied with an
+                      error code); ``error_code`` / ``error_message``
+                      hold the details
+      * ``timeout`` — request deadline exceeded; the runner pool will
+                      typically respawn for the next call
+
+    ``request_size_bytes`` and ``response_size_bytes`` are the JSON payload
+    lengths the engine wrote/read; useful for finding "this MCP call paid
+    20 MB of round-trip" outliers in long-running RAG workflows.
+    """
+
+    server_id: str
+    tool_name: str
+    duration_ms: float = 0.0
+    status: Literal["ok", "error", "timeout"] = "ok"
+    request_size_bytes: int = 0
+    response_size_bytes: int = 0
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class PluginToolCall(BaseModel):
+    """One Python plugin tool the step invoked.
+
+    Plugin tools run in-process so we don't have a transport status —
+    just ok/error. ``error_class`` captures the exception class name when
+    a tool raised; useful for triaging the long-tail of plugin breakage
+    without dumping a full stack trace into the run record.
+    """
+
+    plugin_id: str
+    tool_id: str
+    duration_ms: float = 0.0
+    status: Literal["ok", "error"] = "ok"
+    error_class: Optional[str] = None
 
 
 # ── MCP Runner Stats (Phase 2) ────────────────────────────────────────────
@@ -1082,3 +1158,44 @@ class WorkflowRun(BaseModel):
     # Populated by MCPRunnerPool.release_workflow() at run end. Empty when
     # the workflow declared no MCPs or when MCP routing wasn't enabled.
     mcp_runners: List[MCPRunnerStats] = Field(default_factory=list)
+    # Phase 4 (MCP & Skills) — run-level extension usage rollup. Computed
+    # once at run completion by ``aggregate_extension_stats(run)`` from the
+    # per-step arrays so the UI doesn't have to walk every step result.
+    skills_activated_total: int = 0
+    mcp_invocations_total: int = 0
+    plugin_tools_invoked_total: int = 0
+    mcp_servers_used: List[str] = Field(default_factory=list)
+    extension_overhead_seconds: float = 0.0
+
+
+# ── Run-level aggregation (Phase 4, MCP & Skills) ─────────────────────────
+
+
+def aggregate_extension_stats(run: "WorkflowRun") -> None:
+    """Roll per-step ``skills_activated`` / ``mcp_calls`` / ``plugin_tools_called``
+    arrays into the run-level totals on ``WorkflowRun``.
+
+    Called once at run completion by ``workflow_engine.execute`` so the UI
+    (and ``/api/workflows/runs/{id}``) can answer "how much of this run's
+    wall-clock was extension overhead?" without walking every step result.
+    Idempotent — re-running over a run with already-aggregated stats
+    produces the same numbers.
+    """
+    run.skills_activated_total = sum(len(s.skills_activated) for s in run.step_results)
+    run.mcp_invocations_total = sum(len(s.mcp_calls) for s in run.step_results)
+    run.plugin_tools_invoked_total = sum(
+        len(s.plugin_tools_called) for s in run.step_results
+    )
+    # Deduplicate while preserving stable order — set() loses iteration order
+    # under hash randomization and the operator dashboard renders this list.
+    seen: set = set()
+    ordered: List[str] = []
+    for s in run.step_results:
+        for c in s.mcp_calls:
+            if c.server_id not in seen:
+                seen.add(c.server_id)
+                ordered.append(c.server_id)
+    run.mcp_servers_used = ordered
+    run.extension_overhead_seconds = round(
+        sum(s.extension_overhead_ms for s in run.step_results) / 1000.0, 3
+    )

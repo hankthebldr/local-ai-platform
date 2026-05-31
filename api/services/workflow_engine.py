@@ -1308,6 +1308,17 @@ class WorkflowEngine:
 
     def _persist_run(self, run: WorkflowRun, definition: WorkflowDefinition) -> None:
         """Terminal persist: run.json + per-step artifact JSONs + summary.md."""
+        # Phase 4 (MCP & Skills) — roll per-step extension counts into the
+        # run-level totals before we serialize. Idempotent; cheap; runs on
+        # every terminal persist (success or failure) so the UI always has
+        # a populated rollup to render.
+        try:
+            from ..models.workflow_models import aggregate_extension_stats
+
+            aggregate_extension_stats(run)
+        except Exception as e:  # noqa: BLE001 - never block persist on a rollup error
+            logger.debug(f"extension stats rollup skipped: {e}")
+
         run_dir = Path(DATA_DIR) / run.run_id
         artifacts_dir = run_dir / "artifacts"
 
