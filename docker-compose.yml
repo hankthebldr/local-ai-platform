@@ -99,6 +99,24 @@ services:
       # /app/data/logs lives in api_logs while everything else under
       # /app/data lives in api_data.
       - api_logs:/app/data/logs
+    # Phase 7.2 (MCP & Skills) — security hardening for stdio MCP
+    # subprocesses spawned under /app/data/mcp/binaries/. The api
+    # container runs no daemons that need extra Linux capabilities,
+    # so we drop them all and forbid privilege escalation. MCP
+    # binaries inherit this stripped surface — even a malicious
+    # plugin can only do what an unprivileged process can.
+    # See docs/deployment/per-architecture-config.md "MCP security".
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # read_only: true is the stricter posture documented as opt-in;
+    # /app/data + /tmp are the only writable surfaces when enabled.
+    # Default false for v1 — turn on once your workflow library
+    # doesn't surprise you with /app writes.
+    # read_only: true
+    tmpfs:
+      - /tmp:size=128M,mode=1777
     depends_on:
       ollama:
         condition: service_healthy
