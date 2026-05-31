@@ -1172,8 +1172,8 @@ git commit -m "chore(triage): idempotent label bootstrap script"
 
 - [ ] All `tests/triage/` pass: `pytest tests/triage -v`
 - [ ] Full suite still green: `pytest tests/ --ignore=tests/e2e -q`
-- [ ] Seed a deliberately failing test on a scratch branch, push to a **non-master** branch → CI shows an inline annotation + a summary table row, and **no** issue is filed.
-- [ ] Merge/push that failure to `master` (or simulate locally) → exactly one issue filed; a second run files **no** duplicate, adds a comment instead.
+- [ ] Seed a deliberately failing test and **open a PR** (CI triggers on PRs to `master`) → CI shows an inline annotation + a summary-table row, and **no** issue is filed (PR runs emit `annotations,summary` only).
+- [ ] Merge/push that failure to `master` → exactly one issue filed; a second `master` run files **no** duplicate, adds a comment instead.
 - [ ] Only one tiny dep added (`defusedxml`, security-justified); CI wall-clock increase < ~5s.
 
 ---
