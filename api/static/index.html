@@ -307,6 +307,35 @@ html { font-size: 14px; }
   box-shadow: 0 0 0 3px var(--accent-ghost);
 }
 
+/* Canonical search / filter controls — ONE dark, theme-aligned look across the
+   whole product. Previously only `.inv-toolbar .search-input` set a background,
+   so every search box elsewhere (Skills, Workflow Index, Runs, Admin, Memory)
+   fell back to the browser default — stark white against the dark UI. This base
+   themes every .search-input and filter .model-select; scoped rules only tweak
+   width/flex. So search/filter looks and behaves identically everywhere. */
+.search-input,
+select.model-select,
+.model-select {
+  /* --bg-deep is the distinct input surface in BOTH themes (a light gray
+     #F2F4F7 in light mode, the darkest panel in dark mode) — so the field
+     reads as a recessed control, not a white box blending into the panel.
+     --border-strong gives it a defined edge. */
+  background: var(--bg-deep);
+  border: 1px solid var(--border-strong, var(--border));
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  padding: 8px 14px;
+  border-radius: 4px;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.search-input::placeholder { color: var(--text-muted); }
+.search-input:hover,
+.model-select:hover { border-color: var(--accent-dim); }
+.search-input:focus,
+.model-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ghost); }
+
 /* Tab content — fade-in when activated. Uses the .active toggle that
    switchTab() already sets, so no JS changes required. */
 .tab-content {
@@ -2332,19 +2361,9 @@ textarea.composer-desc-area {
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
-.inv-toolbar .search-input {
-  flex: 1;
-  min-width: 200px;
-  background: var(--bg-deep);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  padding: 8px 14px;
-  outline: none;
-}
-.inv-toolbar .search-input:focus { border-color: var(--cyan-dim); }
-.inv-toolbar .search-input::placeholder { color: var(--text-muted); }
+/* Layout only — appearance comes from the canonical .search-input base
+   so every search box in the product looks identical. */
+.inv-toolbar .search-input { flex: 1; min-width: 200px; }
 
 .filter-btn {
   background: transparent;
@@ -2593,16 +2612,30 @@ textarea.composer-desc-area {
 /* Pull progress bar */
 .pull-progress {
   margin-top: 8px;
-  height: 3px;
-  background: var(--border);
+  height: 8px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 999px;
   position: relative;
   overflow: hidden;
 }
 .pull-progress-fill {
   height: 100%;
-  background: var(--green);
+  width: 0;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
   box-shadow: var(--glow-green);
   transition: width 0.3s ease;
+  border-radius: 999px;
+}
+/* Indeterminate shimmer before byte totals arrive (manifest/verify phases). */
+.pull-progress-fill.indeterminate {
+  width: 35% !important;
+  animation: pullShimmer 1.1s ease-in-out infinite;
+}
+@keyframes pullShimmer { 0%{margin-left:-35%} 100%{margin-left:100%} }
+.pull-progress-label {
+  margin-top: 4px; font-family: var(--mono); font-size: 0.62rem;
+  color: var(--cyan); letter-spacing: 0.04em;
 }
 
 /* ── MEMORY TAB ────────────────────────────────────────────────── */
@@ -8945,6 +8978,7 @@ function renderCatalog() {
         <div class="pull-progress" id="progress-${m.id}" style="display:none">
           <div class="pull-progress-fill" id="progress-fill-${m.id}" style="width:0%"></div>
         </div>
+        <div class="pull-progress-label" id="progress-label-${m.id}" style="display:none"></div>
       </div>
     `;
   }).join('');
@@ -8952,12 +8986,16 @@ function renderCatalog() {
 
 async function pullModel(ollamaName, modelId) {
   const btn = document.getElementById('pull-btn-' + modelId);
-  if (btn) { btn.disabled = true; btn.textContent = 'Pulling...'; }
-
   const progressEl = document.getElementById('progress-' + modelId);
   const fillEl = document.getElementById('progress-fill-' + modelId);
+  const labelEl = document.getElementById('progress-label-' + modelId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Pulling…'; }
   if (progressEl) progressEl.style.display = 'block';
+  if (labelEl) { labelEl.style.display = 'block'; labelEl.textContent = 'starting…'; }
+  // No byte totals yet → indeterminate shimmer.
+  if (fillEl) fillEl.classList.add('indeterminate');
 
+  const mb = b => (b / 1e6).toFixed(0);
   try {
     await fetch('/api/inventory/pull', {
       method: 'POST',
@@ -8965,32 +9003,41 @@ async function pullModel(ollamaName, modelId) {
       body: JSON.stringify({ model: ollamaName })
     });
 
-    // Poll progress
     const poll = setInterval(async () => {
       try {
         const r = await fetch('/api/inventory/pull-progress/' + encodeURIComponent(ollamaName));
         const d = await r.json();
+        const phase = d.status_message || d.status || 'pulling';
 
         if (d.total > 0 && fillEl) {
           const pct = Math.round((d.progress / d.total) * 100);
+          fillEl.classList.remove('indeterminate');
           fillEl.style.width = pct + '%';
+          if (labelEl) labelEl.textContent = `${phase} — ${pct}%  (${mb(d.progress)} / ${mb(d.total)} MB)`;
+          if (btn) btn.textContent = `Pulling ${pct}%`;
+        } else if (labelEl) {
+          labelEl.textContent = `${phase}…`;  // manifest / verify phases (no bytes)
         }
 
         if (d.status === 'complete' || d.status === 'error') {
           clearInterval(poll);
           if (d.status === 'complete') {
-            catalogLoaded = false;
-            loadCatalog();
-            loadModels();
-          } else if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Retry';
+            if (fillEl) { fillEl.classList.remove('indeterminate'); fillEl.style.width = '100%'; }
+            if (labelEl) { labelEl.textContent = '✓ installed'; labelEl.style.color = 'var(--green)'; }
+            if (btn) btn.textContent = '✓ Installed';
+            setTimeout(() => { catalogLoaded = false; loadCatalog(); if (typeof loadModels==='function') loadModels(); if (typeof loadInstalledLocal==='function') loadInstalledLocal(); }, 800);
+          } else {
+            if (fillEl) fillEl.classList.remove('indeterminate');
+            if (labelEl) { labelEl.textContent = '✗ ' + (d.error || 'pull failed'); labelEl.style.color = 'var(--red)'; }
+            if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
           }
         }
-      } catch(e) { clearInterval(poll); }
-    }, 1000);
+      } catch(e) { clearInterval(poll); if (btn){btn.disabled=false;btn.textContent='Retry';} }
+    }, 800);
   } catch(e) {
+    if (fillEl) fillEl.classList.remove('indeterminate');
     if (btn) { btn.disabled = false; btn.textContent = 'Pull'; }
+    if (labelEl) { labelEl.textContent = '✗ ' + e.message; labelEl.style.color = 'var(--red)'; }
   }
 }
 
