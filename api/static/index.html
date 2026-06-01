@@ -2695,6 +2695,12 @@ textarea.composer-desc-area {
   font-family: var(--mono); font-size: 0.6rem; color: var(--text-muted);
   border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px;
 }
+.rm-clickable { cursor: pointer; }
+.rm-clickable:hover { border-color: var(--cyan-dim); background: var(--accent-trace, rgba(0,220,240,0.03)); }
+.md-detail-grid { display: flex; flex-direction: column; gap: 2px; }
+.md-wf-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px; }
+.md-wf-name { flex: 1; font-family: var(--mono); font-size: 0.7rem; color: var(--text); }
+.md-wf-meta { font-family: var(--mono); font-size: 0.6rem; color: var(--text-muted); }
 .il-running { color: var(--accent); font-size: 0.6rem; font-family: var(--mono); margin-left: 6px; }
 .il-idle    { color: var(--text-muted); font-size: 0.6rem; font-family: var(--mono); margin-left: 6px; }
 .action-btn.xs.danger { color: var(--red, #ff5252); border-color: rgba(255,80,80,0.35); }
@@ -4178,12 +4184,11 @@ textarea.composer-desc-area {
 .runs-tab-floor { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .runs-tab-graph {
   flex: 1; min-height: 280px; position: relative;
-  /* Subtle depth gradient instead of the busy dotted grid — a soft cyan
-     glow at the top fading into the base so the DAG nodes read clearly
-     against a calm backdrop (was: distracting 20px dot matrix). */
-  background:
-    radial-gradient(ellipse 85% 60% at 50% 0%, rgba(0, 220, 240, 0.05) 0%, transparent 60%),
-    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg) 100%);
+  /* Dotted grid matching the Composer canvas (radial-gradient dots @ 20px),
+     so the runs DAG reads as the same gridded surface as the composer. */
+  background: var(--bg-deep);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 20px 20px;
   border: 1px solid var(--border); border-radius: 6px;
   overflow: hidden;
 }
@@ -8458,16 +8463,62 @@ async function loadInstalledLocal() {
           (running ? `<button class="action-btn unload" onclick="unloadModel('${esc(m.name)}')">Unload</button>` : '') +
           `<button class="action-btn xs danger" onclick="removeLocalModel('${esc(m.name)}')">Remove</button>`;
       }
-      return `<div class="running-model-card">
+      return `<div class="running-model-card rm-clickable" ondblclick="openModelDetail('${esc(m.name)}')" title="Double-click for details, metadata, and supported workflows">
         <div class="rm-info">
           <div class="rm-name">${esc(m.name)} ${badge} ${status}</div>
-          <div class="rm-detail">${size} · ${m.in_catalog ? 'in catalog' : 'not in catalog'}</div>
+          <div class="rm-detail">${size} · ${m.in_catalog ? 'in catalog' : 'not in catalog'} · <span style="color:var(--text-muted)">double-click for details</span></div>
         </div>
         <div style="display:flex;gap:6px;align-items:center">${actions}</div>
       </div>`;
     }).join('');
   } catch (e) {
     body.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed to load local models: ${esc(e.message)}</div>`;
+  }
+}
+
+// Double-click a local model → rich detail: metadata + supported workflows.
+async function openModelDetail(name) {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:min(580px,94vw);max-height:88vh;overflow-y:auto;border-radius:6px;';
+  inner.innerHTML = '<div class="model-empty">Loading model detail…</div>';
+  modal.appendChild(inner);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  const close = "this.closest('div[style*=fixed]').remove()";
+  try {
+    const r = await fetch('/api/inventory/model/' + encodeURIComponent(name));
+    const d = await r.json();
+    const det = d.details || {};
+    const ctxVal = Object.entries(d.model_info || {}).filter(([k]) => k.includes('context')).map(([, v]) => v)[0];
+    const rows = [
+      ['Backend', d.backend === 'vllm' ? 'vLLM · GPU' : 'Ollama'],
+      ['Family', det.family], ['Parameters', det.parameter_size],
+      ['Quantization', det.quantization_level], ['Format', det.format],
+      ['Context window', ctxVal ? Number(ctxVal).toLocaleString() + ' tokens' : null],
+      ['Capabilities', (d.capabilities || []).join(', ') || null],
+      ['Modified', d.modified_at ? new Date(d.modified_at).toLocaleString() : null],
+    ].filter(([, v]) => v != null && v !== '');
+    const wfs = d.workflows || [];
+    inner.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="font-family:var(--mono);font-weight:600;font-size:0.92rem;flex:1;word-break:break-all">${esc(name)}</div>
+        <span class="rm-backend rm-backend-${d.backend === 'vllm' ? 'vllm' : 'ollama'}">${d.backend === 'vllm' ? 'vLLM · GPU' : 'Ollama'}</span>
+        <button class="action-btn xs ghost" onclick="${close}">×</button>
+      </div>
+      ${d.note ? `<div style="font-size:0.66rem;color:var(--text-muted);margin-bottom:10px">${esc(d.note)}</div>` : ''}
+      ${d.error ? `<div class="admin-modal-error" style="margin:0 0 10px">${esc(d.error)}</div>` : ''}
+      <div class="md-detail-grid">${rows.map(([k, v]) => `<div class="metric-row"><span class="metric-key">${esc(k)}</span><span class="metric-val">${esc(String(v))}</span></div>`).join('')}</div>
+      <div class="panel-label" style="margin-top:16px">Supported workflows ${wfs.length ? `(${wfs.length})` : ''}</div>
+      <div>${wfs.length
+        ? wfs.map(w => `<div class="md-wf-row"><span class="md-wf-name">${esc(w.name)}</span><span class="md-wf-meta">${w.steps} steps</span><button class="action-btn xs" onclick="${close};switchTab('workflow-index')">Open ↗</button></div>`).join('')
+        : '<div style="color:var(--text-muted);font-size:0.66rem;padding:4px 0">No workflows reference this model yet.</div>'}</div>
+      <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:16px">
+        <button class="action-btn sm cyan" onclick="${close};testModel('${esc(name)}')">Test in chat</button>
+      </div>`;
+  } catch (e) {
+    inner.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed to load model detail: ${esc(e.message)}</div>`;
   }
 }
 
