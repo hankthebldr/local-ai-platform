@@ -4108,6 +4108,15 @@ textarea.composer-desc-area {
   border-bottom: 1px solid var(--border);
 }
 .runs-tab-bottom-drawer-body { padding: 10px 12px; overflow: auto; max-height: calc(50vh - 40px); }
+
+/* Step-detail popup */
+.runs-step-modal-head { display: flex; align-items: flex-start; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.runs-step-modal-title { font-family: var(--mono); font-weight: 600; color: var(--text); font-size: 0.92rem; }
+.runs-step-modal-sub { font-family: var(--mono); font-size: 0.66rem; color: var(--text-muted); margin-top: 3px; }
+.runs-step-modal-pivots { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.runs-step-pivot-label { font-family: var(--mono); font-size: 0.62rem; color: var(--text-muted); margin-right: 2px; }
+.runs-step-modal-body { overflow: auto; padding-top: 12px; flex: 1; min-height: 0; }
+.run-step-caret { cursor: pointer; padding: 0 4px; }
 .rdd-cols {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   gap: 14px;
@@ -6642,6 +6651,32 @@ textarea.composer-desc-area {
             <div class="model-empty">Loading…</div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step-detail popup — opened by clicking a step in the Run Detail panel.
+       Shows the full step record (metadata, the prompt that ran, the output)
+       and PIVOTS that turn this step's context into the next action: research
+       it, view it in the context graph, or seed a new agent from it. -->
+  <div id="runs-step-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="runs-step-modal-title">
+    <div class="admin-modal-card" style="width:min(820px,94vw);max-height:88vh;display:flex;flex-direction:column">
+      <div class="runs-step-modal-head">
+        <div style="flex:1;min-width:0">
+          <div id="runs-step-modal-title" class="runs-step-modal-title">Step</div>
+          <div id="runs-step-modal-sub" class="runs-step-modal-sub"></div>
+        </div>
+        <button class="action-btn xs ghost" onclick="RunsTab.closeStepDetail()" title="Close">×</button>
+      </div>
+      <div class="runs-step-modal-pivots">
+        <span class="runs-step-pivot-label">Pivot this step's context →</span>
+        <button class="action-btn sm cyan"   onclick="RunsTab.pivotResearch()"     title="Send this step's output to a research run">🔬 Research</button>
+        <button class="action-btn sm"        onclick="RunsTab.pivotContextGraph()" title="Inspect this run's context handoffs in the graph">🕸 Context Graph</button>
+        <button class="action-btn sm accent" onclick="RunsTab.pivotNewAgent()"      title="Seed a new agent from this step's prompt + context">🤖 New Agent</button>
+        <button class="action-btn sm"        onclick="RunsTab.copyStepContext()"   title="Copy the prompt + output as JSON">⧉ Copy</button>
+      </div>
+      <div id="runs-step-modal-body" class="runs-step-modal-body">
+        <div class="model-empty">Loading…</div>
       </div>
     </div>
   </div>
@@ -18226,8 +18261,10 @@ const RunsTab = (function () {
       return `<div class="ws-run-step ws-run-step-${cls} ${isRoot ? 'is-root-fail' : ''} ${isStarved ? 'is-starved' : ''}"
                    data-step-id="${esc(s.step_id)}">
         <div class="ws-run-step-head"
-             onclick="RunsTab.toggleStepExpand('${esc(s.step_id)}')">
-          <span class="run-step-caret">${isExpanded ? '▾' : '▸'}</span>
+             onclick="RunsTab.openStepDetail('${esc(s.step_id)}')"
+             title="Open full step detail">
+          <span class="run-step-caret" title="Quick inline peek"
+                onclick="event.stopPropagation();RunsTab.toggleStepExpand('${esc(s.step_id)}')">${isExpanded ? '▾' : '▸'}</span>
           <span class="ws-run-step-id">${esc(s.step_id)}</span>
           <span class="run-step-kind kind-${esc(s.kind || 'llm')}" title="step kind">${esc(s.kind || 'llm')}</span>
           <span class="ws-run-step-model">${esc(s.model_used || '—')}</span>
@@ -18409,6 +18446,126 @@ const RunsTab = (function () {
     if (_expandedOutputs.has(id)) _expandedOutputs.delete(id);
     else _expandedOutputs.add(id);
     if (_currentRun) _renderSteps(_currentRun);
+  }
+
+  // ── Step-detail popup + troubleshooting pivots ───────────────────────────
+  let _detailStepId = null;
+
+  function _detailStep() {
+    return _currentRun
+      ? (_currentRun.step_results || []).find(x => x.step_id === _detailStepId)
+      : null;
+  }
+
+  function _stepWorkspace(s) {
+    return (((_currentRun || {}).context || {}).workspace || {})[s.step_id] || {};
+  }
+
+  function _stepContextText(s) {
+    const ws = _stepWorkspace(s);
+    const out = Object.values(ws)
+      .map(v => (typeof v === 'string' ? v : JSON.stringify(v, null, 2)))
+      .join('\n\n');
+    return out || s.rendered_prompt || '';
+  }
+
+  function _renderStepDetailFull(s) {
+    // Everything fully expanded (no click-to-expand) for the popup: the
+    // prompt that ran + every output the step wrote, as scrollable blocks.
+    const blocks = [];
+    if (s.rendered_system_prompt) blocks.push(['system prompt', s.rendered_system_prompt]);
+    if (s.rendered_prompt) blocks.push(['prompt', s.rendered_prompt]);
+    const ws = _stepWorkspace(s);
+    Object.keys(ws).forEach(k => {
+      const v = ws[k];
+      blocks.push(['output · ' + k, typeof v === 'string' ? v : JSON.stringify(v, null, 2)]);
+    });
+    const body = blocks.map(([label, text]) => `
+      <div class="run-step-output open" style="margin-bottom:8px">
+        <div class="run-step-output-head" style="cursor:default">
+          <span class="ctx-field-k">${esc(label)}</span><span style="flex:1"></span>
+          <span class="run-step-output-meta">${String(text).length} chars</span>
+        </div>
+        <pre class="run-step-output-full" style="max-height:280px">${esc(String(text))}</pre>
+      </div>`).join('');
+    return body || '<div class="model-empty">No prompt or output captured for this step.</div>';
+  }
+
+  function openStepDetail(stepId) {
+    if (!_currentRun) return;
+    _detailStepId = stepId;
+    const s = _detailStep();
+    if (!s) return;
+    const tokens = (s.token_count || {}).total_tokens || 0;
+    const dur = s.duration_seconds != null ? Math.round(s.duration_seconds) + 's' : '?';
+    const title = document.getElementById('runs-step-modal-title');
+    const sub = document.getElementById('runs-step-modal-sub');
+    const body = document.getElementById('runs-step-modal-body');
+    if (title) title.textContent = s.step_id;
+    if (sub) sub.textContent = `${s.kind || 'llm'} · ${esc(s.model_used || '—')} · ${esc(s.status || '')} · ${dur}` +
+      (tokens ? ` · ${tokens.toLocaleString()} tok` : '') + (s.retries ? ` · ${s.retries}× retry` : '');
+    if (body) {
+      body.innerHTML =
+        (s.error ? `<div class="run-step-row-kv error"><span class="run-step-row-k">error</span><pre class="run-step-error-text">${esc(s.error)}</pre></div>` : '') +
+        _renderStepDetailFull(s);
+    }
+    const modal = document.getElementById('runs-step-modal');
+    if (modal) modal.hidden = false;
+  }
+
+  function closeStepDetail() {
+    const m = document.getElementById('runs-step-modal');
+    if (m) m.hidden = true;
+    _detailStepId = null;
+  }
+
+  function pivotResearch() {
+    const s = _detailStep(); if (!s) return;
+    const ctx = _stepContextText(s);
+    closeStepDetail();
+    switchTab('research');
+    setTimeout(() => {
+      const inp = document.getElementById('research-topic');
+      if (inp) {
+        inp.value = `Research and verify the output of workflow step "${s.step_id}":\n\n${ctx}`.slice(0, 2000);
+        inp.focus();
+      }
+    }, 300);
+  }
+
+  function pivotContextGraph() {
+    closeStepDetail();
+    switchTab('graph');
+  }
+
+  function pivotNewAgent() {
+    const s = _detailStep(); if (!s) return;
+    closeStepDetail();
+    if (typeof showCreateAgentModal !== 'function') return;
+    showCreateAgentModal();
+    // Seed the new agent from this step: its system prompt becomes the agent's,
+    // and the description notes the provenance.
+    setTimeout(() => {
+      const name = document.getElementById('am-name');
+      const desc = document.getElementById('am-desc');
+      const prompt = document.getElementById('am-prompt');
+      if (name && !name.value) name.value = `Agent from ${s.step_id}`;
+      if (desc && !desc.value) desc.value = `Seeded from run ${(_currentRun.run_id || '').slice(0, 8)} · step "${s.step_id}"`;
+      if (prompt && s.rendered_system_prompt && !prompt.value.trim()) prompt.value = s.rendered_system_prompt;
+    }, 300);
+  }
+
+  function copyStepContext() {
+    const s = _detailStep(); if (!s) return;
+    const payload = {
+      run_id: _currentRun.run_id,
+      step_id: s.step_id,
+      model: s.model_used,
+      system_prompt: s.rendered_system_prompt,
+      prompt: s.rendered_prompt,
+      output: _stepWorkspace(s),
+    };
+    try { navigator.clipboard.writeText(JSON.stringify(payload, null, 2)); } catch (_) {}
   }
 
   function _toggleActionButtons(run) {
@@ -18615,6 +18772,8 @@ const RunsTab = (function () {
   return { init, load, render, setFilter, select,
     resumeCurrent, cancelCurrent, pauseCurrent, rerunCurrent,
     toggleStepExpand, toggleStepOutput, toggleBottomDrawer, markFailed,
+    openStepDetail, closeStepDetail, pivotResearch, pivotContextGraph,
+    pivotNewAgent, copyStepContext,
     zoomIn, zoomOut, zoomReset };
 })();
 window.RunsTab = RunsTab;
