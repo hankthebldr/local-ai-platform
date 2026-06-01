@@ -21,7 +21,6 @@ import pytest
 
 from api.services.workflow_engine import WorkflowEngine
 
-
 # ── Stub Ollama ─────────────────────────────────────────────────────────
 
 
@@ -61,8 +60,7 @@ class _DagStubOllama:
 # ── YAML fixtures ───────────────────────────────────────────────────────
 
 
-_LINEAR_WORKFLOW = textwrap.dedent(
-    """
+_LINEAR_WORKFLOW = textwrap.dedent("""
     id: test-linear
     name: Linear DAG
     schema_version: 1
@@ -82,12 +80,10 @@ _LINEAR_WORKFLOW = textwrap.dedent(
           task: produce_b
         outputs: ["out_b"]
         depends_on: ["step_a"]
-    """
-)
+    """)
 
 
-_DIAMOND_WORKFLOW = textwrap.dedent(
-    """
+_DIAMOND_WORKFLOW = textwrap.dedent("""
     id: test-diamond
     name: Diamond DAG
     schema_version: 1
@@ -123,8 +119,56 @@ _DIAMOND_WORKFLOW = textwrap.dedent(
           task: produce_join
         outputs: ["out_join"]
         depends_on: ["branch_x", "branch_y"]
-    """
-)
+    """)
+
+
+# Faithful to workflows/code-review.yaml: schema_version 1, kind-less
+# (kind defaults to "llm"), v1 `system_prompt` strings, `output_format: json`,
+# three independent passes that dispatch concurrently in one tick, feeding a
+# `synthesize` step. This drives the SAME construction + serialization path a
+# real code-review run uses (WorkflowEngine._execute_one_step → StepExecutor →
+# step_results.append → run.model_dump), not the isolated execute() unit path.
+_V1_CODE_REVIEW_SHAPED_WORKFLOW = textwrap.dedent("""
+    id: test-v1-review
+    name: V1 Code Review Shape
+    schema_version: 1
+    defaults:
+      role: reasoning
+      retries: 0
+    steps:
+      - id: security_pass
+        name: Security
+        model: mistral
+        depends_on: []
+        system_prompt: |
+          You are a security reviewer. produce_security. Output ONLY JSON.
+        outputs: ["findings"]
+        output_format: json
+      - id: correctness_pass
+        name: Correctness
+        model: mistral
+        depends_on: []
+        system_prompt: |
+          You are a correctness reviewer. produce_correctness. Output ONLY JSON.
+        outputs: ["findings"]
+        output_format: json
+      - id: style_pass
+        name: Style
+        model: mistral
+        depends_on: []
+        system_prompt: |
+          You are a style reviewer. produce_style. Output ONLY JSON.
+        outputs: ["findings"]
+        output_format: json
+      - id: synthesize
+        name: Synthesize
+        model: mistral
+        depends_on: ["security_pass", "correctness_pass", "style_pass"]
+        system_prompt: |
+          You are the lead reviewer. produce_synth. Write a comment block.
+        outputs: ["review"]
+        output_format: text
+    """)
 
 
 @pytest.fixture
@@ -225,3 +269,53 @@ def test_dag_preserves_dependency_data_flow(isolated_workflow_dir):
     assert run.status == "completed"
     assert run.context.get_workspace("step_a", "out_a") is not None
     assert run.context.get_workspace("step_b", "out_b") is not None
+
+
+def test_v1_review_shape_captures_rendered_prompt_end_to_end(isolated_workflow_dir):
+    """Regression guard for the rendered_prompt capture on a REAL run path.
+
+    A code-review-shaped v1 workflow (kind-less LLM steps, `system_prompt`,
+    `output_format`) must land rendered_prompt / rendered_system_prompt on
+    EVERY step in WorkflowRun.step_results — including the three passes that
+    dispatch concurrently in one tick and the downstream synthesize step.
+
+    Asserts the capture survives the full engine path AND the model_dump(
+    mode="json") serialization the /runs API response uses — not just the
+    isolated StepExecutor.execute() unit test.
+    """
+    yaml_path = _write_yaml(isolated_workflow_dir, _V1_CODE_REVIEW_SHAPED_WORKFLOW)
+    ollama = _DagStubOllama(
+        {
+            "produce_security": '{"findings": []}',
+            "produce_correctness": '{"findings": []}',
+            "produce_style": '{"findings": []}',
+            "produce_synth": "## Code Review\n\nLooks fine.",
+        }
+    )
+    engine = WorkflowEngine(ollama)
+    defn = engine.load(str(yaml_path))
+
+    # Every step is kind-less → defaults to the llm dispatch path.
+    assert all(s.kind == "llm" for s in defn.steps)
+    # And these are genuine v1 steps (system_prompt, no v2 prompt block).
+    assert all(s.system_prompt and s.prompt is None for s in defn.steps)
+
+    run = engine.run(defn, seed={"code": "def add(a, b):\n    return a - b"})
+
+    assert run.status == "completed"
+    assert len(run.step_results) == 4
+
+    # In-memory WorkflowRun.step_results: capture reached every step.
+    for r in run.step_results:
+        assert r.rendered_prompt, f"{r.step_id} missing rendered_prompt"
+        assert r.rendered_system_prompt, f"{r.step_id} missing rendered_system_prompt"
+        # The captured system prompt carries the step's v1 system_prompt text.
+        assert "reviewer" in r.rendered_system_prompt
+
+    # The serialization the /api/workflows/runs/{id} response uses must NOT
+    # drop the fields (this is where a model_copy/subset-rebuild bug would
+    # surface even when the in-memory object looks correct).
+    dumped = run.model_dump(mode="json")
+    for sr in dumped["step_results"]:
+        assert sr["rendered_prompt"] is not None
+        assert sr["rendered_system_prompt"] is not None

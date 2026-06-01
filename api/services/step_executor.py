@@ -28,6 +28,25 @@ from .prompt_composer import PromptComposer, ComposedPrompt
 from .model_adapters import resolve_adapter
 from .ollama_service import OLLAMA_KEEP_ALIVE, OllamaService
 
+# Generous cap on the prompt text we persist on each StepResult for the
+# Runs UI. Prefer storing the full prompt; only enormous (e.g. RAG-stuffed)
+# prompts get clipped, with a visible marker so the operator knows.
+PROMPT_CAPTURE_MAX_CHARS = 100_000
+_PROMPT_TRUNCATION_MARKER = "…[truncated]"
+
+
+def _cap_prompt(text: Optional[str]) -> Optional[str]:
+    """Cap a captured prompt string for storage on StepResult.
+
+    Returns None unchanged. Strings under the cap are returned as-is; longer
+    strings are clipped to the cap and given a trailing truncation marker.
+    """
+    if text is None:
+        return None
+    if len(text) <= PROMPT_CAPTURE_MAX_CHARS:
+        return text
+    return text[:PROMPT_CAPTURE_MAX_CHARS] + _PROMPT_TRUNCATION_MARKER
+
 
 def _safe_pressure_snapshot() -> tuple[Optional[str], Optional[Dict[str, Any]]]:
     """Capture (arch_name, pressure_dict) or (None, None) if arch detection
@@ -183,6 +202,15 @@ class StepExecutor:
         adapter = resolve_adapter(resolved_model)
         composed, params = adapter.prepare(composed, composed.params)
         composed.params = params
+
+        # --- Capture prompt provenance for the Runs UI -----------------------
+        # Store the SAME composed text that the model call uses — captured here
+        # (post-adaptation, pre-call) so it reflects exactly what's sent. This
+        # is the baseline prompt; per-attempt retry_with_feedback mutations are
+        # transient and reset to this baseline, so the baseline is the faithful
+        # "what prompt ran" answer. Capped for storage; never re-rendered.
+        result.rendered_system_prompt = _cap_prompt(composed.system)
+        result.rendered_prompt = _cap_prompt(composed.user)
 
         # --- Phase 2 observability: snapshot before the LLM call -------------
         # arch_name is fixed for the run; pressure_before is captured once per
