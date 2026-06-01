@@ -5109,6 +5109,7 @@ textarea.composer-desc-area {
 .skill-disc-chip.installed { color: var(--accent); border-color: var(--accent-dim); background: rgba(0, 204, 102, 0.07); }
 .skill-disc-chip.available { color: var(--amber);  border-color: rgba(255, 165, 0, 0.4); background: rgba(255, 165, 0, 0.08); }
 .skill-disc-chip.bundled   { color: var(--cyan);   border-color: var(--cyan-dim); background: rgba(0, 220, 240, 0.05); }
+.skill-disc-chip.marketplace { color: var(--accent-2, #2F86E5); border-color: var(--accent-2-dim, #2F86E555); background: var(--accent-2-ghost, rgba(47,134,229,0.08)); }
 .skill-disc-actions { display: flex; justify-content: flex-end; }
 
 /* ─ Agents tab tiles (larger cousin of the workbench card) ─ */
@@ -16739,11 +16740,15 @@ const SkillsDiscover = (function () {
     const tone    = (window.AgentIcons ? AgentIcons.tone(persona) : 'amber');
     const iconSvg = (window.AgentIcons ? AgentIcons.svg(persona) : '');
     const triggers = (s.triggers || []).slice(0, 3).map(t => `<span class="cap-card-meta">${esc(t)}</span>`).join(' · ');
-    const stateChip = s.installed
+    // Source badge — remote marketplace entries are visually distinct.
+    const sourceChip = (s.marketplace || s.source === 'remote')
+      ? `<span class="skill-disc-chip marketplace" title="From a remote marketplace catalog">marketplace</span>`
+      : '';
+    const stateChip = sourceChip + (s.installed
       ? `<span class="skill-disc-chip installed" title="Already installed in ${esc((s.installed_in || []).join(', '))}">installed</span>`
       : (s.has_body
           ? `<span class="skill-disc-chip available">install</span>`
-          : `<span class="skill-disc-chip bundled" title="Ships pre-installed with the platform">bundled</span>`);
+          : `<span class="skill-disc-chip bundled" title="Ships pre-installed with the platform">bundled</span>`));
     // Same .action-btn sizing/vocabulary as the Models catalog cards so the
     // install/remove experience reads identically across the product.
     const action = s.installed

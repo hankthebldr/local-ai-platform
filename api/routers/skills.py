@@ -12,10 +12,13 @@ install pre-authored skill bodies into a chosen plugin.
 from __future__ import annotations
 
 import json
+import os
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import requests
 import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -24,6 +27,52 @@ from ..logging_config import logger
 from ..middleware import require_master_key
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
+
+# ── Remote marketplace catalog (generic, operator-configurable) ─────────────
+# Set ENCLAVE_SKILLS_CATALOG_URL to a JSON index ({"skills":[...]} or a bare
+# [...] list) and discovery merges it in alongside the local curated catalog +
+# bundled installs. Works with ANY marketplace that publishes JSON — no
+# per-site scraping. Cached so discovery doesn't hit the network every call;
+# fails soft (local-only) on any error.
+_REMOTE_TTL_SECONDS = 600
+_remote_cache: Dict[str, Any] = {"ts": 0.0, "url": None, "skills": []}
+
+
+def _fetch_remote_catalog() -> List[Dict[str, Any]]:
+    """Fetch + cache the remote skills catalog. Never raises — returns the last
+    good cache (or []) on any error so discovery degrades to local-only."""
+    url = os.getenv("ENCLAVE_SKILLS_CATALOG_URL", "").strip()
+    if not url:
+        return []
+    now = time.monotonic()
+    if (
+        _remote_cache["url"] == url
+        and (now - _remote_cache["ts"]) < _REMOTE_TTL_SECONDS
+    ):
+        return _remote_cache["skills"]
+    skills: List[Dict[str, Any]] = []
+    try:
+        resp = requests.get(url, timeout=6)
+        resp.raise_for_status()
+        payload = resp.json()
+        raw = payload.get("skills") if isinstance(payload, dict) else payload
+        for s in raw or []:
+            if isinstance(s, dict) and s.get("id"):
+                rec = dict(s)
+                rec["source"] = "remote"
+                rec["marketplace"] = True
+                skills.append(rec)
+        logger.info("Remote skills catalog: %d skills from %s", len(skills), url)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Remote skills catalog fetch failed (%s); using local only: %s", url, exc
+        )
+        if _remote_cache["url"] == url and _remote_cache["skills"]:
+            return _remote_cache["skills"]
+        return []
+    _remote_cache.update({"ts": now, "url": url, "skills": skills})
+    return skills
+
 
 # Catalog ships under data/discovery so it can be versioned + swapped
 # for a remote-pulled copy in future without changing the API.
@@ -137,25 +186,54 @@ async def discover() -> Dict[str, Any]:
         entry["bundled"] = True
         extras.append(entry)
     skills = catalog_skills + extras
+
+    # Merge the remote marketplace catalog (deduped by id — local catalog +
+    # bundled win on conflict). Remote entries get install-state annotation too.
+    seen = {s.get("id") for s in skills}
+    remote_count = 0
+    for r in _fetch_remote_catalog():
+        rid = r.get("id")
+        if not rid or rid in seen:
+            continue
+        rec = _annotate([r])[0]
+        rec["source"] = "remote"
+        rec["marketplace"] = True
+        skills.append(rec)
+        seen.add(rid)
+        remote_count += 1
+
     return {
         "schema": cat.get("schema"),
         "version": cat.get("version"),
         "updated": cat.get("updated"),
         "count": len(skills),
+        "remote_count": remote_count,
         "skills": skills,
     }
+
+
+def _find_skill_full(skill_id: str) -> Optional[Dict[str, Any]]:
+    """Full skill record (incl. skill_md body) from the local catalog first,
+    then the remote marketplace catalog — so remote skills are installable too
+    when the marketplace publishes bodies. None if in neither."""
+    for s in _load_catalog().get("skills") or []:
+        if s.get("id") == skill_id:
+            return s
+    for s in _fetch_remote_catalog():
+        if s.get("id") == skill_id:
+            return s
+    return None
 
 
 @router.get("/discover/{skill_id}", dependencies=[Depends(require_master_key)])
 async def discover_one(skill_id: str) -> Dict[str, Any]:
     """Return the full record (including skill_md body) for a single skill."""
-    cat = _load_catalog()
-    for skill in cat.get("skills") or []:
-        if skill.get("id") == skill_id:
-            annotated = _annotate([skill])[0]
-            annotated["skill_md"] = skill.get("skill_md")
-            return annotated
-    raise HTTPException(status_code=404, detail="skill not in catalog")
+    skill = _find_skill_full(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="skill not in catalog")
+    annotated = _annotate([skill])[0]
+    annotated["skill_md"] = skill.get("skill_md")
+    return annotated
 
 
 class InstallReq(BaseModel):
@@ -176,10 +254,7 @@ async def install(skill_id: str, req: InstallReq) -> Dict[str, Any]:
     if not _ID_RE.match(req.plugin_id):
         raise HTTPException(status_code=400, detail="invalid plugin id")
 
-    cat = _load_catalog()
-    skill = next(
-        (s for s in (cat.get("skills") or []) if s.get("id") == skill_id), None
-    )
+    skill = _find_skill_full(skill_id)
     if not skill:
         raise HTTPException(status_code=404, detail="skill not in catalog")
     body = skill.get("skill_md")
