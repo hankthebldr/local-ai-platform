@@ -1,0 +1,169 @@
+# Enclave — BD790i local dev stack (Cortex Console in the browser)
+#
+#   docker compose -f docker-compose.bd790i.yml up -d --build
+#   open http://localhost:8001/
+#
+# WHY A SEPARATE FILE (not the base docker-compose.yml):
+#   The base stack bundles its OWN ollama container with no GPU reservation
+#   (CPU-only) on :11434 — which would collide with this box's host Ollama
+#   (GPU-accelerated, already holding yi:34b / qwen2.5 / mistral-nemo) and
+#   start empty. So here we containerize ONLY the API and REUSE the host's
+#   GPU services:
+#       - host Ollama  on 127.0.0.1:11434  (GPU, models already pulled)
+#       - host vLLM    on 127.0.0.1:8000   (optional; see vllm-serve.sh)
+#
+#   network_mode: host gives the container the host's network namespace, so
+#   localhost:11434 / localhost:8000 resolve to those host daemons with zero
+#   bridge/DNS guesswork, and the API binds the host's :8001 directly.
+#
+# ITERATION: ./api is bind-mounted and uvicorn runs with --reload, so editing
+# api/*.py hot-reloads the running container — no rebuild needed. Rebuild only
+# when dependencies (setup/requirements-*.txt) change.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: enclave-api:bd790i
+    container_name: enclave-api
+    # Share the host network namespace → reach host Ollama/vLLM on localhost,
+    # bind the API on the host's API_PORT. (With host networking the `ports:`
+    # key is ignored; the process binds API_PORT directly.)
+    network_mode: host
+    # GPU VISIBILITY (not inference). The API container doesn't run models —
+    # Ollama/vLLM on the host do — but it MUST see the GPU via NVML so
+    # detect_architecture() reports gpu_nvidia_single (correct keep-alive,
+    # VRAM budget, Console display) instead of falling back to cpu_x86.
+    # `utility` is the driver capability that ships libnvidia-ml.so (NVML).
+    # REQUIRES the nvidia container runtime on the host (one-time):
+    #   sudo nvidia-ctk runtime configure --runtime=docker
+    #   sudo systemctl restart docker
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, utility]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - API_HOST=0.0.0.0
+      - API_PORT=8001                       # vLLM owns :8000; Console on :8001
+      - OLLAMA_HOST=http://localhost:11434  # host GPU Ollama
+      # vLLM is CORE on this device: the bundled `vllm` service below serves
+      # the primary model on the GPU and the API auto-registers it as the
+      # performance runner (Ollama stays as the universal fallback).
+      - ENCLAVE_VLLM_BASE_URLS=${ENCLAVE_VLLM_BASE_URLS:-http://localhost:8000}
+      # Auth ON is the DESIGNED local path: the API auto-provisions a first-run
+      # key (data/config/first-run-key.txt) and the SPA auto-signs-in via
+      # /api/setup/local-license (localhost-only). With auth OFF that endpoint
+      # 404s, the SPA falls back to a blocking sign-in modal, and Admin/Models
+      # panels stay locked → host info never renders.
+      # Hardcoded `true` (not ${...:-true}) on purpose: docker compose
+      # auto-loads the repo-root .env for interpolation, and that file sets
+      # ENABLE_API_AUTH=false for the host venv run — which would otherwise
+      # leak in here and re-break the SPA.
+      - ENABLE_API_AUTH=true
+      # Known admin credential baked in FOR LOCAL TESTING ONLY. The middleware
+      # accepts this as a master Bearer key (curl, scripts, manual sign-in).
+      # It does NOT suppress first-run provisioning (only API_KEY does), so the
+      # SPA's auto-sign-in via /api/setup/local-license still works too.
+      # ⚠ Never ship this beyond localhost — rotate via /api/keys for real use.
+      - MASTER_API_KEY=sk-bd790i-dev-admin
+      - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-600}
+      - MAX_CONCURRENT_LLM=${MAX_CONCURRENT_LLM:-1}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-900}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Hot reload for live iteration.
+      - ENCLAVE_RELOAD=1
+      # Host hardware truth so the Console reports the real machine (the
+      # container can't introspect the host). Matches detect_hardware()'s
+      # bd790i profile (keys on the 7945HX brand string).
+      - ENCLAVE_HOST_CPU_BRAND=AMD Ryzen 9 7945HX
+      - ENCLAVE_HOST_CPU_CORES=32
+      - ENCLAVE_HOST_RAM_GB=60
+      - ENCLAVE_HOST_GPU=NVIDIA RTX PRO 4000 Blackwell
+      - ENCLAVE_HOST_PLATFORM=linux
+    volumes:
+      # Live code reload — edits to api/*.py reload the running container.
+      - ./api:/app/api
+      # Persist issued keys, workflow runs, RAG store, uploads across rebuilds.
+      - enclave_bd790i_data:/app/data
+    # uvicorn --reload watches the bind-mounted /app/api.
+    command:
+      - uvicorn
+      - api.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+      - --reload
+      - --reload-dir
+      - /app/api
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import requests; requests.get('http://localhost:8001/health', timeout=3).raise_for_status()
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── vLLM — primary GPU inference backend (core on this device) ──────────
+  # Serves the primary model on the Blackwell via the OpenAI API on :8000.
+  # The API container auto-registers it (ENCLAVE_VLLM_BASE_URLS above) as the
+  # performance runner; Ollama stays as the universal fallback. Primary GPU
+  # budget: ~0.70 utilization (~16 GB), leaving headroom for a small Ollama
+  # model. Swap the model/quant via env (VLLM_MODEL / VLLM_QUANT).
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: enclave-vllm
+    network_mode: host          # bind :8000 on the host; API reaches localhost:8000
+    ipc: host                   # vLLM needs a large /dev/shm for its workers
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HF_HOME=/models
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+    volumes:
+      - vllm_models:/models     # cache downloaded weights across restarts
+    command:
+      - --model
+      - ${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct-AWQ}
+      - --quantization
+      - ${VLLM_QUANT:-awq}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --gpu-memory-utilization
+      - "${VLLM_GPU_UTIL:-0.70}"
+      - --max-model-len
+      - "${VLLM_MAX_LEN:-8192}"
+      - --max-num-seqs
+      - "${VLLM_MAX_SEQS:-16}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 300s        # first run downloads the model — be patient
+
+volumes:
+  enclave_bd790i_data:
+    name: enclave-bd790i-data
+  vllm_models:
+    name: enclave-vllm-models

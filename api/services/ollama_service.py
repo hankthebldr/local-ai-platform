@@ -110,6 +110,80 @@ class OllamaService:
 
     def __init__(self, host: str = OLLAMA_HOST):
         self.host = host
+        # vLLM dispatch cache (gpu-runner-abstraction Phase 4): the set of
+        # model ids the registered vLLM runner serves, refreshed with a short
+        # TTL so chat/generate can route those models to vLLM transparently.
+        self._vllm_served_cache: Optional[set] = None
+        self._vllm_served_ts: float = 0.0
+
+    # ── vLLM dispatch (full-platform vLLM access) ────────────────────────
+    # Every inference caller — chat, completions, workflow steps, agents,
+    # graph — funnels through this service, so routing vLLM-served models to
+    # the vLLM runner HERE gives vLLM platform-wide reach without touching
+    # each call site. Strictly additive: a model the vLLM runner doesn't
+    # serve takes the unchanged Ollama path.
+
+    def _vllm_runner(self):
+        """Return the registered VLLM Runner, or None. Never raises."""
+        try:
+            from .runner_registry import get_current_registry
+            from .runner import RunnerKind
+
+            reg = get_current_registry()
+            if RunnerKind.VLLM in reg.kinds():
+                return reg.get(RunnerKind.VLLM)
+        except Exception:
+            pass
+        return None
+
+    def _vllm_served_models(self, runner) -> set:
+        """Cached set of model ids the vLLM runner serves (8s TTL)."""
+        import time
+
+        now = time.monotonic()
+        if self._vllm_served_cache is not None and (now - self._vllm_served_ts) < 8.0:
+            return self._vllm_served_cache
+        try:
+            served = {m.id for m in runner.list_models()}
+        except Exception:
+            served = set()
+        self._vllm_served_cache = served
+        self._vllm_served_ts = now
+        return served
+
+    def _vllm_runner_for(self, model: str):
+        """Return the vLLM runner iff it serves `model`, else None."""
+        runner = self._vllm_runner()
+        if runner is None:
+            return None
+        return runner if model in self._vllm_served_models(runner) else None
+
+    def _vllm_chat(self, runner, model, messages, temperature, max_tokens, tools):
+        """Dispatch a chat to vLLM and translate the OpenAI result into the
+        same dict shape _chat_inner returns, so callers are oblivious."""
+        from .runner import GenerateRequest
+
+        opts = {"temperature": temperature, "max_tokens": max_tokens}
+        if tools:
+            opts["tools"] = tools
+        resp = runner.generate(
+            GenerateRequest(model=model, messages=messages, options=opts)
+        )
+        logger.info(
+            "Chat complete (vLLM): model=%s, prompt_tokens=%s, completion_tokens=%s",
+            model,
+            resp.tokens_in,
+            resp.tokens_out,
+        )
+        return {
+            "content": strip_think_tags(resp.content or ""),
+            "prompt_eval_count": resp.tokens_in,
+            "eval_count": resp.tokens_out,
+            "total_duration_ms": round((resp.total_seconds or 0.0) * 1000, 2),
+            "load_duration_ms": round((resp.load_seconds or 0.0) * 1000, 2),
+            "prompt_eval_duration_ms": None,
+            "eval_duration_ms": None,
+        }
 
     # ── Version probe (for architecture-aware orchestration) ─────────
 
@@ -130,16 +204,45 @@ class OllamaService:
     # ── Model Management ───────────────────────────────────────────────
 
     def list_models(self) -> List[Dict]:
-        """List all available models from Ollama"""
+        """List all available models — Ollama's /api/tags plus any models the
+        vLLM runner serves, so vLLM weights show up in every picker across the
+        platform (Composer, chat, completions, agents)."""
         try:
             response = requests.get(f"{self.host}/api/tags", timeout=10)
             response.raise_for_status()
-            return response.json().get("models", [])
+            models = response.json().get("models", [])
         except requests.ConnectionError:
             raise OllamaConnectionError(f"Cannot connect to {self.host}")
         except Exception as e:
             logger.error(f"Failed to list models: {e}")
             raise OllamaConnectionError(str(e))
+        return models + self._vllm_model_entries()
+
+    def _vllm_model_entries(self) -> List[Dict]:
+        """vLLM-served models in Ollama /api/tags shape. Never raises."""
+        runner = self._vllm_runner()
+        if runner is None:
+            return []
+        entries = []
+        try:
+            for m in runner.list_models():
+                entries.append(
+                    {
+                        "name": m.id,
+                        "model": m.id,
+                        "size": int((m.size_gb or 0) * 1e9),
+                        "details": {
+                            "family": m.family or "vllm",
+                            "quantization_level": (m.quant.value if m.quant else None),
+                            "context_length": m.context_window,
+                        },
+                        # Marker so the UI/telemetry can badge the backend.
+                        "runner": "vllm",
+                    }
+                )
+        except Exception:
+            return []
+        return entries
 
     def get_model_info(self, model: str) -> Dict:
         """Get detailed info about a specific model"""
@@ -253,6 +356,19 @@ class OllamaService:
         logger.info(
             f"Chat request: model={model}, messages={len(messages)}, temp={temperature}"
         )
+
+        # vLLM-served models route to vLLM (continuous batching), bypassing the
+        # Ollama serialization lock. Falls through to Ollama on any vLLM error.
+        runner = self._vllm_runner_for(model)
+        if runner is not None:
+            try:
+                return self._vllm_chat(
+                    runner, model, messages, temperature, max_tokens, tools
+                )
+            except Exception as e:
+                logger.warning(
+                    "vLLM chat failed for %s (%s); falling back to Ollama", model, e
+                )
 
         with _LLM_SEMAPHORE:
             return self._chat_inner(
@@ -388,6 +504,29 @@ class OllamaService:
 
         logger.info(f"Chat stream: model={model}, messages={len(messages)}")
 
+        # vLLM-served models stream via the vLLM runner (no Ollama lock).
+        runner = self._vllm_runner_for(model)
+        if runner is not None:
+            try:
+                from .runner import GenerateRequest
+
+                req = GenerateRequest(
+                    model=model,
+                    messages=messages,
+                    stream=True,
+                    options={"temperature": temperature, "max_tokens": max_tokens},
+                )
+                for chunk in runner.generate_stream(req):
+                    if chunk.delta:
+                        yield chunk.delta
+                return
+            except Exception as e:
+                logger.warning(
+                    "vLLM stream failed for %s (%s); falling back to Ollama",
+                    model,
+                    e,
+                )
+
         _LLM_SEMAPHORE.acquire()
         try:
             response = requests.post(
@@ -491,6 +630,32 @@ class OllamaService:
         }
 
         logger.info(f"Generate request: model={model}, temp={temperature}")
+
+        # vLLM-served models: satisfy raw completions via a single-message chat
+        # and translate to /api/generate's response shape.
+        runner = self._vllm_runner_for(model)
+        if runner is not None:
+            try:
+                out = self._vllm_chat(
+                    runner,
+                    model,
+                    [{"role": "user", "content": prompt}],
+                    temperature,
+                    max_tokens,
+                    None,
+                )
+                return {
+                    "response": out["content"],
+                    "prompt_eval_count": out["prompt_eval_count"],
+                    "eval_count": out["eval_count"],
+                    "total_duration": int((out.get("total_duration_ms") or 0) * 1e6),
+                }
+            except Exception as e:
+                logger.warning(
+                    "vLLM generate failed for %s (%s); falling back to Ollama",
+                    model,
+                    e,
+                )
 
         with _LLM_SEMAPHORE:
             return self._generate_inner(model, request_data)

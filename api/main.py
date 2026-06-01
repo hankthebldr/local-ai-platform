@@ -185,6 +185,31 @@ async def lifespan(app: FastAPI):
             "See docs/plans/2026-05-19-architecture-aware-orchestration-design.md"
         )
 
+    # ── Inference runner detection (gpu-runner-abstraction Phase 3) ──────
+    # Builds the RunnerRegistry: Ollama always, vLLM when ENCLAVE_VLLM_BASE_URLS
+    # is set. On the BD790i Blackwell host, vLLM (NVFP4 + continuous batching)
+    # is the performance path; Ollama stays as the universal fallback.
+    try:
+        from .services.runner_detection import detect_runners
+
+        strict_runner = os.getenv("STRICT_RUNNER_DETECTION", "false").lower() == "true"
+        registry = detect_runners(ollama_service=ollama_service, strict=strict_runner)
+        logger.info(
+            "  🚀 Runners:      %s%s",
+            sorted(k.value for k in registry.kinds()),
+            (
+                f" (preferred: {registry.preferred_runner.value})"
+                if getattr(registry, "preferred_runner", None)
+                else ""
+            ),
+        )
+    except Exception as e:
+        logger.warning("Runner detection failed: %s", e)
+        logger.warning(
+            "Inference runner registry unavailable; chat/completions still use "
+            "the OllamaService direct path. See docs/deployment/vllm-backend.md"
+        )
+
     yield
     logger.info("Shutting down Enclave API")
 
@@ -343,7 +368,16 @@ async def root():
     """Serve the HTML dashboard"""
     index = STATIC_DIR / "index.html"
     if index.exists():
-        return FileResponse(index, media_type="text/html")
+        # no-store on the SPA shell so a browser never runs a stale index.html.
+        # The single-file SPA bakes its JS inline, so a cached shell means
+        # cached auth/boot logic — exactly what broke admin auto-sign-in after
+        # we fixed it. Revalidate every load; the file is tiny relative to the
+        # API round-trips it gates.
+        return FileResponse(
+            index,
+            media_type="text/html",
+            headers={"Cache-Control": "no-store, must-revalidate"},
+        )
     # Fallback to JSON if static files missing
     return {
         "message": "Enclave API",

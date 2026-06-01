@@ -160,6 +160,59 @@ def refresh_architecture() -> Dict[str, Any]:
     }
 
 
+# ── gpu-runner-abstraction: inference backend status ─────────────────────
+
+
+@router.get("/runner")
+def get_runners() -> Dict[str, Any]:
+    """Report the registered inference runners and their live health.
+
+    Lets an operator confirm that vLLM is wired and serving on a Linux/NVIDIA
+    host (the BD790i performance path) alongside the Ollama fallback. Probes
+    each runner's health() per request so the reachable/serving signal is
+    fresh. Returns 503 if the registry was never populated (detect_runners
+    didn't run — degraded startup).
+    """
+    from ..services.runner_registry import get_current_registry
+
+    try:
+        registry = get_current_registry()
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    runners = []
+    for kind in sorted(registry.kinds(), key=lambda k: k.value):
+        r = registry.get(kind)
+        try:
+            health = r.health()
+            health_payload = (
+                health.model_dump() if hasattr(health, "model_dump") else health.dict()
+            )
+        except Exception as e:  # never let one runner's probe 500 the endpoint
+            health_payload = {"reachable": False, "error": str(e)}
+        runners.append(
+            {
+                "name": kind.value,
+                "base_url": getattr(r, "base_url", None),
+                "supports_continuous_batching": getattr(
+                    r, "supports_continuous_batching", False
+                ),
+                "supports_keep_alive": getattr(r, "supports_keep_alive", False),
+                "max_concurrent_requests": getattr(r, "max_concurrent_requests", None),
+                "supports_quantizations": [
+                    q.value for q in getattr(r, "supports_quantizations", [])
+                ],
+                "health": health_payload,
+            }
+        )
+
+    preferred = getattr(registry, "preferred_runner", None)
+    return {
+        "runners": runners,
+        "preferred_runner": preferred.value if preferred else None,
+    }
+
+
 # ── Phase 6.3: Config validation surfaces ────────────────────────────────
 
 

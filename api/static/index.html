@@ -4121,9 +4121,12 @@ textarea.composer-desc-area {
 .runs-tab-floor { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .runs-tab-graph {
   flex: 1; min-height: 280px; position: relative;
-  background: var(--bg-deep);
-  background-image: radial-gradient(var(--border) 1px, transparent 1px);
-  background-size: 20px 20px;
+  /* Subtle depth gradient instead of the busy dotted grid — a soft cyan
+     glow at the top fading into the base so the DAG nodes read clearly
+     against a calm backdrop (was: distracting 20px dot matrix). */
+  background:
+    radial-gradient(ellipse 85% 60% at 50% 0%, rgba(0, 220, 240, 0.05) 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg) 100%);
   border: 1px solid var(--border); border-radius: 6px;
   overflow: hidden;
 }
@@ -4152,6 +4155,32 @@ textarea.composer-desc-area {
   display: flex; align-items: center; justify-content: center;
   flex-direction: column; gap: 6px;
   color: var(--text-muted); pointer-events: none;
+}
+/* A class-level `display: flex` outranks the UA `[hidden] { display: none }`
+   rule, so select() setting the hidden attribute did NOTHING — the
+   "Workflow Progress" watermark bled through behind the live DAG. This
+   makes the hide actually take effect. */
+.runs-tab-graph-empty[hidden] { display: none; }
+
+/* Full step-output viewer — each workspace key expands to its complete value. */
+.run-step-outputs { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.run-step-output { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.run-step-output.open { border-color: var(--cyan-dim); }
+.run-step-output-head {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 4px 7px; font-family: var(--mono); font-size: 0.66rem;
+  background: rgba(255,255,255,0.015);
+}
+.run-step-output-head:hover { background: var(--accent-ghost, rgba(0,220,240,0.05)); }
+.run-step-output-head .ctx-field-k { color: var(--accent); font-weight: 600; }
+.run-step-output-head .ctx-field-v { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46ch; }
+.run-step-output-meta { color: var(--text-muted); font-size: 0.6rem; flex-shrink: 0; }
+.run-step-output-full {
+  margin: 0; padding: 8px 10px; max-height: 340px; overflow: auto;
+  font-family: var(--mono); font-size: 0.66rem; line-height: 1.5;
+  color: var(--text); background: var(--bg-deep);
+  white-space: pre-wrap; word-break: break-word;
+  border-top: 1px solid var(--border);
 }
 /* Workflow-progress chip — lives in the .runs-tab-detail-head panel
    header now (above the DAG canvas), inline-flex next to the run-
@@ -13525,7 +13554,7 @@ window.AdminAuth = (function () {
     if (e.key === 'Escape') { e.preventDefault(); _cancelSignIn(); }
   });
 
-  return { isSignedIn, getKey, authHeaders, fetch, renderLock,
+  return { isSignedIn, getKey, setKey, clearKey, authHeaders, fetch, renderLock,
            signIn, signOut, _cancelSignIn, _submitSignIn };
 })();
 
@@ -17434,6 +17463,7 @@ const RunsTab = (function () {
   let _currentRun = null;      // last fetched run (for cascade / context analysis)
   let _currentSteps = [];      // step list used for the rendered DAG
   const _expandedSteps = new Set();  // step_ids the user clicked to expand
+  const _expandedOutputs = new Set();  // "stepId::key" of fully-expanded outputs
 
   function init() {
     // Defer the drawflow editor init until the first run is actually
@@ -18040,19 +18070,34 @@ const RunsTab = (function () {
         <span style="color:var(--text-muted)">(empty object)</span>
       </div>`;
     }
-    const chips = keys.slice(0, 12).map(k => {
+    // Each workspace key is click-to-expand: a collapsed row shows a short
+    // preview; expanding reveals the COMPLETE produced value (string verbatim,
+    // objects/arrays pretty-printed) in a scrollable block, so the operator can
+    // actually read what a step output — not just a 50-char teaser.
+    const rows = keys.slice(0, 24).map(k => {
       const v = slot[k];
-      const sample = typeof v === 'string'
-        ? v.slice(0, 50) + (v.length > 50 ? '…' : '')
-        : (v === null ? 'null' : typeof v);
-      return `<span class="ctx-field-chip" title="${esc(JSON.stringify(v).slice(0, 200))}">
-        <span class="ctx-field-k">${esc(k)}</span>
-        <span class="ctx-field-v">${esc(String(sample))}</span>
-      </span>`;
+      const isStr = typeof v === 'string';
+      const full = isStr ? v : JSON.stringify(v, null, 2);
+      const preview = isStr
+        ? v.replace(/\s+/g, ' ').slice(0, 60) + (v.length > 60 ? '…' : '')
+        : (v === null ? 'null' : Array.isArray(v) ? `array[${v.length}]` : 'object');
+      const meta = isStr ? `${v.length} chars`
+        : (Array.isArray(v) ? `${v.length} items` : (v === null ? '' : 'object'));
+      const open = _expandedOutputs.has(stepId + '::' + k);
+      return `<div class="run-step-output${open ? ' open' : ''}">
+        <div class="run-step-output-head" onclick="RunsTab.toggleStepOutput('${esc(stepId)}','${esc(k)}')">
+          <span class="run-step-caret">${open ? '▾' : '▸'}</span>
+          <span class="ctx-field-k">${esc(k)}</span>
+          ${open ? '' : `<span class="ctx-field-v">${esc(String(preview))}</span>`}
+          <span style="flex:1"></span>
+          <span class="run-step-output-meta">${esc(meta)}</span>
+        </div>
+        ${open ? `<pre class="run-step-output-full">${esc(full)}</pre>` : ''}
+      </div>`;
     }).join('');
-    return `<div class="run-step-row-kv">
-      <span class="run-step-row-k">workspace</span>
-      <div class="ctx-field-chips">${chips}${keys.length > 12 ? `<span class="ctx-field-more">+${keys.length - 12}</span>` : ''}</div>
+    return `<div class="run-step-row-kv run-step-outputs-kv">
+      <span class="run-step-row-k">output</span>
+      <div class="run-step-outputs">${rows}${keys.length > 24 ? `<span class="ctx-field-more">+${keys.length - 24} more</span>` : ''}</div>
     </div>`;
   }
 
@@ -18113,6 +18158,13 @@ const RunsTab = (function () {
   function toggleStepExpand(stepId) {
     if (_expandedSteps.has(stepId)) _expandedSteps.delete(stepId);
     else _expandedSteps.add(stepId);
+    if (_currentRun) _renderSteps(_currentRun);
+  }
+
+  function toggleStepOutput(stepId, key) {
+    const id = stepId + '::' + key;
+    if (_expandedOutputs.has(id)) _expandedOutputs.delete(id);
+    else _expandedOutputs.add(id);
     if (_currentRun) _renderSteps(_currentRun);
   }
 
@@ -18319,7 +18371,7 @@ const RunsTab = (function () {
 
   return { init, load, render, setFilter, select,
     resumeCurrent, cancelCurrent, pauseCurrent, rerunCurrent,
-    toggleStepExpand, toggleBottomDrawer, markFailed,
+    toggleStepExpand, toggleStepOutput, toggleBottomDrawer, markFailed,
     zoomIn, zoomOut, zoomReset };
 })();
 window.RunsTab = RunsTab;
