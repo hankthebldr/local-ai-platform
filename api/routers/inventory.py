@@ -513,6 +513,22 @@ async def status():
         else:
             available_ids.append(model_id)
 
+    # Every model actually resident on this box, catalogued or not — so the
+    # operator can see/manage models that were installed natively (yi:34b,
+    # qwen2.5, the vLLM-served weights) and aren't in the curated registry.
+    installed_local = [
+        {
+            "name": name,
+            "backend": meta.get("backend", "ollama"),
+            "size_gb": meta.get("size_gb", 0),
+            "in_catalog": any(
+                _is_installed(registry[m].get("ollama", ""), {name: meta})
+                for m in registry
+            ),
+        }
+        for name, meta in installed.items()
+    ]
+
     return {
         "installed": installed_ids,
         "available": available_ids,
@@ -520,6 +536,10 @@ async def status():
         "available_count": len(available_ids),
         "total_registry": len(registry),
         "total_ollama": len(installed),
+        # Full local inventory (all backends), for the "natively installed"
+        # management view — independent of catalog membership.
+        "installed_local": installed_local,
+        "installed_local_count": len(installed_local),
     }
 
 
@@ -609,13 +629,16 @@ async def remove_model(req: RemoveRequest):
 
 @router.get("/memory")
 async def memory_usage():
-    """Currently loaded models with memory usage from Ollama /api/ps."""
+    """Currently loaded models across backends — Ollama (/api/ps) plus vLLM
+    resident (pinned) models. With vLLM as the primary GPU backend, omitting
+    it left this pane misleadingly empty whenever Ollama had evicted its
+    models. Each entry carries a `backend` marker for the UI to badge."""
+    running = []
+    ollama_err = None
     try:
         resp = requests.get(f"{OLLAMA_HOST}/api/ps", timeout=10)
         resp.raise_for_status()
-        data = resp.json()
-        running = []
-        for model in data.get("models", []):
+        for model in resp.json().get("models", []):
             running.append(
                 {
                     "name": model.get("name", ""),
@@ -626,22 +649,66 @@ async def memory_usage():
                     "digest": model.get("digest", "")[:12],
                     "expires_at": model.get("expires_at", ""),
                     "details": model.get("details", {}),
+                    "backend": "ollama",
                 }
             )
-
-        mem = psutil.virtual_memory()
-        return {
-            "running_models": running,
-            "running_count": len(running),
-            "system_memory": {
-                "total_gb": round(mem.total / (1024**3), 1),
-                "used_gb": round(mem.used / (1024**3), 1),
-                "available_gb": round(mem.available / (1024**3), 1),
-                "percent": mem.percent,
-            },
-        }
     except Exception as e:
-        return {"running_models": [], "running_count": 0, "error": str(e)}
+        ollama_err = str(e)
+
+    # Fold in vLLM resident models (independent of Ollama reachability).
+    running.extend(_vllm_running_models())
+
+    mem = psutil.virtual_memory()
+    out = {
+        "running_models": running,
+        "running_count": len(running),
+        "system_memory": {
+            "total_gb": round(mem.total / (1024**3), 1),
+            "used_gb": round(mem.used / (1024**3), 1),
+            "available_gb": round(mem.available / (1024**3), 1),
+            "percent": mem.percent,
+        },
+    }
+    # Only surface the Ollama error when it actually left us with nothing.
+    if ollama_err and not running:
+        out["error"] = ollama_err
+    return out
+
+
+def _vllm_running_models() -> list:
+    """vLLM's served (GPU-resident) models, in the /api/ps card shape. vLLM
+    pins its model at server start, so 'served' == 'resident'. Never raises."""
+    out = []
+    try:
+        from ..services.runner_registry import get_current_registry
+        from ..services.runner import RunnerKind
+
+        reg = get_current_registry()
+        if RunnerKind.VLLM not in reg.kinds():
+            return []
+        runner = reg.get(RunnerKind.VLLM)
+        if not runner.health().reachable:
+            return []
+        for m in runner.list_models():
+            out.append(
+                {
+                    "name": m.id,
+                    "size_bytes": 0,
+                    "size_gb": m.size_gb or 0,
+                    "size_vram_bytes": 0,
+                    "size_vram_gb": 0,
+                    "digest": "",
+                    "expires_at": "pinned",
+                    "details": {
+                        "family": m.family or "vllm",
+                        "quantization_level": (m.quant.value if m.quant else None),
+                    },
+                    "backend": "vllm",
+                }
+            )
+    except Exception:
+        return []
+    return out
 
 
 class UnloadRequest(BaseModel):
