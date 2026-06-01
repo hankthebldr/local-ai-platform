@@ -15333,23 +15333,25 @@ window.Skeleton = (function () {
 
   window.fetch = function (input, init) {
     const path = pathOf(input);
+    let wasAuthed = false;
     if (path && apiPath.test(path) && Auth.isSignedIn()) {
       init = init || {};
       init.headers = Object.assign({}, init.headers || {}, Auth.authHeaders());
+      wasAuthed = true;
     }
     return _origFetch(input, init).then(function (r) {
-      if (r.status === 401 && path && apiPath.test(path) && !_reauthInFlight) {
-        // Key rejected — clear and re-prompt once. Don't loop on a storm
-        // of parallel 401s; the first one drives the modal.
+      // Only treat a 401 as "signed out" if WE actually sent a key the server
+      // rejected. A 401 on a request made before sign-in (no auth header — the
+      // parallel panel fetches that fire during boot) is expected; ignoring it
+      // prevents a stale pre-auth response from wiping the key we just set +
+      // flashing the modal (the race the old full-page reload used to mask).
+      if (r.status === 401 && wasAuthed && path && apiPath.test(path) && !_reauthInFlight) {
         _reauthInFlight = true;
         Auth.signOut();
         Auth.signIn(null);
-        // Reset the latch when the modal closes (cancel or successful submit
-        // — successful submit triggers a reload anyway).
         const reset = () => { _reauthInFlight = false; };
-        document.getElementById('admin-signin-modal').addEventListener(
-          'transitionend', reset, { once: true }
-        );
+        const m = document.getElementById('admin-signin-modal');
+        if (m) m.addEventListener('transitionend', reset, { once: true });
         setTimeout(reset, 1500);  // fallback if no transition fires
       }
       return r;
@@ -15378,6 +15380,10 @@ window.Skeleton = (function () {
           // in-flight navigation (net::ERR_ABORTED — breaks the Playwright
           // suite) and flashes the whole UI for the user.
           try {
+            // The pre-auth 401 race may have popped the sign-in modal before
+            // the key landed — close it now that we're authed.
+            const modal = document.getElementById('admin-signin-modal');
+            if (modal) modal.hidden = true;
             const activeBtn = document.querySelector('.tab-btn.active');
             const tab = activeBtn ? activeBtn.getAttribute('data-tab') : null;
             if (tab && typeof switchTab === 'function') switchTab(tab, activeBtn);
