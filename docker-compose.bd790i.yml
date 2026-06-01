@@ -118,9 +118,15 @@ services:
   # ── vLLM — primary GPU inference backend (core on this device) ──────────
   # Serves the primary model on the Blackwell via the OpenAI API on :8000.
   # The API container auto-registers it (ENCLAVE_VLLM_BASE_URLS above) as the
-  # performance runner; Ollama stays as the universal fallback. Primary GPU
-  # budget: ~0.70 utilization (~16 GB), leaving headroom for a small Ollama
-  # model. Swap the model/quant via env (VLLM_MODEL / VLLM_QUANT).
+  # performance runner; Ollama stays as the universal fallback.
+  #
+  # MODEL: nvidia/Qwen3-8B-NVFP4 — NVFP4 is the Blackwell-native 4-bit float
+  # format (hardware-accelerated, faster than AWQ/GGUF here). ~6.4 GB weights
+  # at 0.85 util leaves ~14 GB for the KV cache → very high concurrency + long
+  # context. NVFP4 weights load via vLLM's `modelopt` quant path + fp8 KV cache.
+  # Bigger option (more capable, tighter memory): nvidia/Qwen3-30B-A3B-NVFP4
+  # (18 GB weights → set VLLM_GPU_UTIL=0.92 VLLM_MAX_LEN=4096). Override any of
+  # these via env (VLLM_MODEL / VLLM_QUANT / VLLM_KV_DTYPE / VLLM_GPU_UTIL).
   vllm:
     image: vllm/vllm-openai:latest
     container_name: enclave-vllm
@@ -141,9 +147,11 @@ services:
       - vllm_models:/models     # cache downloaded weights across restarts
     command:
       - --model
-      - ${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct-AWQ}
+      - ${VLLM_MODEL:-nvidia/Qwen3-8B-NVFP4}
       - --quantization
-      - ${VLLM_QUANT:-awq_marlin}
+      - ${VLLM_QUANT:-modelopt}
+      - --kv-cache-dtype
+      - ${VLLM_KV_DTYPE:-fp8}
       - --host
       - 0.0.0.0
       - --port
