@@ -5110,6 +5110,15 @@ textarea.composer-desc-area {
 .skill-disc-chip.available { color: var(--amber);  border-color: rgba(255, 165, 0, 0.4); background: rgba(255, 165, 0, 0.08); }
 .skill-disc-chip.bundled   { color: var(--cyan);   border-color: var(--cyan-dim); background: rgba(0, 220, 240, 0.05); }
 .skill-disc-chip.marketplace { color: var(--accent-2, #2F86E5); border-color: var(--accent-2-dim, #2F86E555); background: var(--accent-2-ghost, rgba(47,134,229,0.08)); }
+
+/* Agent tools/capabilities picker */
+.am-tools-picker { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 8px; background: var(--bg-deep); }
+.am-tools-group-label { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 6px 0 4px; }
+.am-tools-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.am-tool-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px; font-family: var(--mono); font-size: 0.66rem; color: var(--text-dim); cursor: pointer; user-select: none; }
+.am-tool-chip:hover { border-color: var(--accent-dim); }
+.am-tool-chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-ghost); }
+.am-tool-chip input { accent-color: var(--accent); margin: 0; }
 .skill-disc-actions { display: flex; justify-content: flex-end; }
 
 /* ─ Agents tab tiles (larger cousin of the workbench card) ─ */
@@ -13462,6 +13471,10 @@ function _agentModalHtml(mode, a) {
     <label style="${labelStyle}">Conversation starters <span style="color:var(--text-dim)">(one per line, shown as quick-start chips)</span></label>
     <textarea id="am-starters" rows="3" placeholder="Review this function for bugs&#10;What's the time complexity here?" style="${inputStyle}resize:vertical;">${esc(startersVal)}</textarea>
   </div>
+  <div style="margin-top:10px;">
+    <label style="${labelStyle}">Tools &amp; Capabilities <span style="color:var(--text-dim)">(what this agent may invoke — built-ins, plugin tools, MCP)</span></label>
+    <div id="am-tools-picker" class="am-tools-picker"><div style="color:var(--text-muted);font-size:0.7rem">Loading capabilities…</div></div>
+  </div>
   <input type="hidden" id="am-context-json" value="${esc(contextJson)}">
   <input type="hidden" id="am-tools-json" value="${esc(toolsJson)}">
   <div id="am-error" style="display:none;color:var(--red,#f44);font-size:0.72rem;margin-top:8px;padding:6px 8px;background:rgba(255,68,68,0.08);border-radius:4px;"></div>
@@ -13481,6 +13494,7 @@ function showCreateAgentModal() {
   modal.appendChild(inner);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
+  _renderAgentToolsPicker([]);
   inner.querySelector('#am-id').focus();
 }
 
@@ -13502,7 +13516,86 @@ async function showEditAgentModal(agentId) {
   modal.appendChild(inner);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
+  _renderAgentToolsPicker(agent.tools || []);
   inner.querySelector('#am-name').focus();
+}
+
+// ── Agent tools/capabilities picker ──────────────────────────────────────
+// Builds a checkbox grid of everything an agent can invoke — built-in tools,
+// every registered plugin tool, and MCP-server tools — keeping the hidden
+// #am-tools-json in sync (the shape _saveAgentModal sends). This is the
+// "agents need specific tools/capabilities/MCP alignment" piece.
+async function _renderAgentToolsPicker(selected) {
+  const host = document.getElementById('am-tools-picker');
+  if (!host) return;
+  const sel = new Set((selected || []).map(t =>
+    t && t.type ? 'builtin:' + t.type
+      : (t && t.plugin_id ? 'plugin:' + t.plugin_id + '::' + t.tool_id
+        : (t && t.mcp_server ? 'mcp:' + t.mcp_server + '::' + (t.tool_id || '*') : ''))
+  ).filter(Boolean));
+
+  const groups = [];
+  groups.push(['Built-in', [
+    ['builtin:web_search', 'web_search', 'Live web search'],
+    ['builtin:workflow', 'workflow', 'Run a workflow'],
+    ['builtin:code_exec', 'code_exec', 'Execute code'],
+  ]]);
+
+  try {
+    const r = await fetch('/api/plugins');
+    const d = await r.json();
+    (Array.isArray(d) ? d : (d.plugins || [])).forEach(p => {
+      const tools = p.tools || [];
+      if (!tools.length) return;
+      groups.push([p.name || p.id, tools.map(t => {
+        const tid = t.id || t.name;
+        return ['plugin:' + (p.id || p.name) + '::' + tid, tid, t.description || ''];
+      })]);
+    });
+  } catch (_) { /* plugins unavailable — built-ins only */ }
+
+  try {
+    const r = await fetch('/api/mcp/servers');
+    const servers = await r.json();
+    (Array.isArray(servers) ? servers : []).forEach(s => {
+      groups.push(['MCP · ' + (s.name || s.id), [
+        ['mcp:' + (s.id) + '::*', (s.name || s.id) + ' (all tools)', 'MCP server'],
+      ]]);
+    });
+  } catch (_) { /* no MCP servers */ }
+
+  const chip = (key, label, sub, on) => `
+    <label class="am-tool-chip${on ? ' on' : ''}" title="${esc(sub || '')}">
+      <input type="checkbox" data-tool="${esc(key)}" ${on ? 'checked' : ''} onchange="_syncAgentTools()">
+      <span class="am-tool-name">${esc(label)}</span>
+    </label>`;
+  host.innerHTML = groups.map(([gl, items]) =>
+    `<div class="am-tools-group-label">${esc(gl)}</div><div class="am-tools-row">` +
+    items.map(([k, l, sub]) => chip(k, l, sub, sel.has(k))).join('') + '</div>'
+  ).join('');
+  _syncAgentTools();
+}
+
+function _syncAgentTools() {
+  const host = document.getElementById('am-tools-picker');
+  if (!host) return;
+  const tools = [];
+  host.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    const chip = cb.closest('.am-tool-chip');
+    if (chip) chip.classList.toggle('on', cb.checked);
+    if (!cb.checked) return;
+    const key = cb.getAttribute('data-tool') || '';
+    if (key.startsWith('builtin:')) tools.push({ type: key.slice(8) });
+    else if (key.startsWith('plugin:')) {
+      const [pid, tid] = key.slice(7).split('::');
+      tools.push({ plugin_id: pid, tool_id: tid });
+    } else if (key.startsWith('mcp:')) {
+      const [sid, tid] = key.slice(4).split('::');
+      tools.push({ mcp_server: sid, tool_id: tid });
+    }
+  });
+  const hidden = document.getElementById('am-tools-json');
+  if (hidden) hidden.value = JSON.stringify(tools);
 }
 
 async function _saveAgentModal(existingId) {
