@@ -9,10 +9,12 @@ with hardware auto-detection and live install status from Ollama.
 import os
 import subprocess
 import threading
+from pathlib import Path
 from typing import Optional
 
 import psutil
 import requests
+import yaml
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -709,6 +711,90 @@ def _vllm_running_models() -> list:
     except Exception:
         return []
     return out
+
+
+def _workflows_referencing(model_name: str) -> list:
+    """Workflows whose steps reference this model (exact name or same base
+    before the ':tag'). Powers the 'what workflows it supports' detail view."""
+    out = []
+    wf_dir = Path(__file__).parent.parent.parent / "workflows"
+    if not wf_dir.exists():
+        return out
+    base = model_name.split(":")[0]
+    for f in sorted(wf_dir.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        steps = data.get("steps") or []
+        models = {
+            (s.get("model") or "")
+            for s in steps
+            if isinstance(s, dict) and s.get("model")
+        }
+        if model_name in models or any(m.split(":")[0] == base for m in models):
+            out.append(
+                {
+                    "id": data.get("id") or f.stem,
+                    "name": data.get("name") or f.stem,
+                    "steps": len(steps),
+                }
+            )
+    return out
+
+
+@router.get("/model/{name:path}")
+async def model_detail(name: str):
+    """Rich detail for one installed model — Ollama /api/show metadata (or vLLM
+    served-model info) plus which workflows reference it. Backs the
+    double-click detail view in the local inventory."""
+    # vLLM-served?
+    for m in _vllm_running_models():
+        if m["name"] == name:
+            return {
+                "name": name,
+                "backend": "vllm",
+                "details": m.get("details", {}),
+                "model_info": {},
+                "capabilities": ["chat", "continuous_batching"],
+                "modified_at": None,
+                "workflows": _workflows_referencing(name),
+                "note": "Served by vLLM (pinned). Managed via docker compose.",
+            }
+
+    # Ollama model — pull the rich /api/show payload.
+    from ..services.ollama_service import OllamaService
+
+    try:
+        info = OllamaService().get_model_info(name)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "name": name,
+            "backend": "ollama",
+            "error": str(exc),
+            "workflows": _workflows_referencing(name),
+        }
+
+    mi = info.get("model_info") or {}
+    # Keep only the high-signal model_info keys (context length, architecture,
+    # param/embedding sizes) — the full blob is huge.
+    keep = {
+        k: v
+        for k, v in mi.items()
+        if any(
+            tok in k
+            for tok in ("context_length", "architecture", "parameter", "embedding")
+        )
+    }
+    return {
+        "name": name,
+        "backend": "ollama",
+        "details": info.get("details", {}),
+        "model_info": keep,
+        "capabilities": info.get("capabilities", []),
+        "modified_at": info.get("modified_at"),
+        "workflows": _workflows_referencing(name),
+    }
 
 
 class UnloadRequest(BaseModel):
