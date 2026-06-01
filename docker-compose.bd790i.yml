@@ -72,7 +72,7 @@ services:
       # SPA's auto-sign-in via /api/setup/local-license still works too.
       # ⚠ Never ship this beyond localhost — rotate via /api/keys for real use.
       - MASTER_API_KEY=sk-bd790i-dev-admin
-      - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-600}
+      - RATE_LIMIT_RPM=600   # hardcoded: host .env sets 60 which 429-storms the SPA
       - MAX_CONCURRENT_LLM=${MAX_CONCURRENT_LLM:-1}
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
       - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-900}
@@ -143,20 +143,21 @@ services:
       - --model
       - ${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct-AWQ}
       - --quantization
-      - ${VLLM_QUANT:-awq}
+      - ${VLLM_QUANT:-awq_marlin}
       - --host
       - 0.0.0.0
       - --port
       - "8000"
       - --gpu-memory-utilization
-      - "${VLLM_GPU_UTIL:-0.70}"
+      - "${VLLM_GPU_UTIL:-0.85}"
       - --max-model-len
       - "${VLLM_MAX_LEN:-8192}"
       - --max-num-seqs
       - "${VLLM_MAX_SEQS:-16}"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      # The vllm/vllm-openai image has curl but no `python` on PATH.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 30s
       timeout: 5s
       retries: 5

@@ -2651,6 +2651,17 @@ textarea.composer-desc-area {
 .running-model-card .rm-info { flex: 1; }
 .running-model-card .rm-name { font-weight: 600; color: var(--text); }
 .running-model-card .rm-detail { font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; }
+.rm-backend {
+  font-family: var(--mono); font-size: 0.56rem; font-weight: 600;
+  letter-spacing: 0.06em; padding: 1px 6px; border-radius: 999px;
+  vertical-align: middle; margin-left: 6px;
+}
+.rm-backend-vllm  { color: var(--cyan); border: 1px solid var(--cyan-dim); background: rgba(0,220,240,0.06); }
+.rm-backend-ollama { color: var(--text-muted); border: 1px solid var(--border); }
+.rm-pinned {
+  font-family: var(--mono); font-size: 0.6rem; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px;
+}
 
 /* ── STATUS RAIL — Cortex operations bar ────────────────────────
    Fixed at the bottom of the shell. Mirrors the Cortex product
@@ -4206,20 +4217,31 @@ textarea.composer-desc-area {
    off-screen. */
 .runs-tab-detail-head { flex-wrap: wrap; }
 .runs-tab-steps {
-  max-height: 36vh; overflow-y: auto; padding: 10px 12px;
+  max-height: 46vh; overflow-y: auto; padding: 10px 12px;
 }
-/* Two-column floor: step results + context trace side by side. On
-   narrow viewports they stack. */
+/* Steps + Context are their OWN sub-panel below the graph — a distinct
+   region separated by a labeled divider, not just two cards hanging off the
+   canvas. Side-by-side on wide viewports; stacked when narrow. */
 .runs-tab-floor-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  position: relative;
+}
+.runs-tab-floor-grid::before {
+  content: "RUN DETAIL — STEPS & CONTEXT";
+  position: absolute; top: -8px; left: 0;
+  font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.12em;
+  color: var(--text-muted); background: var(--bg); padding: 0 8px 0 0;
 }
 @media (max-width: 1100px) {
   .runs-tab-floor-grid { grid-template-columns: 1fr; }
 }
 .runs-tab-context {
-  max-height: 36vh; overflow-y: auto; padding: 10px 12px;
+  max-height: 46vh; overflow-y: auto; padding: 10px 12px;
 }
 
 /* Top-of-pane run-level error banner (shown for failed runs). */
@@ -8915,15 +8937,17 @@ async function loadArchInfo() {
     const r = await fetch('/api/system/architecture');
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
-    const arch = d.architecture || {};
+    // The endpoint returns the architecture under `arch` (not `architecture`);
+    // reading the wrong key left every field as '—'.
+    const arch = d.arch || d.architecture || {};
     const dep  = d.deployment  || {};
     const oll  = d.ollama      || {};
 
     const ARCH_LABELS = {
-      apple_unified:  'Apple Unified (M-series)',
-      cpu_x86:        'CPU x86 (no discrete GPU)',
-      nvidia_single:  'NVIDIA Single-GPU',
-      nvidia_multi:   'NVIDIA Multi-GPU',
+      apple_unified:     'Apple Unified (M-series)',
+      cpu_x86:           'CPU x86 (no discrete GPU)',
+      gpu_nvidia_single: 'NVIDIA Single-GPU',
+      gpu_nvidia_multi:  'NVIDIA Multi-GPU',
     };
     const DEP_LABELS = {
       host_native: 'Host Native',
@@ -9027,25 +9051,36 @@ async function loadMemory() {
 
     // Running models
     const running = mem.running_models || [];
-    document.getElementById('mem-count').textContent = running.length > 0 ? `(${running.length})` : '';
+    // mem-count was removed from the markup; guard so a missing node doesn't
+    // throw and abort the whole panel (which left "Running Models" showing a
+    // "Cannot set properties of null" error instead of the model cards).
+    const memCountEl = document.getElementById('mem-count');
+    if (memCountEl) memCountEl.textContent = running.length > 0 ? `(${running.length})` : '';
 
     if (running.length === 0) {
       document.getElementById('mem-running').innerHTML =
         '<div class="model-empty">No models currently loaded in memory. Send a chat message to load one.</div>';
     } else {
-      document.getElementById('mem-running').innerHTML = running.map(m => `
-        <div class="running-model-card">
+      document.getElementById('mem-running').innerHTML = running.map(m => {
+        const isVllm = m.backend === 'vllm';
+        const expires = (m.expires_at && m.expires_at !== 'pinned')
+          ? ` | Expires: ${new Date(m.expires_at).toLocaleTimeString()}` : '';
+        const badge = `<span class="rm-backend rm-backend-${isVllm ? 'vllm' : 'ollama'}">${isVllm ? 'vLLM · GPU' : 'Ollama'}</span>`;
+        const detail = isVllm
+          ? 'Pinned · continuous batching'
+          : `RAM: ${m.size_gb} GB${m.size_vram_gb > 0 ? ` | VRAM: ${m.size_vram_gb} GB` : ''}${expires}`;
+        // vLLM pins its model at server start — there's nothing to unload.
+        const action = isVllm
+          ? `<span class="rm-pinned" title="vLLM loads its model at server start; restart the vllm service to change it">pinned</span>`
+          : `<button class="action-btn unload" onclick="unloadModel('${esc(m.name)}')">Unload</button>`;
+        return `<div class="running-model-card">
           <div class="rm-info">
-            <div class="rm-name">${esc(m.name)}</div>
-            <div class="rm-detail">
-              RAM: ${m.size_gb} GB
-              ${m.size_vram_gb > 0 ? ` | VRAM: ${m.size_vram_gb} GB` : ''}
-              ${m.expires_at ? ` | Expires: ${new Date(m.expires_at).toLocaleTimeString()}` : ''}
-            </div>
+            <div class="rm-name">${esc(m.name)} ${badge}</div>
+            <div class="rm-detail">${detail}</div>
           </div>
-          <button class="action-btn unload" onclick="unloadModel('${esc(m.name)}')">Unload</button>
-        </div>
-      `).join('');
+          ${action}
+        </div>`;
+      }).join('');
     }
   } catch(e) {
     document.getElementById('mem-running').innerHTML =
@@ -18012,6 +18047,7 @@ const RunsTab = (function () {
             <span class="run-step-row-k">started</span>
             <span>${esc(s.started_at)}</span>
           </div>` : ''}
+          ${_renderStepPrompt(s)}
           ${_renderStepOutputs(run, s.step_id)}
         </div>` : '';
 
@@ -18054,6 +18090,41 @@ const RunsTab = (function () {
   // HTML showing what fields the step wrote (so the operator can
   // trace context handoff). Empty when the step has nothing in
   // workspace (e.g. it failed before producing output).
+  function _renderStepPrompt(s) {
+    // What actually went IN to the model — the rendered system + user prompt
+    // captured on the StepResult at execution time. Each is click-to-expand to
+    // its full text (reusing the output-viewer styling). LLM steps populate
+    // these; non-LLM steps and pre-capture runs leave them null.
+    const items = [];
+    if (s.rendered_system_prompt) items.push(['system prompt', s.rendered_system_prompt]);
+    if (s.rendered_prompt) items.push(['prompt', s.rendered_prompt]);
+    if (!items.length) {
+      return `<div class="run-step-row-kv">
+        <span class="run-step-row-k">input</span>
+        <span style="color:var(--text-muted)">prompt not captured (re-run this workflow to record it)</span>
+      </div>`;
+    }
+    const rows = items.map(([label, text]) => {
+      const key = '⟦' + label + '⟧';
+      const open = _expandedOutputs.has(s.step_id + '::' + key);
+      const preview = text.replace(/\s+/g, ' ').slice(0, 60) + (text.length > 60 ? '…' : '');
+      return `<div class="run-step-output${open ? ' open' : ''}">
+        <div class="run-step-output-head" onclick="RunsTab.toggleStepOutput('${esc(s.step_id)}','${esc(key)}')">
+          <span class="run-step-caret">${open ? '▾' : '▸'}</span>
+          <span class="ctx-field-k">${esc(label)}</span>
+          ${open ? '' : `<span class="ctx-field-v">${esc(preview)}</span>`}
+          <span style="flex:1"></span>
+          <span class="run-step-output-meta">${text.length} chars</span>
+        </div>
+        ${open ? `<pre class="run-step-output-full">${esc(text)}</pre>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="run-step-row-kv run-step-outputs-kv">
+      <span class="run-step-row-k">input</span>
+      <div class="run-step-outputs">${rows}</div>
+    </div>`;
+  }
+
   function _renderStepOutputs(run, stepId) {
     const ws = (run && run.context && run.context.workspace) || {};
     const slot = ws[stepId];

@@ -5,6 +5,7 @@ Those were removed in the v2 refactor (6-hook lifecycle + PromptComposer).
 Remaining tests construct a real PromptComposer + HookBus and verify
 end-to-end step execution via the new signature.
 """
+
 from pathlib import Path
 
 import pytest
@@ -14,10 +15,13 @@ from api.services.step_executor import StepExecutor
 from api.services.prompt_composer import PromptComposer
 from api.services.hook_bus import HookBus
 from api.models.workflow_models import (
-    AgentStep, StepConfig, WorkflowContext, WorkflowDefaults, WorkflowDefinition,
+    AgentStep,
+    StepConfig,
+    WorkflowContext,
+    WorkflowDefaults,
+    WorkflowDefinition,
 )
 from api.exceptions import GenerationError
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -76,6 +80,55 @@ class TestStepExecutor:
         assert result.model_used == "deepseek-r1:32b"
         assert result.token_count["completion_tokens"] == 100
         assert ctx.get_workspace("analyze", "result") is not None
+
+    def test_execute_step_captures_rendered_prompt(self):
+        """A successful LLM step records the prompt actually sent to the model.
+
+        The captured rendered_prompt / rendered_system_prompt must match the
+        exact messages handed to ollama.chat — they are captured from the same
+        composed prompt, not re-rendered.
+        """
+        step = AgentStep(
+            id="analyze",
+            name="Analyze",
+            role="reasoning",
+            system_prompt="Analyze the data. Return JSON with key 'entities'.",
+            inputs=["seed.task"],
+            outputs=["result"],
+        )
+        ctx = WorkflowContext(seed={"task": "analyze the user records"})
+        defaults = WorkflowDefaults()
+        workflow = _make_workflow(step)
+
+        self.ollama.chat.return_value = {
+            "content": "Done.",
+            "prompt_eval_count": 10,
+            "eval_count": 20,
+        }
+
+        result = self.executor.execute(
+            step=step,
+            workflow=workflow,
+            context=ctx,
+            resolved_model="deepseek-r1:32b",
+            defaults=defaults,
+        )
+
+        assert result.status == "completed"
+        # Provenance fields are populated for the LLM step.
+        assert result.rendered_prompt is not None
+        assert result.rendered_system_prompt is not None
+        # The declared input value reached the captured user prompt.
+        assert "analyze the user records" in result.rendered_prompt
+        # Captured text matches exactly what was sent to the model.
+        call_args = self.ollama.chat.call_args
+        messages = (
+            call_args[1]["messages"] if "messages" in call_args[1] else call_args[0][1]
+        )
+        sent_system = messages[0]["content"]
+        sent_user = messages[-1]["content"]
+        assert result.rendered_system_prompt == sent_system
+        assert result.rendered_prompt == sent_user
 
     def test_execute_step_retries_on_failure(self):
         """Step retries on model failure then succeeds (requires RetryWithFeedbackHook)"""
@@ -180,7 +233,9 @@ class TestStepExecutor:
 
         # Check the messages sent to ollama.chat
         call_args = self.ollama.chat.call_args
-        messages = call_args[1]["messages"] if "messages" in call_args[1] else call_args[0][1]
+        messages = (
+            call_args[1]["messages"] if "messages" in call_args[1] else call_args[0][1]
+        )
         user_content = messages[-1]["content"]
         assert "User" in user_content
         assert "should not appear" not in user_content

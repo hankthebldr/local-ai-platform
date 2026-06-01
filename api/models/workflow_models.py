@@ -969,6 +969,19 @@ class StepResult(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
+    # ── Prompt provenance — "what prompt ran?" for the Runs UI. ──────
+    # The actual text sent to the model for this step, captured from the
+    # SAME composed prompt the model call used (never re-rendered). Both
+    # are optional so pre-existing runs deserialize unchanged and non-LLM
+    # step kinds (parallel/loop/orchestrator/ralph — which delegate the
+    # real model call to their child steps) leave them None.
+    #   rendered_prompt        — final user/content message string.
+    #   rendered_system_prompt — final system message string, if any.
+    # Each is capped at PROMPT_CAPTURE_MAX_CHARS with a trailing
+    # "…[truncated]" marker; full text is stored when under the cap.
+    rendered_prompt: Optional[str] = None
+    rendered_system_prompt: Optional[str] = None
+
     # Phase 2 — Architecture-aware observability. All optional; populated when
     # the executor has access to Ollama timing + arch.snapshot(). Older runs
     # serialized before Phase 2 deserialize cleanly because every field defaults.
