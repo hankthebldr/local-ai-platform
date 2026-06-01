@@ -4237,6 +4237,18 @@ textarea.composer-desc-area {
    makes the hide actually take effect. */
 .runs-tab-graph-empty[hidden] { display: none; }
 
+/* START / END anchor nodes in the runs DAG (seed input · final deliverable) */
+#runs-tab-canvas .drawflow .drawflow-node:has(.wf-anchor) { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; min-width: 0 !important; }
+.wf-anchor { padding: 8px 12px; border-radius: 999px; font-family: var(--mono); text-align: center; min-width: 120px; border: 1px solid; }
+.wf-anchor-label { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; }
+.wf-anchor-sub { font-size: 0.54rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 4px; }
+.wf-anchor-keys { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; }
+.wf-anchor-keys span { font-size: 0.56rem; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); }
+.wf-anchor-start { border-color: var(--accent-dim); background: var(--accent-ghost); }
+.wf-anchor-start .wf-anchor-label { color: var(--accent); }
+.wf-anchor-end { border-color: var(--cyan-dim); background: rgba(0,220,240,0.06); }
+.wf-anchor-end .wf-anchor-label { color: var(--cyan); }
+
 /* Full step-output viewer — each workspace key expands to its complete value. */
 .run-step-outputs { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .run-step-output { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
@@ -18310,6 +18322,27 @@ const RunsTab = (function () {
         try { _editor.addConnection(src, tgt, 'output_1', 'input_1'); } catch (_) {}
       });
     });
+
+    // START / END anchor nodes — make the workflow's input (seed) and final
+    // deliverable (terminal-step outputs) explicit, bracketing the DAG.
+    try {
+      const depOf = s => Array.isArray(s.depends_on) ? s.depends_on : (s.depends_on ? [s.depends_on] : []);
+      const seedKeys = [...new Set(steps.flatMap(s =>
+        (s.inputs || []).filter(i => typeof i === 'string' && i.startsWith('seed.')).map(i => i.slice(5))))];
+      const depended = new Set(steps.flatMap(depOf));
+      const rootSteps = steps.filter(s => depOf(s).length === 0);
+      const terminalSteps = steps.filter(s => !depended.has(s.id));
+      const deliverable = [...new Set(terminalSteps.flatMap(s => Array.isArray(s.outputs) ? s.outputs : []))];
+      const keyChips = arr => (arr.length ? arr : ['—']).map(k => `<span>${esc(k)}</span>`).join('');
+
+      const startHtml = `<div class="wf-anchor wf-anchor-start"><div class="wf-anchor-label">▶ START</div><div class="wf-anchor-sub">seed input</div><div class="wf-anchor-keys">${keyChips(seedKeys)}</div></div>`;
+      const startId = _editor.addNode('__start__', 0, 1, 0, 0, '__start__', {}, startHtml);
+      rootSteps.forEach(s => { const t = _idMap[s.id]; if (t) { try { _editor.addConnection(startId, t, 'output_1', 'input_1'); } catch (_) {} } });
+
+      const endHtml = `<div class="wf-anchor wf-anchor-end"><div class="wf-anchor-label">■ END</div><div class="wf-anchor-sub">deliverable</div><div class="wf-anchor-keys">${keyChips(deliverable.length ? deliverable : ['output'])}</div></div>`;
+      const endId = _editor.addNode('__end__', 1, 0, 0, 0, '__end__', {}, endHtml);
+      terminalSteps.forEach(s => { const src = _idMap[s.id]; if (src) { try { _editor.addConnection(src, endId, 'output_1', 'input_1'); } catch (_) {} } });
+    } catch (_) { /* anchors are best-effort decoration */ }
     // Stash the resolved step list for cascade detection.
     _currentSteps = steps;
     // Auto-layout. We reuse the composer's dagre helper but target our
