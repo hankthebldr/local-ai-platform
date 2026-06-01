@@ -67,6 +67,37 @@ def _installed_index() -> Dict[str, List[str]]:
     return out
 
 
+def _installed_skills_detail() -> Dict[str, Dict[str, Any]]:
+    """skill_id → minimal record, read from plugin manifests, for every skill
+    installed on disk. Lets discover() surface bundled/installed skills that
+    aren't in the curated catalog so the view reflects what's actually here."""
+    out: Dict[str, Dict[str, Any]] = {}
+    if not _PLUGINS_DIR.exists():
+        return out
+    for manifest in sorted(_PLUGINS_DIR.glob("*/plugin.yaml")):
+        try:
+            data = yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001
+            continue
+        plugin_id = data.get("id") or manifest.parent.name
+        for skill in data.get("skills") or []:
+            sid = (skill or {}).get("id")
+            if not sid or sid in out:
+                continue
+            out[sid] = {
+                "id": sid,
+                "name": skill.get("name") or sid,
+                "description": skill.get("description") or "",
+                "category": skill.get("category") or "installed",
+                "triggers": skill.get("triggers")
+                or skill.get("trigger_keywords")
+                or [],
+                "persona": skill.get("persona"),
+                "source_plugin": plugin_id,
+            }
+    return out
+
+
 def _annotate(skills: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Mark each catalog entry with where it's currently installed."""
     installed = _installed_index()
@@ -89,12 +120,29 @@ def _annotate(skills: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 async def discover() -> Dict[str, Any]:
     """List every skill in the curated discovery catalog with install state."""
     cat = _load_catalog()
+    catalog_skills = _annotate(cat.get("skills") or [])
+    catalog_ids = {s.get("id") for s in catalog_skills}
+    # Fold in installed plugin skills that aren't in the curated catalog so the
+    # discovery view reflects everything actually on the box (not just the
+    # curated set). Marked installed + bundled.
+    installed_idx = _installed_index()
+    extras: List[Dict[str, Any]] = []
+    for sid, detail in _installed_skills_detail().items():
+        if sid in catalog_ids:
+            continue
+        entry = dict(detail)
+        entry["installed_in"] = installed_idx.get(sid, [])
+        entry["installed"] = bool(entry["installed_in"])
+        entry["has_body"] = False  # bundled — body lives in the plugin
+        entry["bundled"] = True
+        extras.append(entry)
+    skills = catalog_skills + extras
     return {
         "schema": cat.get("schema"),
         "version": cat.get("version"),
         "updated": cat.get("updated"),
-        "count": len(cat.get("skills") or []),
-        "skills": _annotate(cat.get("skills") or []),
+        "count": len(skills),
+        "skills": skills,
     }
 
 
