@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-
 # ── Context Source ───────────────────────────────────────────────────────
 
 
@@ -44,19 +43,30 @@ class AgentTool(BaseModel):
     config: Dict[str, Any] = Field(default_factory=dict)
     plugin_id: Optional[str] = None
     tool_id: Optional[str] = None
+    # MCP-server tool reference: ``mcp_server: <server_id>`` with a ``tool_id``
+    # ("*" = all tools the server exposes). Lets an agent be aligned to MCP
+    # capabilities alongside built-ins and plugin tools.
+    mcp_server: Optional[str] = None
 
     @model_validator(mode="after")
     def _one_shape(self) -> "AgentTool":
         has_builtin = self.type is not None
-        has_plugin = bool(self.plugin_id) or bool(self.tool_id)
-        if not has_builtin and not has_plugin:
+        has_plugin = bool(self.plugin_id) or (
+            bool(self.tool_id) and not self.mcp_server
+        )
+        has_mcp = bool(self.mcp_server)
+        if not (has_builtin or has_plugin or has_mcp):
             raise ValueError(
-                "AgentTool requires either 'type' (built-in) or "
-                "'plugin_id'+'tool_id' (plugin tool reference)."
+                "AgentTool requires one of: 'type' (built-in), "
+                "'plugin_id'+'tool_id' (plugin tool), or 'mcp_server'+'tool_id' (MCP)."
             )
         if has_plugin and not (self.plugin_id and self.tool_id):
             raise ValueError(
                 "plugin tool reference must include both 'plugin_id' and 'tool_id'."
+            )
+        if has_mcp and not self.tool_id:
+            raise ValueError(
+                "MCP tool reference must include 'tool_id' ('*' for all tools)."
             )
         return self
 
