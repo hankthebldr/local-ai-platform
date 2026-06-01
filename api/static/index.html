@@ -2662,6 +2662,10 @@ textarea.composer-desc-area {
   font-family: var(--mono); font-size: 0.6rem; color: var(--text-muted);
   border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px;
 }
+.il-running { color: var(--accent); font-size: 0.6rem; font-family: var(--mono); margin-left: 6px; }
+.il-idle    { color: var(--text-muted); font-size: 0.6rem; font-family: var(--mono); margin-left: 6px; }
+.action-btn.xs.danger { color: var(--red, #ff5252); border-color: rgba(255,80,80,0.35); }
+.action-btn.xs.danger:hover { background: rgba(255,80,80,0.1); }
 
 /* ── STATUS RAIL — Cortex operations bar ────────────────────────
    Fixed at the bottom of the shell. Mirrors the Cortex product
@@ -6124,6 +6128,22 @@ textarea.composer-desc-area {
       </div>
     </div>
 
+    <!-- Installed Locally — every model actually resident on this box across
+         backends (Ollama + vLLM), catalogued or not. The catalog grid below
+         is for DISCOVERING new models; this panel MANAGES what you already
+         have. Populated by loadInstalledLocal() from /api/inventory/status
+         (installed_local) cross-referenced with /api/inventory/memory. -->
+    <div class="panel" style="margin-bottom:16px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">Installed Locally
+        <span class="tab-count" id="installed-local-count"></span>
+        <button class="action-btn xs" style="float:right" onclick="loadInstalledLocal()">↻ Refresh</button>
+      </div>
+      <div id="installed-local-body">
+        <div class="model-empty">Loading local models…</div>
+      </div>
+    </div>
+
     <div class="inv-toolbar">
       <input class="search-input" type="text" placeholder="Search models..." id="inv-search" oninput="filterCatalog()" />
       <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
@@ -7560,6 +7580,7 @@ function switchTab(name, el) {
     // the Models tab actually renders. Idempotent if it's already home.
     if (window.CatalogModelsShare) CatalogModelsShare.showInModelsTab();
     if (!catalogLoaded) loadCatalog();
+    loadInstalledLocal();
   }
   // Catalog (legacy `workflows` data-tab): pull the shared inventory
   // DOM into the Catalog Models mount on demand. Only happens when
@@ -8311,6 +8332,72 @@ let activeFilter = 'all';
 function tagClass(t) {
   const map = { uncensored: 'uncensored', abliterated: 'abliterated', reasoning: 'reasoning', coding: 'coding', fast: 'fast' };
   return map[t] || '';
+}
+
+// ── Installed Locally — manage models actually resident on this box ──────
+// The catalog grid below is for DISCOVERING new models; this manages what's
+// already installed, across backends (Ollama + vLLM), catalogued or not.
+async function loadInstalledLocal() {
+  const body = document.getElementById('installed-local-body');
+  const countEl = document.getElementById('installed-local-count');
+  if (!body) return;
+  try {
+    const [stRes, memRes] = await Promise.all([
+      fetch('/api/inventory/status'),
+      fetch('/api/inventory/memory'),
+    ]);
+    const st = await stRes.json();
+    const mem = await memRes.json();
+    const local = st.installed_local || [];
+    const runningNames = new Set((mem.running_models || []).map(m => m.name));
+    if (countEl) countEl.textContent = local.length ? `(${local.length})` : '';
+    if (!local.length) {
+      body.innerHTML = '<div class="model-empty">No models installed locally yet. Install one from the catalog below.</div>';
+      return;
+    }
+    body.innerHTML = local.map(m => {
+      const isVllm = m.backend === 'vllm';
+      const running = runningNames.has(m.name);
+      const size = m.size_gb ? `${m.size_gb} GB` : '—';
+      const badge = `<span class="rm-backend rm-backend-${isVllm ? 'vllm' : 'ollama'}">${isVllm ? 'vLLM · GPU' : 'Ollama'}</span>`;
+      const status = running
+        ? '<span class="il-running" title="Currently loaded in memory">● running</span>'
+        : '<span class="il-idle">idle</span>';
+      let actions;
+      if (isVllm) {
+        actions = `<span class="rm-pinned" title="Served by vLLM; change via docker compose (VLLM_MODEL)">pinned</span>`;
+      } else {
+        actions =
+          (running ? `<button class="action-btn unload" onclick="unloadModel('${esc(m.name)}')">Unload</button>` : '') +
+          `<button class="action-btn xs danger" onclick="removeLocalModel('${esc(m.name)}')">Remove</button>`;
+      }
+      return `<div class="running-model-card">
+        <div class="rm-info">
+          <div class="rm-name">${esc(m.name)} ${badge} ${status}</div>
+          <div class="rm-detail">${size} · ${m.in_catalog ? 'in catalog' : 'not in catalog'}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">${actions}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    body.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed to load local models: ${esc(e.message)}</div>`;
+  }
+}
+
+async function removeLocalModel(name) {
+  if (!confirm(`Remove "${name}" from local storage? This deletes the weights from Ollama.`)) return;
+  try {
+    const r = await fetch('/api/inventory/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: name }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    loadInstalledLocal();
+    if (typeof loadCatalog === 'function') { catalogLoaded = false; loadCatalog(); }
+  } catch (e) {
+    alert('Remove failed: ' + e.message);
+  }
 }
 
 async function loadCatalog() {
