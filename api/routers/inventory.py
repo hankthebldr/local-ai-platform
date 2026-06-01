@@ -184,6 +184,14 @@ def detect_hardware() -> dict:
     # the host's reality rather than a hardcoded profile sample.
     profile["ram_gb"] = total_ram
     profile["threads"] = thread_count
+    # The profile's max_model_ram_gb is sized for the profile's *sample* RAM
+    # (e.g. the bd790i spec assumes 96 GB). If this physical host actually has
+    # less RAM than the sample, clamp so we never advertise a model budget the
+    # box can't hold — otherwise the model-fit filter (size <= max_model_ram_gb)
+    # would surface models that OOM. Preserves the invariant max_model <= ram.
+    profile["max_model_ram_gb"] = min(
+        profile["max_model_ram_gb"], round(total_ram * 0.75)
+    )
     if host_gpu:
         profile["gpu"] = host_gpu
     # Make the CPU string explicit even on a matched profile.
@@ -225,10 +233,40 @@ def _get_installed_models() -> dict:
                 "digest": model.get("digest", "")[:12],
                 "details": model.get("details", {}),
             }
+        result.update(_vllm_installed_models())
         return result
     except Exception as e:
         logger.error(f"Failed to get installed models: {e}")
+        return _vllm_installed_models()
+
+
+def _vllm_installed_models() -> dict:
+    """vLLM-served models, shaped like installed Ollama models so the Models
+    tab reflects the full set the platform can serve. Read-only (vLLM weights
+    aren't Ollama-pull/remove-managed). Never raises."""
+    out: dict = {}
+    try:
+        from ..services.runner_registry import get_current_registry
+        from ..services.runner import RunnerKind
+
+        reg = get_current_registry()
+        if RunnerKind.VLLM not in reg.kinds():
+            return {}
+        for m in reg.get(RunnerKind.VLLM).list_models():
+            out[m.id] = {
+                "size_bytes": 0,
+                "size_gb": m.size_gb or 0,
+                "modified_at": "",
+                "digest": "",
+                "details": {
+                    "family": m.family or "vllm",
+                    "quantization_level": (m.quant.value if m.quant else None),
+                },
+                "backend": "vllm",
+            }
+    except Exception:
         return {}
+    return out
 
 
 def _is_installed(ollama_name: str, installed: dict) -> bool:
