@@ -3795,13 +3795,12 @@ textarea.composer-desc-area {
    stops drawflow's mousedown→pan handler from firing on background
    drags) and re-enable on .drawflow-node + its descendants. */
 .readonly-canvas .drawflow .drawflow-node { cursor: pointer; }
-/* Block port-drag — would otherwise start a new connection. */
+/* Block port-drag — would otherwise start a new connection. Everything else
+   (canvas pan via background drag, node drag-to-reposition, zoom) stays live
+   so the runs DAG navigates exactly like the Composer canvas — only EDITING
+   the wiring is prevented. */
 .readonly-canvas .drawflow .drawflow-node .input,
 .readonly-canvas .drawflow .drawflow-node .output { pointer-events: none; }
-.readonly-canvas > .drawflow { pointer-events: none; }
-.readonly-canvas > .drawflow .drawflow-node,
-.readonly-canvas > .drawflow .drawflow-node *,
-.readonly-canvas > .drawflow svg { pointer-events: auto; }
 #runs-tab-canvas .drawflow .drawflow-node {
   background: linear-gradient(180deg, rgba(20, 28, 38, 0.96), rgba(10, 16, 22, 0.96));
   filter: saturate(0.7);
