@@ -9780,8 +9780,8 @@ async function rebuildGraph() {
 
 function updateResCount() {
   const el = document.getElementById('res-count');
-  if (graphData) el.textContent = graphData.session_count || '';
-  else el.textContent = '';
+  if (!el) return;  // node was removed from the markup — don't throw + abort graph load
+  el.textContent = (graphData && graphData.session_count) || '';
 }
 
 function resetGraphZoom() {
@@ -15370,11 +15370,18 @@ window.Skeleton = (function () {
       if (r.ok) {
         const data = await r.json();
         if (data && data.key) {
-          Auth.setKey(data.key);
-          // Reload so every subsequent fetch picks up the auth header
-          // via the wrapper. Cheaper and more reliable than re-firing
-          // every panel's init by hand.
-          window.location.reload();
+          Auth.setKey(data.key);  // also refreshes the admin status pill
+          // Soft re-init instead of a full-page reload. The fetch wrapper
+          // reads the key dynamically, so subsequent fetches are already
+          // authed; we just re-fire the active tab's loaders (panels that
+          // fetched before the key landed). A reload here aborts the page's
+          // in-flight navigation (net::ERR_ABORTED — breaks the Playwright
+          // suite) and flashes the whole UI for the user.
+          try {
+            const activeBtn = document.querySelector('.tab-btn.active');
+            const tab = activeBtn ? activeBtn.getAttribute('data-tab') : null;
+            if (tab && typeof switchTab === 'function') switchTab(tab, activeBtn);
+          } catch (_) { /* best-effort */ }
           return;
         }
       }
