@@ -92,6 +92,11 @@ services:
       - ./api:/app/api
       # Persist issued keys, workflow runs, RAG store, uploads across rebuilds.
       - enclave_bd790i_data:/app/data
+      # Curated discovery catalogs (skills_catalog.json, …) ship in the repo
+      # under data/discovery, but the data volume above shadows /app/data —
+      # so skills/discover returned 0. Surface them read-only (more-specific
+      # mount wins over the volume) so discovery reflects the real catalog.
+      - ./data/discovery:/app/data/discovery:ro
     # uvicorn --reload watches the bind-mounted /app/api.
     command:
       - uvicorn
