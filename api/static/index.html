@@ -2701,6 +2701,20 @@ textarea.composer-desc-area {
 .md-wf-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px; }
 .md-wf-name { flex: 1; font-family: var(--mono); font-size: 0.7rem; color: var(--text); }
 .md-wf-meta { font-family: var(--mono); font-size: 0.6rem; color: var(--text-muted); }
+
+/* Workflow deep-dive */
+.wf-dd-steps { display: flex; flex-direction: column; gap: 8px; }
+.wf-dd-step { border: 1px solid var(--border); border-radius: 5px; padding: 10px; background: var(--bg-deep); }
+.wf-dd-step-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.wf-dd-step-name { font-family: var(--mono); font-weight: 600; font-size: 0.74rem; color: var(--text); }
+.wf-dd-step-model { font-family: var(--mono); font-size: 0.64rem; color: var(--cyan); }
+.wf-dd-meta { font-family: var(--mono); font-size: 0.6rem; color: var(--text-muted); margin-bottom: 4px; }
+.wf-dd-io { display: flex; gap: 8px; font-family: var(--mono); font-size: 0.66rem; padding: 1px 0; }
+.wf-dd-io-k { color: var(--accent); min-width: 64px; }
+.wf-dd-prompt { margin-top: 4px; }
+.wf-dd-prompt summary { cursor: pointer; font-family: var(--mono); font-size: 0.62rem; color: var(--text-muted); }
+.wf-dd-prompt summary:hover { color: var(--cyan); }
+.wf-dd-prompt pre { margin: 4px 0 0; padding: 8px; max-height: 220px; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-size: 0.64rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--text); }
 .il-running { color: var(--accent); font-size: 0.6rem; font-family: var(--mono); margin-left: 6px; }
 .il-idle    { color: var(--text-muted); font-size: 0.6rem; font-family: var(--mono); margin-left: 6px; }
 .action-btn.xs.danger { color: var(--red, #ff5252); border-color: rgba(255,80,80,0.35); }
@@ -17645,7 +17659,7 @@ const WorkflowIndex = (function () {
       // composerNewWorkflow() on every stray click (description text,
       // tags, mini-DAG) and silently wiped unsaved composer state.
       // Explicit buttons stay as the only action affordance.
-      return `<div class="wfi-card">
+      return `<div class="wfi-card" ondblclick="WorkflowIndex.deepDive('${esc(w.id)}')" title="Double-click to deep-dive into the steps, prompts, and outputs">
         <div class="wfi-card-head">
           <span class="wfi-card-icon tone-${esc(tone)}" data-cat="${esc(w.category)}">${iconSvg}</span>
           <span class="wfi-card-title">${esc(w.name)}</span>
@@ -17666,6 +17680,7 @@ const WorkflowIndex = (function () {
         </div>
         <div class="wfi-card-refs">${refTags.map(t => `<span class="wfi-card-tag">${esc(t)}</span>`).join('')}</div>
         <div class="wfi-card-actions">
+          <button class="action-btn accent" onclick="WorkflowIndex.deepDive('${esc(w.id)}')">Deep Dive</button>
           <button class="action-btn" onclick="WorkflowIndex.openInComposer('${esc(w.id)}')">Compose</button>
           <button class="action-btn" onclick="WorkflowIndex.run('${esc(w.id)}')">Run</button>
           <button class="action-btn" onclick="WorkflowIndex.exportBundle('${esc(w.id)}')">Export</button>
@@ -17874,6 +17889,64 @@ const WorkflowIndex = (function () {
     setTimeout(() => composerLoadById(id), 80);
   }
 
+  // Deep dive — drill into a workflow's steps: model, what each prompt
+  // expects (inputs/system prompt), what it produces (outputs), and the
+  // sub-agents/tools/skills it uses. Edit affordance = open in Composer.
+  async function deepDive(id) {
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:min(720px,95vw);max-height:90vh;overflow-y:auto;border-radius:6px;';
+    inner.innerHTML = '<div class="model-empty">Loading workflow…</div>';
+    modal.appendChild(inner);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    const close = "this.closest('div[style*=fixed]').remove()";
+    const asKey = x => typeof x === 'string' ? x : (x && (x.key || x.name) || JSON.stringify(x));
+    try {
+      const r = await fetch('/api/workflows/' + encodeURIComponent(id));
+      const w = await r.json();
+      const steps = w.steps || [];
+      const stepCard = s => {
+        const ins = (s.inputs || []).map(asKey);
+        const outs = (s.outputs || []).map(asKey);
+        const caps = [
+          ...(s.tools || []).map(t => 'tool:' + (t.tool_id || t.type || t.plugin_id || '?')),
+          ...(s.skills || []).map(x => 'skill:' + asKey(x)),
+        ];
+        const sp = s.system_prompt || '', up = s.prompt || '';
+        return `<div class="wf-dd-step">
+          <div class="wf-dd-step-head">
+            <span class="wf-dd-step-name">${esc(s.name || s.id)}</span>
+            <span class="run-step-kind kind-${esc(s.kind || 'llm')}">${esc(s.kind || 'llm')}</span>
+            <span style="flex:1"></span>
+            <span class="wf-dd-step-model">${esc(s.model || s.role || '—')}</span>
+          </div>
+          ${s.depends_on && s.depends_on.length ? `<div class="wf-dd-meta">runs after: ${s.depends_on.map(esc).join(', ')}</div>` : ''}
+          <div class="wf-dd-io"><span class="wf-dd-io-k">expects</span><span>${ins.length ? ins.map(esc).join(', ') : 'seed input'}</span></div>
+          <div class="wf-dd-io"><span class="wf-dd-io-k">produces</span><span>${outs.length ? outs.map(esc).join(', ') : '—'}</span></div>
+          ${caps.length ? `<div class="wf-dd-io"><span class="wf-dd-io-k">uses</span><span>${caps.map(esc).join(', ')}</span></div>` : ''}
+          ${sp ? `<details class="wf-dd-prompt"><summary>system prompt · ${sp.length} ch</summary><pre>${esc(sp)}</pre></details>` : ''}
+          ${up ? `<details class="wf-dd-prompt"><summary>prompt template · ${up.length} ch</summary><pre>${esc(up)}</pre></details>` : ''}
+        </div>`;
+      };
+      inner.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-weight:600;font-size:0.95rem;flex:1">${esc(w.name || id)}</div>
+          <button class="action-btn xs ghost" onclick="${close}">×</button>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:12px">${esc(w.description || '')}</div>
+        <div class="panel-label">Steps (${steps.length})</div>
+        <div class="wf-dd-steps">${steps.map(stepCard).join('')}</div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:14px">
+          <button class="action-btn sm" onclick="${close};WorkflowIndex.run('${esc(id)}')">Run ▶</button>
+          <button class="action-btn sm accent" onclick="${close};WorkflowIndex.openInComposer('${esc(id)}')">Edit in Composer</button>
+        </div>`;
+    } catch (e) {
+      inner.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed to load workflow: ${esc(e.message)}</div>`;
+    }
+  }
+
   async function run(id) {
     // Kick the run via the async endpoint, then route the operator to
     // the Runs tab and auto-select the new run so they see the live
@@ -17918,7 +17991,7 @@ const WorkflowIndex = (function () {
 
   function openImportDialog() { dfImportBundle(); }
 
-  return { load, refresh, setCategory, openInComposer, run, exportBundle, openImportDialog };
+  return { load, refresh, setCategory, openInComposer, deepDive, run, exportBundle, openImportDialog };
 })();
 
 // ── Runs tab ────────────────────────────────────────────────────────
