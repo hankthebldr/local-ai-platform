@@ -8950,12 +8950,25 @@ function renderCatalog() {
     const tags = (m.tags || []).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('');
 
     let actions = '';
+    // Uniform card action set — same vocabulary (Pull · Review · Test ·
+    // Remove) and styling used across every catalog in the product.
+    const repo = m.huggingface || m.gguf || '';
+    const reviewBtn = repo
+      ? `<button class="action-btn sm" onclick="reviewModel('${esc(repo)}')" title="View source on Hugging Face">Review</button>`
+      : '';
     if (m.installed) {
-      actions = `<button class="action-btn remove" onclick="removeModel('${esc(m.ollama || m.id)}')">Remove</button>`;
-    } else if (m.ollama) {
-      actions = `<button class="action-btn pull" id="pull-btn-${m.id}" onclick="pullModel('${esc(m.ollama)}', '${m.id}')">Pull</button>`;
-    } else if (m.gguf) {
-      actions = `<span style="font-size:0.65rem;color:var(--text-muted)">GGUF only</span>`;
+      actions =
+        `<button class="action-btn sm cyan" onclick="testModel('${esc(m.ollama || m.id)}')" title="Open this model in the Composer chat">Test</button>` +
+        reviewBtn +
+        `<button class="action-btn sm danger" onclick="removeModel('${esc(m.ollama || m.id)}')">Remove</button>`;
+    } else {
+      // GGUF-only models are now pullable via Ollama's hf.co/ path instead of
+      // being a dead "GGUF only" label.
+      const pullTarget = m.ollama || (m.gguf ? 'hf.co/' + m.gguf : '');
+      const pullBtn = pullTarget
+        ? `<button class="action-btn sm accent pull" id="pull-btn-${m.id}" onclick="pullModel('${esc(pullTarget)}', '${m.id}')">Pull</button>`
+        : '';
+      actions = pullBtn + reviewBtn;
     }
 
     return `
@@ -8982,6 +8995,29 @@ function renderCatalog() {
       </div>
     `;
   }).join('');
+}
+
+// Uniform catalog actions — Review (inspect source) + Test (try it now).
+// Same verbs are reused across Models / Skills / MCP / Agents catalogs.
+function reviewModel(repo) {
+  if (repo) window.open('https://huggingface.co/' + repo, '_blank', 'noopener');
+}
+function testModel(name) {
+  // Jump to the Composer chat with this model preselected, ready to try.
+  switchTab('dashboard');
+  setTimeout(() => {
+    const sel = document.getElementById('model-select');
+    if (sel) {
+      if (![...sel.options].some(o => o.value === name)) {
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name; sel.appendChild(opt);
+      }
+      sel.value = name;
+      sel.dispatchEvent(new Event('change'));
+    }
+    const inp = document.querySelector('#agent-chat-input, .chat-input');
+    if (inp) inp.focus();
+  }, 250);
 }
 
 async function pullModel(ollamaName, modelId) {
@@ -16673,10 +16709,12 @@ const SkillsDiscover = (function () {
       : (s.has_body
           ? `<span class="skill-disc-chip available">install</span>`
           : `<span class="skill-disc-chip bundled" title="Ships pre-installed with the platform">bundled</span>`);
+    // Same .action-btn sizing/vocabulary as the Models catalog cards so the
+    // install/remove experience reads identically across the product.
     const action = s.installed
-      ? `<button class="action-btn xs ghost" onclick="SkillsDiscover.uninstall('${esc(s.id)}', '${esc((s.installed_in || [])[0] || '')}')">Uninstall</button>`
+      ? `<button class="action-btn sm danger" onclick="SkillsDiscover.uninstall('${esc(s.id)}', '${esc((s.installed_in || [])[0] || '')}')">Remove</button>`
       : (s.has_body
-          ? `<button class="action-btn xs" onclick="SkillsDiscover.install('${esc(s.id)}')">Install</button>`
+          ? `<button class="action-btn sm accent" onclick="SkillsDiscover.install('${esc(s.id)}')">Install</button>`
           : '');
     return `<div class="workbench-item agent-card cap-card skill-disc-card cap-skill" data-skill-id="${esc(s.id)}">
       <div class="agent-card-head">
