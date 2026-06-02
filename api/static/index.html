@@ -6508,6 +6508,7 @@ textarea.composer-desc-area {
             <button type="button" class="skills-disc-view" data-view="icons"
                     onclick="SkillsDiscover.setView('icons')" title="Icon explorer">▦</button>
           </div>
+          <button class="action-btn accent" onclick="SkillsDiscover.importFromUrl()" title="Import a SKILL.md from a URL (e.g. a skills.sh / GitHub skill)">+ Import URL</button>
           <button class="action-btn" onclick="SkillsDiscover.load(true)" title="Refresh the catalog">⟲</button>
         </div>
         <div class="skills-discover-grid" id="skills-discover-grid">
@@ -17172,6 +17173,33 @@ const SkillsDiscover = (function () {
     render();
   }
 
+  // Import a SKILL.md from a URL (skills.sh entries are GitHub-backed — grab
+  // the SKILL.md's GitHub link). Fetches + parses frontmatter server-side,
+  // installs into the chosen plugin, then refreshes discovery.
+  async function importFromUrl() {
+    const url = prompt('SKILL.md URL to import\n(a GitHub raw or blob link — e.g. from a skills.sh skill):');
+    if (!url || !url.trim()) return;
+    const plugin = prompt('Install into which plugin?', 'general-skills');
+    if (!plugin || !plugin.trim()) return;
+    _setMeta('Importing…');
+    try {
+      const r = await fetch('/api/skills/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url.trim(), plugin_id: plugin.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      if (window.Toast) Toast.info(`Imported "${d.name || d.skill_id}" → ${d.plugin_id}. Restart to activate.`);
+      else alert(`Imported "${d.name || d.skill_id}" into ${d.plugin_id}.\nRestart the API to activate it.`);
+      load(true);
+    } catch (e) {
+      if (window.Toast) Toast.error('Import failed: ' + e.message);
+      else alert('Import failed: ' + e.message);
+      _setMeta('');
+    }
+  }
+
   // Icon-explorer renderer — groups skills by persona (their primary
   // visual axis), with a large icon tile per skill. Each tile carries
   // an install/uninstall affordance.
@@ -17213,7 +17241,7 @@ const SkillsDiscover = (function () {
     }).join('');
   }
 
-  return { load, render, install, uninstall, setView };
+  return { load, render, install, uninstall, setView, importFromUrl };
 })();
 window.SkillsDiscover = SkillsDiscover;
 
