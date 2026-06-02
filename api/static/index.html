@@ -18690,22 +18690,30 @@ const RunsTab = (function () {
       </div>`;
     }
 
-    // START / END entries bracketing the step list — mirror the DAG anchors
-    // so seed input → steps → deliverable reads the same in the list + graph.
+    // START / END entries bracketing the step list — the workflow's explicit
+    // entry point (seed) and output (deliverable). Clickable to inspect the
+    // ACTUAL values (e.g. the code that was reviewed, the review produced).
     const seed = (run.context && run.context.seed) || {};
-    const seedKeys = Object.keys(seed);
+    const seedEntries = Object.entries(seed);
     const ws = (run.context && run.context.workspace) || {};
     const terminal = results[results.length - 1];
-    const deliverableKeys = terminal ? Object.keys(ws[terminal.step_id] || {}) : [];
-    const anchorRow = (cls, glyph, label, keys, fallback) => `
-      <div class="ws-run-step ws-run-anchor-row ${cls}">
+    const delivEntries = terminal ? Object.entries(ws[terminal.step_id] || {}) : [];
+    const previewOf = entries => {
+      if (!entries.length) return 'none';
+      const v = entries[0][1];
+      const s = typeof v === 'string' ? v : JSON.stringify(v);
+      return s.replace(/\s+/g, ' ').slice(0, 44) + (s.length > 44 ? '…' : '');
+    };
+    const anchorRow = (cls, glyph, label, kind, entries) => `
+      <div class="ws-run-step ws-run-anchor-row ${cls}" onclick="RunsTab.openAnchorDetail('${kind}')" title="Open the full ${kind} (actual values)">
         <span class="run-step-caret">${glyph}</span>
         <span class="ws-run-step-id">${label}</span>
+        <span class="ws-anchor-count">${entries.length} field${entries.length === 1 ? '' : 's'}</span>
         <span style="flex:1"></span>
-        <span class="ws-anchor-keys-inline">${keys.length ? keys.map(esc).join(', ') : fallback}</span>
+        <span class="ws-anchor-keys-inline">${entries.length ? esc(entries.map(e => e[0]).join(', ')) + ' · ' + esc(previewOf(entries)) : '—'}</span>
       </div>`;
-    const startRow = anchorRow('ws-anchor-start-row', '▶', 'START · seed', seedKeys, '—');
-    const endRow = anchorRow('ws-anchor-end-row', '■', 'END · deliverable', deliverableKeys, 'output');
+    const startRow = anchorRow('ws-anchor-start-row', '▶', 'START · seed', 'seed', seedEntries);
+    const endRow = anchorRow('ws-anchor-end-row', '■', 'END · deliverable', 'deliverable', delivEntries);
 
     body.innerHTML = errorBanner + cascadeSummary + startRow + rows + endRow;
   }
@@ -18932,6 +18940,52 @@ const RunsTab = (function () {
     const m = document.getElementById('runs-step-modal');
     if (m) m.hidden = true;
     _detailStepId = null;
+  }
+
+  // Inspect the workflow's actual entry-point (seed) or output (deliverable)
+  // VALUES — e.g. the code that was reviewed, the review that was produced.
+  function openAnchorDetail(kind) {
+    if (!_currentRun) return;
+    const ctx = _currentRun.context || {};
+    let title, sub, entries, accent;
+    if (kind === 'seed') {
+      title = '▶ START · Seed Input';
+      sub = 'The entry-point data this run executed on';
+      entries = Object.entries(ctx.seed || {});
+      accent = 'var(--accent)';
+    } else {
+      title = '■ END · Deliverable';
+      sub = 'The final output this run produced';
+      const results = _currentRun.step_results || [];
+      const terminal = results[results.length - 1];
+      const ws = ctx.workspace || {};
+      entries = terminal ? Object.entries(ws[terminal.step_id] || {}) : [];
+      accent = 'var(--cyan)';
+    }
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:min(720px,94vw);max-height:88vh;overflow-y:auto;border-radius:6px;';
+    const close = "this.closest('div[style*=fixed]').remove()";
+    const blocks = entries.length
+      ? entries.map(([k, v]) => {
+          const text = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+          return `<div class="run-step-output open" style="margin-bottom:8px">
+            <div class="run-step-output-head" style="cursor:default"><span class="ctx-field-k">${esc(k)}</span><span style="flex:1"></span><span class="run-step-output-meta">${String(text).length} chars</span></div>
+            <pre class="run-step-output-full">${esc(String(text))}</pre>
+          </div>`;
+        }).join('')
+      : `<div class="model-empty">No ${esc(kind)} data captured on this run.</div>`;
+    inner.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div style="font-family:var(--mono);font-weight:600;font-size:0.92rem;flex:1;color:${accent}">${esc(title)}</div>
+        <button class="action-btn xs ghost" onclick="${close}">×</button>
+      </div>
+      <div style="font-size:0.66rem;color:var(--text-muted);margin-bottom:12px">${esc(sub)}</div>
+      ${blocks}`;
+    modal.appendChild(inner);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
   }
 
   function pivotResearch() {
@@ -19187,7 +19241,7 @@ const RunsTab = (function () {
   return { init, load, render, setFilter, select,
     resumeCurrent, cancelCurrent, pauseCurrent, rerunCurrent,
     toggleStepExpand, toggleStepOutput, toggleBottomDrawer, markFailed,
-    openStepDetail, closeStepDetail, pivotResearch, pivotContextGraph,
+    openStepDetail, closeStepDetail, openAnchorDetail, pivotResearch, pivotContextGraph,
     pivotNewAgent, copyStepContext,
     zoomIn, zoomOut, zoomReset };
 })();
