@@ -4197,11 +4197,15 @@ textarea.composer-desc-area {
 .runs-tab-floor { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .runs-tab-graph {
   flex: 1; min-height: 280px; position: relative;
-  /* Dotted grid matching the Composer canvas (radial-gradient dots @ 20px),
-     so the runs DAG reads as the same gridded surface as the composer. */
-  background: var(--bg-deep);
-  background-image: radial-gradient(var(--border) 1px, transparent 1px);
-  background-size: 20px 20px;
+  /* Unified sleek canvas surface — IDENTICAL to the Composer canvas: a soft
+     accent-glow gradient at the top over a subtle dot grid. Keep this block in
+     lockstep with .composer-canvas-panel so the two views read as one. */
+  background-color: var(--bg-deep);
+  background-image:
+    radial-gradient(ellipse 85% 55% at 50% -8%, var(--accent-ghost) 0%, transparent 58%),
+    radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 100% 100%, 22px 22px;
+  background-repeat: no-repeat, repeat;
   border: 1px solid var(--border); border-radius: 6px;
   overflow: hidden;
 }
@@ -4718,13 +4722,15 @@ textarea.composer-desc-area {
   border: none;
   border-radius: 6px;          /* keep the corner radius for the clip mask */
   overflow: hidden;
-  /* The grid background lives on #drawflow-canvas's .drawflow child,
-     but pre-render that child may not exist — paint the same grid
-     on the wrapper so the canvas reads as the gridded surface
-     immediately. */
-  background: var(--bg-deep);
-  background-image: radial-gradient(var(--border) 1px, transparent 1px);
-  background-size: 20px 20px;
+  /* Unified sleek canvas surface — IDENTICAL to the runs graph: a soft
+     accent-glow gradient at the top over a subtle dot grid. Keep this block in
+     lockstep with .runs-tab-graph so the two views read as one. */
+  background-color: var(--bg-deep);
+  background-image:
+    radial-gradient(ellipse 85% 55% at 50% -8%, var(--accent-ghost) 0%, transparent 58%),
+    radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 100% 100%, 22px 22px;
+  background-repeat: no-repeat, repeat;
 }
 /* Suppress the .panel scan-line + corner crosshair markers on the
    canvas — they look misplaced over a full-bleed grid. */
