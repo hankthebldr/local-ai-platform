@@ -440,6 +440,84 @@ async def create(req: CreateReq) -> Dict[str, Any]:
     }
 
 
+def _slug(text: str) -> str:
+    """Lowercase, hyphenated, id-safe slug from a skill name."""
+    s = re.sub(r"[^A-Za-z0-9]+", "-", (text or "").strip().lower()).strip("-")
+    return s[:64] or "imported-skill"
+
+
+def _parse_skill_frontmatter(text: str) -> Dict[str, Any]:
+    """Pull the YAML frontmatter (name/description/…) from a SKILL.md.
+    Returns {} when there's no frontmatter block."""
+    t = text.lstrip()
+    if not t.startswith("---"):
+        return {}
+    end = t.find("\n---", 3)
+    if end == -1:
+        return {}
+    try:
+        meta = yaml.safe_load(t[3:end]) or {}
+        return meta if isinstance(meta, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+class ImportReq(BaseModel):
+    """Import a skill from a remote SKILL.md (e.g. skills.sh → GitHub)."""
+
+    url: str
+    plugin_id: str
+    id: Optional[str] = None  # override the derived slug
+
+
+@router.post("/import", dependencies=[Depends(require_master_key)])
+async def import_skill(req: ImportReq) -> Dict[str, Any]:
+    """Fetch a SKILL.md by URL, parse its frontmatter, and install it.
+
+    Accepts a direct raw URL or a GitHub blob link (auto-converted to raw).
+    skills.sh entries are GitHub-backed, so grab the SKILL.md's GitHub link.
+    The fetched markdown (frontmatter + body) is written verbatim via the same
+    path as /create.
+    """
+    url = (req.url or "").strip()
+    # GitHub blob → raw.
+    if "github.com" in url and "/blob/" in url:
+        url = url.replace("github.com", "raw.githubusercontent.com").replace(
+            "/blob/", "/"
+        )
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(status_code=400, detail="url must be http(s)")
+    if not (url.endswith(".md") or "raw.githubusercontent" in url):
+        raise HTTPException(
+            status_code=400,
+            detail="provide a direct SKILL.md URL (GitHub raw or blob link)",
+        )
+    try:
+        resp = requests.get(url, timeout=12, headers={"Accept": "text/plain"})
+        resp.raise_for_status()
+        text = resp.text
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"failed to fetch skill: {exc}")
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="fetched skill body is empty")
+
+    meta = _parse_skill_frontmatter(text)
+    name = str(meta.get("name") or "imported skill")
+    sid = req.id or _slug(name)
+    create_req = CreateReq(
+        id=sid,
+        plugin_id=req.plugin_id,
+        name=name,
+        description=meta.get("description"),
+        triggers=[],
+        body=text,
+    )
+    out = await create(create_req)
+    out["imported_from"] = url
+    out["name"] = name
+    return out
+
+
 @router.delete(
     "/discover/{skill_id}/uninstall", dependencies=[Depends(require_master_key)]
 )
