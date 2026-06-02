@@ -13457,7 +13457,13 @@ function closeAgentChat() {
 }
 
 async function sendAgentMessage() {
-  if (!_activeAgentId) return;
+  // If a composer step is engaged, chat in THAT step's context (its system
+  // prompt + model) rather than only the selected agent persona — so you can
+  // iterate on the actual workflow step / its adopted agent context.
+  const _engId = window._composerEngagedNodeId;
+  const _engStep = (_engId != null && typeof dfNodeData !== 'undefined' && dfNodeData[_engId])
+    ? dfNodeData[_engId] : null;
+  if (!_activeAgentId && !_engStep) return;
   const input = document.getElementById('agent-chat-input');
   const text = input.value.trim();
   if (!text) return;
@@ -13477,13 +13483,36 @@ async function sendAgentMessage() {
 
   let result;
   try {
-    const r = await fetch(`/api/agents/${_activeAgentId}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: _agentHistory }),
-    });
-    result = await r.json();
-    if (!r.ok) throw new Error(result.detail || 'Chat failed');
+    if (_engStep) {
+      // Step context: run the step's system prompt + model directly via the
+      // OpenAI-compatible endpoint, so the chat reflects exactly what this
+      // workflow step would run with.
+      const sys = _engStep.system_prompt || '';
+      // step model → current dropdown choice (if a real model id, not the
+      // "no models, pull one" placeholder) → safe default.
+      const selVal = (document.getElementById('model-select') || {}).value || '';
+      const validSel = selVal && !/\s/.test(selVal) ? selVal : '';
+      const model = _engStep.model || validSel || 'qwen2.5:7b';
+      const messages = sys
+        ? [{ role: 'system', content: sys }, ..._agentHistory]
+        : _agentHistory.slice();
+      const r = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages, max_tokens: 2048, temperature: 0.7 }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error((d.error && d.error.message) || d.detail || 'Chat failed');
+      result = { content: (d.choices && d.choices[0] && d.choices[0].message.content) || '', model };
+    } else {
+      const r = await fetch(`/api/agents/${_activeAgentId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: _agentHistory }),
+      });
+      result = await r.json();
+      if (!r.ok) throw new Error(result.detail || 'Chat failed');
+    }
   } catch(e) {
     document.getElementById('agent-thinking')?.remove();
     msgEl.insertAdjacentHTML('beforeend',
