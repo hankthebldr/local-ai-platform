@@ -4242,7 +4242,7 @@ textarea.composer-desc-area {
 .runs-tab-graph-empty[hidden] { display: none; }
 
 /* START / END anchor nodes in the runs DAG (seed input · final deliverable) */
-#runs-tab-canvas .drawflow .drawflow-node:has(.wf-anchor) { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; min-width: 0 !important; }
+.drawflow .drawflow-node:has(.wf-anchor) { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; min-width: 0 !important; }
 .wf-anchor { padding: 8px 12px; border-radius: 999px; font-family: var(--mono); text-align: center; min-width: 120px; border: 1px solid; }
 .wf-anchor-label { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; }
 .wf-anchor-sub { font-size: 0.54rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 4px; }
@@ -4252,6 +4252,15 @@ textarea.composer-desc-area {
 .wf-anchor-start .wf-anchor-label { color: var(--accent); }
 .wf-anchor-end { border-color: var(--cyan-dim); background: rgba(0,220,240,0.06); }
 .wf-anchor-end .wf-anchor-label { color: var(--cyan); }
+
+/* START/END rows in the Step Results list */
+.ws-run-anchor-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 4px; border: 1px solid; font-family: var(--mono); }
+.ws-run-anchor-row .ws-run-step-id { font-weight: 600; font-size: 0.7rem; }
+.ws-anchor-keys-inline { font-size: 0.64rem; color: var(--text-dim); }
+.ws-anchor-start-row { border-color: var(--accent-dim); background: var(--accent-ghost); }
+.ws-anchor-start-row .run-step-caret, .ws-anchor-start-row .ws-run-step-id { color: var(--accent); }
+.ws-anchor-end-row { border-color: var(--cyan-dim); background: rgba(0,220,240,0.06); }
+.ws-anchor-end-row .run-step-caret, .ws-anchor-end-row .ws-run-step-id { color: var(--cyan); }
 
 /* Full step-output viewer — each workspace key expands to its complete value. */
 .run-step-outputs { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
@@ -12905,6 +12914,34 @@ function dfOnConnectionRemoved(conn) {
   }
 }
 
+// Add START (seed) / END (deliverable) anchor nodes to the composer canvas,
+// mirroring the runs DAG. NOT added to dfNodeData → dfExportYaml skips them.
+function dfAddAnchors(steps, idMap, hasDeps) {
+  if (!dfEditor || !steps || !steps.length) return;
+  const depOf = s => Array.isArray(s.depends_on) ? s.depends_on : (s.depends_on ? [s.depends_on] : []);
+  const seedKeys = [...new Set(steps.flatMap(s =>
+    (s.inputs || []).filter(i => typeof i === 'string' && i.startsWith('seed.')).map(i => i.slice(5))))];
+  let rootSteps, terminalSteps;
+  if (hasDeps) {
+    const depended = new Set(steps.flatMap(depOf));
+    rootSteps = steps.filter(s => depOf(s).length === 0);
+    terminalSteps = steps.filter(s => !depended.has(s.id));
+  } else {
+    rootSteps = [steps[0]];
+    terminalSteps = [steps[steps.length - 1]];
+  }
+  const deliverable = [...new Set(terminalSteps.flatMap(s => Array.isArray(s.outputs) ? s.outputs : []))];
+  const keyChips = arr => (arr.length ? arr : ['—']).map(k => `<span>${esc(k)}</span>`).join('');
+  try {
+    const startHtml = `<div class="wf-anchor wf-anchor-start"><div class="wf-anchor-label">▶ START</div><div class="wf-anchor-sub">seed input</div><div class="wf-anchor-keys">${keyChips(seedKeys)}</div></div>`;
+    const startId = dfEditor.addNode('__start__', 0, 1, 0, 0, '__start__', {}, startHtml);
+    rootSteps.forEach(s => { const t = idMap[s && s.id]; if (t != null) { try { dfEditor.addConnection(startId, t, 'output_1', 'input_1'); } catch (_) {} } });
+    const endHtml = `<div class="wf-anchor wf-anchor-end"><div class="wf-anchor-label">■ END</div><div class="wf-anchor-sub">deliverable</div><div class="wf-anchor-keys">${keyChips(deliverable.length ? deliverable : ['output'])}</div></div>`;
+    const endId = dfEditor.addNode('__end__', 1, 0, 0, 0, '__end__', {}, endHtml);
+    terminalSteps.forEach(s => { const src = idMap[s && s.id]; if (src != null) { try { dfEditor.addConnection(src, endId, 'output_1', 'input_1'); } catch (_) {} } });
+  } catch (_) { /* anchors are best-effort decoration */ }
+}
+
 function dfExportYaml() {
   if (!dfEditor) return;
   const exported = dfEditor.export();
@@ -17526,6 +17563,11 @@ async function composerLoadById(wfId) {
       }
     }
 
+    // START/END anchor nodes — same seed→deliverable brackets as the runs
+    // DAG. Not tracked in dfNodeData, so dfExportYaml skips them (they're
+    // decoration, not steps).
+    try { dfAddAnchors(allSteps, idMap, anyDepsDeclared); } catch (_) {}
+
     // Auto-layout AFTER edges exist so dagre's topological sort actually
     // has a graph to lay out (with no edges it stacked everything at
     // top-left). Then ComposerView refreshes the empty-state flag.
@@ -18648,7 +18690,24 @@ const RunsTab = (function () {
       </div>`;
     }
 
-    body.innerHTML = errorBanner + cascadeSummary + rows;
+    // START / END entries bracketing the step list — mirror the DAG anchors
+    // so seed input → steps → deliverable reads the same in the list + graph.
+    const seed = (run.context && run.context.seed) || {};
+    const seedKeys = Object.keys(seed);
+    const ws = (run.context && run.context.workspace) || {};
+    const terminal = results[results.length - 1];
+    const deliverableKeys = terminal ? Object.keys(ws[terminal.step_id] || {}) : [];
+    const anchorRow = (cls, glyph, label, keys, fallback) => `
+      <div class="ws-run-step ws-run-anchor-row ${cls}">
+        <span class="run-step-caret">${glyph}</span>
+        <span class="ws-run-step-id">${label}</span>
+        <span style="flex:1"></span>
+        <span class="ws-anchor-keys-inline">${keys.length ? keys.map(esc).join(', ') : fallback}</span>
+      </div>`;
+    const startRow = anchorRow('ws-anchor-start-row', '▶', 'START · seed', seedKeys, '—');
+    const endRow = anchorRow('ws-anchor-end-row', '■', 'END · deliverable', deliverableKeys, 'output');
+
+    body.innerHTML = errorBanner + cascadeSummary + startRow + rows + endRow;
   }
 
   // Inspect run.context.workspace for the step's outputs. Returns
