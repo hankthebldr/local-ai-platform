@@ -19,7 +19,11 @@ import yaml
 
 from ..logging_config import logger
 from .chunker import Chunker
-from .embedding_service import EmbeddingService, EmbeddingBackendMismatch
+from .embedding_service import (
+    EmbeddingBackendMismatch,
+    EmbeddingService,
+    collection_compatible,
+)
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
 COLLECTION_NAME = "enclave-docs"
@@ -58,6 +62,7 @@ def _parse_file(filename: str, content: bytes) -> str:
             return content.decode("latin-1")
     if ext == ".pdf":
         import pypdf
+
         reader = pypdf.PdfReader(io.BytesIO(content))
         pages = [page.extract_text() or "" for page in reader.pages]
         return "\n\n".join(pages)
@@ -83,8 +88,16 @@ class DocumentService:
         self._raw_dir.mkdir(parents=True, exist_ok=True)
         self._chroma_dir.mkdir(parents=True, exist_ok=True)
 
-        cs = chunk_size if chunk_size is not None else int(os.getenv("RAG_CHUNK_SIZE", "512"))
-        co = chunk_overlap if chunk_overlap is not None else int(os.getenv("RAG_CHUNK_OVERLAP", "50"))
+        cs = (
+            chunk_size
+            if chunk_size is not None
+            else int(os.getenv("RAG_CHUNK_SIZE", "512"))
+        )
+        co = (
+            chunk_overlap
+            if chunk_overlap is not None
+            else int(os.getenv("RAG_CHUNK_OVERLAP", "50"))
+        )
         self._chunker = Chunker(chunk_size=cs, chunk_overlap=co)
 
         self._client = None
@@ -95,26 +108,33 @@ class DocumentService:
 
     def _init_chroma(self) -> None:
         import chromadb
-        self._client = chromadb.PersistentClient(path=str(self._chroma_dir))
+
+        if self._client is None:
+            self._client = chromadb.PersistentClient(path=str(self._chroma_dir))
         desc = self._embed.describe()
         try:
             existing = self._client.get_collection(name=COLLECTION_NAME)
-            if existing.metadata != desc:
+            compatible, warning = collection_compatible(existing.metadata, desc)
+            if not compatible:
                 raise EmbeddingBackendMismatch(
                     f"Collection '{COLLECTION_NAME}' was created with {existing.metadata}, "
-                    f"but EmbeddingService reports {desc}. Restore original backend or "
-                    f"delete {self._chroma_dir} to re-ingest."
+                    f"but EmbeddingService reports {desc}. Restore the original backend, "
+                    f"set ENCLAVE_EMBEDDING_ALLOW_REBIND=true to reuse a same-family "
+                    f"collection, or delete {self._chroma_dir} to re-ingest."
                 )
+            if warning:
+                logger.warning(warning)
             self._collection = existing
         except Exception as e:
             if isinstance(e, EmbeddingBackendMismatch):
                 raise
-            # Collection doesn't exist yet
             self._collection = self._client.create_collection(
                 name=COLLECTION_NAME,
                 metadata=desc,
             )
-            logger.info(f"Created ChromaDB collection '{COLLECTION_NAME}' with metadata {desc}")
+            logger.info(
+                f"Created ChromaDB collection '{COLLECTION_NAME}' with metadata {desc}"
+            )
 
     # ── Upload ────────────────────────────────────────────────────────
 
@@ -215,6 +235,7 @@ class DocumentService:
         raw = self._raw_dir / doc_id
         if raw.exists():
             import shutil as _shutil
+
             _shutil.rmtree(raw, ignore_errors=True)
         return True
 
@@ -253,7 +274,10 @@ class DocumentService:
                     for i in range(len(chunks))
                 ]
                 self._collection.add(
-                    ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas
+                    ids=ids,
+                    embeddings=embeddings,
+                    documents=chunks,
+                    metadatas=metadatas,
                 )
             rec["chunk_count"] = len(chunks)
             rec["status"] = "indexed"

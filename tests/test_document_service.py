@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Tests for DocumentService — lifecycle and ChromaDB integration"""
 
-import os
 import pytest
 import tempfile
 import shutil
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 pytestmark = pytest.mark.rag
 
 
 class _FakeEmbedding:
     """Deterministic fake for EmbeddingService — no network or model."""
+
     def __init__(self, dim=4):
         self._dim = dim
 
@@ -44,6 +44,7 @@ def tmp_rag_dir():
 @pytest.fixture
 def doc_svc(tmp_rag_dir):
     from api.services.document_service import DocumentService
+
     svc = DocumentService(embedding_service=_FakeEmbedding(), data_dir=tmp_rag_dir)
     yield svc
 
@@ -64,6 +65,7 @@ class TestUpload:
 
     def test_unsupported_extension_rejected(self, doc_svc):
         from api.services.document_service import UnsupportedFormat
+
         with pytest.raises(UnsupportedFormat):
             doc_svc.upload("binary.zip", b"\x00\x01\x02")
 
@@ -113,3 +115,57 @@ class TestStats:
         s = doc_svc.stats()
         assert s["total_documents"] == 1
         assert s["total_chunks"] >= 1
+
+
+# ── Unit G: rebind-aware collection guard ────────────────────────────────────
+
+
+def _make_doc_service_with_existing(monkeypatch, existing_meta, active_desc):
+    """Stand up a DocumentService whose Chroma client returns a collection
+    tagged `existing_meta`, with an EmbeddingService reporting `active_desc`."""
+    import api.services.document_service as ds
+
+    embed = MagicMock()
+    embed.describe.return_value = active_desc
+
+    existing_collection = MagicMock()
+    existing_collection.metadata = existing_meta
+
+    client = MagicMock()
+    client.get_collection.return_value = existing_collection
+
+    # _init_chroma (after Step 3) reuses self._client when already set, so we
+    # inject the fake client directly — no need to patch PersistentClient.
+    svc = ds.DocumentService.__new__(ds.DocumentService)
+    svc._embed = embed
+    svc._chroma_dir = "/tmp/fake-chroma"
+    svc._client = client
+    svc._collection = None
+    return ds, svc, client
+
+
+def test_init_chroma_strict_refuses_backend_switch(monkeypatch):
+    from api.services.embedding_service import EmbeddingBackendMismatch
+
+    existing = {
+        "backend": "sentence_transformers",
+        "model": "all-MiniLM-L6-v2",
+        "dimension": 384,
+    }
+    active = {"backend": "onnx", "model": "all-MiniLM-L6-v2", "dimension": 384}
+    ds, svc, client = _make_doc_service_with_existing(monkeypatch, existing, active)
+    with pytest.raises(EmbeddingBackendMismatch):
+        svc._init_chroma()
+
+
+def test_init_chroma_lenient_reuses_same_family(monkeypatch):
+    monkeypatch.setenv("ENCLAVE_EMBEDDING_ALLOW_REBIND", "true")
+    existing = {
+        "backend": "sentence_transformers",
+        "model": "all-MiniLM-L6-v2",
+        "dimension": 384,
+    }
+    active = {"backend": "onnx", "model": "all-MiniLM-L6-v2", "dimension": 384}
+    ds, svc, client = _make_doc_service_with_existing(monkeypatch, existing, active)
+    svc._init_chroma()
+    assert svc._collection is client.get_collection.return_value
