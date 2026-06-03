@@ -16,6 +16,7 @@ import requests
 
 from ..logging_config import logger
 from .ollama_service import OllamaService
+from .onnx.models import DEFAULT_ONNX_EMBEDDING_MODEL
 
 
 def normalized_family(model: str) -> str:
@@ -79,6 +80,7 @@ class EmbeddingService:
         ollama_service: OllamaService,
         ollama_model: Optional[str] = None,
         st_model: Optional[str] = None,
+        onnx_model: Optional[str] = None,
         backend: Optional[str] = None,
     ):
         self._ollama = ollama_service
@@ -88,12 +90,16 @@ class EmbeddingService:
         self._st_model = st_model or os.getenv(
             "SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2"
         )
+        self._onnx_model = onnx_model or os.getenv(
+            "ONNX_EMBEDDING_MODEL", DEFAULT_ONNX_EMBEDDING_MODEL
+        )
         self._backend_choice = backend or os.getenv("EMBEDDING_BACKEND", "auto")
 
         self._backend: Optional[str] = None
         self._model: Optional[str] = None
         self._dimension: Optional[int] = None
         self._st_instance = None
+        self._onnx_instance = None
 
         self._select_backend()
 
@@ -165,6 +171,32 @@ class EmbeddingService:
 
         self._st_instance = SentenceTransformer(self._st_model)
 
+    def _load_onnx_encoder(self) -> None:
+        """Import and instantiate the ONNX encoder. Isolated for test patching."""
+        from .onnx.encoder import OnnxTextEncoder
+
+        self._onnx_instance = OnnxTextEncoder(self._onnx_model)
+
+    def _bind_onnx(self, raise_on_fail: bool) -> bool:
+        try:
+            self._load_onnx_encoder()
+            vec = self._onnx_instance.encode(["probe"])[0]
+            self._backend = "onnx"
+            self._model = self._onnx_model
+            self._dimension = len(vec)
+            logger.info(
+                f"Embedding backend: ONNX ({self._onnx_model}, dim={self._dimension}, "
+                f"providers={self._onnx_instance.active_providers})"
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"ONNX embeddings load failed: {e}")
+            if raise_on_fail:
+                raise EmbeddingBackendUnavailable(
+                    f"ONNX embedding backend failed: {e}"
+                ) from e
+            return False
+
     # ── Embedding API ─────────────────────────────────────────────────
 
     def embed(self, texts: List[str]) -> List[List[float]]:
@@ -172,6 +204,8 @@ class EmbeddingService:
             return []
         if self._backend == "ollama":
             return [self._embed_one_ollama(t) for t in texts]
+        if self._backend == "onnx":
+            return self._onnx_instance.encode(texts)
         # sentence_transformers + chromadb: must return List[List[float]].
         # Previously this used convert_to_numpy=False + list(v), which leaks
         # PyTorch tensor objects into the embeddings list and breaks Chroma's
@@ -214,3 +248,15 @@ class EmbeddingService:
             "model": self.get_model(),
             "dimension": self.get_dimension(),
         }
+
+    def runtime_info(self) -> dict:
+        """describe() plus runtime-only fields (active ONNX providers).
+
+        Kept SEPARATE from describe() because describe() feeds Chroma's
+        collection-identity metadata — adding providers there would break the
+        rebind guard for existing collections.
+        """
+        info = self.describe()
+        if self._backend == "onnx" and self._onnx_instance is not None:
+            info["providers"] = self._onnx_instance.active_providers
+        return info

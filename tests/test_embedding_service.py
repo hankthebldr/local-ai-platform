@@ -166,3 +166,48 @@ def test_collection_compatible_lenient_still_refuses_dimension_change(monkeypatc
     active = {"backend": "onnx", "model": "all-MiniLM-L6-v2", "dimension": 384}
     ok, warning = collection_compatible(existing, active)
     assert ok is False
+
+
+# ── Task 1.2: ONNX backend arm ────────────────────────────────────────────────
+
+from api.services.embedding_service import EmbeddingService
+
+
+def _service_with_stubbed_onnx(monkeypatch, ollama_up=False):
+    """Build an EmbeddingService in auto mode with Ollama down and ONNX stubbed."""
+    fake_encoder = MagicMock()
+    fake_encoder.encode.return_value = [[0.1] * 384]
+    fake_encoder.active_providers = ["CPUExecutionProvider"]
+
+    monkeypatch.setattr(
+        EmbeddingService,
+        "_load_onnx_encoder",
+        lambda self: setattr(self, "_onnx_instance", fake_encoder),
+    )
+    ollama = MagicMock()
+    ollama.host = "http://127.0.0.1:11434"
+    svc = EmbeddingService.__new__(EmbeddingService)  # bypass __init__ probing
+    return svc, fake_encoder, ollama
+
+
+def test_bind_onnx_sets_backend_and_dimension(monkeypatch):
+    svc, fake_encoder, ollama = _service_with_stubbed_onnx(monkeypatch)
+    svc._ollama = ollama
+    svc._onnx_model = "all-MiniLM-L6-v2"
+    svc._onnx_instance = None
+    ok = svc._bind_onnx(raise_on_fail=True)
+    assert ok is True
+    assert svc.get_backend() == "onnx"
+    assert svc.get_dimension() == 384
+    assert svc.embed(["x"]) == [[0.1] * 384]
+
+
+def test_runtime_info_includes_providers(monkeypatch):
+    svc, fake_encoder, ollama = _service_with_stubbed_onnx(monkeypatch)
+    svc._ollama = ollama
+    svc._onnx_model = "all-MiniLM-L6-v2"
+    svc._onnx_instance = None
+    svc._bind_onnx(raise_on_fail=True)
+    info = svc.runtime_info()
+    assert info["providers"] == ["CPUExecutionProvider"]
+    assert "providers" not in svc.describe()
