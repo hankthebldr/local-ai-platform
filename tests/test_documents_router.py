@@ -23,10 +23,17 @@ class _FakeEmbedding:
     def embed_query(self, text):
         return [0.1] * self._dim
 
-    def get_backend(self): return "fake"
-    def get_model(self): return "fake-model"
-    def get_dimension(self): return self._dim
-    def describe(self): return {"backend": "fake", "model": "fake-model", "dimension": self._dim}
+    def get_backend(self):
+        return "fake"
+
+    def get_model(self):
+        return "fake-model"
+
+    def get_dimension(self):
+        return self._dim
+
+    def describe(self):
+        return {"backend": "fake", "model": "fake-model", "dimension": self._dim}
 
 
 @pytest.fixture(scope="module")
@@ -49,6 +56,7 @@ def client():
     # Force data_dir to tmpdir
     os.environ["RAG_DATA_DIR"] = tmpdir
     import api.services.document_service as doc_mod
+
     _orig_init = doc_mod.DocumentService.__init__
 
     def patched_init(self, embedding_service, data_dir="data/rag", **kw):
@@ -57,12 +65,16 @@ def client():
     doc_mod.DocumentService.__init__ = patched_init
 
     import api.middleware
+
     importlib.reload(api.middleware)
     import api.routers.documents
+
     importlib.reload(api.routers.documents)
     import api.main
+
     importlib.reload(api.main)
     from api.main import app
+
     yield TestClient(app)
 
     emb_mod.EmbeddingService = original
@@ -108,7 +120,9 @@ class TestDocumentsRouter:
         content = b"Some content about sandboxes."
         files = {"file": ("sb.txt", io.BytesIO(content), "text/plain")}
         client.post("/api/documents", files=files)
-        resp = client.post("/api/documents/search", json={"query": "sandbox", "top_k": 3})
+        resp = client.post(
+            "/api/documents/search", json={"query": "sandbox", "top_k": 3}
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "results" in data
@@ -119,26 +133,52 @@ class TestChatRagIntegration:
     def test_chat_accepts_rag_flag(self, client):
         # Upload a doc first
         import io
-        files = {"file": ("facts.txt", io.BytesIO(b"The capital of France is Paris."), "text/plain")}
+
+        files = {
+            "file": (
+                "facts.txt",
+                io.BytesIO(b"The capital of France is Paris."),
+                "text/plain",
+            )
+        }
         client.post("/api/documents", files=files)
 
         # Mock Ollama chat call
-        from unittest.mock import patch, MagicMock
+
         mock_ollama = MagicMock()
         mock_ollama.status_code = 200
         mock_ollama.json.return_value = {
             "message": {"role": "assistant", "content": "Paris."},
-            "prompt_eval_count": 10, "eval_count": 5,
+            "prompt_eval_count": 10,
+            "eval_count": 5,
         }
 
-        with patch("api.services.ollama_service.requests.post", return_value=mock_ollama):
-            resp = client.post("/v1/chat/completions", json={
-                "model": "test-model",
-                "messages": [{"role": "user", "content": "What is the capital of France?"}],
-                "rag": True,
-                "rag_top_k": 3,
-                "tools": False,
-            })
+        # chat.py binds `_rag_service` at import time (`from .documents import
+        # rag_service as _rag_service`). The module fixture reloads `documents`
+        # with a fake-backed rag_service but not `chat`, so chat._rag_service can
+        # be a stale real (Ollama-bound) service depending on suite collection
+        # order. Pin it to the fresh fake-backed one for this test (auto-reverts).
+        import api.routers.chat as chat_mod
+        import api.routers.documents as doc_mod
+
+        with (
+            patch.object(chat_mod, "_rag_service", doc_mod.rag_service),
+            patch(
+                "api.services.ollama_service.requests.post", return_value=mock_ollama
+            ),
+        ):
+            resp = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "test-model",
+                    "messages": [
+                        {"role": "user", "content": "What is the capital of France?"}
+                    ],
+                    "rag": True,
+                    "rag_top_k": 3,
+                    "tools": False,
+                },
+            )
             assert resp.status_code == 200
             data = resp.json()
             # rag_sources should be present when retrieval found results
