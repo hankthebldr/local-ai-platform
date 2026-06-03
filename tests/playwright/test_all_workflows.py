@@ -110,15 +110,21 @@ def test_workflow_step_shape(wf_id, base_url, api_headers):
         step_id = step.get("id")
         assert step_id, f"workflow {wf_id!r} step #{i} missing id"
 
-        has_v1 = bool(step.get("system_prompt"))
-        has_v2 = bool(step.get("prompt"))
-        assert has_v1 or has_v2, (
-            f"workflow {wf_id!r} step {step_id!r} has neither system_prompt "
-            f"nor v2 prompt block"
-        )
-        assert not (
-            has_v1 and has_v2
-        ), f"workflow {wf_id!r} step {step_id!r} has both v1 and v2 prompts"
+        # Composite / delegation step kinds (kind: a2a, parallel, loop,
+        # consolidate, orchestrator, ralph, …) don't prompt a model directly —
+        # their behaviour comes from branches/body/agent_card_url/built-in
+        # logic — so a prompt block is N/A. Only plain generation steps (no
+        # `kind`) must carry exactly one prompt block.
+        if not step.get("kind"):
+            has_v1 = bool(step.get("system_prompt"))
+            has_v2 = bool(step.get("prompt"))
+            assert has_v1 or has_v2, (
+                f"workflow {wf_id!r} step {step_id!r} has neither system_prompt "
+                f"nor v2 prompt block"
+            )
+            assert not (
+                has_v1 and has_v2
+            ), f"workflow {wf_id!r} step {step_id!r} has both v1 and v2 prompts"
 
         outputs = step.get("outputs", []) or []
         assert outputs, f"workflow {wf_id!r} step {step_id!r} has no outputs"
@@ -126,6 +132,8 @@ def test_workflow_step_shape(wf_id, base_url, api_headers):
         # Inputs must resolve to one of:
         #   - seed.* (caller's responsibility to provide)
         #   - shared.* (cross-cutting workflow state)
+        #   - $*.* (engine-injected special namespaces, e.g. $memory.* — the
+        #     engine resolves these at run time, not from an upstream step)
         #   - <self_id>.* (self-reference for retry/revise hook loops —
         #     hooks may produce keys beyond what the step declares in
         #     `outputs:`, so we trust the step's own namespace fully)
@@ -137,7 +145,7 @@ def test_workflow_step_shape(wf_id, base_url, api_headers):
                     "is not in 'namespace.key' form"
                 )
             ns, _key = input_ref.split(".", 1)
-            if ns in ("seed", "shared", step_id):
+            if ns in ("seed", "shared", step_id) or ns.startswith("$"):
                 continue
             assert input_ref in seen_outputs, (
                 f"workflow {wf_id!r} step {step_id!r} references "
