@@ -13,13 +13,14 @@ def test_default_model_is_minilm():
     entry = ONNX_EMBEDDING_MODELS["all-MiniLM-L6-v2"]
     assert entry["dimension"] == 384
     assert entry["pooling"] == "mean"
-    assert "fp32" in entry["files"] and "int8" in entry["files"]
+    # Phase 1 ships fp32 only; ISA-specific int8 is deferred to hardware-tuning.
+    assert "fp32" in entry["files"] and "int8" not in entry["files"]
 
 
 import api.services.onnx.model_cache as mc
 
 
-def test_ensure_model_picks_int8_variant(monkeypatch):
+def test_ensure_model_selects_fp32(monkeypatch):
     calls = []
 
     def fake_download(repo_id, filename, cache_dir=None):
@@ -27,12 +28,12 @@ def test_ensure_model_picks_int8_variant(monkeypatch):
         return f"/cache/{repo_id}/{filename}"
 
     monkeypatch.setattr(mc, "hf_hub_download", fake_download)
-    paths = mc.ensure_model("all-MiniLM-L6-v2", quant="int8")
-    assert paths.onnx_path.endswith("onnx/model_quantized.onnx")
+    paths = mc.ensure_model("all-MiniLM-L6-v2", quant="fp32")
+    assert paths.onnx_path.endswith("onnx/model.onnx")
     assert paths.tokenizer_path.endswith("tokenizer.json")
     assert (
         "sentence-transformers/all-MiniLM-L6-v2",
-        "onnx/model_quantized.onnx",
+        "onnx/model.onnx",
     ) in calls
 
 

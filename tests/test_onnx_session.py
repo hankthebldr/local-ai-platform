@@ -1,5 +1,6 @@
 import api.services.onnx.session as sess_mod
 from api.services.architecture import ArchClass
+from api.services.arch_impl.nvidia_single import NvidiaSingleArchitecture
 from api.services.arch_impl.unified import UnifiedArchitecture
 
 
@@ -20,9 +21,11 @@ class _FakeOrt:
     InferenceSession = _FakeSession
 
 
-def _apple():
-    return UnifiedArchitecture(
-        arch_class=ArchClass.APPLE_UNIFIED, total_memory_gb=48.0, bandwidth_gbps=273.0
+def _nvidia():
+    # A real arch whose ONNX plan requests a non-CPU EP (CUDA), to exercise the
+    # EP-availability degrade path. apple_unified/cpu_x86 are CPU-only in Phase 1.
+    return NvidiaSingleArchitecture(
+        gpu_meta={"name": "RTX PRO 4000", "vram_total_gb": 24.0}, driver_version="575"
     )
 
 
@@ -36,7 +39,8 @@ def test_build_session_cpu_x86_runs_on_cpu(monkeypatch):
 
 
 def test_build_session_degrades_when_accelerator_unavailable(monkeypatch, caplog):
-    # apple plan requests [CoreML, CPU]; FakeOrt only has CPU -> falls back, warns.
+    # The nvidia plan requests [CUDA, CPU]; FakeOrt only has CPU -> CUDA is
+    # dropped, build_session degrades to CPU and logs which EP was unavailable.
     import logging
 
     # The project logger has propagate=False; enable propagation so caplog
@@ -44,6 +48,6 @@ def test_build_session_degrades_when_accelerator_unavailable(monkeypatch, caplog
     monkeypatch.setattr(sess_mod.logger, "propagate", True)
     caplog.set_level(logging.WARNING)
     monkeypatch.setattr(sess_mod, "ort", _FakeOrt)
-    session, active = sess_mod.build_session("/fake/model.onnx", arch=_apple())
+    session, active = sess_mod.build_session("/fake/model.onnx", arch=_nvidia())
     assert active == ["CPUExecutionProvider"]
-    assert any("CoreMLExecutionProvider" in r.message for r in caplog.records)
+    assert any("CUDAExecutionProvider" in r.message for r in caplog.records)

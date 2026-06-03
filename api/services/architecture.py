@@ -377,9 +377,11 @@ class UnknownArchitecture:
         return "5m"
 
     def recommended_onnx_providers(self) -> "OnnxExecutionPlan":
-        # Degraded mode: the universal floor, conservatively quantized.
+        # Degraded mode: the universal floor with the universal weight format.
+        # fp32 (onnx/model.onnx) exists for every model and runs on any CPU;
+        # ISA-specific int8 is deferred to the hardware-tuning phase.
         return OnnxExecutionPlan(
-            providers=["CPUExecutionProvider"], quant="int8", provider_options=[{}]
+            providers=["CPUExecutionProvider"], quant="fp32", provider_options=[{}]
         )
 
 

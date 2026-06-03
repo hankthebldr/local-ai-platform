@@ -185,7 +185,12 @@ class EmbeddingService:
     def _bind_onnx(self, raise_on_fail: bool) -> bool:
         try:
             self._load_onnx_encoder()
-            vec = self._onnx_instance.encode(["probe"])[0]
+            # Probe with a >1 batch on purpose: some accelerator EPs build a
+            # session fine but fail at inference on batches >1 (e.g. CoreML's
+            # dynamic-batch limit). A single-text probe would bind with false
+            # confidence and then crash on the first real multi-chunk document.
+            vecs = self._onnx_instance.encode(["probe one", "probe two"])
+            vec = vecs[0]
             self._backend = "onnx"
             self._model = self._onnx_model
             self._dimension = len(vec)

@@ -16,10 +16,10 @@ def test_onnx_execution_plan_shape():
     assert plan.provider_options == [{}]
 
 
-def test_unknown_arch_recommends_cpu_int8():
+def test_unknown_arch_recommends_cpu_fp32():
     plan = UnknownArchitecture().recommended_onnx_providers()
     assert plan.providers == ["CPUExecutionProvider"]
-    assert plan.quant == "int8"
+    assert plan.quant == "fp32"
 
 
 def _unified(arch_class):
@@ -28,18 +28,22 @@ def _unified(arch_class):
     )
 
 
-def test_apple_unified_recommends_coreml_fp16():
+def test_apple_unified_recommends_cpu_fp32_phase1():
+    # Phase 1 ships CPU/fp32 on Apple Silicon: CoreML crashes at inference on
+    # batch>1 (deferred), and int8 weights are ISA-specific (also deferred), so
+    # fp32 on the CPU floor is the universal, never-fatal Phase-1 choice.
     plan = _unified(ArchClass.APPLE_UNIFIED).recommended_onnx_providers()
-    assert plan.providers == ["CoreMLExecutionProvider", "CPUExecutionProvider"]
-    assert plan.quant == "fp16"
+    assert plan.providers == ["CPUExecutionProvider"]
+    assert plan.quant == "fp32"
     assert len(plan.provider_options) == len(plan.providers)
 
 
-def test_cpu_x86_recommends_cpu_int8_amd_first():
-    # "AMD-first": int8/CPU is the AMD-optimal default; Intel OpenVINO is deferred.
+def test_cpu_x86_recommends_cpu_fp32():
+    # Phase 1: CPU/fp32 (universal). int8 is ISA-specific (qint8_avx512 for the
+    # AMD/Intel boxes, qint8_arm64 for Apple) and deferred with the CPU-vendor probe.
     plan = _unified(ArchClass.CPU_X86).recommended_onnx_providers()
     assert plan.providers == ["CPUExecutionProvider"]
-    assert plan.quant == "int8"
+    assert plan.quant == "fp32"
 
 
 _FAKE_GPU = {"name": "RTX PRO 4000", "vram_total_gb": 24.0}

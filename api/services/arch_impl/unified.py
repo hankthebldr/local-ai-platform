@@ -356,22 +356,22 @@ class UnifiedArchitecture:
         return "30m"
 
     def recommended_onnx_providers(self) -> OnnxExecutionPlan:
-        """Apple Silicon -> CoreML (ANE/GPU) + CPU floor, fp16.
-        cpu_x86 -> plain CPU EP, int8 (AMD-first; Zen4 AVX-512 runs int8 well).
+        """Phase 1: CPU EP + fp32 on BOTH apple_unified and cpu_x86.
 
-        The Intel OpenVINO branch is a deferred optimization (needs a CPU-vendor
-        probe in detect()); cpu_x86 here is optimal for AMD and a correct floor
-        for Intel.
+        Two accelerations are deliberately deferred — they ship together in the
+        hardware-tuning phase:
+          - CoreML (Apple ANE/GPU): the EP builds the MiniLM graph but crashes
+            at inference on batches >1, and build_session guards only session
+            construction, not run(). CPU is the floor that never fails.
+          - int8 quantization: the published int8 weights are ISA-specific
+            (onnx/model_qint8_arm64.onnx, onnx/model_qint8_avx512.onnx, ...), so
+            choosing the right file needs ISA detection. fp32 (onnx/model.onnx)
+            is universal and correct, and runs on any CPU arch.
+        Intel OpenVINO is likewise deferred (needs a CPU-vendor probe).
         """
-        if self.name == ArchClass.APPLE_UNIFIED:
-            return OnnxExecutionPlan(
-                providers=["CoreMLExecutionProvider", "CPUExecutionProvider"],
-                quant="fp16",
-                provider_options=[{}, {}],
-            )
         return OnnxExecutionPlan(
             providers=["CPUExecutionProvider"],
-            quant="int8",
+            quant="fp32",
             provider_options=[{}],
         )
 
