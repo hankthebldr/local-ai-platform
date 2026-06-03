@@ -39,7 +39,11 @@ class TestBackendSelection:
             assert svc.get_backend() == "ollama"
             assert svc.get_dimension() == 768
 
-    def test_both_fail_raises(self):
+    def test_all_backends_fail_raises(self):
+        # Auto order is Ollama -> ONNX -> sentence-transformers; all three must
+        # be mocked to fail for EmbeddingBackendUnavailable to surface. Mocking
+        # _load_onnx_encoder also prevents a real MiniLM download (and a real
+        # ONNX bind whose global side-effects leak into later suite tests).
         from api.services.embedding_service import (
             EmbeddingService,
             EmbeddingBackendUnavailable,
@@ -52,11 +56,15 @@ class TestBackendSelection:
             side_effect=Exception("conn refused"),
         ):
             with patch(
-                "api.services.embedding_service.EmbeddingService._load_sentence_transformer",
-                side_effect=Exception("st fail"),
+                "api.services.embedding_service.EmbeddingService._load_onnx_encoder",
+                side_effect=Exception("onnx fail"),
             ):
-                with pytest.raises(EmbeddingBackendUnavailable):
-                    EmbeddingService(ollama, backend="auto")
+                with patch(
+                    "api.services.embedding_service.EmbeddingService._load_sentence_transformer",
+                    side_effect=Exception("st fail"),
+                ):
+                    with pytest.raises(EmbeddingBackendUnavailable):
+                        EmbeddingService(ollama, backend="auto")
 
 
 class TestEmbedding:
