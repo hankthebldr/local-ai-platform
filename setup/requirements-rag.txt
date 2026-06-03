@@ -1,5 +1,6 @@
 # RAG Dependencies — vector database and retrieval
 -r requirements-core.txt
+-r requirements-onnx.txt
 chromadb>=0.4.22
 # Only RecursiveCharacterTextSplitter is used (api/services/chunker.py).
 # Capped below 0.2 because the text_splitter module moved to a separate

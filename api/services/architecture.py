@@ -28,7 +28,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, List, Literal, Optional, Protocol, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────
@@ -158,6 +158,38 @@ class TransitionPlan(BaseModel):
     warm_eviction_candidate: bool = False
 
 
+# ── ONNX execution recipe ─────────────────────────────────────────────────
+
+
+class OnnxExecutionPlan(BaseModel):
+    """Per-architecture ONNX Runtime execution recipe.
+
+    providers is ordered by preference; CPUExecutionProvider is ALWAYS the
+    final entry (the universal floor). provider_options is parallel to
+    providers — one options dict per provider (empty dict = defaults).
+    """
+
+    providers: List[str]
+    quant: Literal["int8", "fp16", "fp32"]
+    provider_options: List[dict]
+
+    @model_validator(mode="after")
+    def _check_invariants(self) -> "OnnxExecutionPlan":
+        if not self.providers:
+            raise ValueError("providers must be non-empty")
+        if self.providers[-1] != "CPUExecutionProvider":
+            raise ValueError(
+                "CPUExecutionProvider must be the last entry in providers "
+                f"(got {self.providers})"
+            )
+        if len(self.provider_options) != len(self.providers):
+            raise ValueError(
+                f"provider_options length ({len(self.provider_options)}) must "
+                f"match providers length ({len(self.providers)})"
+            )
+        return self
+
+
 # ── Protocol ──────────────────────────────────────────────────────────────
 
 
@@ -219,6 +251,15 @@ class Architecture(Protocol):
             "0"      — evict immediately when the request completes
             "30m"    — keep loaded for 30 minutes
             "-1"     — keep forever (until explicit unload)
+        """
+        ...
+
+    def recommended_onnx_providers(self) -> "OnnxExecutionPlan":
+        """Ordered ONNX Runtime execution providers + quant for this host.
+
+        The ONNX substrate (api/services/onnx/) calls this to configure
+        encoder sessions (embeddings, rerankers, classifiers). CPU is always
+        the floor — a missing accelerator wheel degrades, never fails.
         """
         ...
 
@@ -334,6 +375,14 @@ class UnknownArchitecture:
         # rather than "0" because we may not actually want eviction —
         # detection just failed.
         return "5m"
+
+    def recommended_onnx_providers(self) -> "OnnxExecutionPlan":
+        # Degraded mode: the universal floor with the universal weight format.
+        # fp32 (onnx/model.onnx) exists for every model and runs on any CPU;
+        # ISA-specific int8 is deferred to the hardware-tuning phase.
+        return OnnxExecutionPlan(
+            providers=["CPUExecutionProvider"], quant="fp32", provider_options=[{}]
+        )
 
 
 # ── Top-level detector ───────────────────────────────────────────────────

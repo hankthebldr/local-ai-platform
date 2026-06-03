@@ -204,6 +204,17 @@ class NvidiaSingleArchitecture:
         # for single-model long sessions.
         return "0"
 
+    def recommended_onnx_providers(self) -> "OnnxExecutionPlan":
+        """Single NVIDIA GPU -> CUDA EP + CPU floor, fp16. (TensorRT EP is a
+        later opportunistic optimization.)"""
+        from ..architecture import OnnxExecutionPlan
+
+        return OnnxExecutionPlan(
+            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            quant="fp16",
+            provider_options=[{}, {}],
+        )
+
     @classmethod
     def current(cls):
         from ..architecture import _get_current
