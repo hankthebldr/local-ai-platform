@@ -2,9 +2,10 @@
 """
 EmbeddingService — Backend-bound text-to-vector provider
 
-Binds to ONE backend at init time (Ollama or sentence-transformers).
+Binds to ONE backend at init time (Ollama, ONNX, or sentence-transformers).
 Once bound, stays with that backend for its lifetime to prevent
-dimension/semantic mismatches in ChromaDB collections.
+dimension/semantic mismatches in ChromaDB collections. Auto-select order is
+Ollama → ONNX → sentence-transformers (the last is the torch-based failsafe).
 """
 
 from __future__ import annotations
