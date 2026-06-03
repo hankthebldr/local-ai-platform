@@ -26,6 +26,7 @@ from ..architecture import (
     ArchClass,
     ClassifiedError,
     Feasibility,
+    OnnxExecutionPlan,
     PressureSnapshot,
     ScheduleDecision,
     TransitionPlan,
@@ -353,6 +354,26 @@ class UnifiedArchitecture:
         # reload would pay full prefill cost on CPU (10s+ for 7B, 90s+
         # for 34B), and Apple's mmap'd weights stay in page cache anyway.
         return "30m"
+
+    def recommended_onnx_providers(self) -> OnnxExecutionPlan:
+        """Apple Silicon -> CoreML (ANE/GPU) + CPU floor, fp16.
+        cpu_x86 -> plain CPU EP, int8 (AMD-first; Zen4 AVX-512 runs int8 well).
+
+        The Intel OpenVINO branch is a deferred optimization (needs a CPU-vendor
+        probe in detect()); cpu_x86 here is optimal for AMD and a correct floor
+        for Intel.
+        """
+        if self.name == ArchClass.APPLE_UNIFIED:
+            return OnnxExecutionPlan(
+                providers=["CoreMLExecutionProvider", "CPUExecutionProvider"],
+                quant="fp16",
+                provider_options=[{}, {}],
+            )
+        return OnnxExecutionPlan(
+            providers=["CPUExecutionProvider"],
+            quant="int8",
+            provider_options=[{}],
+        )
 
     @classmethod
     def current(cls) -> "UnifiedArchitecture":
