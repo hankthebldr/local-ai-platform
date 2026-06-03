@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Tests for EmbeddingService — backend selection and binding"""
 
-import os
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -16,7 +15,9 @@ class TestBackendSelection:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"embedding": [0.1, 0.2, 0.3]}
 
-        with patch("api.services.embedding_service.requests.post", return_value=mock_resp):
+        with patch(
+            "api.services.embedding_service.requests.post", return_value=mock_resp
+        ):
             svc = EmbeddingService(ollama, ollama_model="nomic-embed-text")
             assert svc.get_backend() == "ollama"
             assert svc.get_model() == "nomic-embed-text"
@@ -31,18 +32,29 @@ class TestBackendSelection:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"embedding": [0.0] * 768}
 
-        with patch("api.services.embedding_service.requests.post", return_value=mock_resp):
+        with patch(
+            "api.services.embedding_service.requests.post", return_value=mock_resp
+        ):
             svc = EmbeddingService(ollama, backend="ollama", ollama_model="test-model")
             assert svc.get_backend() == "ollama"
             assert svc.get_dimension() == 768
 
     def test_both_fail_raises(self):
-        from api.services.embedding_service import EmbeddingService, EmbeddingBackendUnavailable
+        from api.services.embedding_service import (
+            EmbeddingService,
+            EmbeddingBackendUnavailable,
+        )
         from api.services.ollama_service import OllamaService
 
         ollama = OllamaService()
-        with patch("api.services.embedding_service.requests.post", side_effect=Exception("conn refused")):
-            with patch("api.services.embedding_service.EmbeddingService._load_sentence_transformer", side_effect=Exception("st fail")):
+        with patch(
+            "api.services.embedding_service.requests.post",
+            side_effect=Exception("conn refused"),
+        ):
+            with patch(
+                "api.services.embedding_service.EmbeddingService._load_sentence_transformer",
+                side_effect=Exception("st fail"),
+            ):
                 with pytest.raises(EmbeddingBackendUnavailable):
                     EmbeddingService(ollama, backend="auto")
 
@@ -57,7 +69,9 @@ class TestEmbedding:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"embedding": [0.5, 0.5, 0.5]}
 
-        with patch("api.services.embedding_service.requests.post", return_value=mock_resp):
+        with patch(
+            "api.services.embedding_service.requests.post", return_value=mock_resp
+        ):
             svc = EmbeddingService(ollama, backend="ollama", ollama_model="m")
             vecs = svc.embed(["a", "b", "c"])
             assert len(vecs) == 3
@@ -72,7 +86,9 @@ class TestEmbedding:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"embedding": [0.1, 0.2]}
 
-        with patch("api.services.embedding_service.requests.post", return_value=mock_resp):
+        with patch(
+            "api.services.embedding_service.requests.post", return_value=mock_resp
+        ):
             svc = EmbeddingService(ollama, backend="ollama", ollama_model="m")
             v = svc.embed_query("hello")
             assert v == [0.1, 0.2]
@@ -88,9 +104,65 @@ class TestDescribe:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"embedding": [0.0] * 768}
 
-        with patch("api.services.embedding_service.requests.post", return_value=mock_resp):
-            svc = EmbeddingService(ollama, backend="ollama", ollama_model="nomic-embed-text")
+        with patch(
+            "api.services.embedding_service.requests.post", return_value=mock_resp
+        ):
+            svc = EmbeddingService(
+                ollama, backend="ollama", ollama_model="nomic-embed-text"
+            )
             d = svc.describe()
             assert d["backend"] == "ollama"
             assert d["model"] == "nomic-embed-text"
             assert d["dimension"] == 768
+
+
+# ── Task 1.1: rebind-compatibility helpers ────────────────────────────────────
+
+from api.services.embedding_service import normalized_family, collection_compatible
+
+
+def test_normalized_family_strips_qualifiers():
+    assert normalized_family("all-MiniLM-L6-v2") == "all-minilm-l6-v2"
+    assert (
+        normalized_family("sentence-transformers/all-MiniLM-L6-v2")
+        == "all-minilm-l6-v2"
+    )
+    assert normalized_family("nomic-embed-text:latest") == "nomic-embed-text"
+
+
+def test_collection_compatible_exact_match():
+    meta = {"backend": "onnx", "model": "all-MiniLM-L6-v2", "dimension": 384}
+    ok, warning = collection_compatible(meta, dict(meta))
+    assert ok is True and warning is None
+
+
+def test_collection_compatible_strict_default_refuses_backend_switch():
+    existing = {
+        "backend": "sentence_transformers",
+        "model": "all-MiniLM-L6-v2",
+        "dimension": 384,
+    }
+    active = {"backend": "onnx", "model": "all-MiniLM-L6-v2", "dimension": 384}
+    ok, warning = collection_compatible(existing, active)
+    assert ok is False
+
+
+def test_collection_compatible_lenient_allows_same_family(monkeypatch):
+    monkeypatch.setenv("ENCLAVE_EMBEDDING_ALLOW_REBIND", "true")
+    existing = {
+        "backend": "sentence_transformers",
+        "model": "all-MiniLM-L6-v2",
+        "dimension": 384,
+    }
+    active = {"backend": "onnx", "model": "all-MiniLM-L6-v2", "dimension": 384}
+    ok, warning = collection_compatible(existing, active)
+    assert ok is True
+    assert warning and "quality" in warning.lower()
+
+
+def test_collection_compatible_lenient_still_refuses_dimension_change(monkeypatch):
+    monkeypatch.setenv("ENCLAVE_EMBEDDING_ALLOW_REBIND", "true")
+    existing = {"backend": "ollama", "model": "nomic-embed-text", "dimension": 768}
+    active = {"backend": "onnx", "model": "all-MiniLM-L6-v2", "dimension": 384}
+    ok, warning = collection_compatible(existing, active)
+    assert ok is False

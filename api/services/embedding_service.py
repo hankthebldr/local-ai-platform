@@ -10,12 +10,57 @@ dimension/semantic mismatches in ChromaDB collections.
 from __future__ import annotations
 
 import os
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import requests
 
 from ..logging_config import logger
 from .ollama_service import OllamaService
+
+
+def normalized_family(model: str) -> str:
+    """Reduce a model id to its comparable family: drop namespace prefix and
+    any ':tag'/quant suffix, lowercase. So sentence-transformers/all-MiniLM-L6-v2
+    and onnx all-MiniLM-L6-v2 compare equal."""
+    base = model.split("/")[-1]
+    base = base.split(":")[0]
+    return base.lower()
+
+
+def collection_compatible(existing: dict, active: dict) -> Tuple[bool, Optional[str]]:
+    """Decide whether the active embedding service may use a Chroma collection
+    built by `existing` (both are describe() dicts).
+
+    Default: strict exact match. With ENCLAVE_EMBEDDING_ALLOW_REBIND=true,
+    lenient on {normalized_family, dimension}; a dimension change ALWAYS fails.
+    Returns (compatible, warning_message_or_none).
+    """
+    if existing == active:
+        return True, None
+
+    allow_rebind = os.getenv("ENCLAVE_EMBEDDING_ALLOW_REBIND", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if not allow_rebind:
+        return False, None
+
+    if existing.get("dimension") != active.get("dimension"):
+        return False, None  # hard incompatibility — re-index required
+
+    same_family = normalized_family(
+        str(existing.get("model", ""))
+    ) == normalized_family(str(active.get("model", "")))
+    if not same_family:
+        return False, None
+
+    warning = (
+        f"Rebinding embedding collection from {existing} to {active} via "
+        f"ENCLAVE_EMBEDDING_ALLOW_REBIND. Vectors may differ subtly across "
+        f"backends; retrieval quality could degrade. Re-index to be safe."
+    )
+    return True, warning
 
 
 class EmbeddingBackendUnavailable(Exception):
