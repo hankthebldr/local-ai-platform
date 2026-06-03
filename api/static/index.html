@@ -7286,6 +7286,7 @@ textarea.composer-desc-area {
         <div class="panel-label">// MCP SERVERS
           <span style="float:right">
             <button class="action-btn accent" onclick="MCPPanel.showCreate()">+ Register</button>
+            <button class="action-btn" onclick="MCPPanel.browseMarketplace()" title="Browse a catalog of well-known MCP servers">⌗ Marketplace</button>
             <button class="action-btn" onclick="MCPPanel.refresh()">Refresh</button>
           </span>
         </div>
@@ -19846,13 +19847,88 @@ const MCPPanel = (function () {
     } catch (e) { _showError(e.message); }
   }
 
+  // ── Marketplace — browse + one-click register a catalog MCP server ──
+  async function browseMarketplace() {
+    const modal = document.createElement('div');
+    modal.className = 'mcp-mkt-overlay';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:1000;display:flex;align-items:center;justify-content:center';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);width:min(760px,95vw);max-height:90vh;display:flex;flex-direction:column;border-radius:8px;overflow:hidden';
+    inner.innerHTML = '<div class="model-empty" style="padding:28px">Loading MCP catalog…</div>';
+    modal.appendChild(inner);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    try {
+      const r = await fetch('/api/mcp/discover', { headers: _headers() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      const icon = (window.AgentIcons ? AgentIcons.svg('mcp') : '');
+      const rows = (d.servers || []).map(s => {
+        const envReq = (s.env_required || []);
+        const reqChip = envReq.length
+          ? `<span class="skill-disc-chip available" title="${esc(envReq.map(e => e.key).join(', '))}">needs ${envReq.length} secret${envReq.length === 1 ? '' : 's'}</span>` : '';
+        const srcChip = s.marketplace ? '<span class="skill-disc-chip marketplace">remote</span>' : '';
+        const action = s.installed
+          ? '<span class="skill-disc-chip installed">installed</span>'
+          : `<button class="action-btn sm accent" onclick='MCPPanel._installFromCatalog(${JSON.stringify(s).replace(/'/g, "&#39;")}, this)'>Install</button>`;
+        return `<div class="gh-skill-row">
+          <span class="admin-card-icon admin-card-icon-sm tone-purple" style="flex:0 0 auto">${icon}</span>
+          <div class="gh-skill-info">
+            <div class="gh-skill-name">${esc(s.name || s.id)} ${srcChip} ${reqChip}</div>
+            <div class="gh-skill-desc">${esc(s.description || '')}</div>
+            ${s.args_hint ? `<div class="gh-skill-desc" style="color:var(--amber);margin-top:2px">⚙ ${esc(s.args_hint)}</div>` : ''}
+          </div>
+          <div style="flex:0 0 auto">${action}</div>
+        </div>`;
+      }).join('');
+      inner.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-family:var(--mono);font-weight:600;flex:1">MCP Marketplace <span style="color:var(--text-muted);font-weight:400">· ${d.count} server${d.count === 1 ? '' : 's'}</span></div>
+          <button class="action-btn xs ghost" onclick="this.closest('.mcp-mkt-overlay').remove()">×</button>
+        </div>
+        <div style="font-size:0.64rem;color:var(--text-muted);padding:8px 18px 0">Servers run as local processes under your account. Servers needing a path/DSN install with a placeholder — edit the registration afterward. Secrets are collected on install.</div>
+        <div class="gh-skills" style="overflow:auto;padding:10px 18px 18px">${rows || '<div class="model-empty">Catalog is empty.</div>'}</div>`;
+    } catch (e) {
+      inner.innerHTML = `<div class="model-empty" style="color:var(--red);padding:24px">Failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function _installFromCatalog(entry, btn) {
+    // Collect required credentials up front; abort if any are skipped.
+    const env = {};
+    for (const e of (entry.env_required || [])) {
+      const val = prompt(`${entry.name}: enter ${e.key}\n${e.hint || ''}`);
+      if (val === null) return;           // operator cancelled
+      if (val.trim()) env[e.key] = val.trim();
+    }
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      const r = await fetch(`/api/mcp/discover/${encodeURIComponent(entry.id)}/install`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ..._headers() },
+        body: JSON.stringify({ env }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      if (btn) { btn.outerHTML = '<span class="skill-disc-chip installed">installed</span>'; }
+      if (window.Toast) Toast.success('MCP server registered', `${entry.id} — test the handshake from its detail panel.`);
+      await load();
+      select(entry.id);
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+      if (window.Toast) Toast.error('Install failed: ' + e.message);
+      else alert('Install failed: ' + e.message);
+    }
+  }
+
   // Refresh when the panel becomes visible.
   window.addEventListener('adminPanelActivated', e => {
     if (e.detail && e.detail.panel === 'admin-mcp') load();
   });
 
   return { load, refresh, render, select, test, discoverTools, toggleEnabled, remove,
-           showCreate, edit, _onTransportChange, _closeModal, _submit };
+           showCreate, edit, _onTransportChange, _closeModal, _submit,
+           browseMarketplace, _installFromCatalog };
 })();
 
 /* Refresh workbenches whenever the composer becomes the active tab. */

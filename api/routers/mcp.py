@@ -7,8 +7,17 @@ local processes (stdio transport) or contact arbitrary URLs (http
 transport); operator credentials gate every change.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+import json
+import os
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+import requests
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from ..logging_config import logger
 from ..middleware import require_master_key
 from ..models.mcp_models import (
     MCPServerCreate,
@@ -22,6 +31,133 @@ router = APIRouter(
     tags=["mcp"],
     dependencies=[Depends(require_master_key)],
 )
+
+# ── MCP marketplace (curated catalog + optional remote merge) ───────────────
+# A discovery surface analogous to the Skills Lab's: browse well-known MCP
+# servers and one-click register them. The curated catalog ships in
+# data/discovery/mcp_catalog.json; set ENCLAVE_MCP_CATALOG_URL to merge a
+# remote JSON index ({"servers":[...]} or a bare [...] list) alongside it.
+_CATALOG_PATH = (
+    Path(__file__).parent.parent.parent / "data" / "discovery" / "mcp_catalog.json"
+)
+_REMOTE_TTL_SECONDS = 600
+_remote_cache: Dict[str, Any] = {"ts": 0.0, "url": None, "servers": []}
+
+
+def _load_catalog() -> Dict[str, Any]:
+    try:
+        return json.loads(_CATALOG_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"servers": []}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("MCP catalog read failed: %s", exc)
+        return {"servers": []}
+
+
+def _fetch_remote_catalog() -> List[Dict[str, Any]]:
+    url = os.getenv("ENCLAVE_MCP_CATALOG_URL", "").strip()
+    if not url:
+        return []
+    now = time.time()
+    if (
+        _remote_cache["url"] == url
+        and (now - _remote_cache["ts"]) < _REMOTE_TTL_SECONDS
+    ):
+        return _remote_cache["servers"]
+    try:
+        resp = requests.get(url, timeout=8)
+        resp.raise_for_status()
+        data = resp.json()
+        servers = data.get("servers") if isinstance(data, dict) else data
+        servers = [s for s in (servers or []) if isinstance(s, dict) and s.get("id")]
+        _remote_cache.update({"ts": now, "url": url, "servers": servers})
+        return servers
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Remote MCP catalog fetch failed (%s): %s", url, exc)
+        return _remote_cache["servers"] if _remote_cache["url"] == url else []
+
+
+class InstallMcpReq(BaseModel):
+    """Register a catalog MCP server, optionally overriding id/name/args and
+    supplying required credentials."""
+
+    id: Optional[str] = None
+    name: Optional[str] = None
+    args: Optional[List[str]] = None
+    env: Dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+@router.get("/discover")
+async def discover_mcp() -> Dict[str, Any]:
+    """List catalog MCP servers with install state (which catalog ids are
+    already registered). Merges any configured remote catalog."""
+    cat = _load_catalog()
+    servers = list(cat.get("servers") or [])
+    seen = {s.get("id") for s in servers}
+    remote_count = 0
+    for r in _fetch_remote_catalog():
+        rid = r.get("id")
+        if not rid or rid in seen:
+            continue
+        rec = dict(r)
+        rec["source"] = "remote"
+        rec["marketplace"] = True
+        servers.append(rec)
+        seen.add(rid)
+        remote_count += 1
+
+    registered = {s.get("id") for s in get_mcp_service().list_servers()}
+    out = []
+    for s in servers:
+        rec = dict(s)
+        rec["installed"] = s.get("id") in registered
+        out.append(rec)
+    return {
+        "schema": cat.get("schema"),
+        "version": cat.get("version"),
+        "updated": cat.get("updated"),
+        "count": len(out),
+        "remote_count": remote_count,
+        "servers": out,
+    }
+
+
+@router.post("/discover/{catalog_id}/install")
+async def install_mcp(catalog_id: str, req: InstallMcpReq) -> Dict[str, Any]:
+    """Register a catalog MCP server. Builds an MCPServerCreate from the
+    catalog entry, applying any id/name/args overrides and supplied env."""
+    cat = _load_catalog()
+    entry = next(
+        (s for s in (cat.get("servers") or []) if s.get("id") == catalog_id),
+        None,
+    )
+    if entry is None:
+        entry = next(
+            (s for s in _fetch_remote_catalog() if s.get("id") == catalog_id),
+            None,
+        )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="server not in catalog")
+
+    create = MCPServerCreate(
+        id=req.id or entry["id"],
+        name=req.name or entry.get("name") or entry["id"],
+        description=entry.get("description"),
+        transport=entry.get("transport", "stdio"),
+        command=entry.get("command"),
+        args=req.args if req.args is not None else list(entry.get("args") or []),
+        env=req.env or {},
+        url=entry.get("url"),
+        enabled=req.enabled,
+        tags=list(entry.get("tags") or []),
+    )
+    try:
+        registered = get_mcp_service().register(create)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    logger.info("Installed MCP server '%s' from catalog '%s'", create.id, catalog_id)
+    return {"installed": True, "server": registered}
 
 
 @router.get("/servers")

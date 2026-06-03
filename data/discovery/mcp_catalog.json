@@ -1,0 +1,171 @@
+{
+  "schema": "enclave.mcp.catalog/v1",
+  "version": "1.0.0",
+  "updated": "2026-06-02",
+  "note": "Curated catalog of well-known Model Context Protocol servers. Most are the official @modelcontextprotocol reference servers (npx) or community python servers (uvx). Entries marked with env_required need credentials supplied at install time. Commands run as local processes under the operator's account — review before installing.",
+  "servers": [
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "description": "Read, write, and search files within an allowed directory. The path argument is the sandbox root the server is permitted to touch.",
+      "category": "files",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "args_hint": "Replace /tmp with the directory the server may access.",
+      "env_required": [],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+      "tags": ["files", "official", "node"]
+    },
+    {
+      "id": "memory",
+      "name": "Knowledge Graph Memory",
+      "description": "A persistent knowledge-graph memory store the model can write entities and relations into and recall across turns.",
+      "category": "memory",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "args_hint": "",
+      "env_required": [],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+      "tags": ["memory", "official", "node"]
+    },
+    {
+      "id": "sequential-thinking",
+      "name": "Sequential Thinking",
+      "description": "A scratchpad tool for structured, revisable step-by-step reasoning. Lets the model branch and revise a chain of thoughts.",
+      "category": "reasoning",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "args_hint": "",
+      "env_required": [],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
+      "tags": ["reasoning", "official", "node"]
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch (Web)",
+      "description": "Fetch a URL and return its content converted to markdown for the model to read. Good for grounding on live web pages.",
+      "category": "web",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "args_hint": "Requires uv/uvx installed (Python). Try `pip install uv` if missing.",
+      "env_required": [],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+      "tags": ["web", "official", "python"]
+    },
+    {
+      "id": "git",
+      "name": "Git",
+      "description": "Read, search, and inspect a local git repository — status, diff, log, blame — as tools.",
+      "category": "dev",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-git", "--repository", "/path/to/repo"],
+      "args_hint": "Replace /path/to/repo with the repository to expose. Requires uv/uvx.",
+      "env_required": [],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+      "tags": ["dev", "git", "official", "python"]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "Interact with the GitHub API — search code/issues/PRs, read files, create issues — using a personal access token.",
+      "category": "dev",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "args_hint": "",
+      "env_required": [
+        { "key": "GITHUB_PERSONAL_ACCESS_TOKEN", "hint": "A GitHub PAT with the scopes you want the model to use (repo, read:org, …)." }
+      ],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
+      "tags": ["dev", "github", "official", "node"]
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "description": "Web and local search via the Brave Search API. Returns ranked results the model can ground on.",
+      "category": "web",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "args_hint": "",
+      "env_required": [
+        { "key": "BRAVE_API_KEY", "hint": "A Brave Search API key (free tier available at brave.com/search/api)." }
+      ],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
+      "tags": ["web", "search", "official", "node"]
+    },
+    {
+      "id": "sqlite",
+      "name": "SQLite",
+      "description": "Query and explore a local SQLite database — list tables, read schema, run read/write SQL — as tools.",
+      "category": "data",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-sqlite", "--db-path", "/path/to/database.db"],
+      "args_hint": "Replace the path with your .db file. Requires uv/uvx.",
+      "env_required": [],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite",
+      "tags": ["data", "sql", "official", "python"]
+    },
+    {
+      "id": "postgres",
+      "name": "PostgreSQL",
+      "description": "Read-only access to a PostgreSQL database — inspect schema and run read queries — for grounding the model on live data.",
+      "category": "data",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"],
+      "args_hint": "Replace the connection URL with your database DSN.",
+      "env_required": [],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
+      "tags": ["data", "sql", "official", "node"]
+    },
+    {
+      "id": "puppeteer",
+      "name": "Puppeteer (Browser)",
+      "description": "Drive a headless Chromium browser — navigate, click, fill, screenshot, evaluate JS — for live web automation and scraping.",
+      "category": "web",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+      "args_hint": "",
+      "env_required": [],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer",
+      "tags": ["web", "browser", "official", "node"]
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "description": "Read and post Slack messages, list channels and users, via a bot token.",
+      "category": "comms",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "args_hint": "",
+      "env_required": [
+        { "key": "SLACK_BOT_TOKEN", "hint": "A Slack bot token (xoxb-…) with the scopes you want." },
+        { "key": "SLACK_TEAM_ID", "hint": "Your Slack workspace/team ID (T…)." }
+      ],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
+      "tags": ["comms", "slack", "official", "node"]
+    },
+    {
+      "id": "everything",
+      "name": "Everything (Reference/Test)",
+      "description": "The reference MCP server exercising every protocol feature — prompts, resources, tools, sampling. Use it to verify the MCP wiring end-to-end.",
+      "category": "dev",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"],
+      "args_hint": "Handy for testing the platform's MCP integration with no external dependencies.",
+      "env_required": [],
+      "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/everything",
+      "tags": ["dev", "test", "official", "node"]
+    }
+  ]
+}
