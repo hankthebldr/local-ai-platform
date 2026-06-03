@@ -28,7 +28,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, List, Literal, Optional, Protocol, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────
@@ -172,6 +172,22 @@ class OnnxExecutionPlan(BaseModel):
     providers: List[str]
     quant: Literal["int8", "fp16", "fp32"]
     provider_options: List[dict]
+
+    @model_validator(mode="after")
+    def _check_invariants(self) -> "OnnxExecutionPlan":
+        if not self.providers:
+            raise ValueError("providers must be non-empty")
+        if self.providers[-1] != "CPUExecutionProvider":
+            raise ValueError(
+                "CPUExecutionProvider must be the last entry in providers "
+                f"(got {self.providers})"
+            )
+        if len(self.provider_options) != len(self.providers):
+            raise ValueError(
+                f"provider_options length ({len(self.provider_options)}) must "
+                f"match providers length ({len(self.providers)})"
+            )
+        return self
 
 
 # ── Protocol ──────────────────────────────────────────────────────────────
