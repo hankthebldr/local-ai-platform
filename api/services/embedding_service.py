@@ -108,15 +108,19 @@ class EmbeddingService:
     def _select_backend(self) -> None:
         if self._backend_choice == "ollama":
             self._bind_ollama(raise_on_fail=True)
+        elif self._backend_choice == "onnx":
+            self._bind_onnx(raise_on_fail=True)
         elif self._backend_choice == "sentence_transformers":
             self._bind_sentence_transformers(raise_on_fail=True)
-        else:  # auto
+        else:  # auto: Ollama -> ONNX -> sentence-transformers (ST is the failsafe)
             if not self._bind_ollama(raise_on_fail=False):
-                if not self._bind_sentence_transformers(raise_on_fail=False):
-                    raise EmbeddingBackendUnavailable(
-                        f"No embedding backend available. Tried Ollama model '{self._ollama_model}' "
-                        f"and sentence-transformers model '{self._st_model}'."
-                    )
+                if not self._bind_onnx(raise_on_fail=False):
+                    if not self._bind_sentence_transformers(raise_on_fail=False):
+                        raise EmbeddingBackendUnavailable(
+                            f"No embedding backend available. Tried Ollama model "
+                            f"'{self._ollama_model}', ONNX model '{self._onnx_model}', "
+                            f"and sentence-transformers model '{self._st_model}'."
+                        )
 
     def _bind_ollama(self, raise_on_fail: bool) -> bool:
         """Probe the Ollama embeddings endpoint; bind if it responds."""

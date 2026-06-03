@@ -211,3 +211,43 @@ def test_runtime_info_includes_providers(monkeypatch):
     info = svc.runtime_info()
     assert info["providers"] == ["CPUExecutionProvider"]
     assert "providers" not in svc.describe()
+
+
+# ── Task 1.3: auto backend order Ollama -> ONNX -> sentence-transformers ──────
+
+
+def test_auto_order_prefers_onnx_over_st_when_ollama_down(monkeypatch):
+    svc, fake_encoder, ollama = _service_with_stubbed_onnx(monkeypatch)
+    svc._ollama = ollama
+    svc._onnx_model = "all-MiniLM-L6-v2"
+    svc._onnx_instance = None
+    svc._st_model = "all-MiniLM-L6-v2"
+    svc._backend_choice = "auto"
+    svc._backend = None
+    svc._model = None
+    svc._dimension = None
+    svc._st_instance = None
+
+    monkeypatch.setattr(svc, "_bind_ollama", lambda raise_on_fail: False)
+    st_called = {"hit": False}
+
+    def _st_should_not_run(raise_on_fail):
+        st_called["hit"] = True
+        return False
+
+    monkeypatch.setattr(svc, "_bind_sentence_transformers", _st_should_not_run)
+
+    svc._select_backend()
+    assert svc.get_backend() == "onnx"
+    assert st_called["hit"] is False
+
+
+def test_explicit_onnx_backend_binds(monkeypatch):
+    svc, fake_encoder, ollama = _service_with_stubbed_onnx(monkeypatch)
+    svc._ollama = ollama
+    svc._onnx_model = "all-MiniLM-L6-v2"
+    svc._onnx_instance = None
+    svc._backend_choice = "onnx"
+    svc._backend = None
+    svc._select_backend()
+    assert svc.get_backend() == "onnx"
