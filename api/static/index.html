@@ -17103,7 +17103,7 @@ const SkillsDiscover = (function () {
           ? `<button class="action-btn sm accent" onclick="SkillsDiscover.install('${esc(s.id)}')">Install</button>`
           : '');
     return `<div class="workbench-item agent-card cap-card skill-disc-card cap-skill" data-skill-id="${esc(s.id)}">
-      <div class="agent-card-head">
+      <div class="agent-card-head" style="cursor:pointer" title="Open detail" onclick="SkillsDiscover.openDetail('${esc(s.id)}')">
         <span class="agent-card-icon tone-${esc(tone)}">${iconSvg}</span>
         <div class="agent-card-titleblock">
           <div class="agent-card-title">${esc(s.name)}</div>
@@ -17309,7 +17309,148 @@ const SkillsDiscover = (function () {
     }).join('');
   }
 
-  return { load, render, install, uninstall, setView, importFromUrl, browseGithubRepo, _installGithub };
+  // Deep-dive — expand a skill into its full SKILL.md body. Installed skills
+  // open editable (saved in place via PUT /source + a live plugin reload);
+  // catalog/remote skills are read-only previews of the body that would land
+  // on install. Mirrors the Models/Workflows deep-dive pattern.
+  async function openDetail(skillId) {
+    const s = (_data?.skills || []).find(x => x.id === skillId);
+    if (!s) return;
+    const persona = s.persona || (window.AgentIcons ? AgentIcons.resolve({ name: s.name, description: s.description }) : 'skill');
+    const tone    = (window.AgentIcons ? AgentIcons.tone(persona) : 'amber');
+    const iconSvg = (window.AgentIcons ? AgentIcons.svg(persona) : '');
+    const plugin  = (s.installed_in || [])[0] || '';
+
+    const modal = document.createElement('div');
+    modal.className = 'skill-detail-overlay';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:1000;display:flex;align-items:center;justify-content:center';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);width:min(780px,95vw);max-height:90vh;display:flex;flex-direction:column;border-radius:8px;overflow:hidden';
+    inner.innerHTML = '<div class="model-empty" style="padding:28px">Loading skill…</div>';
+    modal.appendChild(inner);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+
+    // Resolve the body: installed → on-disk editable source; else catalog body.
+    let body = '', editable = false, srcPlugin = plugin;
+    try {
+      if (s.installed && plugin) {
+        const r = await fetch(`/api/skills/source/${encodeURIComponent(skillId)}?plugin_id=${encodeURIComponent(plugin)}`);
+        if (r.ok) { const d = await r.json(); body = d.body || ''; editable = true; srcPlugin = d.plugin_id || plugin; }
+      }
+      if (!body) {
+        const r = await fetch(`/api/skills/discover/${encodeURIComponent(skillId)}`);
+        if (r.ok) { const d = await r.json(); body = d.skill_md || ''; }
+      }
+    } catch (_) {}
+
+    const triggers = (s.triggers || []).map(t => `<span class="cap-card-meta">${esc(t)}</span>`).join(' · ');
+    const stateLabel = s.installed
+      ? `installed${plugin ? ' · ' + esc(plugin) : ''}`
+      : (s.marketplace || s.source === 'remote' ? 'marketplace' : (s.has_body ? 'available' : 'bundled'));
+    const removeBtn = (s.installed && plugin)
+      ? `<button class="action-btn sm danger" onclick="SkillsDiscover.uninstall('${esc(skillId)}','${esc(plugin)}');this.closest('.skill-detail-overlay').remove()">Remove</button>` : '';
+    const installBtn = (!s.installed && s.has_body)
+      ? `<button class="action-btn sm accent" onclick="SkillsDiscover.install('${esc(skillId)}');this.closest('.skill-detail-overlay').remove()">Install</button>` : '';
+    const editControls = editable
+      ? `<button class="action-btn sm" id="skill-edit-toggle" onclick="SkillsDiscover._toggleEdit('${esc(skillId)}','${esc(srcPlugin)}')">Edit</button>` : '';
+
+    inner.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:11px;padding:16px 18px;border-bottom:1px solid var(--border)">
+        <span class="agent-card-icon tone-${esc(tone)}" style="flex:0 0 auto">${iconSvg}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:650;font-size:0.96rem">${esc(s.name || skillId)}</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${esc(s.description || '')}</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap">
+            <code class="cap-card-id">${esc(skillId)}</code>
+            <span class="skill-disc-chip ${s.installed ? 'installed' : (s.has_body ? 'available' : 'bundled')}">${stateLabel}</span>
+            ${triggers ? `<span class="cap-card-meta">${triggers}</span>` : ''}
+          </div>
+        </div>
+        <button class="action-btn xs ghost" onclick="this.closest('.skill-detail-overlay').remove()">×</button>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:14px 18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:0.64rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)">SKILL.md ${editable ? '' : '· read-only'}</span>
+          <span id="skill-edit-status" style="font-size:0.64rem;color:var(--text-muted)"></span>
+        </div>
+        <textarea id="skill-detail-body" readonly spellcheck="false"
+          style="width:100%;min-height:340px;font-family:var(--mono);font-size:0.72rem;line-height:1.5;background:var(--bg-deep);color:var(--text);border:1px solid var(--border-strong);border-radius:5px;padding:11px;resize:vertical;box-sizing:border-box">${esc(body || '(no body — this entry ships pre-bundled in the plugin)')}</textarea>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;padding:12px 18px;border-top:1px solid var(--border)">
+        ${editControls}
+        <span id="skill-edit-save-wrap" style="display:none;gap:8px">
+          <button class="action-btn sm accent" id="skill-edit-save" onclick="SkillsDiscover._saveEdit('${esc(skillId)}','${esc(srcPlugin)}')">Save &amp; reload</button>
+          <button class="action-btn sm ghost" onclick="SkillsDiscover._cancelEdit()">Cancel</button>
+        </span>
+        <span style="flex:1"></span>
+        ${installBtn}${removeBtn}
+      </div>`;
+    SkillsDiscover._detailOrig = body;
+  }
+
+  function _toggleEdit() {
+    const ta = document.getElementById('skill-detail-body');
+    const toggle = document.getElementById('skill-edit-toggle');
+    const saveWrap = document.getElementById('skill-edit-save-wrap');
+    if (!ta) return;
+    ta.readOnly = false;
+    ta.focus();
+    if (toggle) toggle.style.display = 'none';
+    if (saveWrap) saveWrap.style.display = 'inline-flex';
+    const st = document.getElementById('skill-edit-status');
+    if (st) st.textContent = 'editing — unsaved';
+  }
+
+  function _cancelEdit() {
+    const ta = document.getElementById('skill-detail-body');
+    if (ta && typeof SkillsDiscover._detailOrig === 'string') ta.value = SkillsDiscover._detailOrig;
+    if (ta) ta.readOnly = true;
+    const toggle = document.getElementById('skill-edit-toggle');
+    const saveWrap = document.getElementById('skill-edit-save-wrap');
+    if (toggle) toggle.style.display = '';
+    if (saveWrap) saveWrap.style.display = 'none';
+    const st = document.getElementById('skill-edit-status');
+    if (st) st.textContent = '';
+  }
+
+  async function _saveEdit(skillId, pluginId) {
+    const ta = document.getElementById('skill-detail-body');
+    const save = document.getElementById('skill-edit-save');
+    const st = document.getElementById('skill-edit-status');
+    if (!ta) return;
+    const newBody = ta.value;
+    if (!newBody.trim()) { if (window.Toast) Toast.error('Skill body cannot be empty'); return; }
+    if (save) { save.disabled = true; save.textContent = 'Saving…'; }
+    try {
+      const r = await fetch(`/api/skills/source/${encodeURIComponent(skillId)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plugin_id: pluginId, body: newBody }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      // Hot-reload so the edited skill activates immediately for chat.
+      let active = false;
+      try { active = (await fetch('/api/plugins/reload', { method: 'POST' })).ok; } catch (_) {}
+      SkillsDiscover._detailOrig = newBody;
+      ta.readOnly = true;
+      const toggle = document.getElementById('skill-edit-toggle');
+      const saveWrap = document.getElementById('skill-edit-save-wrap');
+      if (toggle) toggle.style.display = '';
+      if (saveWrap) saveWrap.style.display = 'none';
+      if (st) st.textContent = active ? 'saved — active now' : 'saved (reload to activate)';
+      if (window.Toast) Toast.success('Skill saved', `${skillId} → ${pluginId}`);
+      load(true);
+    } catch (e) {
+      if (window.Toast) Toast.error('Save failed: ' + e.message);
+      if (st) st.textContent = 'save failed';
+    } finally {
+      if (save) { save.disabled = false; save.textContent = 'Save & reload'; }
+    }
+  }
+
+  return { load, render, install, uninstall, setView, importFromUrl, browseGithubRepo, _installGithub,
+           openDetail, _toggleEdit, _cancelEdit, _saveEdit };
 })();
 window.SkillsDiscover = SkillsDiscover;
 
