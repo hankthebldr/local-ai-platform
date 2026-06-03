@@ -59,6 +59,22 @@ async def list_plugins():
     return plugin_service.list_plugins()
 
 
+@router.post("/reload", dependencies=[Depends(require_master_key)])
+async def reload_plugins():
+    """Re-scan the plugin layers in-process so newly installed/imported skills
+    and tools activate WITHOUT an API restart. The chat path reads this same
+    PluginService singleton live (chat.py: _plugin_service.get_skills(...)), so
+    reloaded skills inject on the very next turn."""
+    plugin_service.scan_plugins()
+    plugins = plugin_service.list_plugins()
+    return {
+        "reloaded": True,
+        "plugins": len(plugins),
+        "skills": sum(len(p.get("skills") or []) for p in plugins),
+        "tools": sum(len(p.get("tools") or []) for p in plugins),
+    }
+
+
 @router.post("/install", dependencies=[Depends(require_master_key)])
 async def install_plugin(plugin: UploadFile = File(...)):
     """Install a plugin tarball into the writable user layer."""
