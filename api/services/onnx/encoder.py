@@ -48,6 +48,12 @@ class OnnxTextEncoder:
         _active_providers: Optional[List[str]] = None,
     ):
         entry = ONNX_EMBEDDING_MODELS[model_name]
+        # NOTE: entry["query_prefix"] is intentionally NOT applied here. For the
+        # Phase-1 default (all-MiniLM-L6-v2) the prefix is None, so this is a
+        # no-op. bge-small-en-v1.5 declares a query prefix, but applying it
+        # correctly needs a query-vs-document distinction the encode() interface
+        # doesn't carry yet — deferred to the reranker/Phase-2 work. A future
+        # bge user must wire prefixing before relying on asymmetric retrieval.
         self.model_name = model_name
         self._pooling = entry["pooling"]
         self._max_length = entry.get("max_length", 512)
