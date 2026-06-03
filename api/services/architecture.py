@@ -158,6 +158,22 @@ class TransitionPlan(BaseModel):
     warm_eviction_candidate: bool = False
 
 
+# ── ONNX execution recipe ─────────────────────────────────────────────────
+
+
+class OnnxExecutionPlan(BaseModel):
+    """Per-architecture ONNX Runtime execution recipe.
+
+    providers is ordered by preference; CPUExecutionProvider is ALWAYS the
+    final entry (the universal floor). provider_options is parallel to
+    providers — one options dict per provider (empty dict = defaults).
+    """
+
+    providers: List[str]
+    quant: Literal["int8", "fp16", "fp32"]
+    provider_options: List[dict]
+
+
 # ── Protocol ──────────────────────────────────────────────────────────────
 
 
@@ -219,6 +235,15 @@ class Architecture(Protocol):
             "0"      — evict immediately when the request completes
             "30m"    — keep loaded for 30 minutes
             "-1"     — keep forever (until explicit unload)
+        """
+        ...
+
+    def recommended_onnx_providers(self) -> "OnnxExecutionPlan":
+        """Ordered ONNX Runtime execution providers + quant for this host.
+
+        The ONNX substrate (api/services/onnx/) calls this to configure
+        encoder sessions (embeddings, rerankers, classifiers). CPU is always
+        the floor — a missing accelerator wheel degrades, never fails.
         """
         ...
 
@@ -334,6 +359,12 @@ class UnknownArchitecture:
         # rather than "0" because we may not actually want eviction —
         # detection just failed.
         return "5m"
+
+    def recommended_onnx_providers(self) -> "OnnxExecutionPlan":
+        # Degraded mode: the universal floor, conservatively quantized.
+        return OnnxExecutionPlan(
+            providers=["CPUExecutionProvider"], quant="int8", provider_options=[{}]
+        )
 
 
 # ── Top-level detector ───────────────────────────────────────────────────
