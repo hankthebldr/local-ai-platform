@@ -225,6 +225,30 @@ pre-flight, per-step instrumentation, and security hardening.
   `_LLM_SEMAPHORE` prevents accidental two-model concurrency on
   CPU/single-GPU hosts; cache eliminates redundant lookups on retry.
 
+### Added — Failure auto-triage & opt-in error reporting (PRs #130, #131)
+
+- **CI failure triage (#130).** New self-contained `triage/` package (no
+  FastAPI dependency) that turns pytest failures into GitHub-native output:
+  inline `::error` annotations, a `$GITHUB_STEP_SUMMARY` table, and
+  **deduplicated** auto-filed issues (one per stable fingerprint; recurrences
+  comment instead of duplicating). Runs via `python -m triage ci` — annotations
+  + summary every run, issues only on `master` pushes; fork PRs skip issue
+  creation (read-only token). Issue emitter is rate-limit-safe: one
+  `gh issue list` per run, a per-run cap, throttling, and a hard stop on the
+  first API error.
+- **Runtime error capture (#131).** Catch-all exception handler in
+  `api/exceptions.py` (existing `APIError` responses unchanged) that captures
+  unhandled exceptions and — **opt-in, off by default**
+  (`ENABLE_ERROR_REPORTING=false`) — reports to an **operator-owned** sink
+  (`github` / `webhook` / `sentry`) on a fire-and-forget daemon thread.
+  Best-effort local-Ollama enrichment (`qwen2.5:14b`); mandatory redaction of
+  prompts, secrets, and `$HOME` paths.
+- **Telemetry stance revised (#131).** From absolute "no telemetry" to **"no
+  telemetry by default; opt-in, operator-owned error reporting."** Non-opt-in
+  behavior is unchanged — fully local, zero egress. Vendor phone-home is a
+  separate, deferred, off-by-default capability. See
+  `docs/deployment/error-reporting.md`.
+
 ### Changed — Engine internals
 
 - `_execute_steps` is no longer a `for step in steps` loop — it's a tick
