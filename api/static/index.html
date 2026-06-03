@@ -5156,6 +5156,13 @@ textarea.composer-desc-area {
 .skill-disc-chip.bundled   { color: var(--cyan);   border-color: var(--cyan-dim); background: rgba(0, 220, 240, 0.05); }
 .skill-disc-chip.marketplace { color: var(--accent-2, #2F86E5); border-color: var(--accent-2-dim, #2F86E555); background: var(--accent-2-ghost, rgba(47,134,229,0.08)); }
 
+/* GitHub repo browse (bulk skill install) */
+.gh-skills { display: flex; flex-direction: column; gap: 6px; }
+.gh-skill-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px; }
+.gh-skill-info { flex: 1; min-width: 0; }
+.gh-skill-name { font-family: var(--mono); font-weight: 600; font-size: 0.74rem; color: var(--text); }
+.gh-skill-desc { font-size: 0.66rem; color: var(--text-dim); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
 /* Agent tools/capabilities picker */
 .am-tools-picker { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 8px; background: var(--bg-deep); }
 .am-tools-group-label { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 6px 0 4px; }
@@ -6508,7 +6515,8 @@ textarea.composer-desc-area {
             <button type="button" class="skills-disc-view" data-view="icons"
                     onclick="SkillsDiscover.setView('icons')" title="Icon explorer">▦</button>
           </div>
-          <button class="action-btn accent" onclick="SkillsDiscover.importFromUrl()" title="Import a SKILL.md from a URL (e.g. a skills.sh / GitHub skill)">+ Import URL</button>
+          <button class="action-btn accent" onclick="SkillsDiscover.browseGithubRepo()" title="Browse + bulk-install all skills in a GitHub repo (e.g. a skills.sh repo)">⌗ Browse repo</button>
+          <button class="action-btn" onclick="SkillsDiscover.importFromUrl()" title="Import a single SKILL.md by URL">+ Import URL</button>
           <button class="action-btn" onclick="SkillsDiscover.load(true)" title="Refresh the catalog">⟲</button>
         </div>
         <div class="skills-discover-grid" id="skills-discover-grid">
@@ -17173,6 +17181,62 @@ const SkillsDiscover = (function () {
     render();
   }
 
+  // Browse every skill in a GitHub repo (skills.sh repos are at
+  // skills.sh/<owner>/<repo>) and install any of them.
+  async function browseGithubRepo() {
+    const repo = prompt('GitHub repo to browse (owner/repo):', 'anthropics/skills');
+    if (!repo || !repo.trim()) return;
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:min(680px,94vw);max-height:88vh;overflow-y:auto;border-radius:6px;';
+    inner.innerHTML = '<div class="model-empty">Loading repo skills…</div>';
+    modal.appendChild(inner);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    const close = "this.closest('div[style*=fixed]').remove()";
+    try {
+      const r = await fetch('/api/skills/github?repo=' + encodeURIComponent(repo.trim()));
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      const rows = (d.skills || []).map(s => `
+        <div class="gh-skill-row">
+          <div class="gh-skill-info">
+            <div class="gh-skill-name">${esc(s.name)}</div>
+            <div class="gh-skill-desc">${esc(s.description || s.path || '')}</div>
+          </div>
+          <button class="action-btn sm accent" onclick="SkillsDiscover._installGithub('${esc(s.raw_url)}','${esc(s.id)}',this)">Install</button>
+        </div>`).join('');
+      inner.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-family:var(--mono);font-weight:600;flex:1">${esc(d.repo)} <span style="color:var(--text-muted);font-weight:400">· ${d.count} skill${d.count === 1 ? '' : 's'}</span></div>
+          <button class="action-btn xs ghost" onclick="${close}">×</button>
+        </div>
+        <div style="font-size:0.64rem;color:var(--text-muted);margin-bottom:10px">Installs go to <code>general-skills</code> and activate immediately.</div>
+        <div class="gh-skills">${rows || '<div class="model-empty">No SKILL.md files found in this repo.</div>'}</div>`;
+    } catch (e) {
+      inner.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function _installGithub(rawUrl, id, btn) {
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const r = await fetch('/api/skills/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: rawUrl, plugin_id: 'general-skills', id }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      try { await fetch('/api/plugins/reload', { method: 'POST' }); } catch (_) {}
+      btn.textContent = '✓ Installed'; btn.classList.remove('accent');
+      load(true);
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Retry';
+      if (window.Toast) Toast.error('Install failed: ' + e.message);
+    }
+  }
+
   // Import a SKILL.md from a URL (skills.sh entries are GitHub-backed — grab
   // the SKILL.md's GitHub link). Fetches + parses frontmatter server-side,
   // installs into the chosen plugin, then refreshes discovery.
@@ -17245,7 +17309,7 @@ const SkillsDiscover = (function () {
     }).join('');
   }
 
-  return { load, render, install, uninstall, setView, importFromUrl };
+  return { load, render, install, uninstall, setView, importFromUrl, browseGithubRepo, _installGithub };
 })();
 window.SkillsDiscover = SkillsDiscover;
 

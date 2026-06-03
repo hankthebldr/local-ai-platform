@@ -462,6 +462,66 @@ def _parse_skill_frontmatter(text: str) -> Dict[str, Any]:
         return {}
 
 
+_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+@router.get("/github", dependencies=[Depends(require_master_key)])
+async def discover_github(repo: str, ref: str = "main") -> Dict[str, Any]:
+    """Bulk-browse a GitHub repo's skills — every SKILL.md, parsed. skills.sh
+    indexes repos at skills.sh/<owner>/<repo>, so paste the owner/repo to see
+    everything installable in it. Uses the unauthenticated GitHub trees API."""
+    repo = (repo or "").strip()
+    if not _REPO_RE.match(repo):
+        raise HTTPException(status_code=400, detail="repo must be 'owner/repo'")
+    try:
+        tr = requests.get(
+            f"https://api.github.com/repos/{repo}/git/trees/{ref}?recursive=1",
+            timeout=12,
+            headers={"Accept": "application/vnd.github+json"},
+        )
+        if tr.status_code == 404 and ref == "main":
+            tr = requests.get(
+                f"https://api.github.com/repos/{repo}/git/trees/master?recursive=1",
+                timeout=12,
+            )
+            ref = "master"
+        tr.raise_for_status()
+        tree = tr.json().get("tree", [])
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"GitHub fetch failed: {exc}")
+
+    paths = [
+        t["path"]
+        for t in tree
+        if isinstance(t, dict) and t.get("path", "").lower().endswith("skill.md")
+    ][
+        :30
+    ]  # cap — each needs a content fetch
+    skills = []
+    for path in paths:
+        raw = f"https://raw.githubusercontent.com/{repo}/{ref}/{path}"
+        meta = {}
+        try:
+            text = requests.get(raw, timeout=6).text
+            meta = _parse_skill_frontmatter(text)
+        except Exception:  # noqa: BLE001
+            pass
+        # name fallback: the skill's parent directory.
+        parts = path.split("/")
+        dirname = parts[-2] if len(parts) > 1 else parts[0]
+        skills.append(
+            {
+                "id": _slug(meta.get("name") or dirname),
+                "name": meta.get("name") or dirname,
+                "description": meta.get("description") or "",
+                "path": path,
+                "raw_url": raw,
+                "source": "github",
+            }
+        )
+    return {"repo": repo, "ref": ref, "count": len(skills), "skills": skills}
+
+
 class ImportReq(BaseModel):
     """Import a skill from a remote SKILL.md (e.g. skills.sh → GitHub)."""
 
