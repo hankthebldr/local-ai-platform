@@ -41,3 +41,31 @@ def test_cpu_x86_recommends_cpu_int8_amd_first():
     plan = _unified(ArchClass.CPU_X86).recommended_onnx_providers()
     assert plan.providers == ["CPUExecutionProvider"]
     assert plan.quant == "int8"
+
+
+from api.services.arch_impl.nvidia_single import NvidiaSingleArchitecture
+from api.services.arch_impl.nvidia_multi import NvidiaMultiArchitecture
+
+_FAKE_GPU = {"name": "RTX PRO 4000", "vram_total_gb": 24.0}
+
+
+def test_nvidia_single_recommends_cuda_fp16(monkeypatch):
+    monkeypatch.setattr(
+        "api.services.arch_impl._nvml.estimate_bandwidth_gbps", lambda n: 600.0
+    )
+    arch = NvidiaSingleArchitecture(gpu_meta=_FAKE_GPU, driver_version="575")
+    plan = arch.recommended_onnx_providers()
+    assert plan.providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    assert plan.quant == "fp16"
+
+
+def test_nvidia_multi_recommends_cuda_fp16(monkeypatch):
+    monkeypatch.setattr(
+        "api.services.arch_impl._nvml.estimate_bandwidth_gbps", lambda n: 600.0
+    )
+    arch = NvidiaMultiArchitecture(
+        gpus=[_FAKE_GPU, _FAKE_GPU], nvlink_topology=[], driver_version="575"
+    )
+    plan = arch.recommended_onnx_providers()
+    assert plan.providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    assert plan.quant == "fp16"
