@@ -109,16 +109,26 @@ to `UnifiedArchitecture.detect()`), so the impl branches on `self.name`.
 
 | Impl | Branch | `providers` | `quant` | Phase |
 |---|---|---|---|---|
-| `UnifiedArchitecture` | `name == apple_unified` (M4 Pro) | `[CoreMLExecutionProvider, CPUExecutionProvider]` | `fp16` | **1** |
-| `UnifiedArchitecture` | `name == cpu_x86` (**AMD-first** — BD790i) | `[CPUExecutionProvider]` | `int8` | **1** |
+| `UnifiedArchitecture` | `name == apple_unified` (M4 Pro) | `[CPUExecutionProvider]` | `fp32` | **1** |
+| `UnifiedArchitecture` | `name == cpu_x86` (BD790i / MS-01) | `[CPUExecutionProvider]` | `fp32` | **1** |
 | `NvidiaSingleArchitecture` / `NvidiaMultiArchitecture` | — | `[CUDAExecutionProvider, CPUExecutionProvider]` | `fp16` | 1 (code lands; unverified until a GPU host exists) |
-| `UnknownArchitecture` | degraded | `[CPUExecutionProvider]` | `int8` | **1** |
+| `UnknownArchitecture` | degraded | `[CPUExecutionProvider]` | `fp32` | **1** |
 
-**AMD-first rationale:** the BD790i (Ryzen 9 7945HX, 96 GB) is the primary `cpu_x86` target. AMD
-has no worthwhile ONNX accelerator EP — `OpenVINOExecutionProvider` is Intel-only, and ROCm-on-ORT
-for that iGPU isn't worth the dependency. The plain `CPUExecutionProvider` with int8 quantization
-runs fast on Zen4's AVX-512. This is optimal for AMD and a correct floor for Intel, so **Phase 1
-needs no CPU-vendor probe.**
+> **Revised during implementation — validated on the M4 Pro.** The design originally recommended
+> CoreML/fp16 on Apple and int8 on cpu_x86. Real-hardware testing found two blockers:
+> 1. The **CoreML EP crashes at inference on batches >1** with the MiniLM graph, and `build_session`
+>    guards only session *construction*, not `run()` — so the "CPU floor / never fatal" guarantee did
+>    not actually hold on Apple Silicon.
+> 2. There is **no universal int8 weight file** — the published int8 variants are ISA-specific
+>    (`model_qint8_arm64.onnx`, `model_qint8_avx512.onnx`, `model_quint8_avx2.onnx`, …), so choosing
+>    one needs ISA detection (the same probe deferred for OpenVINO).
+>
+> So **Phase 1 ships `[CPUExecutionProvider]` + `fp32` (`onnx/model.onnx`) on every reachable host** —
+> universal, correct, torch-free, and where "never fatal" genuinely holds. `recommended_onnx_providers()`
+> no longer branches on `self.name`. CoreML, OpenVINO, and ISA-aware int8 ship together as a coherent
+> hardware-tuning increment (§9), gated on an **inference-time** CPU fallback and a CPU-vendor probe. The
+> bind probe was also made multi-text so any future accelerator that fails on real batches is rejected at
+> bind time (auto falls through to ST), not mid-ingest.
 
 ---
 
@@ -321,7 +331,7 @@ suite's "heavy to install" concern from regressing.
 
 | Item | Phase |
 |---|---|
-| CPU-vendor probe + Intel `OpenVINOExecutionProvider` for MS-01 | 1.x optimization |
+| **Accelerator-enablement unit** (ships together): inference-time CPU fallback in `encode()` (catch a CoreML/CUDA `run()` failure → rebuild CPU-only → retry, so "never fatal" holds at inference, not just construction); **re-enable CoreML** on Apple once batch>1 is validated behind that fallback; **ISA-aware int8** selection (`model_qint8_arm64` / `model_qint8_avx512` / `model_quint8_avx2`) via a CPU-vendor/ISA probe; Intel `OpenVINOExecutionProvider` for MS-01 | 1.x hardware-tuning |
 | Reranker consumer (CPU cross-encoder, net-new RAG capability) | 2 |
 | PII-NER classifier consumer (powers triage redaction) | 3 |
 | `/api/system` surfacing of active ONNX providers (Memory tab card) | with Phase 2 |
