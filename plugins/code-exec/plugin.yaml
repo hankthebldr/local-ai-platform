@@ -1,0 +1,16 @@
+id: code-exec
+name: "Code Exec"
+version: "1.0.0"
+description: "Run Python snippets in the local sandbox. Off by default — requires CODE_EXEC_ENABLED=true and explicit allowed_plugins entry."
+author: "enclave"
+
+tools:
+  - id: "code_exec"
+    file: "tool.py"
+    function: "code_exec"
+    description: "Execute a short Python snippet in an isolated sandbox and return stdout/stderr."
+    parameters:
+      code:
+        type: string
+        required: true
+        description: "Python source to execute."
