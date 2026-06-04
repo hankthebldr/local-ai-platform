@@ -52,9 +52,10 @@ services:
       - API_HOST=0.0.0.0
       - API_PORT=8001                       # vLLM owns :8000; Console on :8001
       - OLLAMA_HOST=http://localhost:11434  # host GPU Ollama
-      # vLLM is CORE on this device: the bundled `vllm` service below serves
-      # the primary model on the GPU and the API auto-registers it as the
-      # performance runner (Ollama stays as the universal fallback).
+      # vLLM is the GPU backend for this device: the bundled `vllm` service
+      # below comes up alongside the API (same `up`/`stop` lifecycle) and the
+      # API auto-registers it as the performance runner; Ollama stays the
+      # universal fallback. Neither service auto-starts on boot (restart: "no").
       - ENCLAVE_VLLM_BASE_URLS=${ENCLAVE_VLLM_BASE_URLS:-http://localhost:8000}
       # Auth ON is the DESIGNED local path: the API auto-provisions a first-run
       # key (data/config/first-run-key.txt) and the SPA auto-signs-in via
@@ -114,7 +115,8 @@ services:
       - --reload
       - --reload-dir
       - /app/api
-    restart: unless-stopped
+    # Do NOT auto-start on boot/reboot — start the stack by hand (`up -d`).
+    restart: "no"
     healthcheck:
       test:
         - CMD
@@ -126,10 +128,17 @@ services:
       retries: 3
       start_period: 20s
 
-  # ── vLLM — primary GPU inference backend (core on this device) ──────────
+  # ── vLLM — primary GPU inference backend (coupled to the API) ──────────
   # Serves the primary model on the Blackwell via the OpenAI API on :8000.
   # The API container auto-registers it (ENCLAVE_VLLM_BASE_URLS above) as the
   # performance runner; Ollama stays as the universal fallback.
+  #
+  # LIFECYCLE: vLLM comes up and down WITH the app — `up -d` starts it as the
+  # backend, `stop`/`down` releases the GPU. But `restart: "no"` (see below)
+  # means it does NOT auto-start on boot/reboot: pinning ~85% of the GPU's
+  # VRAM on every boot whether or not anyone's inferencing was the problem.
+  # Start the stack by hand when you want it:
+  #   docker compose -f docker-compose.bd790i.yml up -d
   #
   # MODEL: nvidia/Qwen3-8B-NVFP4 — NVFP4 is the Blackwell-native 4-bit float
   # format (hardware-accelerated, faster than AWQ/GGUF here). ~6.4 GB weights
@@ -173,7 +182,8 @@ services:
       - "${VLLM_MAX_LEN:-8192}"
       - --max-num-seqs
       - "${VLLM_MAX_SEQS:-16}"
-    restart: unless-stopped
+    # Do NOT auto-start on boot/reboot — comes up only with the app (`up -d`).
+    restart: "no"
     healthcheck:
       # The vllm/vllm-openai image has curl but no `python` on PATH.
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
