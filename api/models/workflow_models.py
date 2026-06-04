@@ -1054,6 +1054,14 @@ class StepResult(BaseModel):
     # pure-inference time (eval_duration_ms) without summing the arrays.
     extension_overhead_ms: float = 0.0
 
+    # Code-exec (kind: code) — all optional; None on non-code steps.
+    code_exit_code: Optional[int] = None
+    tier_used: Optional[int] = None
+    peak_rss_mb: Optional[float] = None
+    files_produced: List[str] = Field(default_factory=list)
+    approval_status: Optional[Literal["auto", "approved", "edited", "rejected"]] = None
+    promoted: Optional[bool] = None
+
 
 # ── Run-Level Telemetry Summary (Phase 2 task 2.4) ────────────────────────
 
