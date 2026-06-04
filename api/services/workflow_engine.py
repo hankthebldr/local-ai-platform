@@ -811,6 +811,7 @@ class WorkflowEngine:
                     "orchestrator",
                     "consolidate",
                     "ralph",
+                    "code",
                 ):
                     resolved_models[step.id] = ""
                     continue
@@ -1246,6 +1247,10 @@ class WorkflowEngine:
             from .engine_executors import ralph as _ralph
 
             return _ralph.execute(self, step, definition, context, workflow_run)
+        if step.kind == "code":
+            from .engine_executors import code as _code
+
+            return _code.execute(self, step, definition, context, workflow_run)
 
         # kind == "llm" — the default
         step_bus = self._build_step_bus(step)
