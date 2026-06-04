@@ -54,6 +54,8 @@ class SubprocessSandbox:
         env = {k: os.environ[k] for k in spec.env_allowlist if k in os.environ}
         env["TMPDIR"] = str(fs.root)
         if spec.network == "none":
+            # Best-effort only: blocks urllib/requests but not raw sockets.
+            # True network isolation is the container tier's job (Task 14).
             env["http_proxy"] = env["https_proxy"] = "http://127.0.0.1:1"
 
         t0 = time.monotonic()
@@ -72,7 +74,10 @@ class SubprocessSandbox:
                 out, err = proc.communicate(input=spec.stdin, timeout=spec.timeout_s)
                 code = proc.returncode
             except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass  # group already exited; still a timeout
                 out, err = proc.communicate()
                 code, violations = -9, ["timeout exceeded"]
         except Exception as e:  # noqa: BLE001
