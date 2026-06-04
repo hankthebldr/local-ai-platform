@@ -941,18 +941,53 @@ class WorkflowEngine:
             # "completed", so all of them re-run after the operator decides.
             # For the common single-step tick (code on unified/single-GPU
             # arch) this is just "the one step gated → pause".
-            gated = [
-                r
-                for r in workflow_run.step_results
-                if r.step_id in tick_id_set and r.status == "awaiting_approval"
-            ]
+            # Stable order so the "kept" gate is deterministic regardless of
+            # as_completed() arrival order.
+            gated = sorted(
+                (
+                    r
+                    for r in workflow_run.step_results
+                    if r.step_id in tick_id_set and r.status == "awaiting_approval"
+                ),
+                key=lambda r: r.step_id,
+            )
             if gated:
+                kept = gated[0]
+                # Concurrent code-gates are unsupported: GatePending is a single
+                # run-level slot, so co-dispatched gating steps race on
+                # workflow_run.pending_gate (last-writer-wins) and only ONE gate's
+                # fully-populated payload survives in the slot. Rather than keep an
+                # arbitrary stable-order step and fabricate a partial GatePending
+                # for it (proposed_code/tier aren't available here), we pin `kept`
+                # to whichever step the surviving pending_gate actually describes.
+                # That keeps the persisted gate, the run status, and the reported
+                # step in agreement and never loses the gate to a checkpoint that
+                # points elsewhere. The other gated steps are non-completed, so
+                # resume() drops their rows and re-dispatches them after the
+                # operator decides on `kept`.
+                if len(gated) > 1:
+                    pg = workflow_run.pending_gate
+                    surviving = next(
+                        (g for g in gated if pg and g.step_id == pg.step_id),
+                        gated[0],
+                    )
+                    kept = surviving
+                    logger.warning(
+                        "Workflow '%s' tick produced %d concurrent code-gates "
+                        "(%s); concurrent code-gates are not supported — keeping "
+                        "'%s' (the gate held in pending_gate), the rest re-dispatch "
+                        "on resume.",
+                        definition.id,
+                        len(gated),
+                        ",".join(r.step_id for r in gated),
+                        kept.step_id,
+                    )
                 with state_lock:
                     workflow_run.status = "awaiting_approval"
                     self._checkpoint(workflow_run)
                 logger.info(
                     f"Workflow '{definition.id}' paused at step "
-                    f"'{gated[0].step_id}' awaiting operator approval"
+                    f"'{kept.step_id}' awaiting operator approval"
                 )
                 return  # halt; resume() re-enters and re-dispatches after approval
 

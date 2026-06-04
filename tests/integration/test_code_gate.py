@@ -110,3 +110,42 @@ def test_engine_run_pauses_on_gate(monkeypatch):
     assert not any(
         r.step_id == "c1" and r.status == "completed" for r in run.step_results
     )
+
+
+def test_resume_without_decision_does_not_duplicate(monkeypatch):
+    monkeypatch.setenv("CODE_EXEC_ENABLED", "true")
+    reg = SandboxRegistry()
+    reg.register(SubprocessSandbox())
+    _set_current(reg)
+    from api.services.workflow_engine import WorkflowEngine
+    from api.services.ollama_service import OllamaService
+
+    wf = WorkflowDefinition(
+        id="wg2",
+        name="g",
+        steps=[
+            AgentStep(
+                id="c1",
+                name="run",
+                kind="code",
+                outputs=["result"],
+                code=CodeStepConfig(code="print(1)", approval="required"),
+            ),
+        ],
+    )
+    eng = WorkflowEngine(OllamaService())
+    run = eng.run(wf, seed={})
+    assert run.status == "awaiting_approval"
+    # resume WITHOUT setting a decision -> must still be a single
+    # awaiting_approval, no duplicate
+    # Pass the in-memory definition: this synthetic workflow has no
+    # ./workflows/wg2.yaml on disk, and resume() accepts an explicit
+    # definition for exactly this case.
+    run2 = eng.resume(run.run_id, definition=wf)
+    assert run2.status == "awaiting_approval"
+    aw = [
+        r
+        for r in run2.step_results
+        if r.step_id == "c1" and r.status == "awaiting_approval"
+    ]
+    assert len(aw) == 1  # exactly one, not duplicated

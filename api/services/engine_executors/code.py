@@ -62,6 +62,16 @@ def _consume_decision(run, step_id):
     set. We detach it from the run (so a re-run can't re-consume it) and hand
     it back so `execute` proceeds with approved/edited/rejected semantics
     instead of re-pausing.
+
+    Re-pause idempotence: if resume() is called while the gate exists but its
+    decision is still None (a mis-timed or direct test resume), this returns
+    None, `_approval_required` stays True, and `execute` re-stamps a fresh
+    GatePending + returns a second `awaiting_approval` StepResult. That does
+    NOT duplicate the step's entry, because resume() drops every non-completed
+    step_results row before re-dispatch (workflow_engine.resume keeps only
+    status=="completed"), so the prior `awaiting_approval` row is gone and the
+    re-stamp leaves exactly one. Proven by
+    tests/integration/test_code_gate.py::test_resume_without_decision_does_not_duplicate.
     """
     g = run.pending_gate
     if g and g.step_id == step_id and g.decision is not None:
@@ -119,6 +129,21 @@ def execute(
     decision = _consume_decision(workflow_run, step.id)
     if decision is None and _approval_required(cfg, backend):
         tier = backend.capabilities().isolation_tier
+        # Cross-thread write: this runs inside a ThreadPoolExecutor worker
+        # (WorkflowEngine._execute_one_step), but `workflow_run.pending_gate`
+        # is a shared-run field read by the main thread. Two things make it
+        # safe TODAY without a lock here:
+        #   1. happens-before — the engine reads pending_gate only AFTER
+        #      future.result() for this step returns, which establishes a
+        #      happens-before edge so the write is visible before the main
+        #      thread checkpoints.
+        #   2. single code-gate per tick — current arches dispatch `code`
+        #      steps one-per-tick, so no sibling worker writes pending_gate
+        #      concurrently (last-writer-wins would otherwise drop a gate).
+        # If code steps are ever co-dispatched, this single field becomes a
+        # race; _execute_steps' gate-detection guards against silently losing
+        # a gate, but the right fix would be per-step gate carriers, not a
+        # single run-level slot. Keep the one-per-tick invariant until then.
         workflow_run.pending_gate = GatePending(
             gate_id=f"{workflow_run.run_id}:{step.id}",
             run_id=workflow_run.run_id,
