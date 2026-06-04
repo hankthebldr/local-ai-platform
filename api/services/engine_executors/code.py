@@ -53,7 +53,7 @@ def execute(
     backend = get_current_sandbox_registry().resolve(override=cfg.backend_override)
 
     spec = CodeExecSpec(
-        language="python",
+        language=cfg.language,
         code=code_src,
         scratch_path=_scratch_root(workflow_run, step),
         files_in=cfg.files_in,
@@ -64,6 +64,15 @@ def execute(
         pids=cfg.limits.pids,
         network=cfg.network,
     )
+    from .code_promote import stage_inputs, promote
+    from ..sandbox_fs import SandboxedFS
+
+    scratch = SandboxedFS(spec.scratch_path, max_file_size_mb=50)
+    canon = SandboxedFS(
+        os.path.join("data", "sandboxes", f"wf-{workflow_run.run_id}", "_workspace")
+    )
+    stage_inputs(canon, scratch, cfg)
+
     res = StepResult(step_id=step.id, status="running", started_at=datetime.utcnow())
     out = backend.execute(spec)
 
@@ -71,7 +80,10 @@ def execute(
     res.tier_used = out.tier_used
     res.peak_rss_mb = out.peak_rss_mb
     res.files_produced = out.files_produced
-    res.promoted = False  # Phase 2 wires real promotion
+    promoted = (
+        promote(scratch, canon, cfg, out.exit_code) if cfg.promote != "gated" else []
+    )
+    res.promoted = bool(promoted)
     res.status = "completed" if out.exit_code == 0 else "failed"
     if out.exit_code != 0:
         res.error = (
