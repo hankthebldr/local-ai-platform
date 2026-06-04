@@ -210,6 +210,23 @@ async def lifespan(app: FastAPI):
             "the OllamaService direct path. See docs/deployment/vllm-backend.md"
         )
 
+    # ── Code-exec sandbox detection + scratch reaper (code-exec-sandbox) ──
+    # Builds the SandboxRegistry: subprocess always, container tier when a
+    # podman/docker runtime is present. Reaps stale scratch dirs from prior runs.
+    try:
+        from .services.sandbox_detection import detect_sandboxes
+        from .services.sandbox_reaper import reap_scratch
+
+        sbx = detect_sandboxes()
+        logger.info("  📦 Sandbox:      %s", [b.name for b in sbx.backends()])
+        reaped = reap_scratch(
+            ttl_hours=int(os.getenv("SANDBOX_SCRATCH_TTL_HOURS", "24"))
+        )
+        if reaped:
+            logger.info("  🧹 Reaped %d stale sandbox scratch dir(s)", len(reaped))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Sandbox detection failed: %s", e)
+
     yield
     logger.info("Shutting down Enclave API")
 
