@@ -1063,6 +1063,28 @@ class StepResult(BaseModel):
     promoted: Optional[bool] = None
 
 
+# ── HITL Approval Gate (Task 11) ──────────────────────────────────────────
+
+
+class GatePending(BaseModel):
+    """A HITL approval gate awaiting an operator decision. Serialized on the run
+    so a paused workflow survives restart and resumes by id."""
+
+    gate_id: str
+    run_id: str
+    step_id: str
+    step_kind: str
+    proposed_code: str
+    network: str
+    files: List[str] = Field(default_factory=list)
+    tier: int
+    question: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    decision: Optional[Literal["approved", "edited", "rejected"]] = None
+    edited_code: Optional[str] = None
+    reason: Optional[str] = None
+
+
 # ── Run-Level Telemetry Summary (Phase 2 task 2.4) ────────────────────────
 
 
@@ -1229,6 +1251,9 @@ class WorkflowRun(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
+    # HITL gate — set when a code step is awaiting operator approval; cleared
+    # (set back to None) once the decision arrives or the step is skipped.
+    pending_gate: Optional[GatePending] = None
     telemetry_summary: Optional[RunTelemetrySummary] = None
     # Phase 5b — pre-warm dispatch log. Daemon threads update entries in
     # place under the engine's state_lock. Empty list on runs where the
