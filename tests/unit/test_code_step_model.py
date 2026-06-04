@@ -30,3 +30,14 @@ def test_non_code_step_rejects_code_block():
             outputs=["o"],
             code=CodeStepConfig(code="print(1)"),
         )
+
+
+def test_code_step_id_rejects_path_chars():
+    with pytest.raises(ValidationError):
+        AgentStep(
+            id="../evil",
+            name="n",
+            kind="code",
+            outputs=["o"],
+            code=CodeStepConfig(code="x"),
+        )

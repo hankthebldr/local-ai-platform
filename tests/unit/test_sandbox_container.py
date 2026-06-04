@@ -55,3 +55,12 @@ def test_container_runs_when_image_present(tmp_path):
     ):
         pytest.skip("container daemon not running or image not built")
     assert "in-container" in res.stdout and res.tier_used == 2
+
+
+def test_build_cmd_cidfile_optional():
+    sb = ContainerSandbox(runtime="podman", image="enclave-sandbox:latest")
+    spec = CodeExecSpec(language="python", code="print(1)", scratch_path="/tmp/s")
+    with_cid = sb._build_cmd(spec, "/abs/scratch", cidfile="/x/.cid")
+    assert "--cidfile" in with_cid and "/x/.cid" in with_cid
+    without = sb._build_cmd(spec, "/abs/scratch")
+    assert "--cidfile" not in without

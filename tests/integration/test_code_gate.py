@@ -149,3 +149,29 @@ def test_resume_without_decision_does_not_duplicate(monkeypatch):
         if r.step_id == "c1" and r.status == "awaiting_approval"
     ]
     assert len(aw) == 1  # exactly one, not duplicated
+
+
+def test_approval_auto_tier1_warns(monkeypatch, caplog):
+    import logging
+    from api.logging_config import logger as proj_logger
+    from api.services.engine_executors.code import _approval_required
+
+    monkeypatch.setenv("CODE_EXEC_ENABLED", "true")
+    reg = SandboxRegistry()
+    reg.register(SubprocessSandbox())
+    _set_current(reg)
+    sb = SubprocessSandbox()
+    # The project "local-ai" logger has propagate=False, so caplog's root
+    # handler can't see it — attach caplog's handler to the logger directly.
+    caplog.set_level(logging.WARNING)
+    proj_logger.addHandler(caplog.handler)
+    try:
+        assert (
+            _approval_required(CodeStepConfig(code="x", approval="auto"), sb) is False
+        )
+        assert any("approval=auto on Tier-1" in r.message for r in caplog.records)
+        caplog.clear()
+        _approval_required(CodeStepConfig(code="x", approval="required"), sb)
+        assert not any("approval=auto" in r.message for r in caplog.records)
+    finally:
+        proj_logger.removeHandler(caplog.handler)

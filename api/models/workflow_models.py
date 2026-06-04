@@ -817,6 +817,11 @@ class AgentStep(BaseModel):
                 raise ValueError(
                     f"AgentStep(kind=code, id={self.id!r}) requires a `code` config block"
                 )
+            if "/" in self.id or "\\" in self.id or ".." in self.id:
+                raise ValueError(
+                    f"AgentStep(kind=code, id={self.id!r}): id must not contain "
+                    f"path separators or '..' (used in the sandbox scratch path)"
+                )
             if self.code.source == "inline" and not self.code.code:
                 raise ValueError(
                     f"AgentStep(kind=code, id={self.id!r}) source=inline requires code.code"

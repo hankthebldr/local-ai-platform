@@ -34,7 +34,9 @@ class ContainerSandbox:
             can_auto_run=True,
         )
 
-    def _build_cmd(self, spec: CodeExecSpec, scratch_abs: str) -> List[str]:
+    def _build_cmd(
+        self, spec: CodeExecSpec, scratch_abs: str, cidfile=None
+    ) -> List[str]:
         # v1: no real egress allowlist exists yet, so deny network unconditionally.
         # A requested "allowlist" is downgraded to deny (fail-safe) until a real
         # allowlist backend lands. Real network policy is a future task.
@@ -44,10 +46,14 @@ class ContainerSandbox:
                 "is not implemented in v1; denying network (--network=none)",
                 spec.network,
             )
-        return [
+        cmd = [
             self.runtime,
             "run",
             "--rm",
+        ]
+        if cidfile is not None:
+            cmd += ["--cidfile", cidfile]
+        cmd += [
             "--network=none",
             "--read-only",
             "--tmpfs",
@@ -68,11 +74,13 @@ class ContainerSandbox:
             "-I",
             "/work/__entry__.py",
         ]
+        return cmd
 
     def execute(self, spec: CodeExecSpec) -> CodeExecResult:
         fs = SandboxedFS(spec.scratch_path, max_file_size_mb=50)
         fs.write("__entry__.py", spec.code)
-        cmd = self._build_cmd(spec, str(fs.root))
+        cid_path = os.path.join(str(fs.root), ".enclave.cid")
+        cmd = self._build_cmd(spec, str(fs.root), cidfile=cid_path)
         t0 = time.monotonic()
         try:
             p = subprocess.run(
@@ -84,6 +92,18 @@ class ContainerSandbox:
             )
             code, out, err, viol = p.returncode, p.stdout, p.stderr, []
         except subprocess.TimeoutExpired as e:
+            try:
+                import pathlib
+
+                cid = pathlib.Path(cid_path).read_text().strip()
+                if cid:
+                    subprocess.run(
+                        [self.runtime, "rm", "-f", cid],
+                        capture_output=True,
+                        timeout=10,
+                    )
+            except Exception:  # noqa: BLE001
+                logger.warning("container timeout: could not force-remove container")
             code, out, err, viol = (
                 -9,
                 (e.stdout or ""),
@@ -99,7 +119,7 @@ class ContainerSandbox:
                 tier_used=2,
                 violations=["container spawn failed"],
             )
-        produced = [r for r in fs.walk() if r != "__entry__.py"]
+        produced = [r for r in fs.walk() if r != "__entry__.py" and r != ".enclave.cid"]
         return CodeExecResult(
             exit_code=code,
             stdout=out[:100_000],

@@ -43,6 +43,11 @@ def _approval_required(cfg, backend) -> bool:
             can reach the network, or a backend that hasn't opted in, gates.
     """
     if cfg.approval == "auto":
+        if backend.capabilities().isolation_tier == 1:
+            logger.warning(
+                "code step: approval=auto on Tier-1 subprocess — no HITL gate; "
+                "ensure this workflow is trusted (imported/untrusted YAML should not auto-run)"
+            )
         return False
     if cfg.approval == "required":
         return True
@@ -196,6 +201,14 @@ def execute(
     res.tier_used = out.tier_used
     res.peak_rss_mb = out.peak_rss_mb
     res.files_produced = out.files_produced
+    if cfg.promote == "gated" and cfg.files_out:
+        logger.info(
+            "code step %s: promote=gated with files_out=%s — promotion is deferred "
+            "in v1 (files remain in scratch, not copied to the workspace); use "
+            "promote=auto_on_green to promote on success",
+            step.id,
+            cfg.files_out,
+        )
     promoted = (
         promote(scratch, canon, cfg, out.exit_code) if cfg.promote != "gated" else []
     )
