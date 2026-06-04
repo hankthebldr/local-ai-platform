@@ -26,6 +26,16 @@ def test_build_cmd_is_hardened():
     )
 
 
+def test_allowlist_is_denied_in_v1():
+    sb = ContainerSandbox(runtime="podman", image="enclave-sandbox:latest")
+    spec = CodeExecSpec(
+        language="python", code="print(1)", scratch_path="/tmp/s", network="allowlist"
+    )
+    cmd = sb._build_cmd(spec, "/abs/scratch")
+    assert "--network=none" in cmd and "--network=bridge" not in " ".join(cmd)
+    assert sb.capabilities().network_modes == ("none",)
+
+
 RUNTIME = shutil.which("podman") or shutil.which("docker")
 
 

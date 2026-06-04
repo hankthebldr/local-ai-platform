@@ -1,5 +1,8 @@
 """Tier-2 sandbox: one hardened container per run. Podman-first (rootless ->
-escape lands unprivileged). Strictly harder than typical reference images."""
+escape lands unprivileged). Strictly harder than typical reference images.
+
+Note: file output requires rootless Podman (or a world-writable scratch mount);
+with Docker rootful, --user 65534 may be unable to write to the bind-mounted /work."""
 from __future__ import annotations
 
 import os
@@ -25,19 +28,27 @@ class ContainerSandbox:
         return SandboxCapabilities(
             name="container",
             isolation_tier=2,
-            network_modes=("none", "allowlist"),
+            network_modes=("none",),
             max_mem_mb=8192,
             languages=("python",),
             can_auto_run=True,
         )
 
     def _build_cmd(self, spec: CodeExecSpec, scratch_abs: str) -> List[str]:
-        net = "none" if spec.network == "none" else "bridge"
+        # v1: no real egress allowlist exists yet, so deny network unconditionally.
+        # A requested "allowlist" is downgraded to deny (fail-safe) until a real
+        # allowlist backend lands. Real network policy is a future task.
+        if spec.network != "none":
+            logger.warning(
+                "container sandbox: network=%r requested but egress allowlisting "
+                "is not implemented in v1; denying network (--network=none)",
+                spec.network,
+            )
         return [
             self.runtime,
             "run",
             "--rm",
-            f"--network={net}",
+            "--network=none",
             "--read-only",
             "--tmpfs",
             "/tmp:rw,size=256m",
