@@ -48,9 +48,7 @@ class SandboxedFS:
         try:
             candidate.relative_to(self.root)
         except ValueError:
-            raise SandboxViolation(
-                f"Path '{relative_path}' escapes sandbox root"
-            )
+            raise SandboxViolation(f"Path '{relative_path}' escapes sandbox root")
         return candidate
 
     def _check_extension(self, path: str) -> None:
@@ -106,6 +104,7 @@ class SandboxedFS:
             abs_path.unlink()
         elif abs_path.is_dir():
             import shutil
+
             shutil.rmtree(abs_path)
 
     def stats(self) -> dict:
@@ -122,3 +121,23 @@ class SandboxedFS:
             "total_bytes": total_bytes,
             "max_file_size": self.max_file_size,
         }
+
+    def write_bytes(self, path: str, data: bytes) -> None:
+        abs_path = self.get_absolute_path(path)  # raises SandboxViolation on escape
+        self._check_extension(path)
+        if len(data) > self.max_file_size:
+            raise SandboxQuotaExceeded(f"{path} exceeds {self.max_file_size} bytes")
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_bytes(data)
+
+    def mkdir(self, path: str) -> None:
+        abs_path = self.get_absolute_path(path)
+        abs_path.mkdir(parents=True, exist_ok=True)
+
+    def walk(self) -> list:
+        """Recursive list of file (not dir) paths, relative to root, POSIX style."""
+        return [
+            p.relative_to(self.root).as_posix()
+            for p in self.root.rglob("*")
+            if p.is_file()
+        ]
