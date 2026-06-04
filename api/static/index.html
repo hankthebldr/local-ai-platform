@@ -4633,6 +4633,59 @@ textarea.composer-desc-area {
 }
 .runs-tab-progress-chip.is-zombie .df-run-progress-current { color: var(--amber); }
 
+/* ── Sandbox / code-exec panel (Task 18) ──────────────────────────
+   Rendered inside the step expanded-body when code_exit_code is set. */
+.sandbox-code-panel {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-top: 6px; padding: 6px 8px;
+  background: rgba(0, 220, 240, 0.04);
+  border: 1px solid rgba(0, 220, 240, 0.15);
+  border-radius: 3px;
+  font-family: var(--mono); font-size: 0.6rem;
+}
+.sandbox-code-panel .scp-label {
+  color: var(--text-muted); letter-spacing: 0.06em;
+  text-transform: uppercase; font-size: 0.5rem; font-weight: 700;
+  margin-right: 4px;
+}
+.sandbox-code-panel .scp-chip {
+  padding: 1px 6px; border-radius: 2px;
+  color: var(--cyan); background: rgba(0, 220, 240, 0.08);
+  border: 1px solid rgba(0, 220, 240, 0.22);
+}
+.sandbox-code-panel .scp-chip.ok   { color: var(--green); background: rgba(0, 232, 123, 0.08); border-color: rgba(0, 232, 123, 0.25); }
+.sandbox-code-panel .scp-chip.fail { color: var(--red);   background: rgba(255, 80, 80, 0.08);  border-color: rgba(255, 80, 80, 0.25);  }
+.sandbox-code-panel .scp-chip.dim  { color: var(--text-muted); background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+
+/* Approval gate bar — rendered above step rows when run.status === 'awaiting_approval' */
+.approval-gate-bar {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; margin-bottom: 10px;
+  background: rgba(0, 220, 240, 0.06);
+  border: 1px solid rgba(0, 220, 240, 0.35);
+  border-radius: 4px;
+  font-family: var(--mono); font-size: 0.66rem;
+}
+.approval-gate-bar .agb-head {
+  display: flex; align-items: center; gap: 10px;
+}
+.approval-gate-bar .agb-icon {
+  flex-shrink: 0;
+  width: 20px; height: 20px; line-height: 20px;
+  text-align: center; font-weight: 700;
+  background: rgba(0, 220, 240, 0.18);
+  color: var(--cyan); border-radius: 50%;
+}
+.approval-gate-bar .agb-title { color: var(--cyan); font-weight: 700; letter-spacing: 0.06em; }
+.approval-gate-bar .agb-meta  { color: var(--text-muted); font-size: 0.6rem; }
+.approval-gate-bar .agb-question { color: var(--text); font-size: 0.68rem; }
+.approval-gate-bar .agb-code {
+  background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 3px; padding: 8px 10px; white-space: pre-wrap; word-break: break-all;
+  max-height: 200px; overflow-y: auto; color: var(--text); font-size: 0.62rem;
+}
+.approval-gate-bar .agb-actions { display: flex; gap: 8px; }
+
 /* Step row flash — fires when the operator clicks a canvas node and
    we scroll the matching row into view. */
 .ws-run-step.flash-highlight {
@@ -18648,6 +18701,92 @@ const RunsTab = (function () {
     }
   }
 
+  // ── Sandbox / code-exec helpers (Task 18) ────────────────────────
+
+  // Returns an HTML snippet summarising the code-exec result for a step.
+  // Rendered inside the expandedBody section when code_exit_code is non-null.
+  function _renderSandboxCodePanel(s) {
+    if (s.code_exit_code == null) return '';
+    const exitOk = s.code_exit_code === 0;
+    const exitCls = exitOk ? 'ok' : 'fail';
+    const tierChip = s.tier_used
+      ? `<span class="scp-chip">${esc(s.tier_used)}</span>`
+      : '';
+    const exitChip = `<span class="scp-chip ${exitCls}">exit ${s.code_exit_code}</span>`;
+    const rssChip = s.peak_rss_mb != null
+      ? `<span class="scp-chip dim">${s.peak_rss_mb.toFixed(0)} MB</span>`
+      : '';
+    const files = Array.isArray(s.files_produced) ? s.files_produced : [];
+    const filesChip = `<span class="scp-chip dim">${files.length} file${files.length === 1 ? '' : 's'}</span>`;
+    const scopeChip = s.promoted
+      ? `<span class="scp-chip ok">promoted</span>`
+      : `<span class="scp-chip dim">in-scratch</span>`;
+    const approvalChip = s.approval_status
+      ? `<span class="scp-chip ${s.approval_status === 'approved' ? 'ok' : (s.approval_status === 'rejected' ? 'fail' : 'dim')}">${esc(s.approval_status)}</span>`
+      : '';
+    return `<div class="sandbox-code-panel">
+      <span class="scp-label">code</span>
+      ${tierChip}${exitChip}${rssChip}${filesChip}${scopeChip}${approvalChip}
+    </div>`;
+  }
+
+  // Renders the approval-gate bar and prepends it to stepsBody.
+  // Called from _renderSteps whenever run.status === 'awaiting_approval'
+  // and run.pending_gate is present.
+  function _renderApprovalGate(run, body) {
+    const existing = document.getElementById('runs-tab-approval-gate');
+    if (existing) existing.remove();
+    if ((run.status || '').toLowerCase() !== 'awaiting_approval') return;
+    const gate = run.pending_gate;
+    if (!gate) return;
+    const files = Array.isArray(gate.files) ? gate.files : [];
+    const metaParts = [];
+    if (gate.tier)    metaParts.push(`tier ${esc(gate.tier)}`);
+    if (gate.network) metaParts.push(`net ${esc(gate.network)}`);
+    metaParts.push(`${files.length} file${files.length === 1 ? '' : 's'} out`);
+    const questionLine = gate.question
+      ? `<div class="agb-question">${esc(gate.question)}</div>`
+      : '';
+    const el = document.createElement('div');
+    el.id = 'runs-tab-approval-gate';
+    el.className = 'approval-gate-bar';
+    el.innerHTML = `
+      <div class="agb-head">
+        <span class="agb-icon">?</span>
+        <span class="agb-title">AWAITING APPROVAL</span>
+        <span class="agb-meta">${metaParts.join(' · ')}</span>
+      </div>
+      ${questionLine}
+      <pre class="agb-code">${esc(gate.proposed_code || '')}</pre>
+      <div class="agb-actions">
+        <button class="action-btn xs"
+                style="color:var(--green);border-color:var(--green)"
+                onclick="RunsTab.resolveGate('${esc(run.run_id)}','${esc(gate.gate_id)}','approve')">Approve</button>
+        <button class="action-btn xs"
+                style="color:var(--red);border-color:var(--red)"
+                onclick="RunsTab.resolveGate('${esc(run.run_id)}','${esc(gate.gate_id)}','reject')">Reject</button>
+      </div>`;
+    body.prepend(el);
+  }
+
+  // POSTs approve/reject to the backend then re-selects the run to refresh.
+  async function resolveGate(runId, gateId, action) {
+    try {
+      const r = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}/approvals/${encodeURIComponent(gateId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (window.Toast) Toast.info(action === 'approve' ? 'Gate approved' : 'Gate rejected',
+        `Run ${runId.slice(0, 12)}… will ${action === 'approve' ? 'continue' : 'be halted'}.`);
+      select(runId);
+    } catch (e) {
+      if (window.Toast) Toast.danger('Gate action failed', e.message);
+      else console.error('resolveGate failed:', e);
+    }
+  }
+
   function _renderSteps(run) {
     const body = document.getElementById('runs-tab-steps-body');
     if (!body) return;
@@ -18711,6 +18850,7 @@ const RunsTab = (function () {
           </div>` : ''}
           ${_renderStepPrompt(s)}
           ${_renderStepOutputs(run, s.step_id)}
+          ${_renderSandboxCodePanel(s)}
         </div>` : '';
 
       return `<div class="ws-run-step ws-run-step-${cls} ${isRoot ? 'is-root-fail' : ''} ${isStarved ? 'is-starved' : ''}"
@@ -18773,6 +18913,9 @@ const RunsTab = (function () {
     const endRow = anchorRow('ws-anchor-end-row', '■', 'END · deliverable', 'deliverable', delivEntries);
 
     body.innerHTML = errorBanner + cascadeSummary + startRow + rows + endRow;
+    // Approval gate bar — rendered above step rows when a human-in-the-loop
+    // gate is waiting. Uses prepend so it appears above the error banner too.
+    _renderApprovalGate(run, body);
   }
 
   // Inspect run.context.workspace for the step's outputs. Returns
@@ -19300,7 +19443,8 @@ const RunsTab = (function () {
     toggleStepExpand, toggleStepOutput, toggleBottomDrawer, markFailed,
     openStepDetail, closeStepDetail, openAnchorDetail, pivotResearch, pivotContextGraph,
     pivotNewAgent, copyStepContext,
-    zoomIn, zoomOut, zoomReset };
+    zoomIn, zoomOut, zoomReset,
+    resolveGate };
 })();
 window.RunsTab = RunsTab;
 
