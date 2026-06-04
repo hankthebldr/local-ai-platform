@@ -32,7 +32,7 @@ def test_engine_runs_code_workflow(monkeypatch, tmp_path):
                 name="run",
                 kind="code",
                 outputs=["result"],
-                code=CodeStepConfig(code="print('engine-ran-code')"),
+                code=CodeStepConfig(code="print('engine-ran-code')", approval="auto"),
             ),
         ],
     )

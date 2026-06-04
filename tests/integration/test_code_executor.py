@@ -30,7 +30,7 @@ def test_code_step_runs_and_writes_workspace(tmp_path, monkeypatch):
         name="run",
         kind="code",
         outputs=["result"],
-        code=CodeStepConfig(code="print('forty-two')"),
+        code=CodeStepConfig(code="print('forty-two')", approval="auto"),
     )
     ctx = WorkflowContext()
     run = WorkflowRun(

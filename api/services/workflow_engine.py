@@ -923,8 +923,40 @@ class WorkflowEngine:
                             completed_ids.add(step_result.step_id)
                             previous_model = step_result.model_used
 
-            # Tick fully drained. If anything in it failed, stop the run.
+            # Tick fully drained.
             tick_id_set = {s.id for s in dispatch_steps}
+
+            # ── HITL gate short-circuit (Task 12) ────────────────────────
+            # A kind=code step that requires approval returns
+            # status="awaiting_approval" and stamps workflow_run.pending_gate.
+            # The result is ALREADY in step_results (appended by the
+            # as_completed loop above) and ALREADY checkpointed — so we must
+            # NOT re-append. We only flip the run status to awaiting_approval,
+            # re-checkpoint (to persist the new run status alongside the gate),
+            # and return — which halts dispatch of any further ticks.
+            #
+            # Pause beats failure when a concurrent tick has both: an
+            # awaiting_approval step is resumable, and on resume() neither the
+            # gated step nor any sibling failed/running step counts as
+            # "completed", so all of them re-run after the operator decides.
+            # For the common single-step tick (code on unified/single-GPU
+            # arch) this is just "the one step gated → pause".
+            gated = [
+                r
+                for r in workflow_run.step_results
+                if r.step_id in tick_id_set and r.status == "awaiting_approval"
+            ]
+            if gated:
+                with state_lock:
+                    workflow_run.status = "awaiting_approval"
+                    self._checkpoint(workflow_run)
+                logger.info(
+                    f"Workflow '{definition.id}' paused at step "
+                    f"'{gated[0].step_id}' awaiting operator approval"
+                )
+                return  # halt; resume() re-enters and re-dispatches after approval
+
+            # If anything in the tick failed, stop the run.
             tick_failures = [
                 r
                 for r in workflow_run.step_results
