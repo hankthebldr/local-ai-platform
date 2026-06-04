@@ -11,7 +11,7 @@ from typing import List
 
 from ...logging_config import logger
 from ...models.workflow_models import CodeStepConfig
-from ..sandbox_fs import SandboxedFS, SandboxViolation
+from ..sandbox_fs import SandboxedFS, SandboxViolation, SandboxQuotaExceeded
 
 
 def stage_inputs(canon: SandboxedFS, scratch: SandboxedFS, cfg: CodeStepConfig) -> None:
@@ -32,12 +32,18 @@ def promote(
     promoted: List[str] = []
     for rel in cfg.files_out:
         try:
-            scratch.get_absolute_path(rel)  # re-validate: no traversal/abs escape
+            abs_path = scratch.get_absolute_path(
+                rel
+            )  # re-validate: no traversal/abs escape
         except SandboxViolation:
             logger.warning("files_out '%s' failed re-validation; not promoting", rel)
             continue
-        if not scratch.exists(rel):
+        if not abs_path.exists():
             continue
-        canon.write_bytes(rel, scratch.open(rel, "rb").read())
+        try:
+            canon.write_bytes(rel, abs_path.read_bytes())
+        except SandboxQuotaExceeded:
+            logger.warning("files_out '%s' exceeds canon quota; not promoting", rel)
+            continue
         promoted.append(rel)
     return promoted

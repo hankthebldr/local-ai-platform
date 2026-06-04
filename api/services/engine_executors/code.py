@@ -69,7 +69,8 @@ def execute(
 
     scratch = SandboxedFS(spec.scratch_path, max_file_size_mb=50)
     canon = SandboxedFS(
-        os.path.join("data", "sandboxes", f"wf-{workflow_run.run_id}", "_workspace")
+        os.path.join("data", "sandboxes", f"wf-{workflow_run.run_id}", "_workspace"),
+        max_file_size_mb=50,
     )
     stage_inputs(canon, scratch, cfg)
 

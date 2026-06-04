@@ -31,3 +31,12 @@ def test_promote_auto_on_green_skips_on_failure(tmp_path, monkeypatch):
     scratch.write("out.txt", "x")
     cfg = CodeStepConfig(code="x", files_out=["out.txt"], promote="auto_on_green")
     assert cp.promote(scratch, canon, cfg, exit_code=1) == []
+
+
+def test_promote_skips_traversal_files_out(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    canon = SandboxedFS("data/sandboxes/wf-r4/_workspace")
+    scratch = SandboxedFS("data/sandboxes/wf-r4/c1")
+    cfg = CodeStepConfig(code="x", files_out=["../escape.txt"], promote="auto_on_green")
+    # traversal path fails re-validation -> skipped, nothing promoted
+    assert cp.promote(scratch, canon, cfg, exit_code=0) == []
