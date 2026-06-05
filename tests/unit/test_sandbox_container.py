@@ -1,4 +1,5 @@
 import shutil
+import subprocess
 import pytest
 from api.services.sandbox import CodeExecSpec
 from api.services.sandbox_impl.container import ContainerSandbox
@@ -39,7 +40,30 @@ def test_allowlist_is_denied_in_v1():
 RUNTIME = shutil.which("podman") or shutil.which("docker")
 
 
-@pytest.mark.skipif(not RUNTIME, reason="no container runtime on PATH")
+def _image_present(runtime, image="enclave-sandbox:latest"):
+    """True only if the sandbox image is already built locally. The image is
+    local-only (never published), so without this guard the test reaches for a
+    registry and fails — e.g. CI has a runtime (podman) but not the image."""
+    if not runtime:
+        return False
+    try:
+        return (
+            subprocess.run(
+                [runtime, "image", "inspect", image], capture_output=True
+            ).returncode
+            == 0
+        )
+    except Exception:
+        return False
+
+
+IMAGE_PRESENT = _image_present(RUNTIME)
+
+
+@pytest.mark.skipif(
+    not (RUNTIME and IMAGE_PRESENT),
+    reason="container runtime or enclave-sandbox image not available",
+)
 def test_container_runs_when_image_present(tmp_path):
     sb = ContainerSandbox(runtime=RUNTIME)
     res = sb.execute(
