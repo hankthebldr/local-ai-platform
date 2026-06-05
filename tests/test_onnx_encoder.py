@@ -1,6 +1,15 @@
 import numpy as np
+import pytest
 
-from api.services.onnx.encoder import OnnxTextEncoder, mean_pool, l2_normalize
+# onnxruntime is an optional substrate (setup/requirements-onnx.txt); CI installs
+# only core+dev, so skip rather than error at collection when it's absent.
+pytest.importorskip("onnxruntime")
+
+from api.services.onnx.encoder import (
+    OnnxTextEncoder,
+    mean_pool,
+    l2_normalize,
+)  # noqa: E402
 
 
 def test_mean_pool_respects_attention_mask():
