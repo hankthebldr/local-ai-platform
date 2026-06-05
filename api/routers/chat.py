@@ -17,10 +17,10 @@ from ..services.ollama_service import OllamaService
 from ..services import search_service
 from ..services.memory_service import MemoryService
 from .plugins import plugin_service as _plugin_service
-from .context import context_store as _context_store
+from . import context as _context_router
 from ..services.sandbox_fs import SandboxedFS
-from .profiles import profile_service as _profile_service
-from .documents import rag_service as _rag_service
+from . import profiles as _profiles_router
+from . import documents as _documents_router
 from ..services.tool_executor import ToolExecutor
 from ..logging_config import logger
 
@@ -69,6 +69,18 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         f"Chat request: model={request.model}, messages={len(request.messages)}, "
         f"stream={request.stream}, web_search={request.web_search}"
     )
+
+    # ── Live singleton resolution ─────────────────────────────────────
+    # Resolve shared module-level singletons at call time, not import time.
+    # `from .documents import rag_service as _rag_service` binds the value as
+    # it stood when chat.py was first imported; if documents / context /
+    # profiles are reloaded or re-initialized (tests do this, and a runtime
+    # re-init is possible), that copied binding goes stale. Reading the
+    # attribute off the module object here re-resolves the current instance
+    # on every request. See test_chat_rag_uses_live_rag_service.
+    _context_store = _context_router.context_store
+    _profile_service = _profiles_router.profile_service
+    _rag_service = _documents_router.rag_service
 
     # ── Conversation Tracking ─────────────────────────────────────────
     conversation_id = req.headers.get("X-Conversation-ID", str(uuid.uuid4()))

@@ -1,0 +1,4 @@
+# Operator-declared packages available inside the code-exec sandbox.
+# Validated at step-definition time; NO dynamic pip-install at runtime.
+pandas==2.3.3
+numpy==2.3.4

@@ -245,9 +245,9 @@ class ConsolidateSpec(BaseModel):
     model: Optional[str] = None
     target: Literal["playbook", "semantic", "episodic"]
     target_name: str
-    merge_strategy: Literal["replace", "append", "append_with_dedup"] = (
-        "append_with_dedup"
-    )
+    merge_strategy: Literal[
+        "replace", "append", "append_with_dedup"
+    ] = "append_with_dedup"
     system_prompt: str
 
     @model_validator(mode="after")
@@ -313,6 +313,33 @@ class RalphSpec(BaseModel):
         return self
 
 
+# ── Code execution step (kind: code) ──────────────────────────────────────
+
+
+class ResourceLimits(BaseModel):
+    mem_mb: int = 1024
+    cpus: float = 1.0
+    pids: int = 256
+
+
+class CodeStepConfig(BaseModel):
+    """Config for a `kind: code` step — sandboxed code execution."""
+
+    language: Literal["python"] = "python"
+    source: Literal["inline", "from_input"] = "inline"
+    code: Optional[str] = None
+    code_input: Optional[str] = None
+    files_in: List[str] = Field(default_factory=list)
+    files_out: List[str] = Field(default_factory=list)
+    timeout_s: int = 60
+    limits: ResourceLimits = Field(default_factory=ResourceLimits)
+    network: Literal["none", "allowlist"] = "none"
+    approval: Literal["auto", "required", "tier_default"] = "tier_default"
+    backend_override: Optional[Literal["subprocess", "container"]] = None
+    promote: Literal["gated", "auto_on_green", "never"] = "gated"
+    promote_predicate: Optional[str] = None
+
+
 # ── Tool reference (Phase 5) ───────────────────────────────────────────────
 
 
@@ -376,7 +403,7 @@ class AgentStep(BaseModel):
     id: str
     name: str
     kind: Literal[
-        "llm", "parallel", "loop", "a2a", "orchestrator", "consolidate", "ralph"
+        "llm", "parallel", "loop", "a2a", "orchestrator", "consolidate", "ralph", "code"
     ] = "llm"
     model: Optional[str] = None
     role: Optional[str] = None
@@ -498,6 +525,9 @@ class AgentStep(BaseModel):
     # reuses the `body` field (shared with kind=loop).
     ralph: Optional[RalphSpec] = None
 
+    # ── kind: code ────────────────────────────────────────────────────
+    code: Optional[CodeStepConfig] = None
+
     @model_validator(mode="after")
     def _validate_kind_shape(self):
         # Phase 5.3 — gpu_affinity grammar
@@ -557,6 +587,12 @@ class AgentStep(BaseModel):
             raise ValueError(
                 f"AgentStep(kind={self.kind}, id={self.id!r}) must not declare "
                 f"a ralph block (kind=ralph only)"
+            )
+        # Non-code kinds must not declare a code block.
+        if self.kind != "code" and self.code is not None:
+            raise ValueError(
+                f"AgentStep(kind={self.kind}, id={self.id!r}) must not declare a "
+                f"`code` block (only valid on kind=code)"
             )
 
         if self.kind == "llm":
@@ -775,6 +811,24 @@ class AgentStep(BaseModel):
                     f"AgentStep(kind=ralph, id={self.id!r}) outputs "
                     f"{sorted(missing)} are not produced by any body step "
                     f"(body produces {sorted(produced)})"
+                )
+        elif self.kind == "code":
+            if self.code is None:
+                raise ValueError(
+                    f"AgentStep(kind=code, id={self.id!r}) requires a `code` config block"
+                )
+            if "/" in self.id or "\\" in self.id or ".." in self.id:
+                raise ValueError(
+                    f"AgentStep(kind=code, id={self.id!r}): id must not contain "
+                    f"path separators or '..' (used in the sandbox scratch path)"
+                )
+            if self.code.source == "inline" and not self.code.code:
+                raise ValueError(
+                    f"AgentStep(kind=code, id={self.id!r}) source=inline requires code.code"
+                )
+            if self.code.source == "from_input" and not self.code.code_input:
+                raise ValueError(
+                    f"AgentStep(kind=code, id={self.id!r}) source=from_input requires code.code_input"
                 )
         return self
 
@@ -1005,6 +1059,36 @@ class StepResult(BaseModel):
     # pure-inference time (eval_duration_ms) without summing the arrays.
     extension_overhead_ms: float = 0.0
 
+    # Code-exec (kind: code) — all optional; None on non-code steps.
+    code_exit_code: Optional[int] = None
+    tier_used: Optional[int] = None
+    peak_rss_mb: Optional[float] = None
+    files_produced: List[str] = Field(default_factory=list)
+    approval_status: Optional[Literal["auto", "approved", "edited", "rejected"]] = None
+    promoted: Optional[bool] = None
+
+
+# ── HITL Approval Gate (Task 11) ──────────────────────────────────────────
+
+
+class GatePending(BaseModel):
+    """A HITL approval gate awaiting an operator decision. Serialized on the run
+    so a paused workflow survives restart and resumes by id."""
+
+    gate_id: str
+    run_id: str
+    step_id: str
+    step_kind: str
+    proposed_code: str
+    network: str
+    files: List[str] = Field(default_factory=list)
+    tier: int
+    question: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    decision: Optional[Literal["approved", "edited", "rejected"]] = None
+    edited_code: Optional[str] = None
+    reason: Optional[str] = None
+
 
 # ── Run-Level Telemetry Summary (Phase 2 task 2.4) ────────────────────────
 
@@ -1172,6 +1256,9 @@ class WorkflowRun(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
+    # HITL gate — set when a code step is awaiting operator approval; cleared
+    # (set back to None) once the decision arrives or the step is skipped.
+    pending_gate: Optional[GatePending] = None
     telemetry_summary: Optional[RunTelemetrySummary] = None
     # Phase 5b — pre-warm dispatch log. Daemon threads update entries in
     # place under the engine's state_lock. Empty list on runs where the

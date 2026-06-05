@@ -36,6 +36,45 @@ class _FakeEmbedding:
         return {"backend": "fake", "model": "fake-model", "dimension": self._dim}
 
 
+def _mock_ollama_response(content="ok"):
+    """A MagicMock standing in for requests.post() to Ollama's /api/chat."""
+    m = MagicMock()
+    m.status_code = 200
+    m.json.return_value = {
+        "message": {"role": "assistant", "content": content},
+        "prompt_eval_count": 10,
+        "eval_count": 5,
+    }
+    return m
+
+
+class _SentinelRag:
+    """A RAG service returning a uniquely identifiable result.
+
+    Used to prove the chat path invoked *this* instance — resolved live from
+    api.routers.documents at request time — rather than a value the chat
+    module captured at import time. If chat.py still did
+    `from .documents import rag_service as _rag_service`, swapping
+    documents.rag_service for this sentinel would NOT be observed and
+    `.searched` would stay False.
+    """
+
+    def __init__(self, tag):
+        self.tag = tag
+        self.searched = False
+
+    def search(self, query, top_k=5):
+        self.searched = True
+        return {
+            "query": query,
+            "total": 1,
+            "results": [{"id": f"sentinel-{self.tag}", "text": query, "score": 1.0}],
+        }
+
+    def format_context(self, results):
+        return f"[SENTINEL {self.tag}] context"
+
+
 @pytest.fixture(scope="module")
 def client():
     tmpdir = tempfile.mkdtemp()
@@ -144,6 +183,7 @@ class TestChatRagIntegration:
         client.post("/api/documents", files=files)
 
         # Mock Ollama chat call
+        from unittest.mock import patch, MagicMock
 
         mock_ollama = MagicMock()
         mock_ollama.status_code = 200
@@ -153,19 +193,8 @@ class TestChatRagIntegration:
             "eval_count": 5,
         }
 
-        # chat.py binds `_rag_service` at import time (`from .documents import
-        # rag_service as _rag_service`). The module fixture reloads `documents`
-        # with a fake-backed rag_service but not `chat`, so chat._rag_service can
-        # be a stale real (Ollama-bound) service depending on suite collection
-        # order. Pin it to the fresh fake-backed one for this test (auto-reverts).
-        import api.routers.chat as chat_mod
-        import api.routers.documents as doc_mod
-
-        with (
-            patch.object(chat_mod, "_rag_service", doc_mod.rag_service),
-            patch(
-                "api.services.ollama_service.requests.post", return_value=mock_ollama
-            ),
+        with patch(
+            "api.services.ollama_service.requests.post", return_value=mock_ollama
         ):
             resp = client.post(
                 "/v1/chat/completions",
@@ -183,3 +212,80 @@ class TestChatRagIntegration:
             data = resp.json()
             # rag_sources should be present when retrieval found results
             assert "rag_sources" in data or data.get("rag_sources") == []
+
+    def test_chat_rag_uses_live_rag_service(self, client):
+        """Regression: the chat RAG path must resolve documents.rag_service at
+        call time, not capture it at import time.
+
+        Reassigning documents.rag_service (as a module reload or a runtime
+        re-init does) must be observed by chat.py. The previous
+        `from .documents import rag_service as _rag_service` captured the
+        import-time instance and went stale — an order-dependent failure that
+        had to be worked around in the test rather than fixed at the source.
+        """
+        import api.routers.documents as docs_mod
+
+        sentinel = _SentinelRag("rag1")
+        original = docs_mod.rag_service
+        docs_mod.rag_service = sentinel  # simulate re-init AFTER chat imported
+        try:
+            with patch(
+                "api.services.ollama_service.requests.post",
+                return_value=_mock_ollama_response("Paris."),
+            ):
+                resp = client.post(
+                    "/v1/chat/completions",
+                    json={
+                        "model": "test-model",
+                        "messages": [{"role": "user", "content": "capital of France?"}],
+                        "rag": True,
+                        "rag_top_k": 3,
+                        "tools": False,
+                    },
+                )
+
+            assert resp.status_code == 200
+            # The live (sentinel) service must have handled retrieval. If chat
+            # held a stale binding, sentinel.search is never called.
+            assert (
+                sentinel.searched is True
+            ), "chat used a stale rag_service, not the live documents.rag_service"
+            data = resp.json()
+            assert data["rag_sources"] == [
+                {"id": "sentinel-rag1", "text": "capital of France?", "score": 1.0}
+            ]
+        finally:
+            docs_mod.rag_service = original
+
+    def test_chat_uses_live_context_and_profile_singletons(self, client):
+        """Consistency: context_store and profile_service share the same
+        stale-binding class as rag_service and must also be resolved live.
+        """
+        import api.routers.context as ctx_mod
+        import api.routers.profiles as prof_mod
+
+        ctx_spy = MagicMock(wraps=ctx_mod.context_store)
+        prof_spy = MagicMock(wraps=prof_mod.profile_service)
+        orig_ctx, orig_prof = ctx_mod.context_store, prof_mod.profile_service
+        ctx_mod.context_store = ctx_spy
+        prof_mod.profile_service = prof_spy
+        try:
+            with patch(
+                "api.services.ollama_service.requests.post",
+                return_value=_mock_ollama_response(),
+            ):
+                resp = client.post(
+                    "/v1/chat/completions",
+                    json={
+                        "model": "test-model",
+                        "messages": [{"role": "user", "content": "hi"}],
+                        "tools": False,
+                    },
+                )
+
+            assert resp.status_code == 200
+            assert ctx_spy.get.called, "chat used a stale context_store"
+            assert prof_spy.resolve.called, "chat used a stale profile_service"
+        finally:
+            ctx_mod.context_store = orig_ctx
+            prof_mod.profile_service = orig_prof

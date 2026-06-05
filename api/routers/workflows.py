@@ -14,7 +14,7 @@ Endpoints:
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import yaml
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -135,6 +135,22 @@ class WorkflowSaveRequest(BaseModel):
 
     definition: Dict[str, Any]
     overwrite: bool = False  # explicit consent to clobber an existing file
+
+
+class ApprovalRequest(BaseModel):
+    """Operator decision for a paused HITL approval gate (Task 13).
+
+    A `kind: code` step with an approval policy pauses the run at
+    ``status="awaiting_approval"`` with a ``pending_gate``. The operator
+    resolves it by POSTing one of:
+      * approve — run the proposed code as-is.
+      * edit    — run ``edited_code`` instead (must be supplied).
+      * reject  — fail the step; ``reason`` is surfaced in the error.
+    """
+
+    action: Literal["approve", "edit", "reject"]
+    edited_code: Optional[str] = None
+    reason: Optional[str] = None
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
@@ -626,6 +642,75 @@ async def cancel_run(run_id: str):
         "status": "cancel_requested",
         "accepted": newly_marked,
         "reason": None if newly_marked else "cancel already pending",
+    }
+
+
+@router.post("/runs/{run_id}/approvals/{gate_id}")
+def resolve_approval(run_id: str, gate_id: str, body: ApprovalRequest):
+    """Resolve a paused HITL approval gate, then resume the run (Task 13).
+
+    Records the operator's decision onto the persisted ``pending_gate``,
+    checkpoints, and resumes. On resume the engine re-dispatches the gated
+    ``kind: code`` step; its executor reads the recorded decision and either
+    runs (approve / edit) or fails the step (reject).
+
+    Idempotent like ``cancel_run``: a missing run is 404; a gate that doesn't
+    match ``gate_id`` or has already been decided is 409.
+
+    Definition handling mirrors ``resume_run`` exactly — we call
+    ``engine.resume(run_id)`` with no explicit definition, so the engine
+    reloads the workflow from ``./workflows/<workflow_id>.yaml`` (resume needs
+    the definition to re-dispatch the remaining steps).
+    """
+    engine = get_engine()
+    snapshot = engine.get_run(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    gate = snapshot.get("pending_gate") or {}
+    if not gate or gate.get("gate_id") != gate_id:
+        raise HTTPException(
+            status_code=409,
+            detail="no pending gate with that id (already resolved?)",
+        )
+    if gate.get("decision") is not None:
+        raise HTTPException(status_code=409, detail="gate already resolved")
+
+    # An "edit" that supplies no code would silently fall back to running the
+    # originally-proposed code (code.py only swaps when edited_code is truthy),
+    # which is a surprising no-op. Reject it explicitly.
+    if body.action == "edit" and not (body.edited_code or "").strip():
+        raise HTTPException(
+            status_code=422, detail="action 'edit' requires non-empty edited_code"
+        )
+
+    from ..models.workflow_models import WorkflowRun
+
+    run = WorkflowRun.model_validate(snapshot)
+    decision = {"approve": "approved", "edit": "edited", "reject": "rejected"}[
+        body.action
+    ]
+    run.pending_gate.decision = decision
+    run.pending_gate.reason = body.reason
+    if body.action == "edit":
+        run.pending_gate.edited_code = body.edited_code
+    # Flip off the paused state so resume() re-dispatches the gated step.
+    # "awaiting_approval" is already non-terminal (resume only short-circuits
+    # on completed/failed/canceled), but "running" matches what resume() sets
+    # internally and keeps the persisted snapshot consistent if resume throws.
+    run.status = "running"
+    engine._checkpoint(run)
+
+    try:
+        resumed = engine.resume(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return {
+        "run_id": run_id,
+        "gate_id": gate_id,
+        "action": body.action,
+        "status": resumed.status,
     }
 
 

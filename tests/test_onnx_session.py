@@ -1,7 +1,13 @@
-import api.services.onnx.session as sess_mod
-from api.services.architecture import ArchClass
-from api.services.arch_impl.nvidia_single import NvidiaSingleArchitecture
-from api.services.arch_impl.unified import UnifiedArchitecture
+import pytest
+
+# onnxruntime is an optional substrate (setup/requirements-onnx.txt); CI installs
+# only core+dev, so skip rather than error at collection when it's absent.
+pytest.importorskip("onnxruntime")
+
+import api.services.onnx.session as sess_mod  # noqa: E402
+from api.services.architecture import ArchClass  # noqa: E402
+from api.services.arch_impl.nvidia_single import NvidiaSingleArchitecture  # noqa: E402
+from api.services.arch_impl.unified import UnifiedArchitecture  # noqa: E402
 
 
 class _FakeSession:
