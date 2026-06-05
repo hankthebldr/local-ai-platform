@@ -462,6 +462,66 @@ def _parse_skill_frontmatter(text: str) -> Dict[str, Any]:
         return {}
 
 
+_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+@router.get("/github", dependencies=[Depends(require_master_key)])
+async def discover_github(repo: str, ref: str = "main") -> Dict[str, Any]:
+    """Bulk-browse a GitHub repo's skills — every SKILL.md, parsed. skills.sh
+    indexes repos at skills.sh/<owner>/<repo>, so paste the owner/repo to see
+    everything installable in it. Uses the unauthenticated GitHub trees API."""
+    repo = (repo or "").strip()
+    if not _REPO_RE.match(repo):
+        raise HTTPException(status_code=400, detail="repo must be 'owner/repo'")
+    try:
+        tr = requests.get(
+            f"https://api.github.com/repos/{repo}/git/trees/{ref}?recursive=1",
+            timeout=12,
+            headers={"Accept": "application/vnd.github+json"},
+        )
+        if tr.status_code == 404 and ref == "main":
+            tr = requests.get(
+                f"https://api.github.com/repos/{repo}/git/trees/master?recursive=1",
+                timeout=12,
+            )
+            ref = "master"
+        tr.raise_for_status()
+        tree = tr.json().get("tree", [])
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"GitHub fetch failed: {exc}")
+
+    paths = [
+        t["path"]
+        for t in tree
+        if isinstance(t, dict) and t.get("path", "").lower().endswith("skill.md")
+    ][
+        :30
+    ]  # cap — each needs a content fetch
+    skills = []
+    for path in paths:
+        raw = f"https://raw.githubusercontent.com/{repo}/{ref}/{path}"
+        meta = {}
+        try:
+            text = requests.get(raw, timeout=6).text
+            meta = _parse_skill_frontmatter(text)
+        except Exception:  # noqa: BLE001
+            pass
+        # name fallback: the skill's parent directory.
+        parts = path.split("/")
+        dirname = parts[-2] if len(parts) > 1 else parts[0]
+        skills.append(
+            {
+                "id": _slug(meta.get("name") or dirname),
+                "name": meta.get("name") or dirname,
+                "description": meta.get("description") or "",
+                "path": path,
+                "raw_url": raw,
+                "source": "github",
+            }
+        )
+    return {"repo": repo, "ref": ref, "count": len(skills), "skills": skills}
+
+
 class ImportReq(BaseModel):
     """Import a skill from a remote SKILL.md (e.g. skills.sh → GitHub)."""
 
@@ -553,3 +613,83 @@ async def uninstall(skill_id: str, plugin_id: str) -> Dict[str, Any]:
 
     logger.info("Uninstalled skill '%s' from plugin '%s'", skill_id, plugin_id)
     return {"uninstalled": True, "skill_id": skill_id, "plugin_id": plugin_id}
+
+
+# ── Inline source view / edit for installed skills (Catalog deep-dive) ──────
+class SkillSourceReq(BaseModel):
+    """Overwrite an installed skill's SKILL.md body in place."""
+
+    plugin_id: str
+    body: str
+
+
+def _resolve_installed_skill_path(skill_id: str, plugin_id: str) -> Path:
+    """Resolve the on-disk markdown file for an installed skill via its plugin
+    manifest. Honors the manifest's declared ``file`` rather than assuming the
+    default ``skills/<id>.md`` layout, and guards against a manifest ``file``
+    that escapes the plugin directory."""
+    plugin_dir = _PLUGINS_DIR / plugin_id
+    manifest_path = plugin_dir / "plugin.yaml"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="plugin not found")
+    try:
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"manifest read failed: {exc}")
+    entry = next(
+        (s for s in (manifest.get("skills") or []) if (s or {}).get("id") == skill_id),
+        None,
+    )
+    if entry is None:
+        raise HTTPException(
+            status_code=404, detail="skill not registered in this plugin"
+        )
+    rel = entry.get("file") or f"skills/{skill_id}.md"
+    md_path = (plugin_dir / rel).resolve()
+    if not str(md_path).startswith(str(plugin_dir.resolve())):
+        raise HTTPException(status_code=400, detail="skill file escapes plugin dir")
+    return md_path
+
+
+@router.get("/source/{skill_id}", dependencies=[Depends(require_master_key)])
+async def read_source(skill_id: str, plugin_id: str) -> Dict[str, Any]:
+    """Return the raw SKILL.md body for an installed skill so the Catalog
+    deep-dive can review or edit it in place."""
+    if not _ID_RE.match(skill_id) or not _ID_RE.match(plugin_id):
+        raise HTTPException(status_code=400, detail="invalid id")
+    md_path = _resolve_installed_skill_path(skill_id, plugin_id)
+    if not md_path.exists():
+        raise HTTPException(status_code=404, detail="skill file missing on disk")
+    body = md_path.read_text(encoding="utf-8")
+    parsed = _parse_skill_frontmatter(body)
+    return {
+        "skill_id": skill_id,
+        "plugin_id": plugin_id,
+        "file": str(md_path.relative_to(_PLUGINS_DIR.parent)),
+        "body": body,
+        "name": parsed.get("name") or skill_id,
+        "description": parsed.get("description") or "",
+        "editable": True,
+    }
+
+
+@router.put("/source/{skill_id}", dependencies=[Depends(require_master_key)])
+async def write_source(skill_id: str, req: SkillSourceReq) -> Dict[str, Any]:
+    """Overwrite an installed skill's SKILL.md body in place. Reload the
+    plugin registry (POST /api/plugins/reload) afterward so the edit activates
+    without an API restart — the chat path reads the live registry."""
+    if not _ID_RE.match(skill_id) or not _ID_RE.match(req.plugin_id):
+        raise HTTPException(status_code=400, detail="invalid id")
+    if not req.body or not req.body.strip():
+        raise HTTPException(status_code=400, detail="skill body is required")
+    md_path = _resolve_installed_skill_path(skill_id, req.plugin_id)
+    if not md_path.exists():
+        raise HTTPException(status_code=404, detail="skill file missing on disk")
+    md_path.write_text(req.body, encoding="utf-8")
+    logger.info("Edited skill '%s' in plugin '%s'", skill_id, req.plugin_id)
+    return {
+        "saved": True,
+        "skill_id": skill_id,
+        "plugin_id": req.plugin_id,
+        "bytes": len(req.body.encode("utf-8")),
+    }

@@ -293,6 +293,17 @@ class NvidiaMultiArchitecture:
         # eviction pressure — each GPU still has scarce VRAM.
         return "0"
 
+    def recommended_onnx_providers(self) -> "OnnxExecutionPlan":
+        """Multi-GPU -> CUDA EP + CPU floor, fp16. Encoder workloads are small;
+        they run on one GPU (placement of encoders across GPUs is out of scope)."""
+        from ..architecture import OnnxExecutionPlan
+
+        return OnnxExecutionPlan(
+            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            quant="fp16",
+            provider_options=[{}, {}],
+        )
+
     @classmethod
     def current(cls):
         from ..architecture import _get_current

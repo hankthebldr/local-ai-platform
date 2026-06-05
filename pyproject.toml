@@ -107,11 +107,14 @@ path = "api/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 # The wheel ships the FastAPI app, the workflow engine, the CLI tools,
-# and the model registry. It does NOT ship the workflows/, agents/, or
-# plugins/ directories — those are runtime resources the operator
-# co-locates (see Wiki › Deployment). The DMG and Docker images include
-# them automatically.
-packages = ["api", "cli", "models"]
+# the model registry, and the failure-triage core (`triage/`). The triage
+# package is imported lazily by the runtime error handler
+# (api/exceptions.py:_dispatch_report); it MUST be packaged or opt-in error
+# reporting silently no-ops in installed (pip/wheel) deployments. It does NOT
+# ship the workflows/, agents/, or plugins/ directories — those are runtime
+# resources the operator co-locates (see Wiki › Deployment). The DMG and
+# Docker images include them automatically.
+packages = ["api", "cli", "models", "triage"]
 
 [tool.hatch.build.targets.sdist]
 # Source distribution includes everything operators need to rebuild
@@ -120,6 +123,7 @@ include = [
     "api/",
     "cli/",
     "models/",
+    "triage/",
     "agents/",
     "workflows/",
     "plugins/",

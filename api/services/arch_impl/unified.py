@@ -26,6 +26,7 @@ from ..architecture import (
     ArchClass,
     ClassifiedError,
     Feasibility,
+    OnnxExecutionPlan,
     PressureSnapshot,
     ScheduleDecision,
     TransitionPlan,
@@ -353,6 +354,26 @@ class UnifiedArchitecture:
         # reload would pay full prefill cost on CPU (10s+ for 7B, 90s+
         # for 34B), and Apple's mmap'd weights stay in page cache anyway.
         return "30m"
+
+    def recommended_onnx_providers(self) -> OnnxExecutionPlan:
+        """Phase 1: CPU EP + fp32 on BOTH apple_unified and cpu_x86.
+
+        Two accelerations are deliberately deferred — they ship together in the
+        hardware-tuning phase:
+          - CoreML (Apple ANE/GPU): the EP builds the MiniLM graph but crashes
+            at inference on batches >1, and build_session guards only session
+            construction, not run(). CPU is the floor that never fails.
+          - int8 quantization: the published int8 weights are ISA-specific
+            (onnx/model_qint8_arm64.onnx, onnx/model_qint8_avx512.onnx, ...), so
+            choosing the right file needs ISA detection. fp32 (onnx/model.onnx)
+            is universal and correct, and runs on any CPU arch.
+        Intel OpenVINO is likewise deferred (needs a CPU-vendor probe).
+        """
+        return OnnxExecutionPlan(
+            providers=["CPUExecutionProvider"],
+            quant="fp32",
+            provider_options=[{}],
+        )
 
     @classmethod
     def current(cls) -> "UnifiedArchitecture":

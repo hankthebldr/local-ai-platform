@@ -1,0 +1,8 @@
+# ONNX Runtime encoder substrate — torch-free embeddings / rerankers / classifiers.
+# Base onnxruntime wheel carries CoreML (macOS) + universal CPU. Accelerator
+# wheels (onnxruntime-gpu, onnxruntime-openvino) are installed per-arch by
+# install.sh and are mutually exclusive with the base wheel.
+-r requirements-core.txt
+onnxruntime>=1.17
+tokenizers>=0.15
+numpy>=1.26.2

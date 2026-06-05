@@ -97,6 +97,12 @@ services:
       # so skills/discover returned 0. Surface them read-only (more-specific
       # mount wins over the volume) so discovery reflects the real catalog.
       - ./data/discovery:/app/data/discovery:ro
+      # Agent personas + workflow definitions live in the repo. Bind-mount
+      # them so repo-authored agents/workflows (e.g. the platform-builder
+      # personas) are visible to the running container and any authored in
+      # the UI persist back to the repo instead of being lost on rebuild.
+      - ./agents:/app/agents
+      - ./workflows:/app/workflows
     # uvicorn --reload watches the bind-mounted /app/api.
     command:
       - uvicorn

@@ -5209,6 +5209,13 @@ textarea.composer-desc-area {
 .skill-disc-chip.bundled   { color: var(--cyan);   border-color: var(--cyan-dim); background: rgba(0, 220, 240, 0.05); }
 .skill-disc-chip.marketplace { color: var(--accent-2, #2F86E5); border-color: var(--accent-2-dim, #2F86E555); background: var(--accent-2-ghost, rgba(47,134,229,0.08)); }
 
+/* GitHub repo browse (bulk skill install) */
+.gh-skills { display: flex; flex-direction: column; gap: 6px; }
+.gh-skill-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px; }
+.gh-skill-info { flex: 1; min-width: 0; }
+.gh-skill-name { font-family: var(--mono); font-weight: 600; font-size: 0.74rem; color: var(--text); }
+.gh-skill-desc { font-size: 0.66rem; color: var(--text-dim); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
 /* Agent tools/capabilities picker */
 .am-tools-picker { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 8px; background: var(--bg-deep); }
 .am-tools-group-label { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 6px 0 4px; }
@@ -6561,7 +6568,8 @@ textarea.composer-desc-area {
             <button type="button" class="skills-disc-view" data-view="icons"
                     onclick="SkillsDiscover.setView('icons')" title="Icon explorer">▦</button>
           </div>
-          <button class="action-btn accent" onclick="SkillsDiscover.importFromUrl()" title="Import a SKILL.md from a URL (e.g. a skills.sh / GitHub skill)">+ Import URL</button>
+          <button class="action-btn accent" onclick="SkillsDiscover.browseGithubRepo()" title="Browse + bulk-install all skills in a GitHub repo (e.g. a skills.sh repo)">⌗ Browse repo</button>
+          <button class="action-btn" onclick="SkillsDiscover.importFromUrl()" title="Import a single SKILL.md by URL">+ Import URL</button>
           <button class="action-btn" onclick="SkillsDiscover.load(true)" title="Refresh the catalog">⟲</button>
         </div>
         <div class="skills-discover-grid" id="skills-discover-grid">
@@ -7331,6 +7339,7 @@ textarea.composer-desc-area {
         <div class="panel-label">// MCP SERVERS
           <span style="float:right">
             <button class="action-btn accent" onclick="MCPPanel.showCreate()">+ Register</button>
+            <button class="action-btn" onclick="MCPPanel.browseMarketplace()" title="Browse a catalog of well-known MCP servers">⌗ Marketplace</button>
             <button class="action-btn" onclick="MCPPanel.refresh()">Refresh</button>
           </span>
         </div>
@@ -17148,7 +17157,7 @@ const SkillsDiscover = (function () {
           ? `<button class="action-btn sm accent" onclick="SkillsDiscover.install('${esc(s.id)}')">Install</button>`
           : '');
     return `<div class="workbench-item agent-card cap-card skill-disc-card cap-skill" data-skill-id="${esc(s.id)}">
-      <div class="agent-card-head">
+      <div class="agent-card-head" style="cursor:pointer" title="Open detail" onclick="SkillsDiscover.openDetail('${esc(s.id)}')">
         <span class="agent-card-icon tone-${esc(tone)}">${iconSvg}</span>
         <div class="agent-card-titleblock">
           <div class="agent-card-title">${esc(s.name)}</div>
@@ -17226,6 +17235,62 @@ const SkillsDiscover = (function () {
     render();
   }
 
+  // Browse every skill in a GitHub repo (skills.sh repos are at
+  // skills.sh/<owner>/<repo>) and install any of them.
+  async function browseGithubRepo() {
+    const repo = prompt('GitHub repo to browse (owner/repo):', 'anthropics/skills');
+    if (!repo || !repo.trim()) return;
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:min(680px,94vw);max-height:88vh;overflow-y:auto;border-radius:6px;';
+    inner.innerHTML = '<div class="model-empty">Loading repo skills…</div>';
+    modal.appendChild(inner);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    const close = "this.closest('div[style*=fixed]').remove()";
+    try {
+      const r = await fetch('/api/skills/github?repo=' + encodeURIComponent(repo.trim()));
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      const rows = (d.skills || []).map(s => `
+        <div class="gh-skill-row">
+          <div class="gh-skill-info">
+            <div class="gh-skill-name">${esc(s.name)}</div>
+            <div class="gh-skill-desc">${esc(s.description || s.path || '')}</div>
+          </div>
+          <button class="action-btn sm accent" onclick="SkillsDiscover._installGithub('${esc(s.raw_url)}','${esc(s.id)}',this)">Install</button>
+        </div>`).join('');
+      inner.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-family:var(--mono);font-weight:600;flex:1">${esc(d.repo)} <span style="color:var(--text-muted);font-weight:400">· ${d.count} skill${d.count === 1 ? '' : 's'}</span></div>
+          <button class="action-btn xs ghost" onclick="${close}">×</button>
+        </div>
+        <div style="font-size:0.64rem;color:var(--text-muted);margin-bottom:10px">Installs go to <code>general-skills</code> and activate immediately.</div>
+        <div class="gh-skills">${rows || '<div class="model-empty">No SKILL.md files found in this repo.</div>'}</div>`;
+    } catch (e) {
+      inner.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function _installGithub(rawUrl, id, btn) {
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const r = await fetch('/api/skills/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: rawUrl, plugin_id: 'general-skills', id }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      try { await fetch('/api/plugins/reload', { method: 'POST' }); } catch (_) {}
+      btn.textContent = '✓ Installed'; btn.classList.remove('accent');
+      load(true);
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Retry';
+      if (window.Toast) Toast.error('Install failed: ' + e.message);
+    }
+  }
+
   // Import a SKILL.md from a URL (skills.sh entries are GitHub-backed — grab
   // the SKILL.md's GitHub link). Fetches + parses frontmatter server-side,
   // installs into the chosen plugin, then refreshes discovery.
@@ -17243,8 +17308,12 @@ const SkillsDiscover = (function () {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
-      if (window.Toast) Toast.info(`Imported "${d.name || d.skill_id}" → ${d.plugin_id}. Restart to activate.`);
-      else alert(`Imported "${d.name || d.skill_id}" into ${d.plugin_id}.\nRestart the API to activate it.`);
+      // Hot-reload the plugin registry so the skill activates immediately —
+      // no API restart. The chat path reads the same live registry.
+      let active = false;
+      try { active = (await fetch('/api/plugins/reload', { method: 'POST' })).ok; } catch (_) {}
+      const msg = `Imported "${d.name || d.skill_id}" → ${d.plugin_id}` + (active ? ' — active now.' : ' (reload to activate).');
+      if (window.Toast) Toast.info(msg); else alert(msg);
       load(true);
     } catch (e) {
       if (window.Toast) Toast.error('Import failed: ' + e.message);
@@ -17294,7 +17363,148 @@ const SkillsDiscover = (function () {
     }).join('');
   }
 
-  return { load, render, install, uninstall, setView, importFromUrl };
+  // Deep-dive — expand a skill into its full SKILL.md body. Installed skills
+  // open editable (saved in place via PUT /source + a live plugin reload);
+  // catalog/remote skills are read-only previews of the body that would land
+  // on install. Mirrors the Models/Workflows deep-dive pattern.
+  async function openDetail(skillId) {
+    const s = (_data?.skills || []).find(x => x.id === skillId);
+    if (!s) return;
+    const persona = s.persona || (window.AgentIcons ? AgentIcons.resolve({ name: s.name, description: s.description }) : 'skill');
+    const tone    = (window.AgentIcons ? AgentIcons.tone(persona) : 'amber');
+    const iconSvg = (window.AgentIcons ? AgentIcons.svg(persona) : '');
+    const plugin  = (s.installed_in || [])[0] || '';
+
+    const modal = document.createElement('div');
+    modal.className = 'skill-detail-overlay';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:1000;display:flex;align-items:center;justify-content:center';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);width:min(780px,95vw);max-height:90vh;display:flex;flex-direction:column;border-radius:8px;overflow:hidden';
+    inner.innerHTML = '<div class="model-empty" style="padding:28px">Loading skill…</div>';
+    modal.appendChild(inner);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+
+    // Resolve the body: installed → on-disk editable source; else catalog body.
+    let body = '', editable = false, srcPlugin = plugin;
+    try {
+      if (s.installed && plugin) {
+        const r = await fetch(`/api/skills/source/${encodeURIComponent(skillId)}?plugin_id=${encodeURIComponent(plugin)}`);
+        if (r.ok) { const d = await r.json(); body = d.body || ''; editable = true; srcPlugin = d.plugin_id || plugin; }
+      }
+      if (!body) {
+        const r = await fetch(`/api/skills/discover/${encodeURIComponent(skillId)}`);
+        if (r.ok) { const d = await r.json(); body = d.skill_md || ''; }
+      }
+    } catch (_) {}
+
+    const triggers = (s.triggers || []).map(t => `<span class="cap-card-meta">${esc(t)}</span>`).join(' · ');
+    const stateLabel = s.installed
+      ? `installed${plugin ? ' · ' + esc(plugin) : ''}`
+      : (s.marketplace || s.source === 'remote' ? 'marketplace' : (s.has_body ? 'available' : 'bundled'));
+    const removeBtn = (s.installed && plugin)
+      ? `<button class="action-btn sm danger" onclick="SkillsDiscover.uninstall('${esc(skillId)}','${esc(plugin)}');this.closest('.skill-detail-overlay').remove()">Remove</button>` : '';
+    const installBtn = (!s.installed && s.has_body)
+      ? `<button class="action-btn sm accent" onclick="SkillsDiscover.install('${esc(skillId)}');this.closest('.skill-detail-overlay').remove()">Install</button>` : '';
+    const editControls = editable
+      ? `<button class="action-btn sm" id="skill-edit-toggle" onclick="SkillsDiscover._toggleEdit('${esc(skillId)}','${esc(srcPlugin)}')">Edit</button>` : '';
+
+    inner.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:11px;padding:16px 18px;border-bottom:1px solid var(--border)">
+        <span class="agent-card-icon tone-${esc(tone)}" style="flex:0 0 auto">${iconSvg}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:650;font-size:0.96rem">${esc(s.name || skillId)}</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${esc(s.description || '')}</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap">
+            <code class="cap-card-id">${esc(skillId)}</code>
+            <span class="skill-disc-chip ${s.installed ? 'installed' : (s.has_body ? 'available' : 'bundled')}">${stateLabel}</span>
+            ${triggers ? `<span class="cap-card-meta">${triggers}</span>` : ''}
+          </div>
+        </div>
+        <button class="action-btn xs ghost" onclick="this.closest('.skill-detail-overlay').remove()">×</button>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:14px 18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:0.64rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)">SKILL.md ${editable ? '' : '· read-only'}</span>
+          <span id="skill-edit-status" style="font-size:0.64rem;color:var(--text-muted)"></span>
+        </div>
+        <textarea id="skill-detail-body" readonly spellcheck="false"
+          style="width:100%;min-height:340px;font-family:var(--mono);font-size:0.72rem;line-height:1.5;background:var(--bg-deep);color:var(--text);border:1px solid var(--border-strong);border-radius:5px;padding:11px;resize:vertical;box-sizing:border-box">${esc(body || '(no body — this entry ships pre-bundled in the plugin)')}</textarea>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;padding:12px 18px;border-top:1px solid var(--border)">
+        ${editControls}
+        <span id="skill-edit-save-wrap" style="display:none;gap:8px">
+          <button class="action-btn sm accent" id="skill-edit-save" onclick="SkillsDiscover._saveEdit('${esc(skillId)}','${esc(srcPlugin)}')">Save &amp; reload</button>
+          <button class="action-btn sm ghost" onclick="SkillsDiscover._cancelEdit()">Cancel</button>
+        </span>
+        <span style="flex:1"></span>
+        ${installBtn}${removeBtn}
+      </div>`;
+    SkillsDiscover._detailOrig = body;
+  }
+
+  function _toggleEdit() {
+    const ta = document.getElementById('skill-detail-body');
+    const toggle = document.getElementById('skill-edit-toggle');
+    const saveWrap = document.getElementById('skill-edit-save-wrap');
+    if (!ta) return;
+    ta.readOnly = false;
+    ta.focus();
+    if (toggle) toggle.style.display = 'none';
+    if (saveWrap) saveWrap.style.display = 'inline-flex';
+    const st = document.getElementById('skill-edit-status');
+    if (st) st.textContent = 'editing — unsaved';
+  }
+
+  function _cancelEdit() {
+    const ta = document.getElementById('skill-detail-body');
+    if (ta && typeof SkillsDiscover._detailOrig === 'string') ta.value = SkillsDiscover._detailOrig;
+    if (ta) ta.readOnly = true;
+    const toggle = document.getElementById('skill-edit-toggle');
+    const saveWrap = document.getElementById('skill-edit-save-wrap');
+    if (toggle) toggle.style.display = '';
+    if (saveWrap) saveWrap.style.display = 'none';
+    const st = document.getElementById('skill-edit-status');
+    if (st) st.textContent = '';
+  }
+
+  async function _saveEdit(skillId, pluginId) {
+    const ta = document.getElementById('skill-detail-body');
+    const save = document.getElementById('skill-edit-save');
+    const st = document.getElementById('skill-edit-status');
+    if (!ta) return;
+    const newBody = ta.value;
+    if (!newBody.trim()) { if (window.Toast) Toast.error('Skill body cannot be empty'); return; }
+    if (save) { save.disabled = true; save.textContent = 'Saving…'; }
+    try {
+      const r = await fetch(`/api/skills/source/${encodeURIComponent(skillId)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plugin_id: pluginId, body: newBody }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      // Hot-reload so the edited skill activates immediately for chat.
+      let active = false;
+      try { active = (await fetch('/api/plugins/reload', { method: 'POST' })).ok; } catch (_) {}
+      SkillsDiscover._detailOrig = newBody;
+      ta.readOnly = true;
+      const toggle = document.getElementById('skill-edit-toggle');
+      const saveWrap = document.getElementById('skill-edit-save-wrap');
+      if (toggle) toggle.style.display = '';
+      if (saveWrap) saveWrap.style.display = 'none';
+      if (st) st.textContent = active ? 'saved — active now' : 'saved (reload to activate)';
+      if (window.Toast) Toast.success('Skill saved', `${skillId} → ${pluginId}`);
+      load(true);
+    } catch (e) {
+      if (window.Toast) Toast.error('Save failed: ' + e.message);
+      if (st) st.textContent = 'save failed';
+    } finally {
+      if (save) { save.disabled = false; save.textContent = 'Save & reload'; }
+    }
+  }
+
+  return { load, render, install, uninstall, setView, importFromUrl, browseGithubRepo, _installGithub,
+           openDetail, _toggleEdit, _cancelEdit, _saveEdit };
 })();
 window.SkillsDiscover = SkillsDiscover;
 
@@ -19781,13 +19991,88 @@ const MCPPanel = (function () {
     } catch (e) { _showError(e.message); }
   }
 
+  // ── Marketplace — browse + one-click register a catalog MCP server ──
+  async function browseMarketplace() {
+    const modal = document.createElement('div');
+    modal.className = 'mcp-mkt-overlay';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:1000;display:flex;align-items:center;justify-content:center';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);width:min(760px,95vw);max-height:90vh;display:flex;flex-direction:column;border-radius:8px;overflow:hidden';
+    inner.innerHTML = '<div class="model-empty" style="padding:28px">Loading MCP catalog…</div>';
+    modal.appendChild(inner);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    try {
+      const r = await fetch('/api/mcp/discover', { headers: _headers() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      const icon = (window.AgentIcons ? AgentIcons.svg('mcp') : '');
+      const rows = (d.servers || []).map(s => {
+        const envReq = (s.env_required || []);
+        const reqChip = envReq.length
+          ? `<span class="skill-disc-chip available" title="${esc(envReq.map(e => e.key).join(', '))}">needs ${envReq.length} secret${envReq.length === 1 ? '' : 's'}</span>` : '';
+        const srcChip = s.marketplace ? '<span class="skill-disc-chip marketplace">remote</span>' : '';
+        const action = s.installed
+          ? '<span class="skill-disc-chip installed">installed</span>'
+          : `<button class="action-btn sm accent" onclick='MCPPanel._installFromCatalog(${JSON.stringify(s).replace(/'/g, "&#39;")}, this)'>Install</button>`;
+        return `<div class="gh-skill-row">
+          <span class="admin-card-icon admin-card-icon-sm tone-purple" style="flex:0 0 auto">${icon}</span>
+          <div class="gh-skill-info">
+            <div class="gh-skill-name">${esc(s.name || s.id)} ${srcChip} ${reqChip}</div>
+            <div class="gh-skill-desc">${esc(s.description || '')}</div>
+            ${s.args_hint ? `<div class="gh-skill-desc" style="color:var(--amber);margin-top:2px">⚙ ${esc(s.args_hint)}</div>` : ''}
+          </div>
+          <div style="flex:0 0 auto">${action}</div>
+        </div>`;
+      }).join('');
+      inner.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-family:var(--mono);font-weight:600;flex:1">MCP Marketplace <span style="color:var(--text-muted);font-weight:400">· ${d.count} server${d.count === 1 ? '' : 's'}</span></div>
+          <button class="action-btn xs ghost" onclick="this.closest('.mcp-mkt-overlay').remove()">×</button>
+        </div>
+        <div style="font-size:0.64rem;color:var(--text-muted);padding:8px 18px 0">Servers run as local processes under your account. Servers needing a path/DSN install with a placeholder — edit the registration afterward. Secrets are collected on install.</div>
+        <div class="gh-skills" style="overflow:auto;padding:10px 18px 18px">${rows || '<div class="model-empty">Catalog is empty.</div>'}</div>`;
+    } catch (e) {
+      inner.innerHTML = `<div class="model-empty" style="color:var(--red);padding:24px">Failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function _installFromCatalog(entry, btn) {
+    // Collect required credentials up front; abort if any are skipped.
+    const env = {};
+    for (const e of (entry.env_required || [])) {
+      const val = prompt(`${entry.name}: enter ${e.key}\n${e.hint || ''}`);
+      if (val === null) return;           // operator cancelled
+      if (val.trim()) env[e.key] = val.trim();
+    }
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      const r = await fetch(`/api/mcp/discover/${encodeURIComponent(entry.id)}/install`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ..._headers() },
+        body: JSON.stringify({ env }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      if (btn) { btn.outerHTML = '<span class="skill-disc-chip installed">installed</span>'; }
+      if (window.Toast) Toast.success('MCP server registered', `${entry.id} — test the handshake from its detail panel.`);
+      await load();
+      select(entry.id);
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+      if (window.Toast) Toast.error('Install failed: ' + e.message);
+      else alert('Install failed: ' + e.message);
+    }
+  }
+
   // Refresh when the panel becomes visible.
   window.addEventListener('adminPanelActivated', e => {
     if (e.detail && e.detail.panel === 'admin-mcp') load();
   });
 
   return { load, refresh, render, select, test, discoverTools, toggleEnabled, remove,
-           showCreate, edit, _onTransportChange, _closeModal, _submit };
+           showCreate, edit, _onTransportChange, _closeModal, _submit,
+           browseMarketplace, _installFromCatalog };
 })();
 
 /* Refresh workbenches whenever the composer becomes the active tab. */
