@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-import onnxruntime as ort  # module-level so tests can monkeypatch `ort`
+try:
+    import onnxruntime as ort  # module-level so tests can monkeypatch `ort`
+except ModuleNotFoundError:  # optional heavy backend — keep the module import-safe
+    ort = None  # loads on CPU-only hosts / CI; tests still monkeypatch `ort`
 
 from ..architecture import Architecture, _get_current
 from ...logging_config import logger
@@ -28,6 +31,11 @@ def build_session(
     can't supply is logged and dropped — the session still runs on the CPU
     floor. Returns (session, active_providers).
     """
+    if ort is None:
+        raise RuntimeError(
+            "onnxruntime is not installed — install setup/requirements-onnx.txt "
+            "to use the ONNX embedding backend."
+        )
     arch = arch or _get_current()
     plan = arch.recommended_onnx_providers()
     try:
