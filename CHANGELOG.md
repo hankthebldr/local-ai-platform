@@ -101,6 +101,40 @@ captured on every run and aggregated into `RunTelemetrySummary`.
   spec's plan); remaining items are polish (sharded mode, prompt-prefix
   locking, A2A streaming, composer UI renderers).
 
+### Added — Code-execution sandbox (PR #165)
+
+A `kind: code` workflow step + a `code_exec` chat tool run agent-authored
+Python in a tiered, host-detected isolation sandbox — realizing the
+"enclave-code tool-layer" / "read-only-until-promoted" concerns flagged in the
+ralph/composite work above. Off by default (`CODE_EXEC_ENABLED=false`).
+Design: `docs/superpowers/specs/2026-06-03-code-exec-sandbox-design.md`.
+
+- **Backend registry.** `SandboxBackend` protocol + host detection
+  (`detect_sandboxes()` → `SandboxRegistry`, down-only tier resolution),
+  mirroring the `runner.py` / `runner_registry.py` idiom; initialized in the
+  app lifespan alongside `detect_runners()`.
+- **Tier-1 subprocess** (everywhere incl. the DMG): child process with
+  `setrlimit` (CPU/AS/FSIZE/NOFILE), allowlist-only env scrub, process-group
+  SIGKILL on timeout, best-effort network deny. Weakest ceiling →
+  gate-mandatory.
+- **Tier-2 hardened container** (Podman-first, Docker fallback): non-root,
+  `--read-only` + tmpfs, `--cap-drop=ALL`, `--security-opt=no-new-privileges`,
+  `--network=none` (v1; egress allowlist deferred), pids/mem/cpu caps,
+  `--cidfile` timeout-kill. Image at `setup/sandbox/Dockerfile`.
+- **Three-zone workspace.** `files_in` (read-only) → per-step scratch →
+  declared `files_out` promoted to the canonical workspace only on policy
+  (`gated` / `auto_on_green` / `never`); stale scratch reaped on a TTL.
+- **Run-level HITL gate.** An approval-required code step pauses the run
+  (`status="awaiting_approval"` + serialized `WorkflowRun.pending_gate`),
+  checkpoints, and resumes after
+  `POST /api/workflows/runs/{run_id}/approvals/{gate_id}` records
+  approve / edit / reject (idempotent — 409 on double-resolve).
+- **Models.** `AgentStep.kind` gains `"code"` + a `CodeStepConfig` block;
+  `StepResult` gains `code_exit_code` / `tier_used` / `peak_rss_mb` /
+  `files_produced` / `approval_status` / `promoted`; new `GatePending`.
+- **UI.** Runs view renders a per-step code panel (tier / exit / peak RSS /
+  files / promoted / approval) + an inline approve/reject gate bar.
+
 ### Added — MCP & Skills instrumentation (PRs #116–127, all merged)
 
 Twelve-PR series that landed the [MCP & Skills design plan](docs/plans/2026-05-19-mcp-skills-instrumentation-design.md).
