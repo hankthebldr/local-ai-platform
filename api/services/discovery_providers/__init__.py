@@ -5,7 +5,9 @@ agentic_discovery service. Each module under this package calls
 ``register_provider(...)`` at import time.
 
 Wired providers (real ingestion):
-  - mcp_registry  : Official MCP Registry (modelcontextprotocol.io/registry)
+  - mcp_registry        : Official MCP Registry (modelcontextprotocol.io/registry)
+  - skills_marketplace  : skills.sh, ingested via its backing public GitHub repos
+                          (its own API is Vercel-OIDC gated; we crawl the source)
 
 Stub providers (registered, surfaced in UI, not yet wired):
   - smithery        : community MCP registry (smithery.ai)
@@ -25,4 +27,5 @@ DiscoveryFeed.
 """
 
 from . import mcp_registry  # noqa: F401  (real, registers on import)
+from . import skills_marketplace  # noqa: F401  (real, registers on import)
 from . import stubs  # noqa: F401  (all stubs in one file, registers on import)
