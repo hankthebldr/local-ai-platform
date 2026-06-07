@@ -7290,6 +7290,13 @@ textarea.composer-desc-area {
       ℹ Skills are markdown bodies attached to plugins. They auto-inject into chats when their trigger keywords match. Skill files live in <code>plugins/&lt;plugin&gt;/skills/</code>.
     </div>
 
+    <!-- Skills discovery surface — the SAME #skills-discover-panel the
+         Admin → Catalog → Skills section uses. A single DOM node shared
+         between both homes via SkillsDiscoverShare (relocate-on-activate,
+         mirroring CatalogModelsShare for the inventory grid), so the
+         catalog/discovery feature is identical in both places. -->
+    <div id="skills-tab-discover-mount" style="margin-bottom:16px"></div>
+
     <div class="plugins-layout">
       <div class="panel plugins-list-panel">
         <span class="corner-tr"></span><span class="corner-bl"></span>
@@ -7783,6 +7790,9 @@ function switchTab(name, el) {
   // populated on first load.
   if (name === 'workflows') {
     if (window.CatalogModelsShare) CatalogModelsShare.showInCatalog();
+    // Pull the shared skills-discovery panel back into the Catalog's Skills
+    // mount so Catalog → Skills shows it (it may be on the Skills tab).
+    if (window.SkillsDiscoverShare) SkillsDiscoverShare.showInCatalog();
     if (!catalogLoaded) loadCatalog();
   }
   if (name === 'memory') { loadMemory(); loadMemoryTab(); loadArchitecturePanel(); WorkflowMemory && WorkflowMemory.refresh(); }
@@ -7825,6 +7835,15 @@ function switchTab(name, el) {
   // on the `adminPanelActivated` event. Re-emit that event from switchTab
   // so first-class top-level entry to those tabs triggers the same load
   // path the dropdown route used to fire.
+  // Standalone Skills tab — bring the shared discovery/catalog panel into
+  // this tab (relocate-on-activate) and load it, so the homepage Skills tab
+  // exposes the same discovery surface as Admin → Catalog → Skills.
+  if (name === 'admin-skills') {
+    if (window.SkillsDiscoverShare) SkillsDiscoverShare.showInSkillsTab();
+    if (window.SkillsDiscover && typeof SkillsDiscover.load === 'function') {
+      try { SkillsDiscover.load(); } catch (_) {}
+    }
+  }
   if (name === 'admin-plugins' || name === 'admin-skills' || name === 'admin-mcp'
       || name === 'admin-cloud' || name === 'admin-exports' || name === 'admin-keys') {
     window.dispatchEvent(new CustomEvent('adminPanelActivated', { detail: { panel: name } }));
@@ -9095,22 +9114,70 @@ const ExtDiscover = (function () {
   function _renderItem(it) {
     const kindClass = `ext-item-kind-${esc(it.kind || 'other')}`;
     const toolCount = (it.tools || []).length;
+    // Installable skills (e.g. the skills.sh provider) carry a raw SKILL.md
+    // URL the native importer accepts. Render an Install action so the
+    // External-Sources surface matches the Skills catalog's install
+    // affordance instead of being display-only.
+    const skillUrl = (it.kind === 'skill' && it.install && it.install.skill_md_url)
+      ? it.install.skill_md_url : '';
+    const installBtn = skillUrl
+      ? `<button class="action-btn xs accent"
+                 onclick="ExtDiscover.installSkill('${esc(skillUrl)}','${esc(it.id)}',this)"
+                 title="Install this skill into general-skills">+ Install</button>`
+      : '';
+    // Surface the CLI one-liner (npx skills add …) when present.
+    const cmd = (it.install && it.install.command) ? it.install.command : '';
+    const cmdChip = cmd
+      ? `<code class="ext-item-id" style="opacity:.75" title="CLI install">${esc(cmd)}</code>`
+      : '';
     return `<div class="ext-item">
       <div class="ext-item-head">
         <span class="ext-item-kind ${kindClass}">${esc(it.kind || 'item')}</span>
         <span class="ext-item-name">${esc(it.name)}</span>
         <span class="ext-item-version">${esc(it.version || '')}</span>
+        <span style="flex:1"></span>
+        ${installBtn}
       </div>
       <div class="ext-item-desc">${esc(it.description || '')}</div>
       <div class="ext-item-foot">
         <code class="ext-item-id">${esc(it.id)}</code>
+        ${cmdChip}
         ${toolCount ? `<span class="ext-item-toolcount">${toolCount} tools</span>` : ''}
         ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" class="ext-item-link">↗</a>` : ''}
       </div>
     </div>`;
   }
 
-  return { _toggle, refresh };
+  // Install a discovered skill (kind=skill) via the same native importer
+  // the Skills catalog uses, then refresh the Skills surfaces so a skill
+  // found under External Sources lands in the catalog identically.
+  async function installSkill(skillMdUrl, id, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      const r = await fetch('/api/skills/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: skillMdUrl, plugin_id: 'general-skills', id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      // Hot-reload the plugin registry so the skill activates immediately.
+      try { await fetch('/api/plugins/reload', { method: 'POST' }); } catch (_) {}
+      if (btn) { btn.textContent = '✓ Installed'; btn.classList.remove('accent'); btn.disabled = true; }
+      if (window.Toast) Toast.success('Skill installed', `${d.name || id} → general-skills`);
+      // Keep the two surfaces consistent: reflect the install in the Skills
+      // catalog section, the catalog counts, and the composer workbench.
+      if (window.SkillsDiscover && typeof SkillsDiscover.load === 'function') { try { SkillsDiscover.load(true); } catch (_) {} }
+      if (typeof loadCatalogPage === 'function') { try { loadCatalogPage(); } catch (_) {} }
+      if (typeof loadComposerCatalogs === 'function') { try { loadComposerCatalogs(); } catch (_) {} }
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+      if (window.Toast) Toast.error('Install failed: ' + e.message);
+      else alert('Install failed: ' + e.message);
+    }
+  }
+
+  return { _toggle, refresh, installSkill };
 })();
 window.ExtDiscover = ExtDiscover;
 
@@ -12114,6 +12181,40 @@ document.addEventListener('DOMContentLoaded', () => {
           inCatalog = false;
         },
         get isInCatalog() { return inCatalog; },
+      };
+    })();
+
+    // SkillsDiscoverShare — the discovery/catalog panel (#skills-discover-
+    // panel) is a single DOM node. By default it lives in the Catalog's
+    // Skills mount (the move above). This manager relocates it into the
+    // standalone Skills tab (#skills-tab-discover-mount) when that tab is
+    // active and back to the Catalog when the Catalog is shown — so the
+    // SAME discovery surface (curated catalog + Browse repo + Import URL +
+    // installable external-source skills) appears in both places.
+    window.SkillsDiscoverShare = (function () {
+      let inSkillsTab = false;
+      function _panel() { return document.getElementById('skills-discover-panel'); }
+      return {
+        showInSkillsTab() {
+          if (inSkillsTab) return;
+          const panel = _panel();
+          const mount = document.getElementById('skills-tab-discover-mount');
+          if (!panel || !mount) return;
+          mount.replaceChildren();
+          mount.appendChild(panel);
+          panel.open = true;  // expand by default in its dedicated tab
+          inSkillsTab = true;
+        },
+        showInCatalog() {
+          if (!inSkillsTab) return;
+          const panel = _panel();
+          const mount = document.getElementById('catalog-skills-mount');
+          if (!panel || !mount) return;
+          mount.replaceChildren();
+          mount.appendChild(panel);
+          inSkillsTab = false;
+        },
+        get isInSkillsTab() { return inSkillsTab; },
       };
     })();
   }
