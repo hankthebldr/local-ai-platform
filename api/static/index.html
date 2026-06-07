@@ -5853,7 +5853,7 @@ textarea.composer-desc-area {
         </div>
       </div>
       <div class="composer-actions-row">
-        <button class="action-btn" onclick="composerNewWorkflow()" title="Reset composer to a blank workflow">New</button>
+        <button class="action-btn accent" onclick="WorkflowBuilder.open()" title="Start a new workflow — name it and set defaults, then build the steps on the canvas">+ New</button>
         <!-- Explicit Clear button. composerNewWorkflow already does
              the cleanup work (wipes nodes + metadata); the previous
              "New" affordance was easy to miss because operators
@@ -5871,6 +5871,11 @@ textarea.composer-desc-area {
         <div style="flex:1"></div>
         <button class="action-btn ghost" onclick="dfRunWorkflowLive()" title="Save + run in background; watch live progress in the workstream below">Run ▶ live</button>
         <button class="send-btn" onclick="dfRunWorkflowFromComposer()" title="Save then run this workflow (synchronous; switches to the Runs tab when done)">Run ▶</button>
+        <!-- Stop control — appears only while a live run is active (toggled
+             by dfApplyRunState). Cancels the run at the next step boundary. -->
+        <button class="action-btn" id="composer-stop-btn" onclick="composerStopRun()"
+                title="Stop the active run (the engine halts at the next step boundary; the in-flight step finishes first)"
+                style="border-color:var(--red,#ff5252);color:var(--red,#ff5252)" hidden>◼ Stop</button>
       </div>
     </div>
 
@@ -7112,6 +7117,63 @@ textarea.composer-desc-area {
         <div class="admin-modal-actions">
           <button type="button" class="admin-modal-btn" onclick="SkillsBuilder.close()">Cancel</button>
           <button type="button" class="admin-modal-btn primary" onclick="SkillsBuilder.submit()">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- New-Workflow wizard — mirrors the Skill / Agent creators (slug id +
+         name + defaults, validated, modal). Establishes the workflow's
+         identity, then drops the operator on the canvas to build steps. -->
+    <div id="workflow-builder-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="max-width:640px">
+        <h3>New Workflow</h3>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:10px">
+          Name the workflow and set its defaults. After you create it, build the
+          step DAG on the canvas, then <strong>Save</strong>.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label class="admin-modal-label">Workflow ID</label>
+            <input id="workflow-builder-id" type="text" placeholder="my-workflow"
+                   autocomplete="off" oninput="this.dataset.auto=''">
+          </div>
+          <div>
+            <label class="admin-modal-label">Name</label>
+            <input id="workflow-builder-name" type="text" placeholder="My Workflow"
+                   autocomplete="off" oninput="WorkflowBuilder._maybeSlug()">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label class="admin-modal-label">Default role</label>
+            <select id="workflow-builder-role" class="model-select">
+              <option value="reasoning">reasoning</option>
+              <option value="coding">coding</option>
+              <option value="fast">fast</option>
+              <option value="general" selected>general</option>
+              <option value="uncensored">uncensored</option>
+            </select>
+          </div>
+          <div>
+            <label class="admin-modal-label">Category</label>
+            <select id="workflow-builder-category" class="model-select">
+              <option value="general" selected>general</option>
+              <option value="security">security</option>
+              <option value="devops">devops</option>
+              <option value="data">data</option>
+              <option value="code">code</option>
+              <option value="content">content</option>
+              <option value="research">research</option>
+              <option value="automation">automation</option>
+            </select>
+          </div>
+        </div>
+        <label class="admin-modal-label">Description</label>
+        <textarea id="workflow-builder-desc" rows="3" placeholder="What does this workflow do?"></textarea>
+        <div id="workflow-builder-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="WorkflowBuilder.close()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="WorkflowBuilder.submit()">Create</button>
         </div>
       </div>
     </div>
@@ -8950,6 +9012,92 @@ const SkillsBuilder = (function () {
   return { open, close, submit };
 })();
 window.SkillsBuilder = SkillsBuilder;
+
+// WorkflowBuilder — the New-Workflow wizard. Same modal grammar as the
+// Skill / Agent creators (validated slug id + name + defaults), but instead
+// of POSTing a complete record it seeds the composer's identity fields and
+// drops the operator on a blank canvas to build the step DAG (a workflow
+// isn't complete until it has steps; Save/Run persist it from there).
+const WorkflowBuilder = (function () {
+  function _slugify(s) {
+    return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+  }
+
+  // Auto-suggest the id slug from the name until the operator edits the id
+  // field themselves (the id input clears dataset.auto on manual input).
+  function _maybeSlug() {
+    const idEl = document.getElementById('workflow-builder-id');
+    const nameEl = document.getElementById('workflow-builder-name');
+    if (!idEl || !nameEl) return;
+    if (!idEl.value || idEl.dataset.auto === '1') {
+      idEl.value = _slugify(nameEl.value);
+      idEl.dataset.auto = '1';
+    }
+  }
+
+  function open() {
+    const modal = document.getElementById('workflow-builder-modal');
+    if (!modal) return;
+    // Prefill from the composer toolbar so the wizard doubles as a
+    // rename/redefine entry point for the in-progress workflow.
+    const get = id => (document.getElementById(id) || {}).value || '';
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+    set('workflow-builder-id', get('df-wf-id'));
+    set('workflow-builder-name', get('df-wf-name'));
+    set('workflow-builder-desc', get('df-wf-desc'));
+    set('workflow-builder-role', get('df-wf-role'));
+    set('workflow-builder-category', get('df-wf-category'));
+    const err = document.getElementById('workflow-builder-error');
+    if (err) { err.hidden = true; err.textContent = ''; }
+    modal.removeAttribute('hidden');
+    setTimeout(() => { const el = document.getElementById('workflow-builder-name'); if (el) el.focus(); }, 30);
+  }
+
+  function close() {
+    const modal = document.getElementById('workflow-builder-modal');
+    if (modal) modal.setAttribute('hidden', '');
+    const err = document.getElementById('workflow-builder-error');
+    if (err) { err.hidden = true; err.textContent = ''; }
+  }
+
+  function submit() {
+    const id = ((document.getElementById('workflow-builder-id') || {}).value || '').trim();
+    const name = ((document.getElementById('workflow-builder-name') || {}).value || '').trim();
+    const desc = ((document.getElementById('workflow-builder-desc') || {}).value || '').trim();
+    const role = (document.getElementById('workflow-builder-role') || {}).value || 'general';
+    const category = (document.getElementById('workflow-builder-category') || {}).value || 'general';
+    const err = document.getElementById('workflow-builder-error');
+    function fail(msg) { if (err) { err.hidden = false; err.textContent = msg; } }
+
+    if (!/^[a-z0-9-]+$/.test(id)) return fail('Workflow ID must be lowercase letters, digits, and hyphens only.');
+    if (!name) return fail('Name is required.');
+
+    // Ensure the drawflow editor exists before we blank + seed it (the wizard
+    // can fire before the operator has ever opened the Composer tab).
+    if (typeof ComposerView !== 'undefined' && ComposerView && ComposerView.init) {
+      try { ComposerView.init(); } catch (_) {}
+    }
+    // Reset to a blank canvas, then write the identity into the toolbar
+    // fields the rest of the composer (Save / Run) reads from.
+    if (typeof composerNewWorkflow === 'function') { try { composerNewWorkflow(); } catch (_) {} }
+    const set = (fid, v) => { const el = document.getElementById(fid); if (el) el.value = v; };
+    set('df-wf-id', id);
+    set('df-wf-name', name);
+    set('df-wf-desc', desc);
+    set('df-wf-role', role);
+    set('df-wf-category', category);
+    // Grow the auto-sizing description textarea to fit the seeded text.
+    const descEl = document.getElementById('df-wf-desc');
+    if (descEl) { descEl.style.height = 'auto'; descEl.style.height = Math.min(descEl.scrollHeight, 156) + 'px'; }
+
+    close();
+    if (typeof switchTab === 'function') switchTab('dashboard');
+    if (window.Toast) Toast.success('Workflow created', `${name} — drag roles onto the canvas to add steps, then Save.`);
+  }
+
+  return { open, close, submit, _maybeSlug, _slugify };
+})();
+window.WorkflowBuilder = WorkflowBuilder;
 
 // Plugins / MCPs discover sections under the Models tab — small loaders
 // that reuse the workbench renderers but mount into the System-page
@@ -12564,6 +12712,18 @@ function dfClearRunState() {
   });
   const chip = document.getElementById('df-run-progress');
   if (chip) chip.classList.remove('visible');
+  // No active run → hide the toolbar Stop control.
+  _dfToggleStopBtn(false);
+  window._composerActiveRunId = null;
+}
+
+// Show/hide + reset the composer toolbar Stop button. Centralized so the
+// run-state hooks stay one-liners.
+function _dfToggleStopBtn(show) {
+  const btn = document.getElementById('composer-stop-btn');
+  if (!btn) return;
+  btn.hidden = !show;
+  if (show) { btn.disabled = false; btn.textContent = '◼ Stop'; }
 }
 
 function dfApplyRunState(run) {
@@ -12579,7 +12739,17 @@ function dfApplyRunState(run) {
   const planned = Array.isArray(run.steps) ? run.steps
                 : Array.isArray(run.workflow_steps) ? run.workflow_steps
                 : Object.keys(dfNodeData || {}).map(k => (dfNodeData[k] || {}).id).filter(Boolean);
-  const terminalRunStatus = ['completed', 'failed', 'error', 'cancelled'].includes(String(run.status || '').toLowerCase());
+  const terminalRunStatus = ['completed', 'failed', 'error', 'cancelled', 'canceled'].includes(String(run.status || '').toLowerCase());
+
+  // Toolbar Stop button: live only while the run is non-terminal. Track the
+  // active run id so composerStopRun() can target it.
+  if (terminalRunStatus) {
+    _dfToggleStopBtn(false);
+    window._composerActiveRunId = null;
+  } else {
+    window._composerActiveRunId = run.run_id || window._composerActiveRunId || null;
+    _dfToggleStopBtn(true);
+  }
 
   let completed = 0;
   let total = 0;
@@ -18080,6 +18250,32 @@ async function dfRunWorkflowLive() {
     if (window.Toast) Toast.danger('Run kickoff failed', String(e));
   }
 }
+
+// Stop the active composer run. Mirrors RunsTab.cancelCurrent /
+// ComposerWorkstream.clearRun's cancel — POST .../cancel — but reachable
+// straight from the composer toolbar so the operator doesn't have to leave
+// the canvas. The current run id is tracked by dfApplyRunState; falls back
+// to the last run summary if needed.
+async function composerStopRun() {
+  const runId = window._composerActiveRunId
+    || (window._lastRunSummary && window._lastRunSummary.run_id);
+  if (!runId) {
+    if (window.Toast) Toast.warn('No active run', 'Start a run first.');
+    return;
+  }
+  if (!confirm('Stop this run? The engine halts at the next step boundary; the in-flight step finishes first.')) return;
+  const btn = document.getElementById('composer-stop-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '◼ Stopping…'; }
+  try {
+    const r = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (window.Toast) Toast.info('Stop requested', 'Run will halt after the current step.');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '◼ Stop'; }
+    if (window.Toast) Toast.danger('Stop failed', String(e));
+  }
+}
+window.composerStopRun = composerStopRun;
 
 /* ══════════════════════════════════════════════════════════════════
    WORKFLOW INDEX — categorized catalogue + import/export bundles.
