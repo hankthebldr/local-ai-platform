@@ -19515,7 +19515,20 @@ const RunsTab = (function () {
 
   function pivotContextGraph() {
     closeStepDetail();
-    switchTab('graph');
+    // The knowledge graph (#graph-svg) lives in the research / Skill-Lab
+    // tab — there is no standalone 'graph' tab anymore, so switchTab('graph')
+    // null-threw on getElementById('tab-graph') and the pivot did nothing.
+    // Route to the tab that actually hosts the graph (matching pivotResearch),
+    // then (re)load the graph data and bring the panel into view.
+    switchTab('research');
+    setTimeout(() => {
+      try { if (typeof loadGraphData === 'function') loadGraphData(); } catch (_) {}
+      const g = document.querySelector('#tab-research .graph-panel')
+        || document.getElementById('graph-svg');
+      if (g && g.scrollIntoView) {
+        try { g.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+      }
+    }, 250);
   }
 
   function pivotNewAgent() {
