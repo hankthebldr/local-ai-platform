@@ -3582,6 +3582,11 @@ textarea.composer-desc-area {
   overflow: visible;
 }
 .drawflow .drawflow-node.selected {
+  /* Drawflow's vendor CSS sets `.drawflow-node.selected{background:red}`,
+     which leaks a bright-red/orange fill behind the card and makes the node
+     text unreadable. Keep the normal panel background; the selection cue is
+     the cyan border + glow below. */
+  background: var(--bg-panel);
   border-color: var(--cyan);
   box-shadow: 0 4px 18px rgba(0, 220, 240, 0.35), var(--glow-cyan);
 }
