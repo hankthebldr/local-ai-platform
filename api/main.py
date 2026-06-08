@@ -25,6 +25,7 @@ from .routers import (
     graph,
     workflows,
     workflow_index,
+    composer,
     api_keys,
     plugins,
     mcp,
@@ -307,6 +308,7 @@ app.include_router(exports.router)
 app.include_router(graph.router)
 app.include_router(workflows.router)
 app.include_router(workflow_index.router)
+app.include_router(composer.router)
 app.include_router(api_keys.router)
 app.include_router(plugins.router)
 app.include_router(mcp.router)

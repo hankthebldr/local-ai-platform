@@ -4778,6 +4778,274 @@ textarea.composer-desc-area {
     min-height: 0;
   }
 }
+
+/* ── Chat-led composer split ──────────────────────────────────────────
+   The chat dock (column 1) is the primary surface; the workflow "spine"
+   (column 3) holds the canvas + workstream and stays dormant until a
+   workflow is primed. The 8px middle column is the drag divider. Children
+   keep their DOM order — explicit grid-column/grid-row place them, so the
+   large chat-dock block never moves. */
+.composer-split {
+  display: grid;
+  grid-template-columns: var(--chat-frac, 62%) 8px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: clamp(520px, calc(100vh - 200px), 1600px);
+}
+.composer-split > .agent-chat-dock      { grid-column: 1; grid-row: 1 / 3; margin-top: 0; min-height: 0; max-height: clamp(520px, calc(100vh - 200px), 1600px); }
+.composer-split > #composer-divider     { grid-column: 2; grid-row: 1 / 3; }
+.composer-split > .composer-grid        { grid-column: 3; grid-row: 1; min-height: 0; }
+.composer-split > .composer-workstream  { grid-column: 3; grid-row: 2; }
+.composer-split > #composer-spine-dormant { grid-column: 3; grid-row: 1 / 3; }
+
+.composer-divider {
+  cursor: col-resize;
+  position: relative;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.15s ease;
+}
+.composer-divider::before { content: ""; position: absolute; inset: 0 -6px; } /* fat hit target */
+.composer-divider::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 2px; height: 28px; transform: translate(-50%, -50%);
+  background: var(--text-muted); border-radius: 999px; opacity: 0.5;
+}
+.composer-divider:hover,
+.composer-split.is-dragging > .composer-divider { background: var(--accent-dim); }
+
+/* Dormant vs primed */
+.composer-split:not(.is-primed) > .composer-grid,
+.composer-split:not(.is-primed) > .composer-workstream { display: none; }
+.composer-split.is-primed > #composer-spine-dormant { display: none; }
+
+.composer-spine-dormant {
+  display: flex; align-items: center; justify-content: center;
+  border: 1px dashed var(--border); border-radius: 10px;
+  background: var(--panel, rgba(255,255,255,0.02));
+  padding: 24px; min-height: 0;
+}
+.spine-dormant-inner { text-align: center; max-width: 320px; }
+.spine-dormant-flow { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 18px; opacity: 0.8; }
+.spine-dormant-arrow { color: var(--text-muted); font-size: 0.9rem; }
+.spine-dormant-title { font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
+.spine-dormant-sub { font-size: 0.7rem; line-height: 1.6; color: var(--text-muted); margin-bottom: 16px; }
+
+/* Spine collapsed → full-chat */
+.composer-split.spine-collapsed { grid-template-columns: 1fr 0 0; column-gap: 0; }
+.composer-split.spine-collapsed > #composer-divider,
+.composer-split.spine-collapsed > .composer-grid,
+.composer-split.spine-collapsed > .composer-workstream,
+.composer-split.spine-collapsed > #composer-spine-dormant { display: none; }
+
+/* During drag: kill selection + canvas pointer noise */
+.composer-split.is-dragging { user-select: none; }
+.composer-split.is-dragging #drawflow-canvas { pointer-events: none; }
+
+/* Management drawer — recedes the platform-management surfaces */
+.composer-mgmt-drawer { margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel, rgba(255,255,255,0.015)); }
+.composer-mgmt-summary { cursor: pointer; list-style: none; padding: 8px 14px; font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); user-select: none; }
+.composer-mgmt-summary::-webkit-details-marker { display: none; }
+.composer-mgmt-summary::before { content: "\25B8  "; color: var(--text-dim); }
+.composer-mgmt-drawer[open] > .composer-mgmt-summary::before { content: "\25BE  "; }
+.composer-mgmt-drawer[open] > .composer-mgmt-summary { border-bottom: 1px solid var(--border); color: var(--text-dim); }
+.composer-mgmt-drawer > .composer-project-bar { margin: 12px; }
+.composer-mgmt-drawer > .composer-toolbar { margin: 12px; }
+
+/* Responsive: stack chat over spine */
+@media (max-width: 900px) {
+  .composer-split {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    min-height: 0;
+  }
+  .composer-split > .agent-chat-dock      { grid-column: 1; grid-row: 1; max-height: none; }
+  .composer-split > #composer-divider     { display: none; }
+  .composer-split > #composer-spine-dormant,
+  .composer-split > .composer-grid        { grid-column: 1; grid-row: 2; }
+  .composer-split > .composer-workstream  { grid-column: 1; grid-row: 3; }
+}
+
+/* ══ BOOT SEQUENCE — chat→workflow handoff (the flagship "Promote") ══════
+   Concept: the request "compiles"; the kernel brings the operator's LOCAL
+   agents online. Everything is .bs-* namespaced and uses only Cortex tokens.
+   Three acts: (1) the dormant TTY affordance in the message footer,
+   (2) the self-typing "compile log" plan card, (3) the reveal as the dormant
+   spine ignites into a live DAG. --panw-orange appears nowhere. */
+
+/* ── Act 1: dispatch affordance (lives inside .msg-actions) ───────────── */
+.bs-dispatch {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-right: auto;                 /* push rating buttons to the right */
+  background: transparent; border: none; cursor: pointer;
+  font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.05em;
+  text-transform: lowercase;          /* TTY voice, distinct from UPPER rating btns */
+  color: var(--text-faint);
+  padding: 2px 2px 3px; position: relative;
+  transition: color var(--t-fast) var(--ease-out),
+              text-shadow var(--t-fast) var(--ease-out);
+}
+.bs-dispatch-glyph { color: var(--accent-dim); transition: color var(--t-fast) var(--ease-out); }
+.bs-dispatch-caret {
+  display: inline-block; width: 0.5ch; height: 0.85em;
+  border-bottom: 1px solid var(--accent-dim);
+  animation: blink-cursor 1.1s step-end infinite;
+  animation-play-state: paused;       /* static glyph at rest */
+}
+.bs-dispatch-label {
+  background: linear-gradient(90deg, transparent, var(--accent), transparent)
+              bottom / 0% 1px no-repeat;
+  transition: background-size var(--t-med) var(--ease-out);
+}
+.msg.assistant:hover .bs-dispatch,
+.bs-dispatch:focus-visible { color: var(--accent); text-shadow: 0 0 2px #00CC6680; outline: none; }
+.msg.assistant:hover .bs-dispatch .bs-dispatch-glyph,
+.bs-dispatch:focus-visible .bs-dispatch-glyph { color: var(--accent); }
+.msg.assistant:hover .bs-dispatch .bs-dispatch-caret,
+.bs-dispatch:focus-visible .bs-dispatch-caret { animation-play-state: running; }
+.msg.assistant:hover .bs-dispatch .bs-dispatch-label,
+.bs-dispatch:focus-visible .bs-dispatch-label { background-size: 100% 1px; }
+.bs-dispatch:focus-visible { box-shadow: 0 0 0 2px var(--accent-ghost); border-radius: 2px; }
+body.bs-show-hint .bs-dispatch:hover::after {
+  content: 'runs entirely on this machine';
+  position: absolute; left: 0; top: calc(100% + 4px);
+  font-size: 0.55rem; letter-spacing: 0.04em; color: var(--text-muted);
+  white-space: nowrap; pointer-events: none; z-index: 5;
+}
+
+/* emit pulse: a one-shot dot from the button toward the spine */
+.bs-emit-dot {
+  position: fixed; z-index: 60; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-bright); box-shadow: var(--glow-accent);
+  pointer-events: none; animation: bs-emit 520ms var(--ease-out) forwards;
+}
+@keyframes bs-emit {
+  0%   { transform: translate(0,0) scale(1); opacity: 0; }
+  12%  { opacity: 1; }
+  100% { transform: translate(var(--bs-emit-x), var(--bs-emit-y)) scale(0.4); opacity: 0; }
+}
+
+/* ── Act 2: the compile-log plan card ────────────────────────────────── */
+#bs-plan-card.bs-card {
+  grid-column: 3; grid-row: 1 / 3; align-self: start; z-index: 8;
+  max-width: 580px; width: 100%; padding: 18px 18px 14px;
+  background: var(--bg-panel); border: 1px solid var(--border-strong);
+  border-radius: 8px; font-family: var(--mono); color: var(--text);
+  box-shadow: 0 18px 50px -20px #000A, var(--glow-accent);
+  clip-path: inset(0 0 100% 0);
+  animation: bs-card-in var(--t-slow) var(--ease-out) forwards;
+  overflow: hidden;
+}
+#bs-plan-card.bs-powerdown { filter: brightness(0.7); animation: bs-card-out var(--t-med) var(--ease-in) forwards; }
+.bs-banner { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.bs-banner-caret { display: inline-block; width: 0.5ch; height: 0.9em;
+  border-bottom: 1px solid var(--accent); animation: blink-cursor 1.1s step-end infinite; }
+.bs-card.bs-powerdown .bs-banner-caret { animation-play-state: paused; }
+.bs-banner-title { color: var(--accent-bright); font-size: 0.7rem; letter-spacing: 0.06em; }
+.bs-host-chip { margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.56rem; color: var(--accent-dim); letter-spacing: 0.05em;
+  border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
+
+.bs-stanza { display: flex; gap: 10px; align-items: baseline;
+  padding: 6px 0; border-bottom: 1px dashed var(--border);
+  opacity: 0; transform: translateY(6px);
+  animation: bs-rise var(--t-med) var(--ease-out) forwards;
+  animation-delay: calc(180ms + var(--bs-i) * 60ms);
+}
+.bs-stanza-label { color: var(--text-dim); text-transform: uppercase;
+  letter-spacing: var(--tracking-caps); font-size: 0.55rem; min-width: 64px; }
+.bs-stanza-val { flex: 1; color: var(--text); font-size: 0.7rem; line-height: 1.5; outline: none; }
+.bs-stanza-val:focus { box-shadow: inset 0 -1px 0 var(--accent-dim); }
+.bs-stanza-val:empty::before { content: attr(data-placeholder); color: var(--text-faint); }
+
+.bs-roster { margin: 12px 0 10px; position: relative; }
+.bs-probe { position: relative; display: grid;
+  grid-template-columns: auto auto 1fr auto;   /* stamp+name+bind | spacer | model */
+  align-items: center; column-gap: 8px;
+  padding: 5px 0 5px 16px; min-height: 26px; font-size: 0.64rem; overflow: hidden; }
+.bs-probe-rail { position: absolute; left: 7px; top: -3px; bottom: -3px; width: 1px;
+  background: var(--accent-dim); transform: scaleY(0); transform-origin: top;
+  animation: bs-rail var(--t-med) var(--ease-out) forwards;
+  animation-delay: calc(440ms + var(--bs-i) * 140ms); }
+.bs-probe-stamp { color: var(--text-faint); }
+.bs-probe-glyph { position: absolute; left: 2px; color: var(--accent-dim); }
+.bs-probe-name  { color: var(--text); white-space: nowrap; }
+.bs-pill { font-size: 0.55rem; padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--border); letter-spacing: 0.04em; white-space: nowrap; }
+.bs-pill-role, .bs-pill-agent { color: var(--accent);   border-color: var(--accent-dim); }
+.bs-pill-plugin { color: var(--accent-2); border-color: var(--accent-2-dim); }
+.bs-pill-mcp { color: var(--accent-2-bright); border-color: var(--accent-2-dim); }
+.bs-pill-mcp::before { content: '\26A1 '; }
+.bs-probe-ok { color: var(--accent-dim); opacity: 0; }
+.bs-model { justify-self: end; display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text); font-size: 0.62rem; opacity: 0; white-space: nowrap; }
+.bs-model-name { color: var(--text-dim); }
+.bs-model-host { color: var(--accent-dim); }
+/* type-on mask + delayed resolve */
+.bs-probe::before { content: ''; position: absolute; inset: 0 0 0 16px; background: var(--bg-panel);
+  transform-origin: right; transform: scaleX(1);
+  animation: bs-wipe var(--t-med) var(--ease-out) forwards;
+  animation-delay: calc(440ms + var(--bs-i) * 140ms); }
+.bs-probe-ok, .bs-probe .bs-model {
+  animation: bs-resolve var(--t-fast) var(--ease-out) forwards;
+  animation-delay: calc(440ms + var(--bs-i) * 140ms + var(--t-med) + 90ms); }
+
+.bs-seal-row { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px;
+  padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.6rem; }
+.bs-seal { letter-spacing: var(--tracking-caps); padding: 2px 8px; border-radius: 2px;
+  border: 1px solid var(--warn); color: var(--warn); }
+.bs-seal[data-state="signed"] { border-color: var(--accent-dim); color: var(--accent); box-shadow: 0 0 2px #00CC6680; }
+.bs-seal.bs-stamping { animation: bs-stamp 220ms cubic-bezier(.2,.8,.2,1); position: relative; }
+.bs-seal.bs-stamping::after { content: ''; position: absolute; inset: -2px; border: 1px solid var(--accent);
+  border-radius: 2px; animation: bs-ring 360ms var(--ease-out) forwards; }
+.bs-tally { color: var(--text-muted); }
+.bs-tally b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.bs-lock { margin-left: auto; }
+
+.bs-cmdbar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.bs-cmd { font-family: var(--mono); font-size: 0.62rem; cursor: pointer; }
+.bs-cmd-cancel, .bs-cmd-recompile { background: transparent; border: 1px solid var(--border);
+  color: var(--text-dim); border-radius: 2px; padding: 4px 10px; }
+.bs-cmd-recompile { margin-right: auto; }
+.bs-cmd-recompile:hover, .bs-cmd-cancel:hover { color: var(--text); border-color: var(--border-strong); }
+.bs-card.bs-compiling .bs-roster, .bs-card.bs-compiling .bs-seal-row { opacity: 0.4; }
+.bs-compiling-note { font-size: 0.58rem; color: var(--text-muted); padding: 6px 0; }
+
+/* ── Act 3: reveal — anchors ignite, nodes stream in ─────────────────── */
+.wf-anchor.bs-ignite { transition: border-color var(--t-med) var(--ease-out),
+  background var(--t-med) var(--ease-out), box-shadow var(--t-med) var(--ease-out); }
+.wf-anchor-start.bs-ignite { border-color: var(--accent); background: var(--accent-ghost); box-shadow: 0 0 2px #00CC6680; }
+.wf-anchor-end.bs-ignite { border-color: var(--cyan); box-shadow: 0 0 2px #00CC6680; }
+.drawflow .drawflow-node.bs-node-enter {
+  clip-path: inset(0 50% 0 50%); transform: translateY(8px); opacity: 0;
+  transition: clip-path var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out), opacity var(--t-med) var(--ease-out);
+  transition-delay: calc(var(--bs-i) * 110ms); }
+.drawflow .drawflow-node.bs-node-enter.bs-node-in { clip-path: inset(0 0 0 0); transform: translateY(0); opacity: 1; }
+.composer-split.bs-current .drawflow .connection .main-path {
+  stroke: var(--accent-bright); stroke-dasharray: 8 10; animation: bs-current 600ms linear 1; }
+.composer-split.bs-booting #composer-divider { pointer-events: none; }
+
+@keyframes bs-wipe    { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes bs-resolve { to { opacity: 1; } }
+@keyframes bs-rise    { to { opacity: 1; transform: translateY(0); } }
+@keyframes bs-rail    { to { transform: scaleY(1); } }
+@keyframes bs-card-in { to { clip-path: inset(0 0 0 0); } }
+@keyframes bs-card-out{ to { clip-path: inset(0 0 100% 0); opacity: 0.5; } }
+@keyframes bs-stamp   { 0% { transform: scale(1.15); } 100% { transform: scale(1); } }
+@keyframes bs-ring    { from { transform: scale(1); opacity: 0.8; } to { transform: scale(1.6); opacity: 0; } }
+@keyframes bs-current { from { stroke-dashoffset: 36; } to { stroke-dashoffset: 0; } }
+
+@media (max-width: 900px) {
+  #bs-plan-card.bs-card { grid-column: 1; grid-row: 2; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-dispatch-caret, .bs-banner-caret { animation: none; opacity: 1; }
+  .msg.assistant:hover .bs-dispatch .bs-dispatch-label { background-size: 100% 1px; }
+}
+
 .composer-canvas-panel { min-height: clamp(520px, calc(100vh - 320px), 1600px) !important; }
 .composer-left, .composer-center, .composer-right { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .composer-left-panel { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; min-height: 0; }
@@ -4840,6 +5108,13 @@ textarea.composer-desc-area {
 }
 .canvas-ctrl:hover { color: var(--accent); background: var(--accent-ghost); }
 .canvas-ctrl:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Prominent Run — the "output-ready" affordance on the primed canvas. */
+.canvas-ctrl-run {
+  width: auto; padding: 0 10px; font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid var(--accent-dim);
+}
+.canvas-ctrl-run:hover { color: var(--bg-deep); background: var(--accent); box-shadow: var(--glow-accent); }
 .canvas-ctrl-divider {
   width: 1px;
   height: 14px;
@@ -5767,6 +6042,13 @@ textarea.composer-desc-area {
        tab id is preserved for routing back-compat. -->
   <div class="tab-content active" id="tab-dashboard">
 
+    <!-- Platform management drawer — projects, import/export, and the
+         workflow metadata/save toolbar recede here (collapsed by default)
+         so the chat + workflow own the screen. Plain <details> = free
+         collapse, keyboard-safe, no JS. -->
+    <details class="composer-mgmt-drawer">
+      <summary class="composer-mgmt-summary">&#x2699; Workflow admin &middot; projects &middot; import / export / save</summary>
+
     <!-- Project context bar — pin the composer to a project so saves /
          exports include the right workflows, agents, MCP refs, and chats. -->
     <div class="composer-project-bar panel">
@@ -5885,6 +6167,36 @@ textarea.composer-desc-area {
                 style="border-color:var(--red,#ff5252);color:var(--red,#ff5252)" hidden>◼ Stop</button>
       </div>
     </div>
+    </details>
+
+    <!-- Chat-led split: chat pane (left) &middot; workflow spine (right).
+         CSS grid placement (.composer-split) puts the chat dock in column 1
+         and the composer grid + workstream in column 3, so the large
+         chat-dock block does not move in the DOM — only wrappers are added. -->
+    <div class="composer-split" id="composer-split">
+
+      <!-- Draggable divider between chat and spine. -->
+      <div class="composer-divider" id="composer-divider" role="separator"
+           tabindex="0" aria-orientation="vertical" aria-label="Resize chat / workflow"
+           aria-valuemin="40" aria-valuemax="85" aria-valuenow="62"
+           title="Drag to resize &middot; double-click or Home to reset &middot; ←/→ to nudge"></div>
+
+      <!-- Dormant spine — shown until a workflow is primed (.is-primed on
+           #composer-split). Reuses the .wf-anchor grammar from the live
+           canvas so the ghost reads as the same START &rarr; END the canvas
+           will draw once the work is handed to the agents. -->
+      <div class="composer-spine-dormant" id="composer-spine-dormant">
+        <div class="spine-dormant-inner">
+          <div class="spine-dormant-flow" aria-hidden="true">
+            <div class="wf-anchor wf-anchor-start"><div class="wf-anchor-label">&#9654; START</div><div class="wf-anchor-sub">seed input</div></div>
+            <div class="spine-dormant-arrow">&rarr;</div>
+            <div class="wf-anchor wf-anchor-end"><div class="wf-anchor-label">&#9632; END</div><div class="wf-anchor-sub">deliverable</div></div>
+          </div>
+          <div class="spine-dormant-title">No workflow yet</div>
+          <div class="spine-dormant-sub">Talk it through on the left. When you&rsquo;re ready, hand the work to your local agents &mdash; it takes shape here.</div>
+          <button type="button" class="action-btn accent spine-dormant-cta" onclick="document.getElementById('prompt').focus()">Start in chat &uarr;</button>
+        </div>
+      </div>
 
     <!-- Main composer grid: palette + canvas + right rail -->
     <div class="composer-grid">
@@ -5934,6 +6246,8 @@ textarea.composer-desc-area {
           <!-- Floating zoom + maximize controls. Positioned absolute over
                the canvas so they don't reflow when the panel fullscreens. -->
           <div class="composer-canvas-controls" role="toolbar" aria-label="Canvas controls">
+            <button type="button" class="canvas-ctrl canvas-ctrl-run" onclick="dfRunWorkflowLive()" title="Run this workflow now — live progress streams in the workstream below" aria-label="Run workflow">▶ Run</button>
+            <span class="canvas-ctrl-divider" aria-hidden="true"></span>
             <button type="button" class="canvas-ctrl" onclick="dfZoomOut()" title="Zoom out (or scroll down on canvas)" aria-label="Zoom out">−</button>
             <button type="button" class="canvas-ctrl" onclick="dfZoomReset()" title="Reset zoom (100%)" aria-label="Reset zoom">⟲</button>
             <button type="button" class="canvas-ctrl" onclick="dfZoomIn()" title="Zoom in (or scroll up on canvas)" aria-label="Zoom in">+</button>
@@ -5959,6 +6273,9 @@ textarea.composer-desc-area {
             <div class="df-config-popup-head" id="df-config-popup-head">
               <span class="df-config-popup-grip" aria-hidden="true">⋮⋮</span>
               <span class="panel-label" id="df-config-popup-title" style="margin:0;flex:1">Step Config</span>
+              <button type="button" class="df-config-popup-btn" onclick="composerTestStepInChat()"
+                      style="width:auto;padding:0 8px;font-size:0.55rem;letter-spacing:0.04em;color:var(--accent)"
+                      title="Test just this step in the chat — type a message and see only this step's reply, on its local model">▶ test in chat</button>
               <button type="button" class="df-config-popup-btn" id="df-config-popup-dock"
                       onclick="toggleStepConfigDock()"
                       title="Dock to the bottom workstream tab instead of floating">⤓</button>
@@ -6189,6 +6506,7 @@ textarea.composer-desc-area {
         </div>
       </div>
     </div>
+    </div><!-- /.composer-split -->
 
     <!-- Hidden legacy mount point — kept so old code that selects
          #step-config-panel directly doesn't break. -->
@@ -8400,6 +8718,21 @@ function composerEnterStepEngage(nodeId) {
   if (badge && idEl) {
     idEl.textContent = dfNodeData[nodeId].id || ('node ' + nodeId);
     badge.hidden = false;
+  }
+}
+
+// Explicit "test in chat" — engage the selected step AND focus the chat input
+// so the operator can immediately type a message and see only this step's reply
+// (routes to /api/workflows/test-step via the sendMessage step-engage branch).
+function composerTestStepInChat() {
+  const nodeId = (typeof dfSelectedNodeId !== 'undefined' && dfSelectedNodeId != null)
+    ? dfSelectedNodeId : window._composerEngagedNodeId;
+  if (nodeId == null) return;
+  composerEnterStepEngage(nodeId);
+  const p = document.getElementById('prompt');
+  if (p) {
+    p.focus();
+    p.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 }
 
@@ -15789,6 +16122,17 @@ window.ChatRating = (function () {
     const metaAttr = encodeURIComponent(JSON.stringify(meta));
     return (
       '<div class="msg-actions" data-msg-id="' + msgId + '" data-msg-meta="' + metaAttr + '">' +
+        // Boot-sequence dispatch — the dormant TTY that hands this answer to
+        // the operator's LOCAL agents. margin-right:auto pushes the rating
+        // buttons to the right; reuses the .msg-actions hover/opacity ramp.
+        '<button type="button" class="bs-dispatch"' +
+                ' aria-label="Hand this answer to your local agents to run"' +
+                ' title="Resolve this into a local plan — steps, agents, and the models they run on. Nothing leaves this machine."' +
+                ' onclick="BootSequence.dispatch(\'' + msgId + '\', this)">' +
+          '<span class="bs-dispatch-glyph" aria-hidden="true">&#9656;</span>' +
+          '<span class="bs-dispatch-label">run this with my agents</span>' +
+          '<span class="bs-dispatch-caret" aria-hidden="true"></span>' +
+        '</button>' +
         '<button type="button" class="msg-rating-btn up" title="Rate this response good"' +
                 ' onclick="ChatRating.rate(\'' + msgId + '\', \'up\', this)">' +
           '<span aria-hidden="true">▲</span>' +
@@ -17113,6 +17457,7 @@ const ComposerView = (function () {
     // Boot the drawflow editor + palette regardless of whether the user
     // had previously visited the legacy Workflows tab.
     try { dfInitEditor(); dfInitPalette(); } catch (e) { console.warn(e); }
+    try { ComposerSplit.init(); } catch (_) {}
     updateCanvasEmptyState();
     // Show the begin/end boundary immediately, even on an empty canvas.
     if (typeof dfScheduleAnchorRefresh === 'function') dfScheduleAnchorRefresh();
@@ -17134,6 +17479,13 @@ const ComposerView = (function () {
     if (!panel) return;
     const hasNodes = Object.keys(dfNodeData || {}).length > 0;
     panel.classList.toggle('has-nodes', hasNodes);
+    // Spine follows the canvas: dormant ghost when empty, live when primed.
+    // During a BootSequence reveal we hold it primed (window._bsPriming) so
+    // composerNewWorkflow()'s transient 0-node window can't hide the canvas
+    // mid-build — drawflow must lay nodes into a visible, sized canvas.
+    if (typeof ComposerSplit !== 'undefined') {
+      try { ComposerSplit.setSpinePrimed(window._bsPriming ? true : hasNodes); } catch (_) {}
+    }
   }
 
   return { init, updateCanvasEmptyState };
@@ -18078,6 +18430,428 @@ function toggleComposerWorkstream(force) {
   if (btn) btn.textContent = willCollapse ? '▴' : '▾';
 }
 
+// ── ComposerSplit ────────────────────────────────────────────────────
+// Owns the chat | workflow-spine layout: the draggable divider (persists
+// the chat fraction), full-chat collapse, and the dormant↔primed swap.
+// Pure layout — no behaviour change to chat or the canvas.
+const ComposerSplit = (function () {
+  const KEY = 'enclave.composer.split';
+  const MIN = 40, MAX = 85;          // chat-pane width as a % of the split
+  let _wired = false;
+
+  function _el() { return document.getElementById('composer-split'); }
+
+  function _applyFrac(pct) {
+    const el = _el(); if (!el) return;
+    const clamped = Math.max(MIN, Math.min(MAX, pct));
+    el.style.setProperty('--chat-frac', clamped + '%');
+    const divider = document.getElementById('composer-divider');
+    if (divider) divider.setAttribute('aria-valuenow', String(Math.round(clamped)));
+  }
+
+  function init() {
+    const el = _el(); if (!el || _wired) return;
+    _wired = true;
+    const saved = parseFloat(localStorage.getItem(KEY));
+    if (!isNaN(saved)) _applyFrac(saved);
+    _wireDrag();
+  }
+
+  function _wireDrag() {
+    const el = _el(); const divider = document.getElementById('composer-divider');
+    if (!el || !divider) return;
+
+    function onDown(e) {
+      // Only the left column is draggable; ignore when collapsed/stacked.
+      if (el.classList.contains('spine-collapsed')) return;
+      if (window.matchMedia('(max-width: 900px)').matches) return;
+      e.preventDefault();
+      el.classList.add('is-dragging');
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp, { once: true });
+    }
+    function onMove(e) {
+      const rect = el.getBoundingClientRect();
+      if (!rect.width) return;
+      _applyFrac(((e.clientX - rect.left) / rect.width) * 100);
+    }
+    function onUp() {
+      el.classList.remove('is-dragging');
+      window.removeEventListener('pointermove', onMove);
+      const cur = el.style.getPropertyValue('--chat-frac').replace('%', '').trim();
+      if (cur) localStorage.setItem(KEY, cur);
+    }
+    function _persist() {
+      const cur = el.style.getPropertyValue('--chat-frac').replace('%', '').trim();
+      if (cur) localStorage.setItem(KEY, cur);
+    }
+    // Keyboard resize for the role="separator" (a11y): ←/→ nudge, Home resets.
+    function onKey(e) {
+      if (el.classList.contains('spine-collapsed')) return;
+      let f = parseFloat(el.style.getPropertyValue('--chat-frac'));
+      if (isNaN(f)) f = 62;
+      if (e.key === 'ArrowLeft') f -= 3;
+      else if (e.key === 'ArrowRight') f += 3;
+      else if (e.key === 'Home') { f = 62; localStorage.removeItem(KEY); _applyFrac(f); return; }
+      else return;
+      e.preventDefault();
+      _applyFrac(f);
+      _persist();
+    }
+    divider.addEventListener('pointerdown', onDown);
+    divider.addEventListener('keydown', onKey);
+    divider.addEventListener('dblclick', () => { _applyFrac(62); localStorage.removeItem(KEY); });
+  }
+
+  // Swap the spine between its dormant ghost and the live canvas/workstream.
+  function setSpinePrimed(primed) {
+    const el = _el(); if (!el) return;
+    el.classList.toggle('is-primed', !!primed);
+    if (primed) el.classList.remove('spine-collapsed');
+  }
+
+  // Collapse the spine entirely → full-chat (toggle).
+  function toggleSpine(force) {
+    const el = _el(); if (!el) return;
+    el.classList.toggle('spine-collapsed', force === undefined ? undefined : !force);
+  }
+
+  function focusChat() {
+    const p = document.getElementById('prompt');
+    if (p) { p.focus(); p.scrollIntoView({ block: 'nearest' }); }
+  }
+
+  return { init, setSpinePrimed, toggleSpine, focusChat };
+})();
+
+// ── BootSequence ──────────────────────────────────────────────────────
+// The flagship "Promote": hand a chat answer to the operator's LOCAL agents.
+// Act 1 (affordance) lives in .msg-actions; this module owns Act 2 (the
+// self-typing "compile log" plan card) and Act 3 (the reveal as the dormant
+// spine ignites into a live DAG). It calls the local /api/composer endpoints
+// to capture a spec + scaffold a definition, then primes the spine through the
+// shared composerLoadDefinition() — the same path that loads a saved workflow.
+window.BootSequence = (function () {
+  let _plan = { spec: null, scaffold: null };
+  let _escHandler = null;
+
+  function _reduced() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function _thread() {
+    const hist = (typeof chatHistory !== 'undefined' && Array.isArray(chatHistory)) ? chatHistory : [];
+    return hist
+      .filter(m => m && (m.content || '').trim())
+      .map(m => ({ role: m.role || 'user', content: String(m.content) }));
+  }
+
+  async function _post(url, body) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+
+  function _emit(btn) {
+    if (_reduced() || !btn) return Promise.resolve();
+    const split = document.getElementById('composer-split');
+    if (!split) return Promise.resolve();
+    const b = btn.getBoundingClientRect();
+    const target = document.getElementById('composer-spine-dormant') || split;
+    const s = target.getBoundingClientRect();
+    const dot = document.createElement('div');
+    dot.className = 'bs-emit-dot';
+    dot.style.left = b.right + 'px';
+    dot.style.top = (b.top + b.height / 2) + 'px';
+    dot.style.setProperty('--bs-emit-x', (s.left + s.width / 2 - b.right) + 'px');
+    dot.style.setProperty('--bs-emit-y', (s.top + 60 - (b.top + b.height / 2)) + 'px');
+    document.body.appendChild(dot);
+    return new Promise(res => {
+      dot.addEventListener('animationend', () => { dot.remove(); res(); }, { once: true });
+      setTimeout(() => { dot.remove(); res(); }, 700);
+    });
+  }
+
+  async function dispatch(msgId, btn) {
+    if (document.getElementById('bs-plan-card')) return; // one plan at a time
+    const split = document.getElementById('composer-split');
+    if (!split) return;
+    const messages = _thread();
+    if (!messages.length) {
+      if (window.Toast) Toast.warn('Nothing to plan yet', 'Chat first, then hand it to your agents.');
+      return;
+    }
+    try { localStorage.setItem('enclave.bs.hinted', '1'); } catch (_) {}
+    document.body.classList.remove('bs-show-hint');
+
+    await _emit(btn);
+    _renderShell(split);
+    try {
+      const spec = await _post('/api/composer/capture-spec', { messages });
+      _plan.spec = spec;
+      const scaf = await _post('/api/composer/scaffold', {
+        goal: spec.goal, inputs: spec.inputs, checks: spec.checks,
+      });
+      _plan.scaffold = scaf;
+      _fill(spec, scaf);
+    } catch (e) {
+      _error(e);
+    }
+  }
+
+  function _renderShell(split) {
+    const card = document.createElement('div');
+    card.id = 'bs-plan-card';
+    card.className = 'bs-card panel bs-compiling';
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-label', 'Compiled plan');
+    card.innerHTML =
+      '<span class="corner-tr" aria-hidden="true"></span><span class="corner-bl" aria-hidden="true"></span>' +
+      '<div class="bs-banner">' +
+        '<span class="bs-banner-caret" aria-hidden="true"></span>' +
+        '<span class="bs-banner-title">enclave · compiling plan</span>' +
+        '<span class="bs-host-chip"><span class="status-pip online"></span>localhost · 0 cloud calls</span>' +
+      '</div>' +
+      '<div class="bs-body" id="bs-body">' +
+        '<div class="bs-compiling-note">resolving your request into a local plan…</div>' +
+      '</div>' +
+      '<div class="bs-cmdbar">' +
+        '<button type="button" class="bs-cmd bs-cmd-recompile" onclick="BootSequence.recompile()" disabled>recompile ⟳</button>' +
+        '<button type="button" class="bs-cmd bs-cmd-cancel" onclick="BootSequence.cancel()">keep talking</button>' +
+        '<button type="button" class="bs-cmd bs-cmd-confirm action-btn accent" onclick="BootSequence.confirm()" disabled>sign &amp; bring online ↵</button>' +
+      '</div>';
+    split.appendChild(card);
+    _attachEsc();
+  }
+
+  function _esc(text) {
+    const d = document.createElement('div');
+    d.textContent = text == null ? '' : String(text);
+    return d.innerHTML;
+  }
+
+  function _fill(spec, scaf) {
+    const card = document.getElementById('bs-plan-card');
+    if (!card) return;
+    card.classList.remove('bs-compiling');
+    const title = card.querySelector('.bs-banner-title');
+    if (title) title.textContent = 'enclave · ' + (scaf.source === 'template' ? 'matched a local template' : 'plan compiled');
+
+    const body = card.querySelector('#bs-body');
+    const inputsText = (spec.inputs || []).map(i => i.key).join(', ');
+    const checksText = (spec.checks || []).join(' · ');
+    const bindings = scaf.bindings || [];
+    const models = new Set(bindings.map(b => b.model).filter(Boolean));
+    const N = bindings.length;
+
+    let html =
+      _stanza(0, 'goal', 'Goal', _esc(spec.goal), 'what should this accomplish') +
+      _stanza(1, 'inputs', 'Inputs', _esc(inputsText), 'no run-time inputs') +
+      _stanza(2, 'checks', 'Checks', _esc(checksText), 'no explicit checks');
+
+    html += '<div class="bs-roster" aria-live="polite">';
+    bindings.forEach((b, i) => {
+      const stamp = '[ 0.' + String((i * 7 + 12) % 100).padStart(2, '0') + ' ]';
+      const role = b.role || 'reasoning';
+      html +=
+        '<div class="bs-probe" style="--bs-i:' + i + '" data-kind="role">' +
+          '<span class="bs-probe-rail" aria-hidden="true"></span>' +
+          '<span class="bs-probe-glyph" aria-hidden="true">◦</span>' +
+          '<span class="bs-probe-name">' + _esc(b.name || ('step ' + (i + 1))) + '</span>' +
+          '<span class="bs-probe-bind"><span class="bs-pill bs-pill-role">ROLE · ' + _esc(role) + '</span></span>' +
+          '<span class="bs-probe-ok" aria-hidden="true">→ ok</span>' +
+          '<span class="bs-model"><span class="status-pip online"></span>' +
+            '<span class="bs-model-name">@ ' + _esc(b.model || 'local model') + '</span>' +
+            '<span class="bs-model-host">· local</span>' +
+          '</span>' +
+        '</div>';
+    });
+    html += '</div>';
+
+    html +=
+      '<div class="bs-seal-row">' +
+        '<span class="bs-seal" data-state="unsigned">UNSIGNED</span>' +
+        '<span class="bs-tally"><b data-count>0</b> local models · 0 calls leave this machine</span>' +
+        '<span class="bs-lock" aria-hidden="true">🔓</span>' +
+      '</div>';
+
+    body.innerHTML = html;
+
+    const recompileBtn = card.querySelector('.bs-cmd-recompile');
+    const confirmBtn = card.querySelector('.bs-cmd-confirm');
+    if (recompileBtn) recompileBtn.disabled = false;
+    if (confirmBtn) confirmBtn.disabled = false;
+
+    _countUp(card, models.size || N, N);
+
+    const firstVal = card.querySelector('.bs-stanza-val');
+    if (firstVal) { try { firstVal.focus(); } catch (_) {} }
+  }
+
+  function _stanza(i, field, label, val, placeholder) {
+    return '<div class="bs-stanza" data-field="' + field + '" style="--bs-i:' + i + '">' +
+      '<span class="bs-stanza-label">[ ' + label.toLowerCase() + ' ]</span>' +
+      '<span class="bs-stanza-val" contenteditable="true" role="textbox" aria-label="' + label + '" ' +
+        'data-placeholder="' + placeholder + '">' + val + '</span>' +
+    '</div>';
+  }
+
+  function _countUp(card, target, steps) {
+    const el = card.querySelector('.bs-tally b');
+    if (!el) return;
+    if (_reduced()) { el.textContent = String(target); return; }
+    const startDelay = 440 + Math.max(0, steps - 1) * 140 + 220 + 90;
+    setTimeout(() => {
+      const dur = 600; const t0 = performance.now();
+      function tick(now) {
+        const k = Math.min(1, (now - t0) / dur);
+        el.textContent = String(Math.round(k * target));
+        if (k < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }, startDelay);
+  }
+
+  function _error(e) {
+    const card = document.getElementById('bs-plan-card');
+    if (!card) return;
+    card.classList.remove('bs-compiling');
+    const body = card.querySelector('#bs-body');
+    if (body) body.innerHTML = '<div class="bs-compiling-note">Could not reach the local planner. ' +
+      _esc((e && e.message) ? e.message.slice(0, 160) : '') + '</div>';
+  }
+
+  // Read the (possibly edited) spec out of the card's contenteditable stanzas.
+  function _specFromCard(card) {
+    const goalEl = card.querySelector('[data-field="goal"] .bs-stanza-val');
+    const inputsEl = card.querySelector('[data-field="inputs"] .bs-stanza-val');
+    const checksEl = card.querySelector('[data-field="checks"] .bs-stanza-val');
+    const base = _plan.spec || { goal: '', inputs: [], checks: [] };
+    return {
+      goal: (goalEl ? goalEl.textContent : base.goal || '').trim(),
+      inputs: inputsEl
+        ? inputsEl.textContent.split(',').map(s => s.trim()).filter(Boolean).map(k => ({ key: k, description: '' }))
+        : (base.inputs || []),
+      checks: checksEl
+        ? checksEl.textContent.split(/[·\n;]/).map(s => s.trim()).filter(Boolean)
+        : (base.checks || []),
+    };
+  }
+
+  function _specDiffers(a, b) {
+    if (!b) return true;
+    if ((a.goal || '') !== (b.goal || '')) return true;
+    if ((a.inputs || []).map(i => i.key).join('|') !== (b.inputs || []).map(i => i.key).join('|')) return true;
+    if ((a.checks || []).join('|') !== (b.checks || []).join('|')) return true;
+    return false;
+  }
+
+  async function _rescaffold(spec) {
+    const card = document.getElementById('bs-plan-card');
+    if (card) card.classList.add('bs-compiling');
+    const scaf = await _post('/api/composer/scaffold', spec);
+    _plan.spec = spec;
+    _plan.scaffold = scaf;
+    _fill(spec, scaf);
+    return scaf;
+  }
+
+  async function recompile() {
+    const card = document.getElementById('bs-plan-card');
+    if (!card || !_plan.spec) return;
+    try { await _rescaffold(_specFromCard(card)); } catch (e) { _error(e); }
+  }
+
+  async function confirm() {
+    const card = document.getElementById('bs-plan-card');
+    const split = document.getElementById('composer-split');
+    if (!card || !split || !_plan.scaffold) return;
+
+    // If the operator edited the spec (goal / inputs / checks) since the last
+    // scaffold, re-scaffold so the edits actually shape the DAG — not just the
+    // goal, and not silently dropped.
+    const edited = _specFromCard(card);
+    if (_specDiffers(edited, _plan.spec)) {
+      try { await _rescaffold(edited); }
+      catch (e) { _error(e); return; }
+    }
+
+    const defn = _plan.scaffold.definition || {};
+    if (edited.goal) defn.description = edited.goal;
+
+    // STAMP — the sign gesture.
+    const seal = card.querySelector('.bs-seal');
+    if (seal) { seal.setAttribute('data-state', 'signed'); seal.textContent = 'SIGNED · LOCAL'; seal.classList.add('bs-stamping'); }
+    const lock = card.querySelector('.bs-lock'); if (lock) lock.textContent = '🔒';
+    _detachEsc();
+
+    const reduced = _reduced();
+    const begin = () => {
+      split.classList.add('bs-booting');
+      card.classList.add('bs-powerdown');
+      // Prime FIRST so the canvas is visible + sized before drawflow lays out
+      // nodes, and hold it primed across the build (the lock is read by
+      // updateCanvasEmptyState). Then build via the shared load path.
+      window._bsPriming = true;
+      if (typeof ComposerSplit !== 'undefined') ComposerSplit.setSpinePrimed(true);
+      composerLoadDefinition(defn);
+      if (typeof ComposerSplit !== 'undefined') ComposerSplit.setSpinePrimed(true);
+      window._bsPriming = false;
+      // Re-layout once more now the canvas is definitely visible + sized.
+      setTimeout(() => { try { if (typeof dfAutoLayout === 'function') dfAutoLayout(); } catch (_) {} }, 70);
+      _igniteAndStream(split);
+      const cleanup = () => {
+        card.remove();
+        split.classList.remove('bs-booting', 'bs-current');
+      };
+      setTimeout(cleanup, reduced ? 0 : 320);
+    };
+    if (reduced) begin(); else setTimeout(begin, 180);
+  }
+
+  function _igniteAndStream(split) {
+    split.querySelectorAll('.wf-anchor-start, .wf-anchor-end').forEach(a => a.classList.add('bs-ignite'));
+    const nodes = Array.from(split.querySelectorAll('#drawflow-canvas .drawflow-node'))
+      .filter(n => !n.querySelector('.wf-anchor'));
+    if (_reduced() || !nodes.length) return;
+    nodes.forEach((n, i) => { n.style.setProperty('--bs-i', i); n.classList.add('bs-node-enter'); });
+    setTimeout(() => nodes.forEach(n => n.classList.add('bs-node-in')), 90);
+    const last = Math.max(0, nodes.length - 1) * 110 + 220 + 90;
+    setTimeout(() => {
+      split.classList.add('bs-current');
+      setTimeout(() => split.classList.remove('bs-current'), 700);
+    }, last);
+  }
+
+  function cancel() {
+    const card = document.getElementById('bs-plan-card');
+    if (card) card.remove();
+    _detachEsc();
+    if (typeof ComposerSplit !== 'undefined') ComposerSplit.focusChat();
+  }
+
+  function _attachEsc() {
+    _escHandler = (e) => { if (e.key === 'Escape') cancel(); };
+    document.addEventListener('keydown', _escHandler);
+  }
+  function _detachEsc() {
+    if (_escHandler) { document.removeEventListener('keydown', _escHandler); _escHandler = null; }
+  }
+
+  // One-time discoverability hint on the affordance.
+  try {
+    if (!localStorage.getItem('enclave.bs.hinted') && document.body) {
+      document.body.classList.add('bs-show-hint');
+    }
+  } catch (_) {}
+
+  return { dispatch, recompile, confirm, cancel };
+})();
+
 // Loaded-models popover (status strip chip). Hidden by default; the
 // chip click toggles. Pass `false` to force-close.
 function toggleLoadedModelsPopover(force) {
@@ -18249,16 +19023,22 @@ async function composerLoadById(wfId) {
     const r = await fetch(`/api/workflows/${encodeURIComponent(wfId)}`);
     if (!r.ok) { alert('Load failed: ' + (await r.text())); return; }
     const defn = await r.json();
-    // Re-use the YAML import path so node placement / connections work the
-    // same as a paste-import — fewest moving parts.
-    const text = jsyaml.dump(defn);
-    // Ensure the drawflow editor exists BEFORE the cleanup + node spawn
-    // path runs. composerNewWorkflow is a no-op when dfEditor is
-    // undefined, and dfAddNodeFromTemplate hard-requires it — so a
-    // workflow-index → "Open in Composer" click that happens before
-    // the operator has ever visited the Composer tab would silently
-    // produce zero nodes. ComposerView.init wires the editor + the
-    // palette and is idempotent.
+    if (!defn.id) defn.id = wfId;
+    composerLoadDefinition(defn);
+  } catch (e) { alert('Load error: ' + e.message); }
+}
+
+// Load a workflow-definition OBJECT directly onto the canvas. Shared by
+// composerLoadById's fetch path and the chat-led BootSequence scaffold, so a
+// scaffolded plan primes the spine through exactly the same code that loads a
+// saved workflow. Places step nodes, wires depends_on (or infers a linear
+// chain), restores the seed schema, draws START/END anchors, and lays out.
+function composerLoadDefinition(defn) {
+  defn = defn || {};
+  try {
+    // Ensure the drawflow editor exists BEFORE the cleanup + node spawn path
+    // runs (idempotent). A scaffold/open before the operator has ever visited
+    // the Composer tab would otherwise silently produce zero nodes.
     if (typeof ComposerView !== 'undefined' && ComposerView && ComposerView.init) {
       try { ComposerView.init(); } catch (_) {}
     } else if (typeof dfInitEditor === 'function') {
@@ -18267,7 +19047,7 @@ async function composerLoadById(wfId) {
     composerNewWorkflow();
     // jsyaml import path uses the modal textarea; call the function that
     // accepts a definition object directly via the same path.
-    document.getElementById('df-wf-id').value = defn.id || wfId;
+    document.getElementById('df-wf-id').value = defn.id || '';
     document.getElementById('df-wf-name').value = defn.name || '';
     const _descEl = document.getElementById('df-wf-desc');
     _descEl.value = defn.description || '';
@@ -18295,7 +19075,12 @@ async function composerLoadById(wfId) {
         d.id = step.id || d.id;
         d.name = step.name || d.name;
         d.role = step.role || d.role;
-        d.system_prompt = step.system_prompt || d.system_prompt;
+        // Accept the v2 structured prompt (prompt.task / prompt.role_inline)
+        // as a fallback so template-matched workflows that use the v2 schema
+        // render with real instructions instead of an empty 'custom' node.
+        d.system_prompt = step.system_prompt
+          || (step.prompt && (step.prompt.task || step.prompt.role_inline))
+          || d.system_prompt;
         d.outputs = Array.isArray(step.outputs) ? step.outputs : d.outputs;
         d.output_format = (step.output_parser && step.output_parser.format) || 'raw';
         d.quality_gates = Array.isArray(step.quality_gates) ? step.quality_gates : [];
@@ -18381,7 +19166,7 @@ async function composerLoadById(wfId) {
       );
     }
     ComposerView.updateCanvasEmptyState();
-  } catch (e) { alert('Load error: ' + e.message); }
+  } catch (e) { console.warn('composerLoadDefinition failed:', e); }
 }
 
 async function composerLoadByIdAndSwitch() {
