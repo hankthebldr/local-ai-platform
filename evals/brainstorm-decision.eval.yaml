@@ -1,0 +1,28 @@
+# Regression suite for the brainstorm-decision workflow.
+#
+#   python -m cli.eval evals/brainstorm-decision.eval.yaml
+#
+# Property-based: it checks that each stage produced output and that the
+# validator actually issued a recommendation — not the exact wording.
+suite: brainstorm-decision-regression
+workflow: brainstorm-decision
+
+cases:
+  - name: idea-to-decision
+    seed:
+      thesis: |
+        Add a built-in eval/regression harness to our local LLM platform so
+        operators can catch when a prompt or model change degrades a workflow.
+      github_url: "https://github.com/hankthebldr/local-ai-platform"
+    expect_status: completed
+    assert:
+      - gate: "research.research_synthesis != ''"
+        why: "the parallel research must synthesize into a non-empty assessment"
+      - gate: "analyzer.research_plan != ''"
+        why: "the analyzer must produce a plan"
+      - gate: "validator.decision != ''"
+        why: "the validator must produce a decision"
+      - matches:
+          ref: "validator.decision"
+          pattern: "(?i)(recommend|go|no-go|revise|risk)"
+        why: "the validator must issue an explicit recommendation"

@@ -4250,6 +4250,8 @@ textarea.composer-desc-area {
 .wf-anchor-keys span { font-size: 0.56rem; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); }
 .wf-anchor-start { border-color: var(--accent-dim); background: var(--accent-ghost); }
 .wf-anchor-start .wf-anchor-label { color: var(--accent); }
+.wf-anchor-edit { cursor: pointer; margin-left: 6px; opacity: 0.65; font-weight: 400; }
+.wf-anchor-edit:hover { opacity: 1; }
 .wf-anchor-end { border-color: var(--cyan-dim); background: rgba(0,220,240,0.06); }
 .wf-anchor-end .wf-anchor-label { color: var(--cyan); }
 
@@ -7178,6 +7180,26 @@ textarea.composer-desc-area {
       </div>
     </div>
 
+    <!-- Seed-schema editor — opened from the composer's START anchor (✎).
+         Declares the workflow's input contract (context.inputs); steps then
+         reference these as seed.<key>. -->
+    <div id="df-seed-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="max-width:560px">
+        <h3>Workflow inputs (START)</h3>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:10px">
+          Declare the keys this workflow takes as input. Steps reference them as
+          <code>seed.&lt;key&gt;</code>; the START anchor renders them as the entry
+          contract and the Run form scaffolds from them.
+        </div>
+        <div id="df-seed-rows"></div>
+        <button type="button" class="action-btn xs" onclick="DfSeedSchema.addRow()" style="margin-top:4px">+ Add input</button>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="DfSeedSchema.close()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="DfSeedSchema.save()">Save</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Legacy mount points — hidden but kept so existing JS that
          directly writes to these IDs (loadWorkflowDetail, refreshWorkflows,
          a2a panel, etc.) doesn't NPE. The DOMContentLoaded relocators
@@ -9098,6 +9120,54 @@ const WorkflowBuilder = (function () {
   return { open, close, submit, _maybeSlug, _slugify };
 })();
 window.WorkflowBuilder = WorkflowBuilder;
+
+// DfSeedSchema — the START anchor's seed-input editor. Edits the global
+// dfSeedSchema ([{key, description}]); on save it redraws the anchors and the
+// schema persists to context.inputs via dfExportYaml.
+const DfSeedSchema = (function () {
+  function _rows() { return document.getElementById('df-seed-rows'); }
+  function _rowHtml(key, desc) {
+    return `<div class="df-seed-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+      <input type="text" class="df-seed-key" placeholder="thesis" value="${esc(key || '')}" style="flex:0 0 170px" autocomplete="off">
+      <input type="text" class="df-seed-desc" placeholder="what this input is" value="${esc(desc || '')}" style="flex:1" autocomplete="off">
+      <button type="button" class="action-btn xs" title="Remove" onclick="this.closest('.df-seed-row').remove()">×</button>
+    </div>`;
+  }
+  function addRow(key, desc) {
+    const r = _rows();
+    if (r) r.insertAdjacentHTML('beforeend', _rowHtml(key, desc));
+  }
+  function open() {
+    const m = document.getElementById('df-seed-modal');
+    if (!m) return;
+    const r = _rows();
+    if (r) r.innerHTML = '';
+    const seed = (dfSeedSchema && dfSeedSchema.length) ? dfSeedSchema : [{ key: '', description: '' }];
+    seed.forEach(s => addRow(s.key, s.description));
+    m.removeAttribute('hidden');
+    setTimeout(() => { const i = m.querySelector('.df-seed-key'); if (i) i.focus(); }, 30);
+  }
+  function close() {
+    const m = document.getElementById('df-seed-modal');
+    if (m) m.setAttribute('hidden', '');
+  }
+  function save() {
+    const out = [];
+    document.querySelectorAll('#df-seed-rows .df-seed-row').forEach(row => {
+      const rawKey = (row.querySelector('.df-seed-key') || {}).value || '';
+      const desc = (row.querySelector('.df-seed-desc') || {}).value || '';
+      // Normalize to a seed-ref-safe key (letters/digits/underscore).
+      const key = rawKey.trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+      if (key) out.push({ key, description: desc.trim() });
+    });
+    dfSeedSchema = out;
+    close();
+    if (typeof dfRefreshAnchors === 'function') dfRefreshAnchors();
+    if (window.Toast) Toast.success('Inputs saved', out.length ? out.map(s => s.key).join(', ') : 'no inputs declared');
+  }
+  return { open, close, addRow, save };
+})();
+window.DfSeedSchema = DfSeedSchema;
 
 // Plugins / MCPs discover sections under the Models tab — small loaders
 // that reuse the workbench renderers but mount into the System-page
@@ -12495,6 +12565,15 @@ let dfEditor = null;
 let dfNodeData = {};
 let dfNextId = 0;
 let dfSelectedNodeId = null;
+// Declared seed schema (the START anchor's editable input contract):
+// [{ key, description }]. Persisted to the workflow definition under
+// context.inputs and round-tripped on load. Drives the START anchor chips
+// and the run-seed scaffold.
+let dfSeedSchema = [];
+// Guard so the anchor refresh (which itself adds/removes drawflow nodes +
+// connections) doesn't recurse through the node/connection event hooks.
+let _dfAnchorBusy = false;
+let _dfAnchorTimer = null;
 
 // Each template carries a `persona` key — the same vocabulary AgentIcons
 // uses, so the palette glyph, the agent card glyph, and the run-state
@@ -12578,9 +12657,10 @@ function dfInitEditor() {
     if (typeof syncCompositionModelsToChatPicker === 'function') {
       try { syncCompositionModelsToChatPicker(); } catch (_) {}
     }
+    if (!_dfAnchorBusy) dfScheduleAnchorRefresh();  // re-bracket begin/end
   });
-  dfEditor.on('connectionCreated', (conn) => dfOnConnectionCreated(conn));
-  dfEditor.on('connectionRemoved', (conn) => dfOnConnectionRemoved(conn));
+  dfEditor.on('connectionCreated', (conn) => { dfOnConnectionCreated(conn); if (!_dfAnchorBusy) dfScheduleAnchorRefresh(); });
+  dfEditor.on('connectionRemoved', (conn) => { dfOnConnectionRemoved(conn); if (!_dfAnchorBusy) dfScheduleAnchorRefresh(); });
 
   container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
   container.addEventListener('drop', (e) => {
@@ -12865,6 +12945,7 @@ function dfAddNodeFromTemplate(templateKey, x, y) {
   }
   dfSelectedNodeId = nodeId;
   dfRenderConfigPanel(nodeId);
+  if (!_dfAnchorBusy) dfScheduleAnchorRefresh();  // re-bracket begin/end
   return nodeId;
 }
 
@@ -13250,30 +13331,93 @@ function dfOnConnectionRemoved(conn) {
 
 // Add START (seed) / END (deliverable) anchor nodes to the composer canvas,
 // mirroring the runs DAG. NOT added to dfNodeData → dfExportYaml skips them.
-function dfAddAnchors(steps, idMap, hasDeps) {
-  if (!dfEditor || !steps || !steps.length) return;
+function dfAddAnchors(steps, idMap, hasDeps, extraSeedKeys) {
+  if (!dfEditor) return;
+  steps = steps || [];
+  idMap = idMap || {};
   const depOf = s => Array.isArray(s.depends_on) ? s.depends_on : (s.depends_on ? [s.depends_on] : []);
-  const seedKeys = [...new Set(steps.flatMap(s =>
-    (s.inputs || []).filter(i => typeof i === 'string' && i.startsWith('seed.')).map(i => i.slice(5))))];
-  let rootSteps, terminalSteps;
-  if (hasDeps) {
-    const depended = new Set(steps.flatMap(depOf));
-    rootSteps = steps.filter(s => depOf(s).length === 0);
-    terminalSteps = steps.filter(s => !depended.has(s.id));
-  } else {
-    rootSteps = [steps[0]];
-    terminalSteps = [steps[steps.length - 1]];
+  // Seed keys = declared schema (extraSeedKeys, from the START editor) UNION
+  // the keys actually referenced via seed.* in step inputs. So a declared-but-
+  // not-yet-wired key still shows, and a wired-but-undeclared one isn't lost.
+  const inferred = steps.flatMap(s =>
+    (s.inputs || []).filter(i => typeof i === 'string' && i.startsWith('seed.')).map(i => i.slice(5)));
+  const seedKeys = [...new Set([...(extraSeedKeys || []), ...inferred])];
+  let rootSteps = [], terminalSteps = [];
+  if (steps.length) {
+    if (hasDeps) {
+      const depended = new Set(steps.flatMap(depOf));
+      rootSteps = steps.filter(s => depOf(s).length === 0);
+      terminalSteps = steps.filter(s => !depended.has(s.id));
+    } else {
+      rootSteps = [steps[0]];
+      terminalSteps = [steps[steps.length - 1]];
+    }
   }
   const deliverable = [...new Set(terminalSteps.flatMap(s => Array.isArray(s.outputs) ? s.outputs : []))];
   const keyChips = arr => (arr.length ? arr : ['—']).map(k => `<span>${esc(k)}</span>`).join('');
   try {
-    const startHtml = `<div class="wf-anchor wf-anchor-start"><div class="wf-anchor-label">▶ START</div><div class="wf-anchor-sub">seed input</div><div class="wf-anchor-keys">${keyChips(seedKeys)}</div></div>`;
-    const startId = dfEditor.addNode('__start__', 0, 1, 0, 0, '__start__', {}, startHtml);
+    // START carries an inline edit affordance → opens the seed-schema editor.
+    const startHtml = `<div class="wf-anchor wf-anchor-start">`
+      + `<div class="wf-anchor-label">▶ START`
+      + `<span class="wf-anchor-edit" title="Edit the workflow's seed inputs" onclick="event.stopPropagation();DfSeedSchema.open()">✎</span>`
+      + `</div>`
+      + `<div class="wf-anchor-sub">seed input</div>`
+      + `<div class="wf-anchor-keys">${keyChips(seedKeys)}</div></div>`;
+    const startId = dfEditor.addNode('__start__', 0, 1, 40, 200, '__start__', {}, startHtml);
     rootSteps.forEach(s => { const t = idMap[s && s.id]; if (t != null) { try { dfEditor.addConnection(startId, t, 'output_1', 'input_1'); } catch (_) {} } });
     const endHtml = `<div class="wf-anchor wf-anchor-end"><div class="wf-anchor-label">■ END</div><div class="wf-anchor-sub">deliverable</div><div class="wf-anchor-keys">${keyChips(deliverable.length ? deliverable : ['output'])}</div></div>`;
-    const endId = dfEditor.addNode('__end__', 1, 0, 0, 0, '__end__', {}, endHtml);
+    const endId = dfEditor.addNode('__end__', 1, 0, 980, 200, '__end__', {}, endHtml);
     terminalSteps.forEach(s => { const src = idMap[s && s.id]; if (src != null) { try { dfEditor.addConnection(src, endId, 'output_1', 'input_1'); } catch (_) {} } });
   } catch (_) { /* anchors are best-effort decoration */ }
+}
+
+// Rebuild the START/END anchors from the CURRENT canvas state. Removes the old
+// anchor nodes first, derives steps + deps from dfNodeData + connections, then
+// redraws — so the begin/end boundary stays live while authoring (not just on
+// load). Guarded by _dfAnchorBusy so the node/connection it adds don't recurse.
+function dfRefreshAnchors() {
+  if (!dfEditor) return;
+  _dfAnchorBusy = true;
+  try {
+    const ex = dfEditor.export();
+    const home = (ex && ex.drawflow && ex.drawflow.Home && ex.drawflow.Home.data) || {};
+    // Drop existing anchors.
+    Object.keys(home).forEach(id => {
+      const n = home[id];
+      if (n && (n.name === '__start__' || n.name === '__end__')) {
+        try { dfEditor.removeNodeId('node-' + id); } catch (_) {}
+      }
+    });
+    // Reconstruct steps + idMap from real (dfNodeData-backed) nodes.
+    const steps = [], idMap = {};
+    let hasDeps = false;
+    Object.keys(dfNodeData).forEach(nid => {
+      const d = dfNodeData[nid];
+      if (!d) return;
+      const info = home[nid];
+      const deps = [];
+      if (info && info.inputs) {
+        Object.values(info.inputs).forEach(inp => (inp.connections || []).forEach(c => {
+          const src = dfNodeData[parseInt(c.node)];
+          if (src && !deps.includes(src.id)) deps.push(src.id);
+        }));
+      }
+      if (deps.length) hasDeps = true;
+      steps.push({ id: d.id, inputs: d.inputs || [], outputs: d.outputs || [], depends_on: deps });
+      idMap[d.id] = parseInt(nid);
+    });
+    const declaredKeys = (dfSeedSchema || []).map(s => s && s.key).filter(Boolean);
+    dfAddAnchors(steps, idMap, hasDeps, declaredKeys);
+  } catch (_) { /* best-effort */ }
+  _dfAnchorBusy = false;
+}
+
+// Debounced refresh — coalesces the burst of events a bulk load / multi-edit
+// fires, and is a no-op while an anchor refresh is already in flight.
+function dfScheduleAnchorRefresh() {
+  if (_dfAnchorBusy) return;
+  clearTimeout(_dfAnchorTimer);
+  _dfAnchorTimer = setTimeout(() => { try { dfRefreshAnchors(); } catch (_) {} }, 150);
 }
 
 function dfExportYaml() {
@@ -13288,6 +13432,16 @@ function dfExportYaml() {
 
   let yaml = `id: ${wfId}\nname: "${wfName}"\nversion: "1.0"\n`;
   if (wfDesc) yaml += `description: "${wfDesc}"\n`;
+  // Persist the START anchor's declared seed schema as context.inputs so the
+  // input contract round-trips (read back in composerLoadById).
+  if (Array.isArray(dfSeedSchema) && dfSeedSchema.length) {
+    yaml += `\ncontext:\n  inputs:\n`;
+    dfSeedSchema.forEach(s => {
+      if (!s || !s.key) return;
+      yaml += `    - key: ${s.key}\n`;
+      if (s.description) yaml += `      description: "${String(s.description).replace(/"/g, '\\"')}"\n`;
+    });
+  }
   yaml += `\ndefaults:\n  role: ${wfRole}\n  temperature: 0.7\n  max_tokens: 4096\n  retries: 2\n  retry_delay: 5\n\nsteps:\n`;
 
   nodeIds.forEach(nid => {
@@ -16919,6 +17073,8 @@ const ComposerView = (function () {
     // had previously visited the legacy Workflows tab.
     try { dfInitEditor(); dfInitPalette(); } catch (e) { console.warn(e); }
     updateCanvasEmptyState();
+    // Show the begin/end boundary immediately, even on an empty canvas.
+    if (typeof dfScheduleAnchorRefresh === 'function') dfScheduleAnchorRefresh();
     if (_booted) {
       // Already initialised — workbenches refresh quickly to pick up
       // server-side changes (newly registered MCP, etc).
@@ -18032,12 +18188,14 @@ function composerNewWorkflow() {
     });
   }
   dfNodeData = {}; dfNextId = 0; dfSelectedNodeId = null;
+  dfSeedSchema = [];  // fresh workflow → empty input contract
   ['df-wf-id', 'df-wf-name', 'df-wf-desc'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const yamlPanel = document.getElementById('df-yaml-panel');
   if (yamlPanel) yamlPanel.style.display = 'none';
   ComposerView.updateCanvasEmptyState();
+  if (typeof dfScheduleAnchorRefresh === 'function') dfScheduleAnchorRefresh();
 }
 
 async function composerLoadFromIndex() {
@@ -18154,10 +18312,18 @@ async function composerLoadById(wfId) {
       }
     }
 
+    // Restore the declared seed schema (the START anchor's input contract)
+    // from context.inputs so it round-trips, then draw the begin/end anchors.
+    try {
+      const ci = (defn.context && Array.isArray(defn.context.inputs)) ? defn.context.inputs : [];
+      dfSeedSchema = ci.map(x => (typeof x === 'string'
+        ? { key: x, description: '' }
+        : { key: x.key, description: x.description || '' })).filter(s => s.key);
+    } catch (_) { dfSeedSchema = []; }
     // START/END anchor nodes — same seed→deliverable brackets as the runs
     // DAG. Not tracked in dfNodeData, so dfExportYaml skips them (they're
     // decoration, not steps).
-    try { dfAddAnchors(allSteps, idMap, anyDepsDeclared); } catch (_) {}
+    try { dfAddAnchors(allSteps, idMap, anyDepsDeclared, dfSeedSchema.map(s => s.key)); } catch (_) {}
 
     // Auto-layout AFTER edges exist so dagre's topological sort actually
     // has a graph to lay out (with no edges it stacked everything at
