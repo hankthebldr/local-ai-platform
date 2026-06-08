@@ -12762,6 +12762,8 @@ async function dfAddNodeFromAgent(agentId, x, y) {
     dfNodeData[nodeId] = data;
     dfSelectedNodeId = nodeId;
     dfRenderConfigPanel(nodeId);
+    dfAutoChain(nodeId);  // native wire onto the current tail
+    if (!_dfAnchorBusy) dfScheduleAnchorRefresh();
     return nodeId;
   } catch (e) {
     alert(`Drop failed: ${e.message}`);
@@ -12917,7 +12919,8 @@ function dfInitPalette() {
   });
 }
 
-function dfAddNodeFromTemplate(templateKey, x, y) {
+function dfAddNodeFromTemplate(templateKey, x, y, opts) {
+  opts = opts || {};
   const tmpl = dfStepTemplates.find(t => t.key === templateKey);
   if (!tmpl) return;
   const data = {
@@ -12945,8 +12948,41 @@ function dfAddNodeFromTemplate(templateKey, x, y) {
   }
   dfSelectedNodeId = nodeId;
   dfRenderConfigPanel(nodeId);
+  // Native auto-wire: a freshly dropped piece chains onto the current tail
+  // so the flow stays connected START→…→END. Suppressed during load (the
+  // definition carries its own depends_on).
+  if (opts.autoChain !== false) dfAutoChain(nodeId);
   if (!_dfAnchorBusy) dfScheduleAnchorRefresh();  // re-bracket begin/end
   return nodeId;
+}
+
+// Auto-connect a newly created step node onto the current chain tail (the
+// most-recent terminal real step). The first node stays unchained — the
+// START/END anchors bracket it. The connection is a real edge → persists as
+// depends_on and the anchors re-bracket around it.
+function dfAutoChain(newNodeId) {
+  if (!dfEditor || newNodeId == null) return;
+  newNodeId = Number(newNodeId);
+  let home = {};
+  try {
+    const ex = dfEditor.export();
+    home = (ex && ex.drawflow && ex.drawflow.Home && ex.drawflow.Home.data) || {};
+  } catch (_) { return; }
+  const realIds = Object.keys(dfNodeData).map(Number).filter(id => id !== newNodeId);
+  if (!realIds.length) return;  // first node → anchors handle START→node→END
+  // A node is a terminal if it has no outgoing connection to another REAL node.
+  const hasRealDownstream = id => {
+    const info = home[id];
+    if (!info || !info.outputs) return false;
+    return Object.values(info.outputs).some(out =>
+      (out.connections || []).some(c => {
+        const n = parseInt(c.node);
+        return n !== newNodeId && dfNodeData[n];
+      }));
+  };
+  const terminals = realIds.filter(id => !hasRealDownstream(id));
+  const tail = (terminals.length ? terminals : realIds).reduce((a, b) => Math.max(a, b));
+  try { dfEditor.addConnection(tail, newNodeId, 'output_1', 'input_1'); } catch (_) {}
 }
 
 function dfNodeHtml(data) {
@@ -18247,7 +18283,8 @@ async function composerLoadById(wfId) {
       const tmpl = dfStepTemplates.find(t => t.key === tmplKey) || dfStepTemplates.find(t => t.key === 'custom');
       const x = 80 + (i % 4) * 220;
       const y = 60 + Math.floor(i / 4) * 140;
-      const nodeId = dfAddNodeFromTemplate(tmpl.key, x, y);
+      // No auto-chain on load — the definition's depends_on drives wiring.
+      const nodeId = dfAddNodeFromTemplate(tmpl.key, x, y, { autoChain: false });
       if (nodeId != null) {
         const d = dfNodeData[nodeId];
         d.id = step.id || d.id;
