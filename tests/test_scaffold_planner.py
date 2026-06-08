@@ -95,6 +95,38 @@ def test_llm_steps_get_default_output_when_missing(empty_index):
     _assert_loadable(out["definition"])
 
 
+def test_normalize_makes_llm_plan_runnable(empty_index):
+    """A real run surfaced this: local LLM plans emit bare input refs (e.g.
+    'topic' instead of 'seed.topic', or a bare upstream output) which pass
+    Pydantic but fail the engine's producer check. The planner must normalize
+    every input to a real producer so the scaffold is actually runnable."""
+    ollama = FakeOllama(
+        content='{"name": "Greet", "steps": ['
+        '{"id": "greet", "name": "Greet", "role": "general", "system_prompt": "x", '
+        '"inputs": ["topic"], "outputs": ["msg"], "depends_on": []}, '
+        '{"id": "check", "name": "Check", "role": "reasoning", "system_prompt": "y", '
+        '"inputs": ["msg"], "outputs": ["final"], "depends_on": []}]}'
+    )
+    svc = ScaffoldPlannerService(ollama, resolver=FakeResolver())
+    out = svc.scaffold(
+        goal="greet a teammate",
+        inputs=[{"key": "topic", "description": "t"}],
+        checks=[],
+    )
+    steps = {s["id"]: s for s in out["definition"]["steps"]}
+    assert steps["greet"]["inputs"] == ["seed.topic"]  # bare key -> seed.key
+    assert steps["check"]["inputs"] == ["greet.msg"]  # bare output -> step.output
+    assert "greet" in steps["check"]["depends_on"]  # dependency inferred
+    # Engine invariant: every input references a real producer.
+    producers = {"seed.topic"}
+    for s in out["definition"]["steps"]:
+        for inp in s["inputs"]:
+            assert inp in producers, f"input {inp!r} has no producer"
+        for o in s["outputs"]:
+            producers.add(f"{s['id']}.{o}")
+    _assert_loadable(out["definition"])
+
+
 class RaisingResolver:
     """Simulates Ollama being down: even model resolution raises."""
 

@@ -300,12 +300,76 @@ def _validated(definition: Dict[str, Any]) -> Dict[str, Any]:
         return minimal
 
 
+def _normalize_references(
+    steps: List[Dict[str, Any]], seed_keys: List[str]
+) -> List[Dict[str, Any]]:
+    """Make every step's inputs reference a REAL producer, so the scaffold is
+    not just Pydantic-valid but actually runnable by the engine.
+
+    The engine requires each input to be either ``seed.<key>`` or
+    ``<upstream_step>.<output>``. Local LLM plans frequently emit a bare key
+    (``greeting`` instead of ``seed.greeting``) or reference a producer that
+    doesn't exist — which passes WorkflowDefinition validation but fails the
+    engine's "input has no producer" check at run time. We rewrite/repair
+    references in topological (list) order and keep depends_on consistent.
+    """
+    seed_set = set(seed_keys)
+    seen = {f"seed.{k}" for k in seed_keys}
+    # output-name -> first step that produces it (for bare-output rewrites)
+    out_owner: Dict[str, str] = {}
+    for s in steps:
+        for o in s.get("outputs") or []:
+            out_owner.setdefault(o, s["id"])
+
+    prev_first = None  # "<step>.<output>" of the previous step
+    for idx, s in enumerate(steps):
+        deps = set(s.get("depends_on") or [])
+        fixed: List[str] = []
+        for inp in s.get("inputs") or []:
+            cand = inp
+            if cand in seen:
+                pass
+            elif cand in seed_set:
+                cand = f"seed.{cand}"
+            elif cand in out_owner and f"{out_owner[cand]}.{cand}" in seen:
+                cand = f"{out_owner[cand]}.{cand}"
+            elif cand not in seen:
+                # Unresolved — fall back to a real producer.
+                if idx == 0 and seed_keys:
+                    cand = f"seed.{seed_keys[0]}"
+                elif prev_first:
+                    cand = prev_first
+                elif seed_keys:
+                    cand = f"seed.{seed_keys[0]}"
+                else:
+                    cand = None
+            if cand and cand not in fixed:
+                fixed.append(cand)
+                if "." in cand and not cand.startswith("seed."):
+                    deps.add(cand.split(".", 1)[0])
+        # Every non-trivial step needs at least one valid input.
+        if not fixed:
+            if idx == 0 and seed_keys:
+                fixed = [f"seed.{seed_keys[0]}"]
+            elif prev_first:
+                fixed = [prev_first]
+                deps.add(prev_first.split(".", 1)[0])
+        s["inputs"] = fixed
+        s["depends_on"] = [d for d in deps if d != s["id"]]
+        for o in s.get("outputs") or []:
+            seen.add(f"{s['id']}.{o}")
+        outs = s.get("outputs") or ["output"]
+        prev_first = f"{s['id']}.{outs[0]}"
+    return steps
+
+
 def _assemble(
     name: str,
     description: str,
     inputs: List[Dict[str, str]],
     steps: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
+    steps = _normalize_references(steps, [i["key"] for i in inputs])
     return {
         "id": _slug(name) or "composed-workflow",
         "name": name,
