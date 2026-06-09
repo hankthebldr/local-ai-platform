@@ -3582,6 +3582,11 @@ textarea.composer-desc-area {
   overflow: visible;
 }
 .drawflow .drawflow-node.selected {
+  /* Drawflow's vendor CSS sets `.drawflow-node.selected{background:red}`,
+     which leaks a bright-red/orange fill behind the card and makes the node
+     text unreadable. Keep the normal panel background; the selection cue is
+     the cyan border + glow below. */
+  background: var(--bg-panel);
   border-color: var(--cyan);
   box-shadow: 0 4px 18px rgba(0, 220, 240, 0.35), var(--glow-cyan);
 }
@@ -4250,6 +4255,8 @@ textarea.composer-desc-area {
 .wf-anchor-keys span { font-size: 0.56rem; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); }
 .wf-anchor-start { border-color: var(--accent-dim); background: var(--accent-ghost); }
 .wf-anchor-start .wf-anchor-label { color: var(--accent); }
+.wf-anchor-edit { cursor: pointer; margin-left: 6px; opacity: 0.65; font-weight: 400; }
+.wf-anchor-edit:hover { opacity: 1; }
 .wf-anchor-end { border-color: var(--cyan-dim); background: rgba(0,220,240,0.06); }
 .wf-anchor-end .wf-anchor-label { color: var(--cyan); }
 
@@ -5853,7 +5860,7 @@ textarea.composer-desc-area {
         </div>
       </div>
       <div class="composer-actions-row">
-        <button class="action-btn" onclick="composerNewWorkflow()" title="Reset composer to a blank workflow">New</button>
+        <button class="action-btn accent" onclick="WorkflowBuilder.open()" title="Start a new workflow — name it and set defaults, then build the steps on the canvas">+ New</button>
         <!-- Explicit Clear button. composerNewWorkflow already does
              the cleanup work (wipes nodes + metadata); the previous
              "New" affordance was easy to miss because operators
@@ -5871,6 +5878,11 @@ textarea.composer-desc-area {
         <div style="flex:1"></div>
         <button class="action-btn ghost" onclick="dfRunWorkflowLive()" title="Save + run in background; watch live progress in the workstream below">Run ▶ live</button>
         <button class="send-btn" onclick="dfRunWorkflowFromComposer()" title="Save then run this workflow (synchronous; switches to the Runs tab when done)">Run ▶</button>
+        <!-- Stop control — appears only while a live run is active (toggled
+             by dfApplyRunState). Cancels the run at the next step boundary. -->
+        <button class="action-btn" id="composer-stop-btn" onclick="composerStopRun()"
+                title="Stop the active run (the engine halts at the next step boundary; the in-flight step finishes first)"
+                style="border-color:var(--red,#ff5252);color:var(--red,#ff5252)" hidden>◼ Stop</button>
       </div>
     </div>
 
@@ -7116,6 +7128,83 @@ textarea.composer-desc-area {
       </div>
     </div>
 
+    <!-- New-Workflow wizard — mirrors the Skill / Agent creators (slug id +
+         name + defaults, validated, modal). Establishes the workflow's
+         identity, then drops the operator on the canvas to build steps. -->
+    <div id="workflow-builder-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="max-width:640px">
+        <h3>New Workflow</h3>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:10px">
+          Name the workflow and set its defaults. After you create it, build the
+          step DAG on the canvas, then <strong>Save</strong>.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label class="admin-modal-label">Workflow ID</label>
+            <input id="workflow-builder-id" type="text" placeholder="my-workflow"
+                   autocomplete="off" oninput="this.dataset.auto=''">
+          </div>
+          <div>
+            <label class="admin-modal-label">Name</label>
+            <input id="workflow-builder-name" type="text" placeholder="My Workflow"
+                   autocomplete="off" oninput="WorkflowBuilder._maybeSlug()">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label class="admin-modal-label">Default role</label>
+            <select id="workflow-builder-role" class="model-select">
+              <option value="reasoning">reasoning</option>
+              <option value="coding">coding</option>
+              <option value="fast">fast</option>
+              <option value="general" selected>general</option>
+              <option value="uncensored">uncensored</option>
+            </select>
+          </div>
+          <div>
+            <label class="admin-modal-label">Category</label>
+            <select id="workflow-builder-category" class="model-select">
+              <option value="general" selected>general</option>
+              <option value="security">security</option>
+              <option value="devops">devops</option>
+              <option value="data">data</option>
+              <option value="code">code</option>
+              <option value="content">content</option>
+              <option value="research">research</option>
+              <option value="automation">automation</option>
+            </select>
+          </div>
+        </div>
+        <label class="admin-modal-label">Description</label>
+        <textarea id="workflow-builder-desc" rows="3" placeholder="What does this workflow do?"></textarea>
+        <div id="workflow-builder-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="WorkflowBuilder.close()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="WorkflowBuilder.submit()">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seed-schema editor — opened from the composer's START anchor (✎).
+         Declares the workflow's input contract (context.inputs); steps then
+         reference these as seed.<key>. -->
+    <div id="df-seed-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+      <div class="admin-modal-card" style="max-width:560px">
+        <h3>Workflow inputs (START)</h3>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:10px">
+          Declare the keys this workflow takes as input. Steps reference them as
+          <code>seed.&lt;key&gt;</code>; the START anchor renders them as the entry
+          contract and the Run form scaffolds from them.
+        </div>
+        <div id="df-seed-rows"></div>
+        <button type="button" class="action-btn xs" onclick="DfSeedSchema.addRow()" style="margin-top:4px">+ Add input</button>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" onclick="DfSeedSchema.close()">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" onclick="DfSeedSchema.save()">Save</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Legacy mount points — hidden but kept so existing JS that
          directly writes to these IDs (loadWorkflowDetail, refreshWorkflows,
          a2a panel, etc.) doesn't NPE. The DOMContentLoaded relocators
@@ -7289,6 +7378,13 @@ textarea.composer-desc-area {
     <div class="admin-modal-error" style="background:rgba(0,192,232,0.10);border-color:#00C0E8;color:#00C0E8;margin-bottom:14px;font-size:0.7rem">
       ℹ Skills are markdown bodies attached to plugins. They auto-inject into chats when their trigger keywords match. Skill files live in <code>plugins/&lt;plugin&gt;/skills/</code>.
     </div>
+
+    <!-- Skills discovery surface — the SAME #skills-discover-panel the
+         Admin → Catalog → Skills section uses. A single DOM node shared
+         between both homes via SkillsDiscoverShare (relocate-on-activate,
+         mirroring CatalogModelsShare for the inventory grid), so the
+         catalog/discovery feature is identical in both places. -->
+    <div id="skills-tab-discover-mount" style="margin-bottom:16px"></div>
 
     <div class="plugins-layout">
       <div class="panel plugins-list-panel">
@@ -7783,6 +7879,9 @@ function switchTab(name, el) {
   // populated on first load.
   if (name === 'workflows') {
     if (window.CatalogModelsShare) CatalogModelsShare.showInCatalog();
+    // Pull the shared skills-discovery panel back into the Catalog's Skills
+    // mount so Catalog → Skills shows it (it may be on the Skills tab).
+    if (window.SkillsDiscoverShare) SkillsDiscoverShare.showInCatalog();
     if (!catalogLoaded) loadCatalog();
   }
   if (name === 'memory') { loadMemory(); loadMemoryTab(); loadArchitecturePanel(); WorkflowMemory && WorkflowMemory.refresh(); }
@@ -7825,6 +7924,15 @@ function switchTab(name, el) {
   // on the `adminPanelActivated` event. Re-emit that event from switchTab
   // so first-class top-level entry to those tabs triggers the same load
   // path the dropdown route used to fire.
+  // Standalone Skills tab — bring the shared discovery/catalog panel into
+  // this tab (relocate-on-activate) and load it, so the homepage Skills tab
+  // exposes the same discovery surface as Admin → Catalog → Skills.
+  if (name === 'admin-skills') {
+    if (window.SkillsDiscoverShare) SkillsDiscoverShare.showInSkillsTab();
+    if (window.SkillsDiscover && typeof SkillsDiscover.load === 'function') {
+      try { SkillsDiscover.load(); } catch (_) {}
+    }
+  }
   if (name === 'admin-plugins' || name === 'admin-skills' || name === 'admin-mcp'
       || name === 'admin-cloud' || name === 'admin-exports' || name === 'admin-keys') {
     window.dispatchEvent(new CustomEvent('adminPanelActivated', { detail: { panel: name } }));
@@ -8932,6 +9040,140 @@ const SkillsBuilder = (function () {
 })();
 window.SkillsBuilder = SkillsBuilder;
 
+// WorkflowBuilder — the New-Workflow wizard. Same modal grammar as the
+// Skill / Agent creators (validated slug id + name + defaults), but instead
+// of POSTing a complete record it seeds the composer's identity fields and
+// drops the operator on a blank canvas to build the step DAG (a workflow
+// isn't complete until it has steps; Save/Run persist it from there).
+const WorkflowBuilder = (function () {
+  function _slugify(s) {
+    return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+  }
+
+  // Auto-suggest the id slug from the name until the operator edits the id
+  // field themselves (the id input clears dataset.auto on manual input).
+  function _maybeSlug() {
+    const idEl = document.getElementById('workflow-builder-id');
+    const nameEl = document.getElementById('workflow-builder-name');
+    if (!idEl || !nameEl) return;
+    if (!idEl.value || idEl.dataset.auto === '1') {
+      idEl.value = _slugify(nameEl.value);
+      idEl.dataset.auto = '1';
+    }
+  }
+
+  function open() {
+    const modal = document.getElementById('workflow-builder-modal');
+    if (!modal) return;
+    // Prefill from the composer toolbar so the wizard doubles as a
+    // rename/redefine entry point for the in-progress workflow.
+    const get = id => (document.getElementById(id) || {}).value || '';
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+    set('workflow-builder-id', get('df-wf-id'));
+    set('workflow-builder-name', get('df-wf-name'));
+    set('workflow-builder-desc', get('df-wf-desc'));
+    set('workflow-builder-role', get('df-wf-role'));
+    set('workflow-builder-category', get('df-wf-category'));
+    const err = document.getElementById('workflow-builder-error');
+    if (err) { err.hidden = true; err.textContent = ''; }
+    modal.removeAttribute('hidden');
+    setTimeout(() => { const el = document.getElementById('workflow-builder-name'); if (el) el.focus(); }, 30);
+  }
+
+  function close() {
+    const modal = document.getElementById('workflow-builder-modal');
+    if (modal) modal.setAttribute('hidden', '');
+    const err = document.getElementById('workflow-builder-error');
+    if (err) { err.hidden = true; err.textContent = ''; }
+  }
+
+  function submit() {
+    const id = ((document.getElementById('workflow-builder-id') || {}).value || '').trim();
+    const name = ((document.getElementById('workflow-builder-name') || {}).value || '').trim();
+    const desc = ((document.getElementById('workflow-builder-desc') || {}).value || '').trim();
+    const role = (document.getElementById('workflow-builder-role') || {}).value || 'general';
+    const category = (document.getElementById('workflow-builder-category') || {}).value || 'general';
+    const err = document.getElementById('workflow-builder-error');
+    function fail(msg) { if (err) { err.hidden = false; err.textContent = msg; } }
+
+    if (!/^[a-z0-9-]+$/.test(id)) return fail('Workflow ID must be lowercase letters, digits, and hyphens only.');
+    if (!name) return fail('Name is required.');
+
+    // Ensure the drawflow editor exists before we blank + seed it (the wizard
+    // can fire before the operator has ever opened the Composer tab).
+    if (typeof ComposerView !== 'undefined' && ComposerView && ComposerView.init) {
+      try { ComposerView.init(); } catch (_) {}
+    }
+    // Reset to a blank canvas, then write the identity into the toolbar
+    // fields the rest of the composer (Save / Run) reads from.
+    if (typeof composerNewWorkflow === 'function') { try { composerNewWorkflow(); } catch (_) {} }
+    const set = (fid, v) => { const el = document.getElementById(fid); if (el) el.value = v; };
+    set('df-wf-id', id);
+    set('df-wf-name', name);
+    set('df-wf-desc', desc);
+    set('df-wf-role', role);
+    set('df-wf-category', category);
+    // Grow the auto-sizing description textarea to fit the seeded text.
+    const descEl = document.getElementById('df-wf-desc');
+    if (descEl) { descEl.style.height = 'auto'; descEl.style.height = Math.min(descEl.scrollHeight, 156) + 'px'; }
+
+    close();
+    if (typeof switchTab === 'function') switchTab('dashboard');
+    if (window.Toast) Toast.success('Workflow created', `${name} — drag roles onto the canvas to add steps, then Save.`);
+  }
+
+  return { open, close, submit, _maybeSlug, _slugify };
+})();
+window.WorkflowBuilder = WorkflowBuilder;
+
+// DfSeedSchema — the START anchor's seed-input editor. Edits the global
+// dfSeedSchema ([{key, description}]); on save it redraws the anchors and the
+// schema persists to context.inputs via dfExportYaml.
+const DfSeedSchema = (function () {
+  function _rows() { return document.getElementById('df-seed-rows'); }
+  function _rowHtml(key, desc) {
+    return `<div class="df-seed-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+      <input type="text" class="df-seed-key" placeholder="thesis" value="${esc(key || '')}" style="flex:0 0 170px" autocomplete="off">
+      <input type="text" class="df-seed-desc" placeholder="what this input is" value="${esc(desc || '')}" style="flex:1" autocomplete="off">
+      <button type="button" class="action-btn xs" title="Remove" onclick="this.closest('.df-seed-row').remove()">×</button>
+    </div>`;
+  }
+  function addRow(key, desc) {
+    const r = _rows();
+    if (r) r.insertAdjacentHTML('beforeend', _rowHtml(key, desc));
+  }
+  function open() {
+    const m = document.getElementById('df-seed-modal');
+    if (!m) return;
+    const r = _rows();
+    if (r) r.innerHTML = '';
+    const seed = (dfSeedSchema && dfSeedSchema.length) ? dfSeedSchema : [{ key: '', description: '' }];
+    seed.forEach(s => addRow(s.key, s.description));
+    m.removeAttribute('hidden');
+    setTimeout(() => { const i = m.querySelector('.df-seed-key'); if (i) i.focus(); }, 30);
+  }
+  function close() {
+    const m = document.getElementById('df-seed-modal');
+    if (m) m.setAttribute('hidden', '');
+  }
+  function save() {
+    const out = [];
+    document.querySelectorAll('#df-seed-rows .df-seed-row').forEach(row => {
+      const rawKey = (row.querySelector('.df-seed-key') || {}).value || '';
+      const desc = (row.querySelector('.df-seed-desc') || {}).value || '';
+      // Normalize to a seed-ref-safe key (letters/digits/underscore).
+      const key = rawKey.trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+      if (key) out.push({ key, description: desc.trim() });
+    });
+    dfSeedSchema = out;
+    close();
+    if (typeof dfRefreshAnchors === 'function') dfRefreshAnchors();
+    if (window.Toast) Toast.success('Inputs saved', out.length ? out.map(s => s.key).join(', ') : 'no inputs declared');
+  }
+  return { open, close, addRow, save };
+})();
+window.DfSeedSchema = DfSeedSchema;
+
 // Plugins / MCPs discover sections under the Models tab — small loaders
 // that reuse the workbench renderers but mount into the System-page
 // grids. Counts surface in the section header.
@@ -9095,22 +9337,70 @@ const ExtDiscover = (function () {
   function _renderItem(it) {
     const kindClass = `ext-item-kind-${esc(it.kind || 'other')}`;
     const toolCount = (it.tools || []).length;
+    // Installable skills (e.g. the skills.sh provider) carry a raw SKILL.md
+    // URL the native importer accepts. Render an Install action so the
+    // External-Sources surface matches the Skills catalog's install
+    // affordance instead of being display-only.
+    const skillUrl = (it.kind === 'skill' && it.install && it.install.skill_md_url)
+      ? it.install.skill_md_url : '';
+    const installBtn = skillUrl
+      ? `<button class="action-btn xs accent"
+                 onclick="ExtDiscover.installSkill('${esc(skillUrl)}','${esc(it.id)}',this)"
+                 title="Install this skill into general-skills">+ Install</button>`
+      : '';
+    // Surface the CLI one-liner (npx skills add …) when present.
+    const cmd = (it.install && it.install.command) ? it.install.command : '';
+    const cmdChip = cmd
+      ? `<code class="ext-item-id" style="opacity:.75" title="CLI install">${esc(cmd)}</code>`
+      : '';
     return `<div class="ext-item">
       <div class="ext-item-head">
         <span class="ext-item-kind ${kindClass}">${esc(it.kind || 'item')}</span>
         <span class="ext-item-name">${esc(it.name)}</span>
         <span class="ext-item-version">${esc(it.version || '')}</span>
+        <span style="flex:1"></span>
+        ${installBtn}
       </div>
       <div class="ext-item-desc">${esc(it.description || '')}</div>
       <div class="ext-item-foot">
         <code class="ext-item-id">${esc(it.id)}</code>
+        ${cmdChip}
         ${toolCount ? `<span class="ext-item-toolcount">${toolCount} tools</span>` : ''}
         ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" class="ext-item-link">↗</a>` : ''}
       </div>
     </div>`;
   }
 
-  return { _toggle, refresh };
+  // Install a discovered skill (kind=skill) via the same native importer
+  // the Skills catalog uses, then refresh the Skills surfaces so a skill
+  // found under External Sources lands in the catalog identically.
+  async function installSkill(skillMdUrl, id, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      const r = await fetch('/api/skills/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: skillMdUrl, plugin_id: 'general-skills', id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      // Hot-reload the plugin registry so the skill activates immediately.
+      try { await fetch('/api/plugins/reload', { method: 'POST' }); } catch (_) {}
+      if (btn) { btn.textContent = '✓ Installed'; btn.classList.remove('accent'); btn.disabled = true; }
+      if (window.Toast) Toast.success('Skill installed', `${d.name || id} → general-skills`);
+      // Keep the two surfaces consistent: reflect the install in the Skills
+      // catalog section, the catalog counts, and the composer workbench.
+      if (window.SkillsDiscover && typeof SkillsDiscover.load === 'function') { try { SkillsDiscover.load(true); } catch (_) {} }
+      if (typeof loadCatalogPage === 'function') { try { loadCatalogPage(); } catch (_) {} }
+      if (typeof loadComposerCatalogs === 'function') { try { loadComposerCatalogs(); } catch (_) {} }
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+      if (window.Toast) Toast.error('Install failed: ' + e.message);
+      else alert('Install failed: ' + e.message);
+    }
+  }
+
+  return { _toggle, refresh, installSkill };
 })();
 window.ExtDiscover = ExtDiscover;
 
@@ -12116,6 +12406,40 @@ document.addEventListener('DOMContentLoaded', () => {
         get isInCatalog() { return inCatalog; },
       };
     })();
+
+    // SkillsDiscoverShare — the discovery/catalog panel (#skills-discover-
+    // panel) is a single DOM node. By default it lives in the Catalog's
+    // Skills mount (the move above). This manager relocates it into the
+    // standalone Skills tab (#skills-tab-discover-mount) when that tab is
+    // active and back to the Catalog when the Catalog is shown — so the
+    // SAME discovery surface (curated catalog + Browse repo + Import URL +
+    // installable external-source skills) appears in both places.
+    window.SkillsDiscoverShare = (function () {
+      let inSkillsTab = false;
+      function _panel() { return document.getElementById('skills-discover-panel'); }
+      return {
+        showInSkillsTab() {
+          if (inSkillsTab) return;
+          const panel = _panel();
+          const mount = document.getElementById('skills-tab-discover-mount');
+          if (!panel || !mount) return;
+          mount.replaceChildren();
+          mount.appendChild(panel);
+          panel.open = true;  // expand by default in its dedicated tab
+          inSkillsTab = true;
+        },
+        showInCatalog() {
+          if (!inSkillsTab) return;
+          const panel = _panel();
+          const mount = document.getElementById('catalog-skills-mount');
+          if (!panel || !mount) return;
+          mount.replaceChildren();
+          mount.appendChild(panel);
+          inSkillsTab = false;
+        },
+        get isInSkillsTab() { return inSkillsTab; },
+      };
+    })();
   }
 
   // IA shuffle (cont.): Projects + Kanban relocates from inside the
@@ -12246,6 +12570,15 @@ let dfEditor = null;
 let dfNodeData = {};
 let dfNextId = 0;
 let dfSelectedNodeId = null;
+// Declared seed schema (the START anchor's editable input contract):
+// [{ key, description }]. Persisted to the workflow definition under
+// context.inputs and round-tripped on load. Drives the START anchor chips
+// and the run-seed scaffold.
+let dfSeedSchema = [];
+// Guard so the anchor refresh (which itself adds/removes drawflow nodes +
+// connections) doesn't recurse through the node/connection event hooks.
+let _dfAnchorBusy = false;
+let _dfAnchorTimer = null;
 
 // Each template carries a `persona` key — the same vocabulary AgentIcons
 // uses, so the palette glyph, the agent card glyph, and the run-state
@@ -12329,9 +12662,10 @@ function dfInitEditor() {
     if (typeof syncCompositionModelsToChatPicker === 'function') {
       try { syncCompositionModelsToChatPicker(); } catch (_) {}
     }
+    if (!_dfAnchorBusy) dfScheduleAnchorRefresh();  // re-bracket begin/end
   });
-  dfEditor.on('connectionCreated', (conn) => dfOnConnectionCreated(conn));
-  dfEditor.on('connectionRemoved', (conn) => dfOnConnectionRemoved(conn));
+  dfEditor.on('connectionCreated', (conn) => { dfOnConnectionCreated(conn); if (!_dfAnchorBusy) dfScheduleAnchorRefresh(); });
+  dfEditor.on('connectionRemoved', (conn) => { dfOnConnectionRemoved(conn); if (!_dfAnchorBusy) dfScheduleAnchorRefresh(); });
 
   container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
   container.addEventListener('drop', (e) => {
@@ -12433,6 +12767,8 @@ async function dfAddNodeFromAgent(agentId, x, y) {
     dfNodeData[nodeId] = data;
     dfSelectedNodeId = nodeId;
     dfRenderConfigPanel(nodeId);
+    dfAutoChain(nodeId);  // native wire onto the current tail
+    if (!_dfAnchorBusy) dfScheduleAnchorRefresh();
     return nodeId;
   } catch (e) {
     alert(`Drop failed: ${e.message}`);
@@ -12463,6 +12799,18 @@ function dfClearRunState() {
   });
   const chip = document.getElementById('df-run-progress');
   if (chip) chip.classList.remove('visible');
+  // No active run → hide the toolbar Stop control.
+  _dfToggleStopBtn(false);
+  window._composerActiveRunId = null;
+}
+
+// Show/hide + reset the composer toolbar Stop button. Centralized so the
+// run-state hooks stay one-liners.
+function _dfToggleStopBtn(show) {
+  const btn = document.getElementById('composer-stop-btn');
+  if (!btn) return;
+  btn.hidden = !show;
+  if (show) { btn.disabled = false; btn.textContent = '◼ Stop'; }
 }
 
 function dfApplyRunState(run) {
@@ -12478,7 +12826,17 @@ function dfApplyRunState(run) {
   const planned = Array.isArray(run.steps) ? run.steps
                 : Array.isArray(run.workflow_steps) ? run.workflow_steps
                 : Object.keys(dfNodeData || {}).map(k => (dfNodeData[k] || {}).id).filter(Boolean);
-  const terminalRunStatus = ['completed', 'failed', 'error', 'cancelled'].includes(String(run.status || '').toLowerCase());
+  const terminalRunStatus = ['completed', 'failed', 'error', 'cancelled', 'canceled'].includes(String(run.status || '').toLowerCase());
+
+  // Toolbar Stop button: live only while the run is non-terminal. Track the
+  // active run id so composerStopRun() can target it.
+  if (terminalRunStatus) {
+    _dfToggleStopBtn(false);
+    window._composerActiveRunId = null;
+  } else {
+    window._composerActiveRunId = run.run_id || window._composerActiveRunId || null;
+    _dfToggleStopBtn(true);
+  }
 
   let completed = 0;
   let total = 0;
@@ -12566,7 +12924,8 @@ function dfInitPalette() {
   });
 }
 
-function dfAddNodeFromTemplate(templateKey, x, y) {
+function dfAddNodeFromTemplate(templateKey, x, y, opts) {
+  opts = opts || {};
   const tmpl = dfStepTemplates.find(t => t.key === templateKey);
   if (!tmpl) return;
   const data = {
@@ -12594,7 +12953,41 @@ function dfAddNodeFromTemplate(templateKey, x, y) {
   }
   dfSelectedNodeId = nodeId;
   dfRenderConfigPanel(nodeId);
+  // Native auto-wire: a freshly dropped piece chains onto the current tail
+  // so the flow stays connected START→…→END. Suppressed during load (the
+  // definition carries its own depends_on).
+  if (opts.autoChain !== false) dfAutoChain(nodeId);
+  if (!_dfAnchorBusy) dfScheduleAnchorRefresh();  // re-bracket begin/end
   return nodeId;
+}
+
+// Auto-connect a newly created step node onto the current chain tail (the
+// most-recent terminal real step). The first node stays unchained — the
+// START/END anchors bracket it. The connection is a real edge → persists as
+// depends_on and the anchors re-bracket around it.
+function dfAutoChain(newNodeId) {
+  if (!dfEditor || newNodeId == null) return;
+  newNodeId = Number(newNodeId);
+  let home = {};
+  try {
+    const ex = dfEditor.export();
+    home = (ex && ex.drawflow && ex.drawflow.Home && ex.drawflow.Home.data) || {};
+  } catch (_) { return; }
+  const realIds = Object.keys(dfNodeData).map(Number).filter(id => id !== newNodeId);
+  if (!realIds.length) return;  // first node → anchors handle START→node→END
+  // A node is a terminal if it has no outgoing connection to another REAL node.
+  const hasRealDownstream = id => {
+    const info = home[id];
+    if (!info || !info.outputs) return false;
+    return Object.values(info.outputs).some(out =>
+      (out.connections || []).some(c => {
+        const n = parseInt(c.node);
+        return n !== newNodeId && dfNodeData[n];
+      }));
+  };
+  const terminals = realIds.filter(id => !hasRealDownstream(id));
+  const tail = (terminals.length ? terminals : realIds).reduce((a, b) => Math.max(a, b));
+  try { dfEditor.addConnection(tail, newNodeId, 'output_1', 'input_1'); } catch (_) {}
 }
 
 function dfNodeHtml(data) {
@@ -12979,30 +13372,93 @@ function dfOnConnectionRemoved(conn) {
 
 // Add START (seed) / END (deliverable) anchor nodes to the composer canvas,
 // mirroring the runs DAG. NOT added to dfNodeData → dfExportYaml skips them.
-function dfAddAnchors(steps, idMap, hasDeps) {
-  if (!dfEditor || !steps || !steps.length) return;
+function dfAddAnchors(steps, idMap, hasDeps, extraSeedKeys) {
+  if (!dfEditor) return;
+  steps = steps || [];
+  idMap = idMap || {};
   const depOf = s => Array.isArray(s.depends_on) ? s.depends_on : (s.depends_on ? [s.depends_on] : []);
-  const seedKeys = [...new Set(steps.flatMap(s =>
-    (s.inputs || []).filter(i => typeof i === 'string' && i.startsWith('seed.')).map(i => i.slice(5))))];
-  let rootSteps, terminalSteps;
-  if (hasDeps) {
-    const depended = new Set(steps.flatMap(depOf));
-    rootSteps = steps.filter(s => depOf(s).length === 0);
-    terminalSteps = steps.filter(s => !depended.has(s.id));
-  } else {
-    rootSteps = [steps[0]];
-    terminalSteps = [steps[steps.length - 1]];
+  // Seed keys = declared schema (extraSeedKeys, from the START editor) UNION
+  // the keys actually referenced via seed.* in step inputs. So a declared-but-
+  // not-yet-wired key still shows, and a wired-but-undeclared one isn't lost.
+  const inferred = steps.flatMap(s =>
+    (s.inputs || []).filter(i => typeof i === 'string' && i.startsWith('seed.')).map(i => i.slice(5)));
+  const seedKeys = [...new Set([...(extraSeedKeys || []), ...inferred])];
+  let rootSteps = [], terminalSteps = [];
+  if (steps.length) {
+    if (hasDeps) {
+      const depended = new Set(steps.flatMap(depOf));
+      rootSteps = steps.filter(s => depOf(s).length === 0);
+      terminalSteps = steps.filter(s => !depended.has(s.id));
+    } else {
+      rootSteps = [steps[0]];
+      terminalSteps = [steps[steps.length - 1]];
+    }
   }
   const deliverable = [...new Set(terminalSteps.flatMap(s => Array.isArray(s.outputs) ? s.outputs : []))];
   const keyChips = arr => (arr.length ? arr : ['—']).map(k => `<span>${esc(k)}</span>`).join('');
   try {
-    const startHtml = `<div class="wf-anchor wf-anchor-start"><div class="wf-anchor-label">▶ START</div><div class="wf-anchor-sub">seed input</div><div class="wf-anchor-keys">${keyChips(seedKeys)}</div></div>`;
-    const startId = dfEditor.addNode('__start__', 0, 1, 0, 0, '__start__', {}, startHtml);
+    // START carries an inline edit affordance → opens the seed-schema editor.
+    const startHtml = `<div class="wf-anchor wf-anchor-start">`
+      + `<div class="wf-anchor-label">▶ START`
+      + `<span class="wf-anchor-edit" title="Edit the workflow's seed inputs" onclick="event.stopPropagation();DfSeedSchema.open()">✎</span>`
+      + `</div>`
+      + `<div class="wf-anchor-sub">seed input</div>`
+      + `<div class="wf-anchor-keys">${keyChips(seedKeys)}</div></div>`;
+    const startId = dfEditor.addNode('__start__', 0, 1, 40, 200, '__start__', {}, startHtml);
     rootSteps.forEach(s => { const t = idMap[s && s.id]; if (t != null) { try { dfEditor.addConnection(startId, t, 'output_1', 'input_1'); } catch (_) {} } });
     const endHtml = `<div class="wf-anchor wf-anchor-end"><div class="wf-anchor-label">■ END</div><div class="wf-anchor-sub">deliverable</div><div class="wf-anchor-keys">${keyChips(deliverable.length ? deliverable : ['output'])}</div></div>`;
-    const endId = dfEditor.addNode('__end__', 1, 0, 0, 0, '__end__', {}, endHtml);
+    const endId = dfEditor.addNode('__end__', 1, 0, 980, 200, '__end__', {}, endHtml);
     terminalSteps.forEach(s => { const src = idMap[s && s.id]; if (src != null) { try { dfEditor.addConnection(src, endId, 'output_1', 'input_1'); } catch (_) {} } });
   } catch (_) { /* anchors are best-effort decoration */ }
+}
+
+// Rebuild the START/END anchors from the CURRENT canvas state. Removes the old
+// anchor nodes first, derives steps + deps from dfNodeData + connections, then
+// redraws — so the begin/end boundary stays live while authoring (not just on
+// load). Guarded by _dfAnchorBusy so the node/connection it adds don't recurse.
+function dfRefreshAnchors() {
+  if (!dfEditor) return;
+  _dfAnchorBusy = true;
+  try {
+    const ex = dfEditor.export();
+    const home = (ex && ex.drawflow && ex.drawflow.Home && ex.drawflow.Home.data) || {};
+    // Drop existing anchors.
+    Object.keys(home).forEach(id => {
+      const n = home[id];
+      if (n && (n.name === '__start__' || n.name === '__end__')) {
+        try { dfEditor.removeNodeId('node-' + id); } catch (_) {}
+      }
+    });
+    // Reconstruct steps + idMap from real (dfNodeData-backed) nodes.
+    const steps = [], idMap = {};
+    let hasDeps = false;
+    Object.keys(dfNodeData).forEach(nid => {
+      const d = dfNodeData[nid];
+      if (!d) return;
+      const info = home[nid];
+      const deps = [];
+      if (info && info.inputs) {
+        Object.values(info.inputs).forEach(inp => (inp.connections || []).forEach(c => {
+          const src = dfNodeData[parseInt(c.node)];
+          if (src && !deps.includes(src.id)) deps.push(src.id);
+        }));
+      }
+      if (deps.length) hasDeps = true;
+      steps.push({ id: d.id, inputs: d.inputs || [], outputs: d.outputs || [], depends_on: deps });
+      idMap[d.id] = parseInt(nid);
+    });
+    const declaredKeys = (dfSeedSchema || []).map(s => s && s.key).filter(Boolean);
+    dfAddAnchors(steps, idMap, hasDeps, declaredKeys);
+  } catch (_) { /* best-effort */ }
+  _dfAnchorBusy = false;
+}
+
+// Debounced refresh — coalesces the burst of events a bulk load / multi-edit
+// fires, and is a no-op while an anchor refresh is already in flight.
+function dfScheduleAnchorRefresh() {
+  if (_dfAnchorBusy) return;
+  clearTimeout(_dfAnchorTimer);
+  _dfAnchorTimer = setTimeout(() => { try { dfRefreshAnchors(); } catch (_) {} }, 150);
 }
 
 function dfExportYaml() {
@@ -13017,6 +13473,16 @@ function dfExportYaml() {
 
   let yaml = `id: ${wfId}\nname: "${wfName}"\nversion: "1.0"\n`;
   if (wfDesc) yaml += `description: "${wfDesc}"\n`;
+  // Persist the START anchor's declared seed schema as context.inputs so the
+  // input contract round-trips (read back in composerLoadById).
+  if (Array.isArray(dfSeedSchema) && dfSeedSchema.length) {
+    yaml += `\ncontext:\n  inputs:\n`;
+    dfSeedSchema.forEach(s => {
+      if (!s || !s.key) return;
+      yaml += `    - key: ${s.key}\n`;
+      if (s.description) yaml += `      description: "${String(s.description).replace(/"/g, '\\"')}"\n`;
+    });
+  }
   yaml += `\ndefaults:\n  role: ${wfRole}\n  temperature: 0.7\n  max_tokens: 4096\n  retries: 2\n  retry_delay: 5\n\nsteps:\n`;
 
   nodeIds.forEach(nid => {
@@ -16648,6 +17114,8 @@ const ComposerView = (function () {
     // had previously visited the legacy Workflows tab.
     try { dfInitEditor(); dfInitPalette(); } catch (e) { console.warn(e); }
     updateCanvasEmptyState();
+    // Show the begin/end boundary immediately, even on an empty canvas.
+    if (typeof dfScheduleAnchorRefresh === 'function') dfScheduleAnchorRefresh();
     if (_booted) {
       // Already initialised — workbenches refresh quickly to pick up
       // server-side changes (newly registered MCP, etc).
@@ -17761,12 +18229,14 @@ function composerNewWorkflow() {
     });
   }
   dfNodeData = {}; dfNextId = 0; dfSelectedNodeId = null;
+  dfSeedSchema = [];  // fresh workflow → empty input contract
   ['df-wf-id', 'df-wf-name', 'df-wf-desc'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const yamlPanel = document.getElementById('df-yaml-panel');
   if (yamlPanel) yamlPanel.style.display = 'none';
   ComposerView.updateCanvasEmptyState();
+  if (typeof dfScheduleAnchorRefresh === 'function') dfScheduleAnchorRefresh();
 }
 
 async function composerLoadFromIndex() {
@@ -17818,7 +18288,8 @@ async function composerLoadById(wfId) {
       const tmpl = dfStepTemplates.find(t => t.key === tmplKey) || dfStepTemplates.find(t => t.key === 'custom');
       const x = 80 + (i % 4) * 220;
       const y = 60 + Math.floor(i / 4) * 140;
-      const nodeId = dfAddNodeFromTemplate(tmpl.key, x, y);
+      // No auto-chain on load — the definition's depends_on drives wiring.
+      const nodeId = dfAddNodeFromTemplate(tmpl.key, x, y, { autoChain: false });
       if (nodeId != null) {
         const d = dfNodeData[nodeId];
         d.id = step.id || d.id;
@@ -17883,10 +18354,18 @@ async function composerLoadById(wfId) {
       }
     }
 
+    // Restore the declared seed schema (the START anchor's input contract)
+    // from context.inputs so it round-trips, then draw the begin/end anchors.
+    try {
+      const ci = (defn.context && Array.isArray(defn.context.inputs)) ? defn.context.inputs : [];
+      dfSeedSchema = ci.map(x => (typeof x === 'string'
+        ? { key: x, description: '' }
+        : { key: x.key, description: x.description || '' })).filter(s => s.key);
+    } catch (_) { dfSeedSchema = []; }
     // START/END anchor nodes — same seed→deliverable brackets as the runs
     // DAG. Not tracked in dfNodeData, so dfExportYaml skips them (they're
     // decoration, not steps).
-    try { dfAddAnchors(allSteps, idMap, anyDepsDeclared); } catch (_) {}
+    try { dfAddAnchors(allSteps, idMap, anyDepsDeclared, dfSeedSchema.map(s => s.key)); } catch (_) {}
 
     // Auto-layout AFTER edges exist so dagre's topological sort actually
     // has a graph to lay out (with no edges it stacked everything at
@@ -17979,6 +18458,32 @@ async function dfRunWorkflowLive() {
     if (window.Toast) Toast.danger('Run kickoff failed', String(e));
   }
 }
+
+// Stop the active composer run. Mirrors RunsTab.cancelCurrent /
+// ComposerWorkstream.clearRun's cancel — POST .../cancel — but reachable
+// straight from the composer toolbar so the operator doesn't have to leave
+// the canvas. The current run id is tracked by dfApplyRunState; falls back
+// to the last run summary if needed.
+async function composerStopRun() {
+  const runId = window._composerActiveRunId
+    || (window._lastRunSummary && window._lastRunSummary.run_id);
+  if (!runId) {
+    if (window.Toast) Toast.warn('No active run', 'Start a run first.');
+    return;
+  }
+  if (!confirm('Stop this run? The engine halts at the next step boundary; the in-flight step finishes first.')) return;
+  const btn = document.getElementById('composer-stop-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '◼ Stopping…'; }
+  try {
+    const r = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (window.Toast) Toast.info('Stop requested', 'Run will halt after the current step.');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '◼ Stop'; }
+    if (window.Toast) Toast.danger('Stop failed', String(e));
+  }
+}
+window.composerStopRun = composerStopRun;
 
 /* ══════════════════════════════════════════════════════════════════
    WORKFLOW INDEX — categorized catalogue + import/export bundles.
@@ -19414,7 +19919,20 @@ const RunsTab = (function () {
 
   function pivotContextGraph() {
     closeStepDetail();
-    switchTab('graph');
+    // The knowledge graph (#graph-svg) lives in the research / Skill-Lab
+    // tab — there is no standalone 'graph' tab anymore, so switchTab('graph')
+    // null-threw on getElementById('tab-graph') and the pivot did nothing.
+    // Route to the tab that actually hosts the graph (matching pivotResearch),
+    // then (re)load the graph data and bring the panel into view.
+    switchTab('research');
+    setTimeout(() => {
+      try { if (typeof loadGraphData === 'function') loadGraphData(); } catch (_) {}
+      const g = document.querySelector('#tab-research .graph-panel')
+        || document.getElementById('graph-svg');
+      if (g && g.scrollIntoView) {
+        try { g.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+      }
+    }, 250);
   }
 
   function pivotNewAgent() {

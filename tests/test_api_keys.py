@@ -136,7 +136,13 @@ def client_no_master(monkeypatch):
 
 @pytest.fixture(scope="module")
 def api_client():
-    """Test client with master key set"""
+    """Test client with master key set.
+
+    Pins DATA_CONFIG_DIR to a throwaway temp dir so created keys never leak
+    into the real data/config/api_keys.yaml keystore.
+    """
+    tmpdir = tempfile.mkdtemp()
+    os.environ["DATA_CONFIG_DIR"] = tmpdir
     os.environ["ENABLE_API_AUTH"] = "true"
     os.environ["MASTER_API_KEY"] = "master-test-key-12345"
     os.environ["RATE_LIMIT_RPM"] = "0"
@@ -152,7 +158,8 @@ def api_client():
     importlib.reload(api.main)
     from api.main import app
 
-    return TestClient(app)
+    yield TestClient(app)
+    shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 class TestKeyRouter:
@@ -213,10 +220,11 @@ class TestMultiKeyAuth:
     MASTER_HEADER = {"Authorization": "Bearer master-test-key-12345"}
 
     def test_created_key_authenticates_models(self, api_client):
-        # Create a key with chat scope
+        # Create a key scoped for /v1/models (which is gated on the "models"
+        # scope in middleware.SCOPE_MAP).
         resp = api_client.post(
             "/api/keys",
-            json={"name": "auth-test", "scopes": ["chat"]},
+            json={"name": "auth-test", "scopes": ["chat", "models"]},
             headers=self.MASTER_HEADER,
         )
         raw_key = resp.json()["key"]

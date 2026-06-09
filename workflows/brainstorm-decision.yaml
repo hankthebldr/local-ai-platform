@@ -1,0 +1,149 @@
+# Brainstorm → Research → Decision
+#
+# The key user journey for the context engine: a thesis (idea) enters at START,
+# three research subagents interrogate it in parallel from different angles, a
+# gather step synthesizes them, an analyzer turns the synthesis into a concrete
+# research/feature plan, and a validator reviews it and issues a recommendation
+# at END.
+#
+#   START (seed.thesis [+ optional seed.github_url as text])
+#     → research (kind=parallel): market | validation | user_value  → synthesize
+#     → analyzer  (research plan)
+#     → validator (review + go/no-go)
+#   END (decision)
+#
+# Single-output steps throughout so the run is robust on a single-Ollama box
+# (no multi-key JSON parsing to fail). The parallel gain here is context
+# isolation across the three angles, not wall-clock parallelism.
+
+id: brainstorm-decision
+name: "Brainstorm → Research → Decision"
+schema_version: 1
+description: |
+  Take a feature thesis, research it from market / feasibility / user-value
+  angles in parallel, synthesize, draft a plan, then validate with a go/no-go
+  recommendation. Pure local LLM — a GitHub URL may be pasted into the thesis
+  as text but is not fetched.
+
+# START anchor's declared input contract (round-trips via the composer).
+context:
+  inputs:
+    - key: thesis
+      description: "The feature idea / hypothesis to investigate"
+    - key: github_url
+      description: "Optional repo URL pasted as context (not fetched)"
+
+defaults:
+  role: reasoning
+  temperature: 0.5
+  max_tokens: 4096
+  retries: 1
+
+steps:
+  # ── Parallel research: three angles on the same thesis ──────────────
+  - id: research
+    name: "Parallel Research"
+    kind: parallel
+    inputs:
+      - seed.thesis
+    outputs:
+      - research_synthesis
+    execution:
+      mode: multi_model_concurrent
+      max_concurrency: 3
+      failure_policy: fail_fast
+
+    branches:
+      - id: market
+        name: "Market & Competition"
+        role: general
+        prompt:
+          role_inline: |
+            You are a market analyst. Assess the market for the idea: size and
+            trend, who already does this (competitors / alternatives), and how a
+            new entrant could be positioned. Be concrete and skeptical.
+          task: "Analyze the market for: {{ seed.thesis }}"
+        inputs:
+          - seed.thesis
+        outputs:
+          - market
+
+      - id: validation
+        name: "Feasibility & Risks"
+        role: reasoning
+        prompt:
+          role_inline: |
+            You are a technical validator. Assess feasibility: what would it
+            take to build, the hardest unknowns, dependencies, and the top
+            risks that could sink it. Call out what must be true for it to work.
+          task: "Assess feasibility and risks for: {{ seed.thesis }}"
+        inputs:
+          - seed.thesis
+        outputs:
+          - validation
+
+      - id: user_value
+        name: "User Value & Demand"
+        role: general
+        prompt:
+          role_inline: |
+            You are a user researcher. Who specifically wants this and why
+            (jobs-to-be-done)? What signals suggest real demand vs. a
+            nice-to-have? Where is the value sharpest?
+          task: "Analyze user value and demand for: {{ seed.thesis }}"
+        inputs:
+          - seed.thesis
+        outputs:
+          - user_value
+
+    gather:
+      id: synthesize
+      name: "Synthesize Research"
+      role: reasoning
+      prompt:
+        role_inline: |
+          You are the lead researcher. Three specialists analyzed the idea from
+          market, feasibility, and user-value angles. Combine their findings
+          into one coherent synthesis: the strongest evidence for, the biggest
+          risks against, and the open questions that remain.
+        task: "Synthesize the three research reports into one assessment"
+      inputs:
+        - market.market
+        - validation.validation
+        - user_value.user_value
+      outputs:
+        - research_synthesis
+
+  # ── Analyzer: synthesis → concrete plan ─────────────────────────────
+  - id: analyzer
+    name: "Research Plan"
+    role: reasoning
+    depends_on: [research]
+    prompt:
+      role_inline: |
+        You are a staff analyst. From the research synthesis, produce a concrete
+        plan: the recommended direction, the 3-5 steps to de-risk and validate
+        it, what success looks like, and the single biggest risk to watch.
+      task: "Draft a research/feature plan from the synthesis for: {{ seed.thesis }}"
+    inputs:
+      - research.research_synthesis
+      - seed.thesis
+    outputs:
+      - research_plan
+
+  # ── Validator: review the plan, issue a recommendation ──────────────
+  - id: validator
+    name: "Validate & Recommend"
+    role: reasoning
+    depends_on: [analyzer]
+    prompt:
+      role_inline: |
+        You are a critical reviewer. Review the plan for soundness and gaps.
+        End with an explicit recommendation line: "Recommendation: GO" or
+        "Recommendation: NO-GO" (or "REVISE"), followed by the one reason that
+        most drives the call.
+      task: "Review the plan and issue a go / no-go recommendation"
+    inputs:
+      - analyzer.research_plan
+    outputs:
+      - decision

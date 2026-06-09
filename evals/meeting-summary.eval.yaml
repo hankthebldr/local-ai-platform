@@ -1,0 +1,40 @@
+# Regression suite for the meeting-summary workflow.
+#
+# Run it:   python -m cli.eval evals/meeting-summary.eval.yaml
+# (needs the inference backend up — Ollama/vLLM. Assertions are property-based,
+#  so they tolerate the model's wording and only check structure.)
+suite: meeting-summary-regression
+workflow: meeting-summary
+
+cases:
+  - name: happy-path-extracts-actions
+    seed:
+      meeting_title: "Q3 Planning Sync"
+      attendees: ["Ada", "Linus", "Grace"]
+      transcript: |
+        Ada: We agreed to ship the billing migration before the end of Q3.
+        Linus: I'll own the database cutover — target is the 15th.
+        Grace: Open question: do we need a maintenance window, or can we do it live?
+        Ada: Blocker: we still don't have sign-off from finance on the new schema.
+        Linus: Action — Grace to draft the rollback plan by Friday.
+        Ada: Decision: we go with the phased rollout, not big-bang.
+    expect_status: completed
+    assert:
+      - gate: "extract_signals.action_items != []"
+        why: "the transcript clearly contains action items"
+      - gate: "extract_signals.decisions != []"
+        why: "two explicit decisions were stated"
+      - gate: "compose_brief.brief != ''"
+        why: "a non-empty brief must be produced"
+      - matches: { ref: "compose_brief.brief", pattern: "(?i)action" }
+        why: "the brief should carry an action-items section"
+
+  - name: empty-transcript-still-completes
+    seed:
+      meeting_title: "Placeholder"
+      attendees: []
+      transcript: "No substantive discussion occurred."
+    expect_status: completed
+    assert:
+      - gate: "compose_brief.brief != ''"
+        why: "even a thin meeting yields a (possibly mostly-'None') brief"
