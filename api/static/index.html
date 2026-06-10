@@ -7967,8 +7967,9 @@ function setGauge(arcId, valueId, pct) {
 /* ── STATUS LOADER ──────────────────────────────────────────────── */
 async function loadStatus() {
   try {
-    const r = await fetch('/health');
-    const d = await r.json();
+    // Polled every 10s — silent + no Net retries so backoff doesn't stack
+    // with the interval timer; the catch below renders the offline state.
+    const d = await Net.getJson('/health', { silent: true, retries: 0 });
     const o = d.ollama || {};
     const s = d.system || {};
     const isHealthy = d.status === 'healthy';
@@ -8038,8 +8039,13 @@ function isEmbeddingOnlyModel(modelId) {
 
 async function loadModels() {
   try {
-    const r = await fetch('/v1/models');
-    const d = await r.json();
+    // Net.call (not getJson): a 401 returns a JSON body with no .data —
+    // that must flow into the empty-state branch below (which also resets
+    // the model-select), not into the catch. Only non-JSON / network
+    // failures should reach the catch, matching the old r.json() throw.
+    const r = await Net.call('/v1/models');
+    const d = r.data;
+    if (!d || typeof d !== 'object') throw new Error(r.error || 'Invalid response');
     const models = d.data || [];
     const container = document.getElementById('models-content');
 
@@ -8141,8 +8147,7 @@ function markSettingsDirty() { settingsDirty = true; }
 
 async function loadSearchSettings() {
   try {
-    const r = await fetch('/api/inventory/settings/search');
-    const cfg = await r.json();
+    const cfg = await Net.getJson('/api/inventory/settings/search');
     document.getElementById('cfg-backend').value = cfg.default_backend || 'auto';
     document.getElementById('cfg-searxng').value = cfg.searxng_url || '';
     document.getElementById('cfg-brave').value = '';
@@ -8246,8 +8251,7 @@ async function populateSystemPromptRoles() {
   const sel = document.getElementById('sysprompt-role-select');
   if (!sel || sel.dataset.loaded === '1') return;
   try {
-    const r = await fetch('/api/roles');
-    const roles = await r.json();
+    const roles = await Net.getJson('/api/roles');
     for (const role of roles) {
       const opt = document.createElement('option');
       opt.value = role.id;
@@ -8265,9 +8269,9 @@ async function applyRoleAsSystemPrompt() {
   const id = sel.value;
   if (!id) return;
   try {
-    const r = await fetch(`/api/roles/${encodeURIComponent(id)}`);
-    if (!r.ok) return;
-    const role = await r.json();
+    // Old silent !r.ok return now lands in the catch (console.warn) —
+    // cosmetic-only difference, no UI state depends on it.
+    const role = await Net.getJson(`/api/roles/${encodeURIComponent(id)}`);
     document.getElementById('system-prompt').value = role.content;
     saveSystemPrompt();
   } catch (e) { console.warn(e); }
@@ -8642,12 +8646,10 @@ async function loadInstalledLocal() {
   const countEl = document.getElementById('installed-local-count');
   if (!body) return;
   try {
-    const [stRes, memRes] = await Promise.all([
-      fetch('/api/inventory/status'),
-      fetch('/api/inventory/memory'),
+    const [st, mem] = await Promise.all([
+      Net.getJson('/api/inventory/status'),
+      Net.getJson('/api/inventory/memory'),
     ]);
-    const st = await stRes.json();
-    const mem = await memRes.json();
     const local = st.installed_local || [];
     const runningNames = new Set((mem.running_models || []).map(m => m.name));
     if (countEl) countEl.textContent = local.length ? `(${local.length})` : '';
@@ -8696,8 +8698,7 @@ async function openModelDetail(name) {
   document.body.appendChild(modal);
   const close = "this.closest('div[style*=fixed]').remove()";
   try {
-    const r = await fetch('/api/inventory/model/' + encodeURIComponent(name));
-    const d = await r.json();
+    const d = await Net.getJson('/api/inventory/model/' + encodeURIComponent(name));
     const det = d.details || {};
     const ctxVal = Object.entries(d.model_info || {}).filter(([k]) => k.includes('context')).map(([, v]) => v)[0];
     const rows = [
@@ -8749,8 +8750,7 @@ async function removeLocalModel(name) {
 
 async function loadCatalog() {
   try {
-    const r = await fetch('/api/inventory/catalog');
-    const d = await r.json();
+    const d = await Net.getJson('/api/inventory/catalog');
     catalogData = d.models || [];
     catalogLoaded = true;
 
@@ -8783,9 +8783,7 @@ async function _refreshProjectsCount() {
   const chip = document.getElementById('projects-tab-count');
   if (!chip) return;
   try {
-    const r = await fetch('/api/projects');
-    if (!r.ok) return;
-    const data = await r.json();
+    const data = await Net.getJson('/api/projects', { silent: true });
     const list = Array.isArray(data) ? data : (data.projects || []);
     chip.textContent = list.length ? `(${list.length})` : '';
   } catch (_) { /* best-effort */ }
@@ -8813,47 +8811,32 @@ async function loadCatalogPage() {
     if (el) el.textContent = v == null ? '—' : String(v);
   };
   try {
-    const r = await fetch('/v1/models');
-    if (r.ok) {
-      const d = await r.json();
-      const list = d.data || [];
-      set('catalog-count-models', list.length);
-    }
+    const d = await Net.getJson('/v1/models', { silent: true });
+    const list = d.data || [];
+    set('catalog-count-models', list.length);
   } catch (_) {}
   try {
-    const r = await fetch('/api/plugins');
-    if (r.ok) {
-      const data = await r.json();
-      const list = Array.isArray(data) ? data : (data.plugins || []);
-      set('catalog-count-plugins', list.length);
-      let totalSkills = 0;
-      list.forEach(p => { totalSkills += ((p.skills || []).length); });
-      set('catalog-count-skills', totalSkills);
-    }
+    const data = await Net.getJson('/api/plugins', { silent: true });
+    const list = Array.isArray(data) ? data : (data.plugins || []);
+    set('catalog-count-plugins', list.length);
+    let totalSkills = 0;
+    list.forEach(p => { totalSkills += ((p.skills || []).length); });
+    set('catalog-count-skills', totalSkills);
   } catch (_) {}
   try {
-    const r = await fetch('/api/mcp/servers');
-    if (r.ok) {
-      const data = await r.json();
-      const list = Array.isArray(data) ? data : (data.servers || []);
-      set('catalog-count-mcp', list.length);
-    }
+    const data = await Net.getJson('/api/mcp/servers', { silent: true });
+    const list = Array.isArray(data) ? data : (data.servers || []);
+    set('catalog-count-mcp', list.length);
   } catch (_) {}
   try {
-    const r = await fetch('/api/agents');
-    if (r.ok) {
-      const data = await r.json();
-      set('catalog-count-agents', (data || []).length);
-    }
+    const data = await Net.getJson('/api/agents', { silent: true });
+    set('catalog-count-agents', (data || []).length);
   } catch (_) {}
   try {
-    const r = await fetch('/api/discover/sources');
-    if (r.ok) {
-      const data = await r.json();
-      const provs = data.providers || [];
-      const live = provs.filter(p => p.implemented).length;
-      set('catalog-count-ext', provs.length ? `${live}/${provs.length}` : '—');
-    }
+    const data = await Net.getJson('/api/discover/sources', { silent: true });
+    const provs = data.providers || [];
+    const live = provs.filter(p => p.implemented).length;
+    set('catalog-count-ext', provs.length ? `${live}/${provs.length}` : '—');
   } catch (_) {}
   // Activate the current section (or 'models' on first paint).
   if (window.CatalogPage) CatalogPage.show(CatalogPage._active || 'models');
@@ -8895,9 +8878,7 @@ const CatalogPage = (function () {
       const mount = document.getElementById('catalog-agents-mount');
       if (!mount) return;
       try {
-        const r = await fetch('/api/agents');
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const list = await r.json();
+        const list = await Net.getJson('/api/agents');
         mount.innerHTML = _renderAgentsList(list || []);
       } catch (e) {
         mount.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed: ${esc(e.message)}</div>`;
@@ -8970,7 +8951,7 @@ const SkillsBuilder = (function () {
     if (!modal) return;
     // Populate the target-plugin dropdown from /api/plugins so the
     // operator can pick where the new skill lands.
-    fetch('/api/plugins').then(r => r.ok ? r.json() : []).then(data => {
+    Net.getJson('/api/plugins', { silent: true }).then(data => {
       const list = Array.isArray(data) ? data : (data.plugins || []);
       const sel = document.getElementById('skill-builder-plugin');
       if (sel) {
@@ -9045,9 +9026,7 @@ async function loadPluginsDiscover() {
   const grid = document.getElementById('plugins-discover-grid');
   if (!grid) return;
   try {
-    const r = await fetch('/api/plugins');
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
+    const data = await Net.getJson('/api/plugins');
     const list = Array.isArray(data) ? data : (data.plugins || []);
     const countEl = document.getElementById('plugins-disc-count');
     if (countEl) countEl.textContent = list.length ? `(${list.length})` : '';
@@ -9068,9 +9047,7 @@ async function loadMcpsDiscover() {
   const grid = document.getElementById('mcps-discover-grid');
   if (!grid) return;
   try {
-    const r = await fetch('/api/mcp/servers');
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
+    const data = await Net.getJson('/api/mcp/servers');
     const list = Array.isArray(data) ? data : (data.servers || []);
     const countEl = document.getElementById('mcps-disc-count');
     if (countEl) countEl.textContent = list.length ? `(${list.length})` : '';
@@ -9094,9 +9071,7 @@ async function loadExternalDiscover() {
   const host = document.getElementById('ext-discover-providers');
   if (!host) return;
   try {
-    const r = await fetch('/api/discover/sources');
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d = await r.json();
+    const d = await Net.getJson('/api/discover/sources');
     const providers = d.providers || [];
     const countEl = document.getElementById('ext-discover-count');
     if (countEl) {
@@ -9149,9 +9124,7 @@ const ExtDiscover = (function () {
     if (body.dataset.loaded === '1') return;
     body.innerHTML = `<div class="model-empty">Fetching…</div>`;
     try {
-      const r = await fetch(`/api/discover/${encodeURIComponent(source)}`);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const feed = await r.json();
+      const feed = await Net.getJson(`/api/discover/${encodeURIComponent(source)}`);
       body.innerHTML = _renderFeedBody(feed, source);
       body.dataset.loaded = '1';
     } catch (e) {
@@ -9165,9 +9138,7 @@ const ExtDiscover = (function () {
     body.innerHTML = `<div class="model-empty">Refreshing…</div>`;
     delete body.dataset.loaded;
     try {
-      const r = await fetch(`/api/discover/${encodeURIComponent(source)}?force=true`);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const feed = await r.json();
+      const feed = await Net.getJson(`/api/discover/${encodeURIComponent(source)}?force=true`);
       body.innerHTML = _renderFeedBody(feed, source);
       body.dataset.loaded = '1';
     } catch (e) {
@@ -9355,8 +9326,13 @@ async function pullModel(ollamaName, modelId) {
 
     const poll = setInterval(async () => {
       try {
-        const r = await fetch('/api/inventory/pull-progress/' + encodeURIComponent(ollamaName));
-        const d = await r.json();
+        // 800ms poll — retries:0 so Net's backoff doesn't stack with the
+        // interval timer; silent so a transient miss doesn't toast. The
+        // catch below stays authoritative for failure handling (Retry).
+        const d = await Net.getJson(
+          '/api/inventory/pull-progress/' + encodeURIComponent(ollamaName),
+          { silent: true, retries: 0 }
+        );
         const phase = d.status_message || d.status || 'pulling';
 
         if (d.total > 0 && fillEl) {
@@ -9419,9 +9395,7 @@ async function loadArchInfo() {
     if (el) el.textContent = val;
   }
   try {
-    const r = await fetch('/api/system/architecture');
-    if (!r.ok) throw new Error(r.status);
-    const d = await r.json();
+    const d = await Net.getJson('/api/system/architecture');
     // The endpoint returns the architecture under `arch` (not `architecture`);
     // reading the wrong key left every field as '—'.
     const arch = d.arch || d.architecture || {};
@@ -9468,12 +9442,10 @@ async function loadArchInfo() {
 async function loadMemory() {
   loadArchInfo();
   try {
-    const [memRes, sysRes] = await Promise.all([
-      fetch('/api/inventory/memory'),
-      fetch('/api/inventory/system')
+    const [mem, sys] = await Promise.all([
+      Net.getJson('/api/inventory/memory'),
+      Net.getJson('/api/inventory/system')
     ]);
-    const mem = await memRes.json();
-    const sys = await sysRes.json();
 
     // System memory bar
     const sysMem = sys.memory || {};
@@ -9691,11 +9663,10 @@ async function loadArchitecturePanel() {
 
     const pollOnce = async () => {
       try {
-        const pRes = await fetch('/api/system/pressure');
-        if (pRes.ok) {
-          const pressure = await pRes.json();
-          _renderArchPressure(triple.arch, triple.deployment, triple.ollama, pressure);
-        }
+        // Interval poll — silent + retries:0 so Net's backoff doesn't
+        // stack with the poll timer; failures keep the last good paint.
+        const pressure = await Net.getJson('/api/system/pressure', { silent: true, retries: 0 });
+        _renderArchPressure(triple.arch, triple.deployment, triple.ollama, pressure);
       } catch(_) { /* keep the last good paint on transient failures */ }
     };
     pollOnce();
@@ -9744,8 +9715,7 @@ async function loadDiscovery(force = false) {
     document.getElementById('disc-refresh-btn').disabled = true;
     document.getElementById('disc-refresh-btn').textContent = force ? 'Scanning...' : 'Loading...';
 
-    const r = await fetch(url);
-    const d = await r.json();
+    const d = await Net.getJson(url);
     discoverData = d.models || [];
     discoverLoaded = true;
 
@@ -9930,8 +9900,7 @@ function _renderResearchInFlight(state) {
 async function populateResModelSelect() {
   const sel = document.getElementById('res-model-select');
   try {
-    const r = await fetch('/v1/models');
-    const d = await r.json();
+    const d = await Net.getJson('/v1/models', { silent: true });
     const models = d.data || [];
     sel.innerHTML = models.map(m => `<option value="${esc(m.id)}">${esc(m.id)}</option>`).join('');
     if (!sel.innerHTML) sel.innerHTML = '<option value="dolphin3:latest">dolphin3:latest</option>';
@@ -9942,8 +9911,7 @@ async function populateResModelSelect() {
 
 async function loadGraphData() {
   try {
-    const r = await fetch('/api/graph');
-    graphData = await r.json();
+    graphData = await Net.getJson('/api/graph');
     // Expose the dataset to window so the legend toggle handlers can
     // re-render without a network round-trip.
     window.graphData = graphData;
@@ -11012,9 +10980,7 @@ window.ResearchArtifacts = (function () {
     const body = document.getElementById('artifact-library-body');
     body.innerHTML = '<div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-line long"></div>';
     try {
-      const r = await fetch('/api/feedback/artifacts?limit=50');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const list = await r.json();
+      const list = await Net.getJson('/api/feedback/artifacts?limit=50');
       if (!list.length) {
         body.innerHTML = '<div class="model-empty" style="padding:20px">No artifacts captured yet. Run a research and click <strong>+ Capture as artifact</strong>.</div>';
         return;
@@ -11139,8 +11105,7 @@ async function loadRoles() {
   const container = document.getElementById('wf-roles-list');
   if (!container) return;
   try {
-    const resp = await fetch('/api/roles');
-    const roles = await resp.json();
+    const roles = await Net.getJson('/api/roles');
     if (!Array.isArray(roles) || roles.length === 0) {
       container.innerHTML = '<div class="model-empty">No roles defined in prompts/roles/</div>';
       return;
@@ -11175,8 +11140,7 @@ async function previewRole(id) {
 
 async function refreshWorkflows() {
   try {
-    const resp = await fetch('/api/workflows');
-    const workflows = await resp.json();
+    const workflows = await Net.getJson('/api/workflows');
     const sel = document.getElementById('wf-select');
     sel.innerHTML = '<option value="">-- select workflow --</option>';
     workflows.forEach(wf => {
@@ -11258,8 +11222,7 @@ async function loadWorkflowDetail() {
 
   try {
     // Load via validate endpoint to parse the definition
-    const resp = await fetch('/api/workflows');
-    const workflows = await resp.json();
+    const workflows = await Net.getJson('/api/workflows');
     const wf = workflows.find(w => w.id === opt.dataset.id);
     if (!wf) return;
 
@@ -11518,8 +11481,7 @@ async function runWorkflow() {
 
 async function loadRecentRuns() {
   try {
-    const resp = await fetch('/api/workflows/runs?limit=10');
-    const runs = await resp.json();
+    const runs = await Net.getJson('/api/workflows/runs?limit=10');
     const container = document.getElementById('wf-runs-list');
 
     if (!runs.length) {
@@ -11580,8 +11542,7 @@ async function resumeRun(runId, btn) {
 
 async function viewRun(runId) {
   try {
-    const resp = await fetch(`/api/workflows/runs/${runId}`);
-    const run = await resp.json();
+    const run = await Net.getJson(`/api/workflows/runs/${runId}`);
 
     // Show results panel
     document.getElementById('wf-detail').style.display = 'block';
@@ -11595,12 +11556,11 @@ async function viewRun(runId) {
     const pipeline = document.getElementById('wf-pipeline');
     let defSteps = [];
     try {
-      const dResp = await fetch(`/api/workflows/${encodeURIComponent(run.workflow_id)}`);
-      if (dResp.ok) {
-        const d = await dResp.json();
-        defSteps = d.steps || [];
-        currentWorkflowDef = d;
-      }
+      // silent: a 404 here is expected for deleted/private workflows —
+      // the throw lands in this catch and we fall back to step_results.
+      const d = await Net.getJson(`/api/workflows/${encodeURIComponent(run.workflow_id)}`, { silent: true });
+      defSteps = d.steps || [];
+      currentWorkflowDef = d;
     } catch (_) { /* fallback below */ }
     const byId = new Map(defSteps.map(s => [s.id, s]));
     let pipeHtml = '';
@@ -11721,9 +11681,7 @@ async function loadActiveSessions() {
   const el = document.getElementById('live-sessions-list');
   if (!el) return;
   try {
-    const r = await fetch('/api/context');
-    if (!r.ok) throw new Error(r.statusText);
-    const sessions = await r.json();
+    const sessions = await Net.getJson('/api/context');
     if (!sessions.length) {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:0.75rem;text-align:center;padding:20px;">No active sessions</div>';
       return;
@@ -11793,8 +11751,7 @@ async function cleanupStaleSessions() {
 
 async function loadInjectionPreview() {
   try {
-    const r = await fetch('/api/memory/injection-preview');
-    const data = await r.json();
+    const data = await Net.getJson('/api/memory/injection-preview');
     const pre = document.getElementById('injection-preview');
     const empty = document.getElementById('injection-empty');
     if (!data.injection_text) {
@@ -11810,8 +11767,7 @@ async function loadInjectionPreview() {
 
 async function loadSessions() {
   try {
-    const r = await fetch('/api/memory/sessions');
-    const sessions = await r.json();
+    const sessions = await Net.getJson('/api/memory/sessions');
     const el = document.getElementById('session-list');
     if (!sessions.length) {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No saved sessions yet.</div>';
@@ -11838,8 +11794,7 @@ async function toggleSessionDetail(id) {
   const row = el.closest('[role="button"]');  // session row carries aria-expanded
   if (el.style.display !== 'none') { el.style.display = 'none'; if (row) row.setAttribute('aria-expanded', 'false'); return; }
   try {
-    const r = await fetch('/api/memory/sessions/' + id);
-    const s = await r.json();
+    const s = await Net.getJson('/api/memory/sessions/' + id);
     let html = '<div style="color:var(--text-dim);">';
     if (s.tools_used && s.tools_used.length) html += '<div>Tools: ' + s.tools_used.join(', ') + '</div>';
     if (s.topics && s.topics.length) html += '<div>Topics: ' + s.topics.join(', ') + '</div>';
@@ -11866,8 +11821,7 @@ async function deleteSession(id) {
 
 async function loadFacts() {
   try {
-    const r = await fetch('/api/memory/facts');
-    const facts = await r.json();
+    const facts = await Net.getJson('/api/memory/facts');
     const el = document.getElementById('facts-list');
     if (!facts.length) {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No pinned facts. Add one above.</div>';
@@ -11973,8 +11927,7 @@ async function deleteFact(id) {
 
 async function loadMemoryStats() {
   try {
-    const r = await fetch('/api/memory/stats');
-    const s = await r.json();
+    const s = await Net.getJson('/api/memory/stats', { silent: true });
     document.getElementById('stat-sessions').textContent = s.total_sessions || 0;
     document.getElementById('stat-tool-calls').textContent = s.total_tool_calls || 0;
     document.getElementById('stat-facts').textContent = s.total_facts || 0;
@@ -11983,12 +11936,10 @@ async function loadMemoryStats() {
 
 async function loadProfiles() {
   try {
-    const [profilesResp, activeResp] = await Promise.all([
-      fetch('/api/profiles'),
-      fetch('/api/profiles/active'),
+    const [profiles, active] = await Promise.all([
+      Net.getJson('/api/profiles'),
+      Net.getJson('/api/profiles/active'),
     ]);
-    const profiles = await profilesResp.json();
-    const active = await activeResp.json();
     document.getElementById('active-profile-id').textContent = active.default_profile_id || 'default';
 
     const el = document.getElementById('profiles-list');
@@ -12052,8 +12003,7 @@ async function loadDocumentsTab() {
 
 async function loadDocumentsList() {
   try {
-    const r = await fetch('/api/documents');
-    const docs = await r.json();
+    const docs = await Net.getJson('/api/documents');
     const el = document.getElementById('documents-list');
     if (!docs.length) {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No documents yet. Upload above.</div>';
@@ -12084,9 +12034,7 @@ async function loadDocumentsList() {
 
 async function loadDocStats() {
   try {
-    const r = await fetch('/api/documents/stats');
-    if (!r.ok) return;
-    const s = await r.json();
+    const s = await Net.getJson('/api/documents/stats', { silent: true });
     document.getElementById('doc-stat-count').textContent = s.total_documents || 0;
     document.getElementById('doc-stat-chunks').textContent = s.total_chunks || 0;
     const emb = s.embedding || {};
@@ -13526,8 +13474,7 @@ async function loadAgentsTab() {
 
   let agents = [];
   try {
-    const r = await fetch('/api/agents');
-    if (r.ok) agents = await r.json();
+    agents = await Net.getJson('/api/agents');
   } catch (e) {
     listEl.innerHTML = '<div style="color:var(--red,#f44);font-size:0.8rem;padding:8px;">Failed to load agents.</div>';
     return;
@@ -13589,9 +13536,7 @@ async function openAgentChat(agentId) {
   _persistAgentChat();
   let agent;
   try {
-    const r = await fetch(`/api/agents/${agentId}`);
-    if (!r.ok) throw new Error('not found');
-    agent = await r.json();
+    agent = await Net.getJson(`/api/agents/${agentId}`);
   } catch(e) {
     Toast.danger('Failed to load agent', agentId);
     return;
@@ -13851,9 +13796,7 @@ function showCreateAgentModal() {
 async function showEditAgentModal(agentId) {
   let agent;
   try {
-    const r = await fetch(`/api/agents/${agentId}`);
-    if (!r.ok) throw new Error('not found');
-    agent = await r.json();
+    agent = await Net.getJson(`/api/agents/${agentId}`);
   } catch(e) {
     Toast.danger('Failed to load agent for editing', agentId);
     return;
@@ -13893,8 +13836,7 @@ async function _renderAgentToolsPicker(selected) {
   ]]);
 
   try {
-    const r = await fetch('/api/plugins');
-    const d = await r.json();
+    const d = await Net.getJson('/api/plugins', { silent: true });
     (Array.isArray(d) ? d : (d.plugins || [])).forEach(p => {
       const tools = p.tools || [];
       if (!tools.length) return;
@@ -13906,8 +13848,7 @@ async function _renderAgentToolsPicker(selected) {
   } catch (_) { /* plugins unavailable — built-ins only */ }
 
   try {
-    const r = await fetch('/api/mcp/servers');
-    const servers = await r.json();
+    const servers = await Net.getJson('/api/mcp/servers', { silent: true });
     (Array.isArray(servers) ? servers : []).forEach(s => {
       groups.push(['MCP · ' + (s.name || s.id), [
         ['mcp:' + (s.id) + '::*', (s.name || s.id) + ' (all tools)', 'MCP server'],
@@ -13960,8 +13901,7 @@ async function _renderAgentContextPicker(sources) {
   // Offer ingested RAG documents as file-type values (dynamic — empty until
   // documents are ingested).
   try {
-    const r = await fetch('/api/documents');
-    const docs = await r.json();
+    const docs = await Net.getJson('/api/documents', { silent: true });
     const dl = document.getElementById('am-ctx-docs');
     if (dl && Array.isArray(docs)) {
       dl.innerHTML = docs.map(d =>
@@ -14842,9 +14782,7 @@ window.Kanban = (function () {
     const sel = document.getElementById('kanban-project-select');
     if (!sel) return;
     try {
-      const r = await fetch('/api/projects');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const list = await r.json();
+      const list = await Net.getJson('/api/projects');
       const projects = Array.isArray(list) ? list : (list.projects || []);
       const current = sel.value;
       sel.innerHTML = '<option value="">— pick a project —</option>' +
@@ -14877,9 +14815,7 @@ window.Kanban = (function () {
       b.innerHTML = '<div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line short"></div>';
     });
     try {
-      const r = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const tasks = await r.json();
+      const tasks = await Net.getJson('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks');
       const byCol = { todo: [], doing: [], done: [] };
       (tasks || []).forEach(t => {
         const col = byCol[t.column] ? t.column : 'todo';
@@ -14997,7 +14933,7 @@ window.Kanban = (function () {
   async function showEditTask(taskId) {
     if (!_activeProject) return;
     try {
-      const list = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks').then(r => r.json());
+      const list = await Net.getJson('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks', { silent: true });
       const t = (list || []).find(x => x.id === taskId);
       if (!t) return;
       _openModal('task', {
@@ -17220,9 +17156,7 @@ const SkillsDiscover = (function () {
     const grid = document.getElementById('skills-discover-grid');
     if (grid) grid.innerHTML = '<div class="model-empty">Loading discoverable skills…</div>';
     try {
-      const r = await fetch('/api/skills/discover');
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      _data = await r.json();
+      _data = await Net.getJson('/api/skills/discover');
       _loaded = true;
       _populateCats();
       _setMeta(`${_data.count || 0} skills · updated ${_data.updated || '—'}`);
@@ -17355,9 +17289,7 @@ const SkillsDiscover = (function () {
 
   async function _availablePlugins() {
     try {
-      const r = await fetch('/api/plugins');
-      if (!r.ok) return [];
-      const data = await r.json();
+      const data = await Net.getJson('/api/plugins', { silent: true });
       const list = Array.isArray(data) ? data : (data.plugins || []);
       return list.map(p => p.id).filter(Boolean);
     } catch { return []; }
@@ -17387,9 +17319,9 @@ const SkillsDiscover = (function () {
     document.body.appendChild(modal);
     const close = "this.closest('div[style*=fixed]').remove()";
     try {
-      const r = await fetch('/api/skills/github?repo=' + encodeURIComponent(repo.trim()));
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      // getJson's thrown message already prefers the body's detail/error
+      // field, matching the old d.detail || HTTP-status throw.
+      const d = await Net.getJson('/api/skills/github?repo=' + encodeURIComponent(repo.trim()));
       const rows = (d.skills || []).map(s => `
         <div class="gh-skill-row">
           <div class="gh-skill-info">
@@ -17702,9 +17634,7 @@ async function loadAgentsForSelector() {
   const sel = document.getElementById('agent-select');
   if (!sel) return;
   try {
-    const r = await fetch('/api/agents');
-    if (!r.ok) return;
-    const list = await r.json();
+    const list = await Net.getJson('/api/agents', { silent: true });
     const opts = ['<option value="">— none (use model directly) —</option>']
       .concat((list || []).map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}${a.role ? ' (' + esc(a.role) + ')' : ''}</option>`));
     sel.innerHTML = opts.join('');
@@ -18434,8 +18364,7 @@ const WorkflowIndex = (function () {
     const close = "this.closest('div[style*=fixed]').remove()";
     const asKey = x => typeof x === 'string' ? x : (x && (x.key || x.name) || JSON.stringify(x));
     try {
-      const r = await fetch('/api/workflows/' + encodeURIComponent(id));
-      const w = await r.json();
+      const w = await Net.getJson('/api/workflows/' + encodeURIComponent(id));
       const steps = w.steps || [];
       const stepCard = s => {
         const ins = (s.inputs || []).map(asKey);
@@ -18638,9 +18567,7 @@ const RunsTab = (function () {
     if (_pollHandle) { clearInterval(_pollHandle); _pollHandle = null; }
     // Fetch the run + the workflow definition so we can lay out the DAG.
     try {
-      const r = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}`);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const run = await r.json();
+      const run = await Net.getJson(`/api/workflows/runs/${encodeURIComponent(runId)}`);
       const wfId = run.workflow_id;
       let defn = null;
       if (wfId) {
@@ -20530,9 +20457,7 @@ const Projects = (function () {
 
   async function load() {
     try {
-      const r = await fetch('/api/projects');
-      if (!r.ok) return;
-      _projects = await r.json();
+      _projects = await Net.getJson('/api/projects', { silent: true });
       _renderBar();
     } catch (e) { /* offline-tolerant */ }
   }
