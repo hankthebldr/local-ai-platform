@@ -8178,12 +8178,7 @@ async function saveSearchSettings() {
   if (braveVal) body.brave_api_key = braveVal;
 
   try {
-    const r = await fetch('/api/inventory/settings/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const d = await r.json();
+    const d = await Net.postJson('/api/inventory/settings/search', body, { retries: 0 });
     if (d.status === 'saved') {
       loadSearchSettings();
       document.getElementById('cfg-save-btn').textContent = 'Saved!';
@@ -8353,21 +8348,26 @@ async function _sendStepMessage(text, stepData) {
   try {
     // Send the live step definition — not a saved id — so unsaved
     // canvas edits flow through unchanged.
-    const r = await fetch('/api/workflows/test-step', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        step: {
-          id: stepData.id,
-          name: stepData.name,
-          model: stepData.model || null,
-          role: stepData.role || null,
-          system_prompt: stepData.system_prompt || '',
-        },
-        user_message: text,
-      }),
+    // retries:0 — LLM step execution must not double-fire. Net.call (not
+    // postJson) so API-error payloads still render inline, not as 'Connection error'.
+    const r = await Net.call('/api/workflows/test-step', {
+      retries: 0,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step: {
+            id: stepData.id,
+            name: stepData.name,
+            model: stepData.model || null,
+            role: stepData.role || null,
+            system_prompt: stepData.system_prompt || '',
+          },
+          user_message: text,
+        }),
+      },
     });
-    const d = await r.json();
+    const d = (r.data && typeof r.data === 'object') ? r.data : {};
     document.getElementById(typingId)?.remove();
     if (!r.ok) {
       const errMsg = (d && d.error && d.error.message) || (d && d.detail) || `HTTP ${r.status}`;
@@ -8448,26 +8448,36 @@ async function sendMessage() {
     // through /api/agents/{id}/chat so the agent's system prompt, model,
     // context sources, and tools are applied. Otherwise fall back to the
     // raw OpenAI-compatible chat endpoint.
+    // retries:0 on both — LLM inference must never silently double-execute.
+    // Net.call (not postJson) so API-error payloads (d.error) still render
+    // as API errors, not 'Connection error'.
     let r;
     if (window._chatAgent) {
-      r = await fetch(`/api/agents/${encodeURIComponent(window._chatAgent)}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: chatHistory })
+      r = await Net.call(`/api/agents/${encodeURIComponent(window._chatAgent)}/chat`, {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: chatHistory })
+        },
       });
     } else {
-      r = await fetch('/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages: outboundMessages,
-          max_tokens: 1024,
-          web_search: webSearchEnabled,
-        })
+      r = await Net.call('/v1/chat/completions', {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            messages: outboundMessages,
+            max_tokens: 1024,
+            web_search: webSearchEnabled,
+          })
+        },
       });
     }
-    const d = await r.json();
+    if (r.status === 0) throw new Error(r.error || 'network error');
+    const d = (r.data && typeof r.data === 'object') ? r.data : {};
     const ti = document.getElementById(typingId);
     if (ti) ti.remove();
 
@@ -8591,11 +8601,7 @@ async function exportSession() {
 
   // 2. Save to server
   try {
-    await fetch('/api/exports/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, content: md }),
-    });
+    await Net.postJson('/api/exports/save', { filename, content: md }, { retries: 0, silent: true });
   } catch(e) {
     // Silent fail for server save — download already succeeded
   }
@@ -8735,12 +8741,8 @@ async function removeLocalModel(name) {
   const ok = await Confirm.ask({ title: 'Remove model', body: `Remove "${name}" from local storage? This deletes the weights from Ollama.`, okLabel: 'Remove', danger: true });
   if (!ok) return;
   try {
-    const r = await fetch('/api/inventory/remove', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: name }),
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    // retries:0 — destructive remove.
+    await Net.postJson('/api/inventory/remove', { model: name }, { retries: 0 });
     loadInstalledLocal();
     if (typeof loadCatalog === 'function') { catalogLoaded = false; loadCatalog(); }
   } catch (e) {
@@ -8992,19 +8994,12 @@ const SkillsBuilder = (function () {
     if (!body.trim())   return fail('Body cannot be empty — that\'s the skill.');
 
     try {
-      const r = await fetch('/api/skills/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id, name, description: desc, plugin_id: plugin,
-          triggers, body,
-        }),
-      });
-      if (!r.ok) {
-        let detail = `HTTP ${r.status}`;
-        try { const j = await r.json(); detail = j.detail || j.error || detail; } catch (_) {}
-        return fail(`Create failed: ${detail}`);
-      }
+      // retries:0 — creates a skill file. postJson's thrown message is
+      // data.detail || data.error || 'HTTP n' — same copy reaches fail() below.
+      await Net.postJson('/api/skills/create', {
+        id, name, description: desc, plugin_id: plugin,
+        triggers, body,
+      }, { retries: 0 });
       if (window.Toast) Toast.success('Skill created', `${id} → ${plugin}`);
       close();
       // Refresh visible surfaces.
@@ -9166,7 +9161,12 @@ const ExtDiscover = (function () {
       return `${head}<div class="model-empty">Provider returned no items.</div>`;
     }
     const items = feed.items.slice(0, 50).map(_renderItem).join('');
-    return `${head}<div class="ext-item-grid">${items}</div>`;
+    // Cap at 50 cards per provider, but say so — silent truncation reads
+    // as "that's everything" when it isn't.
+    const more = feed.items.length > 50
+      ? `<div class="model-empty">Showing 50 of ${feed.items.length} — refine the search to narrow results.</div>`
+      : '';
+    return `${head}<div class="ext-item-grid">${items}</div>${more}`;
   }
 
   function _renderItem(it) {
@@ -9318,11 +9318,8 @@ async function pullModel(ollamaName, modelId) {
 
   const mb = b => (b / 1e6).toFixed(0);
   try {
-    await fetch('/api/inventory/pull', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: ollamaName })
-    });
+    // retries:0 MANDATORY — a retried POST would double-trigger the multi-GB pull.
+    await Net.postJson('/api/inventory/pull', { model: ollamaName }, { retries: 0 });
 
     const poll = setInterval(async () => {
       try {
@@ -9371,12 +9368,8 @@ async function removeModel(name) {
   const ok = await Confirm.ask({ title: 'Remove model', body: `Remove model "${name}"? This will delete the model files.`, okLabel: 'Remove', danger: true });
   if (!ok) return;
   try {
-    const r = await fetch('/api/inventory/remove', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: name })
-    });
-    const d = await r.json();
+    // retries:0 — destructive remove.
+    const d = await Net.postJson('/api/inventory/remove', { model: name }, { retries: 0 });
     if (d.status === 'removed') {
       catalogLoaded = false;
       loadCatalog();
@@ -9547,11 +9540,7 @@ async function loadMemory() {
 
 async function unloadModel(name) {
   try {
-    await fetch('/api/inventory/unload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: name })
-    });
+    await Net.postJson('/api/inventory/unload', { model: name }, { retries: 0 });
     loadMemory();
   } catch(e) {}
 }
@@ -9653,12 +9642,13 @@ function _renderArchError(msg, color) {
 async function loadArchitecturePanel() {
   _stopArchPressurePoll();
   try {
-    const archRes = await fetch('/api/system/architecture');
+    // Net.call (not getJson): the status code is user-facing copy below.
+    const archRes = await Net.call('/api/system/architecture');
     if (!archRes.ok) {
       _renderArchError('Architecture detection unavailable (status ' + archRes.status + ').');
       return;
     }
-    const triple = await archRes.json();
+    const triple = archRes.data;
     _renderArchPressure(triple.arch, triple.deployment, triple.ollama, null);
 
     const pollOnce = async () => {
@@ -9680,7 +9670,8 @@ async function refreshArchitectureDetection() {
   const btn = document.getElementById('arch-refresh-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Re-detecting…'; }
   try {
-    const r = await fetch('/api/system/architecture/refresh', { method: 'POST' });
+    // Net.call keeps the 'refresh returned N' copy. retries:0 — triggers re-detection.
+    const r = await Net.call('/api/system/architecture/refresh', { retries: 0, init: { method: 'POST' } });
     if (!r.ok) throw new Error('refresh returned ' + r.status);
     await loadArchitecturePanel();
   } catch(e) {
@@ -9924,7 +9915,7 @@ async function loadGraphData() {
 
 async function rebuildGraph() {
   try {
-    await fetch('/api/graph/rebuild', { method: 'POST' });
+    await Net.postJson('/api/graph/rebuild', {}, { retries: 0 });
     await loadGraphData();
   } catch (e) {
     console.error('Rebuild failed', e);
@@ -10790,10 +10781,15 @@ async function runDeepDive() {
     window._researchInFlight.stage = 'search';
     _renderResearchInFlight(window._researchInFlight);
 
-    const resp = await fetch('/api/research/deep-dive', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, model, depth }),
+    // retries:0 ESSENTIAL — minutes-long LLM research; a 504-retry would
+    // launch a second full research run.
+    const resp = await Net.call('/api/research/deep-dive', {
+      retries: 0,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, model, depth }),
+      },
     });
 
     window._researchInFlight.passed.push('search');
@@ -10802,8 +10798,8 @@ async function runDeepDive() {
 
     await new Promise(r => setTimeout(r, 300));
 
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+    const data = (resp.data && typeof resp.data === 'object') ? resp.data : {};
+    if (!resp.ok) throw new Error(data.detail || resp.error || `HTTP ${resp.status}`);
 
     window._researchInFlight.passed.push('synth');
     window._researchInFlight = null;
@@ -10932,16 +10928,20 @@ window.ResearchArtifacts = (function () {
     }
     if (window.Toast) Toast.info('Capturing…', payload.title || 'artifact', { ttl: 1500 });
     try {
-      const r = await fetch('/api/feedback/artifacts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      // retries:0 — artifact capture writes a record.
+      const r = await Net.call('/api/feedback/artifacts', {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
       });
       if (!r.ok) {
-        const text = await r.text();
-        throw new Error('HTTP ' + r.status + ' — ' + text.slice(0, 200));
+        const text = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || r.error || '');
+        throw new Error('HTTP ' + r.status + ' — ' + String(text).slice(0, 200));
       }
-      const rec = await r.json();
+      const rec = r.data;
       if (window.Toast) {
         Toast.success(
           'Captured',
@@ -11076,11 +11076,7 @@ async function exportResearch() {
 
   // Server save
   try {
-    await fetch('/api/exports/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, content }),
-    });
+    await Net.postJson('/api/exports/save', { filename, content }, { retries: 0, silent: true });
     // Rebuild graph to include new research export
     await loadGraphData();
   } catch {}
@@ -11126,9 +11122,12 @@ async function previewRole(id) {
   const box = document.getElementById('wf-role-preview');
   if (!box) return;
   try {
-    const resp = await fetch(`/api/roles/${encodeURIComponent(id)}`);
+    // silent — HTTP miss hides the box quietly; only a network error
+    // (status 0) falls through to the 'Preview failed' catch path.
+    const resp = await Net.call(`/api/roles/${encodeURIComponent(id)}`, { silent: true });
+    if (resp.status === 0) throw new Error(resp.error || 'network error');
     if (!resp.ok) { box.style.display = 'none'; return; }
-    const r = await resp.json();
+    const r = resp.data;
     box.textContent = r.content;
     box.style.display = 'block';
     box.scrollIntoView({behavior: 'smooth', block: 'nearest'});
@@ -11170,9 +11169,11 @@ async function loadA2ACard() {
   const panel = document.getElementById('a2a-panel');
   if (!panel) return;
   try {
-    const resp = await fetch('/.well-known/agent.json');
+    // silent + retries:0 — endpoint legitimately absent on older builds;
+    // must not toast or retry a build that simply lacks A2A.
+    const resp = await Net.call('/.well-known/agent.json', { silent: true, retries: 0 });
     if (!resp.ok) { panel.style.display = 'none'; return; }
-    const card = await resp.json();
+    const card = resp.data;
     panel.style.display = '';
 
     // Resolve the absolute URL the way an external agent would see it.
@@ -11226,7 +11227,8 @@ async function loadWorkflowDetail() {
     const wf = workflows.find(w => w.id === opt.dataset.id);
     if (!wf) return;
 
-    // Fetch the actual YAML definition by running a validate
+    // raw fetch: dead call — defResp is never read (defResp2 below supersedes
+    // it); left raw deliberately, candidate for deletion (Net adds nothing here).
     const defResp = await fetch(opt.value.replace(/^\.\//, '/'));
 
     document.getElementById('wf-detail-name').textContent = opt.textContent;
@@ -11235,8 +11237,9 @@ async function loadWorkflowDetail() {
     document.getElementById('wf-results').style.display = 'none';
 
     // Fetch the full workflow definition (with hooks + prompt blocks).
-    const defResp2 = await fetch(`/api/workflows/${encodeURIComponent(opt.dataset.id)}`);
-    const defn = defResp2.ok ? await defResp2.json() : null;
+    // silent — the ok→null fallback (skeleton def) is load-bearing.
+    const defResp2 = await Net.call(`/api/workflows/${encodeURIComponent(opt.dataset.id)}`, { silent: true });
+    const defn = defResp2.ok ? defResp2.data : null;
     currentWorkflowDef = defn || { id: opt.dataset.id, name: opt.textContent, steps: [] };
 
     // Build static pipeline visualization showing declared hooks + role_ref.
@@ -11392,16 +11395,21 @@ async function runWorkflow() {
   }
 
   try {
-    const resp = await fetch('/api/workflows/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        workflow_id: opt.dataset.id,
-        seed: seed,
-      }),
+    // retries:0 ESSENTIAL — synchronous run blocks for minutes; a 504-retry
+    // would re-execute the entire workflow.
+    const resp = await Net.call('/api/workflows/run', {
+      retries: 0,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflow_id: opt.dataset.id,
+          seed: seed,
+        }),
+      },
     });
-
-    const run = await resp.json();
+    if (resp.status === 0) throw new Error(resp.error || 'network error');
+    const run = (resp.data && typeof resp.data === 'object') ? resp.data : {};
 
     // Show results
     document.getElementById('wf-results').style.display = 'block';
@@ -11523,12 +11531,8 @@ async function loadRecentRuns() {
 async function resumeRun(runId, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Resuming...'; }
   try {
-    const resp = await fetch(`/api/workflows/runs/${runId}/resume`, {method: 'POST'});
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${resp.status}`);
-    }
-    const run = await resp.json();
+    // retries:0 — resume re-executes steps and blocks until the run completes.
+    const run = await Net.postJson(`/api/workflows/runs/${runId}/resume`, {}, { retries: 0 });
     // Refresh the list to reflect the new terminal status, then open the
     // detail panel so the operator sees what happened.
     await loadRecentRuns();
@@ -11729,8 +11733,7 @@ async function loadActiveSessions() {
 
 async function closeSession(convId) {
   try {
-    const r = await fetch('/api/context/' + encodeURIComponent(convId) + '/close', { method: 'POST' });
-    if (!r.ok) throw new Error(r.statusText);
+    await Net.postJson('/api/context/' + encodeURIComponent(convId) + '/close', {}, { retries: 0 });
     loadActiveSessions();
   } catch (e) {
     Toast.danger('Failed to close session', String(e));
@@ -11739,9 +11742,7 @@ async function closeSession(convId) {
 
 async function cleanupStaleSessions() {
   try {
-    const r = await fetch('/api/context/cleanup', { method: 'POST' });
-    if (!r.ok) throw new Error(r.statusText);
-    const d = await r.json();
+    const d = await Net.postJson('/api/context/cleanup', {}, { retries: 0 });
     await loadActiveSessions();
     if (typeof showToast === 'function') showToast('Cleaned up ' + (d.closed || 0) + ' stale session(s)');
   } catch (e) {
@@ -11814,7 +11815,8 @@ async function toggleSessionDetail(id) {
 }
 
 async function deleteSession(id) {
-  await fetch('/api/memory/sessions/' + id, {method: 'DELETE'});
+  // Net.call never throws — also fixes the latent unhandled rejection here.
+  await Net.call('/api/memory/sessions/' + id, { retries: 0, init: { method: 'DELETE' } });
   loadSessions();
   loadMemoryStats();
 }
@@ -11861,10 +11863,13 @@ async function loadFacts() {
 
 async function toggleFact(id, currentlyEnabled) {
   try {
-    await fetch('/api/memory/facts/' + id, {
-      method: 'PATCH',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({enabled: !currentlyEnabled}),
+    await Net.call('/api/memory/facts/' + id, {
+      retries: 0,
+      init: {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: !currentlyEnabled}),
+      },
     });
     loadFacts();
     loadInjectionPreview();
@@ -11887,10 +11892,13 @@ async function editFact(id, contentEl) {
     const next = ta.value.trim();
     if (!next || next === original) { loadFacts(); return; }
     try {
-      await fetch('/api/memory/facts/' + id, {
-        method: 'PATCH',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({content: next}),
+      await Net.call('/api/memory/facts/' + id, {
+        retries: 0,
+        init: {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({content: next}),
+        },
       });
       loadFacts();
       loadInjectionPreview();
@@ -11907,11 +11915,9 @@ async function addFact() {
   const input = document.getElementById('new-fact-input');
   const content = input.value.trim();
   if (!content) return;
-  await fetch('/api/memory/facts', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({content, tags: []}),
-  });
+  // .catch — postJson throws where the old bare fetch only rejected on
+  // network error; without it a failure becomes an unhandled rejection.
+  await Net.postJson('/api/memory/facts', { content, tags: [] }, { retries: 0 }).catch(() => {});
   input.value = '';
   loadFacts();
   loadInjectionPreview();
@@ -11919,7 +11925,8 @@ async function addFact() {
 }
 
 async function deleteFact(id) {
-  await fetch('/api/memory/facts/' + id, {method: 'DELETE'});
+  // Net.call never throws — also fixes the latent unhandled rejection here.
+  await Net.call('/api/memory/facts/' + id, { retries: 0, init: { method: 'DELETE' } });
   loadFacts();
   loadInjectionPreview();
   loadMemoryStats();
@@ -11967,7 +11974,7 @@ async function loadProfiles() {
 
 async function reloadProfiles() {
   try {
-    await fetch('/api/profiles/reload', {method: 'POST'});
+    await Net.postJson('/api/profiles/reload', {}, { retries: 0 });
     loadProfiles();
   } catch(e) { console.error('Reload failed:', e); }
 }
@@ -11975,12 +11982,16 @@ async function reloadProfiles() {
 async function searchMemory(query) {
   if (!query.trim()) { loadSessions(); return; }
   try {
-    const r = await fetch('/api/memory/sessions/search', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({query}),
+    // Idempotent query-style POST (read-only search) — default retries kept.
+    const r = await Net.call('/api/memory/sessions/search', {
+      init: {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query}),
+      },
     });
-    const results = await r.json();
+    if (r.status === 0) throw new Error(r.error || 'network error');
+    const results = Array.isArray(r.data) ? r.data : [];
     const el = document.getElementById('session-list');
     if (!results.length) {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No results for "' + esc(query) + '"</div>';
@@ -12051,6 +12062,8 @@ async function _uploadDocumentFile(file) {
   const form = new FormData();
   form.append('file', file);
   try {
+    // raw fetch: FormData multipart upload — Net.postJson JSON-encodes the body,
+    // and a retry would double-upload the file (Net doesn't support this).
     const r = await fetch('/api/documents', { method: 'POST', body: form });
     const data = await r.json();
     if (!r.ok) { status.textContent = `Error: ${data.detail || 'upload failed'}`; return; }
@@ -12252,7 +12265,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function deleteDocument(id) {
-  await fetch('/api/documents/' + id, { method: 'DELETE' });
+  // Net.call never throws — also fixes the latent unhandled rejection here.
+  await Net.call('/api/documents/' + id, { retries: 0, init: { method: 'DELETE' } });
   loadDocumentsList();
   loadDocStats();
 }
@@ -12260,8 +12274,9 @@ async function deleteDocument(id) {
 async function reindexDocument(id) {
   const status = document.getElementById('doc-upload-status');
   status.textContent = 'Reindexing...';
-  const r = await fetch('/api/documents/' + id + '/reindex', { method: 'POST' });
-  const data = await r.json();
+  // Net.call: needs ok + body simultaneously. retries:0 — reindex triggers work.
+  const r = await Net.call('/api/documents/' + id + '/reindex', { retries: 0, init: { method: 'POST' } });
+  const data = (r.data && typeof r.data === 'object') ? r.data : {};
   status.textContent = r.ok ? `Reindexed: ${data.filename}` : `Error: ${data.detail || 'reindex failed'}`;
   loadDocumentsList();
   loadDocStats();
@@ -12274,12 +12289,16 @@ async function searchDocuments() {
   if (!query) { el.innerHTML = ''; return; }
   el.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;padding:8px;">Searching...</div>';
   try {
-    const r = await fetch('/api/documents/search', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ query, top_k: 5 }),
+    // Idempotent query-style POST (read-only search) — default retries kept.
+    const r = await Net.call('/api/documents/search', {
+      init: {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ query, top_k: 5 }),
+      },
     });
-    const data = await r.json();
+    if (r.status === 0) throw new Error(r.error || 'network error');
+    const data = (r.data && typeof r.data === 'object') ? r.data : {};
     if (!data.results || !data.results.length) {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No matches.</div>';
       return;
@@ -12467,9 +12486,9 @@ window.composerAddAgentAtCenter = composerAddAgentAtCenter;
 async function dfAddNodeFromAgent(agentId, x, y) {
   // Fetch agent definition; spawn an AgentStep clone.
   try {
-    const r = await fetch(`/api/agents/${encodeURIComponent(agentId)}`);
+    const r = await Net.call(`/api/agents/${encodeURIComponent(agentId)}`);
     if (!r.ok) { Toast.danger(`Could not load agent '${agentId}'`, `HTTP ${r.status}`); return; }
-    const a = await r.json();
+    const a = r.data;
     const data = {
       id: agentId + '_' + (++dfNextId),
       name: a.name || agentId,
@@ -13109,13 +13128,13 @@ async function dfSave() {
   try { definition = jsyaml.load(yamlText); } catch (e) { Toast.warn('YAML error', e.message); return; }
   const overwrite = true;
   try {
-    const resp = await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite }) });
+    const resp = await Net.call('/api/workflows/save', { retries: 0, init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite }) } });
     if (resp.ok) {
-      const result = await resp.json();
+      const result = resp.data;
       Toast.success('Saved', result.path);
       if (typeof refreshWorkflows === 'function') refreshWorkflows();
     } else {
-      const err = await resp.json();
+      const err = (resp.data && typeof resp.data === 'object') ? resp.data : {};
       Toast.danger('Save failed', err.detail || JSON.stringify(err));
     }
   } catch (e) { Toast.danger('Save error', e.message); }
@@ -13126,7 +13145,7 @@ async function dfRunWorkflow() {
   if (!yamlText) return;
   let definition;
   try { definition = jsyaml.load(yamlText); } catch (e) { Toast.warn('YAML error', e.message); return; }
-  try { await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite: true }) }); } catch (e) { /* ignore save errors for run */ }
+  try { await Net.postJson('/api/workflows/save', { definition, overwrite: true }, { retries: 0, silent: true }); } catch (e) { /* ignore save errors for run */ }
   setWfMode('run');
   const id = document.getElementById('df-wf-id')?.value || 'my-workflow';
   if (typeof refreshWorkflows === 'function') {
@@ -13615,21 +13634,30 @@ async function sendAgentMessage() {
       const messages = sys
         ? [{ role: 'system', content: sys }, ..._agentHistory]
         : _agentHistory.slice();
-      const r = await fetch('/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, max_tokens: 2048, temperature: 0.7 }),
+      // retries:0 — LLM inference must never silently double-execute.
+      const r = await Net.call('/v1/chat/completions', {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, messages, max_tokens: 2048, temperature: 0.7 }),
+        },
       });
-      const d = await r.json();
+      const d = (r.data && typeof r.data === 'object') ? r.data : {};
       if (!r.ok) throw new Error((d.error && d.error.message) || d.detail || 'Chat failed');
       result = { content: (d.choices && d.choices[0] && d.choices[0].message.content) || '', model };
     } else {
-      const r = await fetch(`/api/agents/${_activeAgentId}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: _agentHistory }),
+      // retries:0 — agent chat is an LLM call; Net.call (not postJson) so the
+      // error body's detail still reaches the inline bubble.
+      const r = await Net.call(`/api/agents/${_activeAgentId}/chat`, {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: _agentHistory }),
+        },
       });
-      result = await r.json();
+      result = (r.data && typeof r.data === 'object') ? r.data : {};
       if (!r.ok) throw new Error(result.detail || 'Chat failed');
     }
   } catch(e) {
@@ -13670,8 +13698,8 @@ async function deleteAgent(agentId) {
   const ok = await Confirm.ask({ title: 'Delete agent', body: `Delete agent "${agentId}"?`, okLabel: 'Delete', danger: true });
   if (!ok) return;
   try {
-    const r = await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
-    if (!r.ok) throw new Error((await r.json()).detail || 'Delete failed');
+    const r = await Net.call(`/api/agents/${agentId}`, { retries: 0, init: { method: 'DELETE' } });
+    if (!r.ok) throw new Error((r.data && r.data.detail) || 'Delete failed');
     loadAgentsTab();
     if (_activeAgentId === agentId) closeAgentChat();
   } catch(e) {
@@ -13986,12 +14014,16 @@ async function _saveAgentModal(existingId) {
   try {
     const url = isEdit ? `/api/agents/${existingId}` : '/api/agents';
     const method = isEdit ? 'PUT' : 'POST';
-    const r = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+    // Net.call (not postJson): PUT branch + error body rendered inline. retries:0 — create/update.
+    const r = await Net.call(url, {
+      retries: 0,
+      init: {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
     });
-    const d = await r.json();
+    const d = (r.data && typeof r.data === 'object') ? r.data : {};
     if (!r.ok) { showErr(d.detail || JSON.stringify(d)); if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; } return; }
     document.querySelector('div[style*=fixed]')?.remove();
     loadAgentsTab();
@@ -14130,6 +14162,7 @@ window.AdminAuth = (function () {
   async function fetch(url, opts, panelId) {
     opts = opts || {};
     opts.headers = Object.assign({}, opts.headers || {}, authHeaders());
+    // raw fetch: THE auth wrapper itself — Net retry around 401-key-clearing would break re-auth UX (Net doesn't support this)
     const r = await window.fetch(url, opts);
     if (r.status === 401) {
       clearKey();
@@ -14172,6 +14205,7 @@ window.AdminAuth = (function () {
     if (!candidate) { errBox.hidden = false; errBox.textContent = 'Enter the master key.'; return; }
 
     // Validate by hitting an endpoint we know is master-key gated.
+    // raw fetch: status-code probe with a candidate key — Net retry would delay 'rejected' feedback, and the module-local fetch() shadows the global here (Net doesn't support this)
     const r = await window.fetch('/api/keys/scopes', {
       headers: { 'Authorization': 'Bearer ' + candidate },
     });
@@ -14888,10 +14922,13 @@ window.Kanban = (function () {
     const id = ev.dataTransfer.getData('application/x-enclave-task');
     if (!id || !_activeProject) return;
     try {
-      const r = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks/' + encodeURIComponent(id), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ column, position: Date.now() }),
+      const r = await Net.call('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks/' + encodeURIComponent(id), {
+        retries: 0,
+        init: {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ column, position: Date.now() }),
+        },
       });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       await _renderTasks();
@@ -14962,16 +14999,19 @@ window.Kanban = (function () {
       if (_modalMode === 'project') {
         const desc = document.getElementById('kanban-modal-desc').value.trim();
         const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || ('proj_' + Date.now().toString(36));
-        const r = await fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: slug, name: title, description: desc }),
+        const r = await Net.call('/api/projects', {
+          retries: 0,
+          init: {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: slug, name: title, description: desc }),
+          },
         });
         if (!r.ok) {
-          const t = await r.text();
-          throw new Error('HTTP ' + r.status + ' — ' + t.slice(0, 200));
+          const t = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || r.error || '');
+          throw new Error('HTTP ' + r.status + ' — ' + String(t).slice(0, 200));
         }
-        const rec = await r.json();
+        const rec = r.data;
         _cancelModal();
         await _loadProjectsIntoSelect();
         document.getElementById('kanban-project-select').value = rec.id || slug;
@@ -14982,17 +15022,23 @@ window.Kanban = (function () {
         const labels = document.getElementById('kanban-modal-labels').value
           .split(',').map(s => s.trim()).filter(Boolean);
         if (_editingTaskId) {
-          const r = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks/' + encodeURIComponent(_editingTaskId), {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, description: desc, labels }),
+          const r = await Net.call('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks/' + encodeURIComponent(_editingTaskId), {
+            retries: 0,
+            init: {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title, description: desc, labels }),
+            },
           });
           if (!r.ok) throw new Error('HTTP ' + r.status);
         } else {
-          const r = await fetch('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, description: desc, labels, column: _modalColumn }),
+          const r = await Net.call('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks', {
+            retries: 0,
+            init: {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title, description: desc, labels, column: _modalColumn }),
+            },
           });
           if (!r.ok) throw new Error('HTTP ' + r.status);
         }
@@ -15017,7 +15063,7 @@ window.Kanban = (function () {
     if (!ok) return;
     const r = await Net.call(
       '/api/projects/' + encodeURIComponent(_activeProject) + '/tasks/' + encodeURIComponent(taskId),
-      { init: { method: 'DELETE' }, silent: true }
+      { retries: 0, init: { method: 'DELETE' }, silent: true }
     );
     if (!r.ok) {
       if (window.Toast) Toast.danger('Delete failed', r.error);
@@ -15216,7 +15262,10 @@ window.ComposerWorkstream = (function () {
 
     _activePollHandle = setInterval(async () => {
       try {
-        const r = await fetch('/api/workflows/runs/' + encodeURIComponent(runId));
+        // silent + retries:0 — Net's own retry/backoff would mask the
+        // failures this counter is designed to count, and stack with
+        // the interval timer.
+        const r = await Net.call('/api/workflows/runs/' + encodeURIComponent(runId), { silent: true, retries: 0 });
         if (!r.ok) {
           consecutiveFailures++;
           if (consecutiveFailures >= maxFailures) {
@@ -15228,7 +15277,7 @@ window.ComposerWorkstream = (function () {
           return;
         }
         consecutiveFailures = 0;
-        const run = await r.json();
+        const run = r.data;
         recordRun(run);
         // Live canvas overlay — paints node statuses + the floating
         // progress chip so the operator can SEE which step is running.
@@ -15305,9 +15354,10 @@ window.ComposerWorkstream = (function () {
       !['completed', 'failed', 'canceled', 'error'].includes((last.status || '').toLowerCase())
       ? last.run_id : null;
     if (liveId) {
-      fetch(`/api/workflows/runs/${encodeURIComponent(liveId)}/cancel`, { method: 'POST' })
-        .then(r => r.ok ? r.json() : null)
-        .then(j => {
+      // silent + retries:0 — best-effort cancel; a 404 is expected and fine.
+      Net.call(`/api/workflows/runs/${encodeURIComponent(liveId)}/cancel`, { silent: true, retries: 0, init: { method: 'POST' } })
+        .then(r => {
+          const j = r.ok ? r.data : null;
           if (window.Toast && j && j.accepted) {
             Toast.info('Run cancel requested', 'Engine will stop after the current step.');
           }
@@ -15430,12 +15480,9 @@ window.ChatRating = (function () {
     _paintRowState(msgId, kind);
 
     // Best-effort send to backend. Endpoint may not exist yet; that's fine.
+    // silent — a 404 here is expected, no toast. retries:0 — feedback write.
     try {
-      await window.fetch('/api/feedback/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: msgId, ...record }),
-      });
+      await Net.postJson('/api/feedback/messages', { id: msgId, ...record }, { silent: true, retries: 0 });
     } catch (_) { /* offline / not implemented */ }
 
     if (window.Toast) {
@@ -16158,12 +16205,12 @@ window.SkillsPanel = (function () {
     const list = document.getElementById('skills-list');
     if (list) list.innerHTML = '<div style="color:var(--text-muted);font-size:0.7rem">Loading…</div>';
     try {
-      const r = await fetch('/api/plugins');
+      const r = await Net.call('/api/plugins');
       if (!r.ok) {
         list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
         return;
       }
-      const plugins = await r.json();
+      const plugins = r.data;
       _items = [];
       (plugins || []).forEach(p => {
         (p.skills || []).forEach(s => {
@@ -16339,12 +16386,12 @@ window.CloudPanel = (function () {
     if (!list) return;
     list.innerHTML = '<div style="color:var(--text-muted);font-size:0.7rem">Loading…</div>';
     try {
-      const r = await fetch('/api/cloud-providers');
+      const r = await Net.call('/api/cloud-providers');
       if (!r.ok) {
         list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
         return;
       }
-      _items = await r.json();
+      _items = r.data;
       _render();
     } catch (e) {
       list.innerHTML = `<div class="admin-modal-error" style="margin:0">${esc(e.message)}</div>`;
@@ -16559,12 +16606,12 @@ window.ExportsPanel = (function () {
     list.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem">Loading…</div>';
     // Exports endpoint is not master-key gated today, but we still attach the
     // header for future-proofing (cheap, harmless, consistent with other admin panels).
-    const r = await fetch('/api/exports', {headers: AdminAuth.authHeaders()});
+    const r = await Net.call('/api/exports', { init: { headers: AdminAuth.authHeaders() } });
     if (!r.ok) {
       list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
       return;
     }
-    const data = await r.json();
+    const data = r.data;
     _items = data.exports || [];
     if (!_items.length) {
       list.innerHTML = '<div style="color:var(--text-muted);padding:14px 0">No exports yet — use "Export session" from the Chat tab.</div>';
@@ -16624,9 +16671,10 @@ window.ExportsPanel = (function () {
   }
 
   async function view(filename) {
-    const r = await fetch('/api/exports/' + encodeURIComponent(filename), {headers: AdminAuth.authHeaders()});
+    // expectJson:false — body is raw markdown, read it as text from the response.
+    const r = await Net.call('/api/exports/' + encodeURIComponent(filename), { expectJson: false, init: { headers: AdminAuth.authHeaders() } });
     if (!r.ok) { Toast.warn('Export not found'); return; }
-    const text = await r.text();
+    const text = await r.response.text();
     document.getElementById('export-view-title').textContent = filename;
     document.getElementById('export-view-body').innerHTML = renderMarkdown(text);
     document.getElementById('export-view-modal').hidden = false;
@@ -16649,9 +16697,9 @@ window.ExportsPanel = (function () {
   async function deleteOne(filename) {
     const ok = await Confirm.ask({ title: 'Delete export', body: `Delete "${filename}"?`, okLabel: 'Delete', danger: true });
     if (!ok) return;
-    const r = await fetch('/api/exports/' + encodeURIComponent(filename), {
-      method: 'DELETE',
-      headers: AdminAuth.authHeaders(),
+    const r = await Net.call('/api/exports/' + encodeURIComponent(filename), {
+      retries: 0,
+      init: { method: 'DELETE', headers: AdminAuth.authHeaders() },
     });
     if (!r.ok) { Toast.danger('Delete failed', `HTTP ${r.status}`); return; }
     _selected.delete(filename);
@@ -16680,9 +16728,9 @@ window.ExportsPanel = (function () {
     // Fire deletes in parallel.
     const names = Array.from(_selected);
     const results = await Promise.all(names.map(n =>
-      fetch('/api/exports/' + encodeURIComponent(n), {
-        method: 'DELETE',
-        headers: AdminAuth.authHeaders(),
+      Net.call('/api/exports/' + encodeURIComponent(n), {
+        retries: 0,
+        init: { method: 'DELETE', headers: AdminAuth.authHeaders() },
       })
     ));
     const failed = names.filter((_, i) => !results[i].ok);
@@ -16775,9 +16823,9 @@ async function loadWorkbenches() {
 
   // Plugins (powers both Skills and Plugins panes)
   try {
-    const r = await fetch('/api/plugins');
+    const r = await Net.call('/api/plugins');
     if (r.ok) {
-      const plugins = await r.json();
+      const plugins = r.data;
       renderSkillsWorkbench(plugins);
       renderPluginsWorkbench(plugins);
     } else {
@@ -16791,9 +16839,9 @@ async function loadWorkbenches() {
 
   // MCP servers
   try {
-    const r = await fetch('/api/mcp/servers');
+    const r = await Net.call('/api/mcp/servers');
     if (r.ok) {
-      const servers = await r.json();
+      const servers = r.data;
       renderMcpsWorkbench(servers);
     } else {
       renderWorkbenchError('bench-mcps-list', `HTTP ${r.status}`);
@@ -16806,9 +16854,9 @@ async function loadWorkbenches() {
   // pre-filled with the agent's role + model + system_prompt so the
   // step starts as a faithful clone of the agent.
   try {
-    const r = await fetch('/api/agents');
+    const r = await Net.call('/api/agents');
     if (r.ok) {
-      const agents = await r.json();
+      const agents = r.data;
       renderAgentsWorkbench(agents);
     } else {
       renderWorkbenchError('bench-agents-list', `HTTP ${r.status}`);
@@ -17252,13 +17300,17 @@ const SkillsDiscover = (function () {
     const def = plugins.includes('general-skills') ? 'general-skills' : (plugins[0] || 'general-skills');
     const target = prompt(`Install '${skillId}' into which plugin?`, def);
     if (!target) return;
-    const r = await fetch(`/api/skills/discover/${encodeURIComponent(skillId)}/install`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plugin_id: target }),
+    // retries:0 — install writes skill files; don't double-install.
+    const r = await Net.call(`/api/skills/discover/${encodeURIComponent(skillId)}/install`, {
+      retries: 0,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plugin_id: target }),
+      },
     });
     if (!r.ok) {
-      const body = await r.text();
+      const body = typeof r.data === 'string' ? r.data : (r.error || '');
       Toast.danger('Install failed', body || `HTTP ${r.status}`);
       return;
     }
@@ -17276,9 +17328,9 @@ const SkillsDiscover = (function () {
     }
     const ok = await Confirm.ask({ title: 'Uninstall skill', body: `Uninstall '${skillId}' from '${pluginId}'? This deletes the skill .md and removes the registration.`, okLabel: 'Uninstall', danger: true });
     if (!ok) return;
-    const r = await fetch(`/api/skills/discover/${encodeURIComponent(skillId)}/uninstall?plugin_id=${encodeURIComponent(pluginId)}`, { method: 'DELETE' });
+    const r = await Net.call(`/api/skills/discover/${encodeURIComponent(skillId)}/uninstall?plugin_id=${encodeURIComponent(pluginId)}`, { retries: 0, init: { method: 'DELETE' } });
     if (!r.ok) {
-      const body = await r.text();
+      const body = typeof r.data === 'string' ? r.data : (r.error || '');
       Toast.danger('Uninstall failed', body || `HTTP ${r.status}`);
       return;
     }
@@ -17345,13 +17397,9 @@ const SkillsDiscover = (function () {
   async function _installGithub(rawUrl, id, btn) {
     btn.disabled = true; btn.textContent = '…';
     try {
-      const r = await fetch('/api/skills/import', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: rawUrl, plugin_id: 'general-skills', id }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
-      try { await fetch('/api/plugins/reload', { method: 'POST' }); } catch (_) {}
+      // retries:0 — import writes a skill file; don't double-install.
+      await Net.postJson('/api/skills/import', { url: rawUrl, plugin_id: 'general-skills', id }, { retries: 0 });
+      try { await Net.postJson('/api/plugins/reload', {}, { retries: 0, silent: true }); } catch (_) {}
       btn.textContent = '✓ Installed'; btn.classList.remove('accent');
       load(true);
     } catch (e) {
@@ -17370,17 +17418,12 @@ const SkillsDiscover = (function () {
     if (!plugin || !plugin.trim()) return;
     _setMeta('Importing…');
     try {
-      const r = await fetch('/api/skills/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim(), plugin_id: plugin.trim() }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      // retries:0 — import writes a skill file; don't double-install.
+      const d = await Net.postJson('/api/skills/import', { url: url.trim(), plugin_id: plugin.trim() }, { retries: 0 });
       // Hot-reload the plugin registry so the skill activates immediately —
       // no API restart. The chat path reads the same live registry.
       let active = false;
-      try { active = (await fetch('/api/plugins/reload', { method: 'POST' })).ok; } catch (_) {}
+      try { active = (await Net.call('/api/plugins/reload', { retries: 0, silent: true, init: { method: 'POST' } })).ok; } catch (_) {}
       const msg = `Imported "${d.name || d.skill_id}" → ${d.plugin_id}` + (active ? ' — active now.' : ' (reload to activate).');
       Toast.info(msg);
       load(true);
@@ -17457,12 +17500,12 @@ const SkillsDiscover = (function () {
     let body = '', editable = false, srcPlugin = plugin;
     try {
       if (s.installed && plugin) {
-        const r = await fetch(`/api/skills/source/${encodeURIComponent(skillId)}?plugin_id=${encodeURIComponent(plugin)}`);
-        if (r.ok) { const d = await r.json(); body = d.body || ''; editable = true; srcPlugin = d.plugin_id || plugin; }
+        const r = await Net.call(`/api/skills/source/${encodeURIComponent(skillId)}?plugin_id=${encodeURIComponent(plugin)}`, { silent: true });
+        if (r.ok) { const d = r.data; body = d.body || ''; editable = true; srcPlugin = d.plugin_id || plugin; }
       }
       if (!body) {
-        const r = await fetch(`/api/skills/discover/${encodeURIComponent(skillId)}`);
-        if (r.ok) { const d = await r.json(); body = d.skill_md || ''; }
+        const r = await Net.call(`/api/skills/discover/${encodeURIComponent(skillId)}`, { silent: true });
+        if (r.ok) { const d = r.data; body = d.skill_md || ''; }
       }
     } catch (_) {}
 
@@ -17545,15 +17588,18 @@ const SkillsDiscover = (function () {
     if (!newBody.trim()) { if (window.Toast) Toast.danger('Skill body cannot be empty'); return; }
     if (save) { save.disabled = true; save.textContent = 'Saving…'; }
     try {
-      const r = await fetch(`/api/skills/source/${encodeURIComponent(skillId)}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plugin_id: pluginId, body: newBody }),
+      // retries:0 — PUT rewrites the skill file; don't double-apply.
+      const r = await Net.call(`/api/skills/source/${encodeURIComponent(skillId)}`, {
+        retries: 0,
+        init: {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plugin_id: pluginId, body: newBody }),
+        },
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      if (!r.ok) throw new Error(r.error || ('HTTP ' + r.status));
       // Hot-reload so the edited skill activates immediately for chat.
       let active = false;
-      try { active = (await fetch('/api/plugins/reload', { method: 'POST' })).ok; } catch (_) {}
+      try { active = (await Net.call('/api/plugins/reload', { retries: 0, silent: true, init: { method: 'POST' } })).ok; } catch (_) {}
       SkillsDiscover._detailOrig = newBody;
       ta.readOnly = true;
       const toggle = document.getElementById('skill-edit-toggle');
@@ -17758,9 +17804,9 @@ async function composerExportBundle() {
   // Save first so the export reflects the current canvas state.
   await dfSave().catch(() => { /* user dismissed */ });
   try {
-    const r = await fetch(`/api/workflow-index/${encodeURIComponent(wfId)}/export`);
-    if (!r.ok) { Toast.danger('Export failed', await r.text()); return; }
-    const bundle = await r.json();
+    const r = await Net.call(`/api/workflow-index/${encodeURIComponent(wfId)}/export`);
+    if (!r.ok) { Toast.danger('Export failed', typeof r.data === 'string' ? r.data : (r.error || '')); return; }
+    const bundle = r.data;
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -17780,13 +17826,16 @@ function dfImportBundle() {
     let bundle;
     try { bundle = JSON.parse(text); } catch (e) { Toast.warn('Invalid JSON', e.message); return; }
     try {
-      const r = await fetch('/api/workflow-index/import?overwrite=true', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bundle),
+      const r = await Net.call('/api/workflow-index/import?overwrite=true', {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bundle),
+        },
       });
-      if (!r.ok) { Toast.danger('Import failed', await r.text()); return; }
-      const result = await r.json();
+      if (!r.ok) { Toast.danger('Import failed', typeof r.data === 'string' ? r.data : (r.error || '')); return; }
+      const result = r.data;
       Toast.success(`Imported workflow '${result.workflow_id}'`, `+${result.agents_installed.length} agents`);
       if (typeof WorkflowIndex !== 'undefined') WorkflowIndex.load();
       if (typeof refreshWorkflows === 'function') refreshWorkflows();
@@ -17843,9 +17892,9 @@ async function composerLoadFromIndex() {
 async function composerLoadById(wfId) {
   if (!wfId) return;
   try {
-    const r = await fetch(`/api/workflows/${encodeURIComponent(wfId)}`);
-    if (!r.ok) { Toast.danger('Load failed', await r.text()); return; }
-    const defn = await r.json();
+    const r = await Net.call(`/api/workflows/${encodeURIComponent(wfId)}`);
+    if (!r.ok) { Toast.danger('Load failed', typeof r.data === 'string' ? r.data : (r.error || '')); return; }
+    const defn = r.data;
     // Re-use the YAML import path so node placement / connections work the
     // same as a paste-import — fewest moving parts.
     const text = jsyaml.dump(defn);
@@ -18029,16 +18078,20 @@ async function dfRunWorkflowLive() {
 
   if (window.Toast) Toast.info('Kicking off…', 'live polling will surface step progress', { ttl: 2200 });
   try {
-    const r = await fetch('/api/workflows/run-async', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+    // retries:0 — a retried kickoff would start two runs.
+    const r = await Net.call('/api/workflows/run-async', {
+      retries: 0,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
     });
     if (!r.ok) {
-      const t = await r.text();
-      throw new Error('HTTP ' + r.status + ' — ' + t.slice(0, 200));
+      const t = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || r.error || '');
+      throw new Error('HTTP ' + r.status + ' — ' + String(t).slice(0, 200));
     }
-    const data = await r.json();
+    const data = r.data;
     if (data.run_id && window.ComposerWorkstream) {
       ComposerWorkstream.startPolling(data.run_id);
     }
@@ -18166,9 +18219,11 @@ const WorkflowIndex = (function () {
       let defn = _dagCache.get(w.id);
       if (!defn) {
         try {
-          const r = await fetch(`/api/workflows/${encodeURIComponent(w.id)}`);
+          // silent + retries:0 — per-card soft-fail loop; retry/backoff
+          // would stall the whole preview strip.
+          const r = await Net.call(`/api/workflows/${encodeURIComponent(w.id)}`, { silent: true, retries: 0 });
           if (!r.ok) { slot.innerHTML = '<div class="wfi-card-dag-err">no preview</div>'; continue; }
-          defn = await r.json();
+          defn = r.data;
           _dagCache.set(w.id, defn);
         } catch (e) {
           slot.innerHTML = '<div class="wfi-card-dag-err">preview failed</div>';
@@ -18411,13 +18466,8 @@ const WorkflowIndex = (function () {
     // the Runs tab and auto-select the new run so they see the live
     // DAG instead of the legacy System → Runs page.
     try {
-      const r = await fetch('/api/workflows/run-async', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow_id: id, seed: {} }),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const out = await r.json();
+      // retries:0 — a retried kickoff would start two runs.
+      const out = await Net.postJson('/api/workflows/run-async', { workflow_id: id, seed: {} }, { retries: 0 });
       switchTab('runs');
       // Give the tab dispatcher a beat to mount + fetch the list,
       // then drill into the new run.
@@ -18435,9 +18485,9 @@ const WorkflowIndex = (function () {
 
   async function exportBundle(id) {
     try {
-      const r = await fetch(`/api/workflow-index/${encodeURIComponent(id)}/export`);
-      if (!r.ok) { Toast.danger('Export failed', await r.text()); return; }
-      const bundle = await r.json();
+      const r = await Net.call(`/api/workflow-index/${encodeURIComponent(id)}/export`);
+      if (!r.ok) { Toast.danger('Export failed', typeof r.data === 'string' ? r.data : (r.error || '')); return; }
+      const bundle = r.data;
       const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -18491,7 +18541,9 @@ const RunsTab = (function () {
     // linger if a previous render flushed it.
     box.innerHTML = '<div class="model-empty">Loading runs…</div>';
     try {
-      const r = await fetch('/api/workflows/runs?limit=40');
+      // Net.call (not getJson): the 401 branch below needs the status code.
+      // retries:0 so Net's backoff doesn't delay the 401 auth-bootstrap retry.
+      const r = await Net.call('/api/workflows/runs?limit=40', { retries: 0 });
       if (r.status === 401) {
         // Auth hadn't initialized when the tab first opened. Retry
         // once after a beat — the global fetch wrapper will inject
@@ -18504,7 +18556,7 @@ const RunsTab = (function () {
         return;
       }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
+      const data = r.data;
       _rows = Array.isArray(data) ? data : (data.runs || []);
       const chip = document.getElementById('runs-tab-count');
       if (chip) chip.textContent = _rows.length ? `(${_rows.length})` : '';
@@ -18572,11 +18624,10 @@ const RunsTab = (function () {
       let defn = null;
       if (wfId) {
         try {
-          const dr = await fetch(`/api/workflows/${encodeURIComponent(wfId)}`);
-          // 404 for private workflows is expected if the overlay
-          // doesn't carry the YAML — fall through to the
-          // reconstruct-from-step_results path.
-          if (dr.ok) defn = await dr.json();
+          // silent + retries:0 — 404 for private workflows is expected if
+          // the overlay doesn't carry the YAML; must not toast or retry.
+          const dr = await Net.call(`/api/workflows/${encodeURIComponent(wfId)}`, { silent: true, retries: 0 });
+          if (dr.ok) defn = dr.data;
         } catch (_) { /* fall through */ }
       }
       // Pass the run into the graph builder so it can reconstruct
@@ -18594,9 +18645,11 @@ const RunsTab = (function () {
       if (['running', 'queued'].includes((run.status || '').toLowerCase())) {
         _pollHandle = setInterval(async () => {
           try {
-            const r2 = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}`);
+            // silent + retries:0 — poll loop: no toast spam, and Net's
+            // backoff must not stack with the 1.5s interval timer.
+            const r2 = await Net.call(`/api/workflows/runs/${encodeURIComponent(runId)}`, { silent: true, retries: 0 });
             if (!r2.ok) return;
-            const run2 = await r2.json();
+            const run2 = r2.data;
             _currentRun = run2;
             _applyStatus(run2);
             _renderSteps(run2);
@@ -18966,8 +19019,7 @@ const RunsTab = (function () {
       // canceled — which is the closest existing signal we have for
       // "this run is dead, stop polling." If the backend grows a
       // dedicated mark-failed verb later, swap the URL.
-      const r = await fetch(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/cancel`, { method: 'POST' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await Net.postJson(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/cancel`, {}, { retries: 0 });
       if (window.Toast) Toast.info('Run marked', 'Engine cancel sent; refreshing.');
       await load();
       select(_selectedId);
@@ -19047,12 +19099,8 @@ const RunsTab = (function () {
   // POSTs approve/reject to the backend then re-selects the run to refresh.
   async function resolveGate(runId, gateId, action) {
     try {
-      const r = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}/approvals/${encodeURIComponent(gateId)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      // retries:0 — HITL gate decisions must fire exactly once.
+      await Net.postJson(`/api/workflows/runs/${encodeURIComponent(runId)}/approvals/${encodeURIComponent(gateId)}`, { action }, { retries: 0 });
       if (window.Toast) Toast.info(action === 'approve' ? 'Gate approved' : 'Gate rejected',
         `Run ${runId.slice(0, 12)}… will ${action === 'approve' ? 'continue' : 'be halted'}.`);
       select(runId);
@@ -19533,8 +19581,8 @@ const RunsTab = (function () {
   async function resumeCurrent() {
     if (!_selectedId) return;
     try {
-      const r = await fetch(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/resume`, { method: 'POST' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      // retries:0 — resume re-executes steps; must fire exactly once.
+      await Net.postJson(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/resume`, {}, { retries: 0 });
       if (window.Toast) Toast.info('Resuming run', 'Picking up at the first un-completed step.');
       select(_selectedId);
     } catch (e) {
@@ -19546,8 +19594,7 @@ const RunsTab = (function () {
     const ok = await Confirm.ask({ title: 'Stop run', body: 'Stop this run? The in-flight LLM call will complete first; no further steps will execute.', okLabel: 'Stop Run', danger: true });
     if (!ok) return;
     try {
-      const r = await fetch(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/cancel`, { method: 'POST' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await Net.postJson(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/cancel`, {}, { retries: 0 });
       if (window.Toast) Toast.info('Stop requested', 'Engine will halt at the next step boundary.');
     } catch (e) {
       if (window.Toast) Toast.danger('Stop failed', e.message);
@@ -19571,24 +19618,32 @@ const RunsTab = (function () {
     try {
       // Prefer the async endpoint so the runs tab can immediately
       // start polling without blocking on a possibly-long sync run.
-      const r = await fetch('/api/workflows/run-async', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow_id: wfId, seed }),
-      });
-      if (!r.ok) {
-        // Fall back to the sync endpoint for older engines.
-        const r2 = await fetch('/api/workflows/run', {
+      // retries:0 on BOTH endpoints — a Net retry stacked on the manual
+      // sync-fallback could kick off the same workflow run multiple times.
+      const r = await Net.call('/api/workflows/run-async', {
+        retries: 0,
+        init: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ workflow_id: wfId, seed }),
+        },
+      });
+      if (!r.ok) {
+        // Fall back to the sync endpoint for older engines.
+        const r2 = await Net.call('/api/workflows/run', {
+          retries: 0,
+          init: {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workflow_id: wfId, seed }),
+          },
         });
         if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
         if (window.Toast) Toast.success('Re-run started (sync)', wfId);
         load();
         return;
       }
-      const out = await r.json();
+      const out = r.data;
       if (window.Toast) Toast.success('Re-run started', `${wfId} · ${(out.run_id || '').slice(0, 12)}…`);
       // Refresh list + auto-select the new run.
       await load();
@@ -19745,11 +19800,11 @@ const WorkflowMemory = (function () {
       const countEl = document.getElementById(t.count_id);
       if (!listEl) continue;
       try {
-        const resp = await fetch(`/api/workflows/memory/${t.kind}`, {
-          headers: typeof getAuthHeaders === 'function' ? getAuthHeaders() : {},
+        const resp = await Net.call(`/api/workflows/memory/${t.kind}`, {
+          init: { headers: typeof getAuthHeaders === 'function' ? getAuthHeaders() : {} },
         });
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const data = await resp.json();
+        const data = resp.data;
         const items = data[t.kind] || [];
         if (countEl) countEl.textContent = items.length;
         if (!items.length) {
@@ -19782,11 +19837,11 @@ const WorkflowMemory = (function () {
     detail.hidden = false;
     detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     try {
-      const resp = await fetch(`/api/workflows/memory/${kind}/${encodeURIComponent(name)}`, {
-        headers: typeof getAuthHeaders === 'function' ? getAuthHeaders() : {},
+      const resp = await Net.call(`/api/workflows/memory/${kind}/${encodeURIComponent(name)}`, {
+        init: { headers: typeof getAuthHeaders === 'function' ? getAuthHeaders() : {} },
       });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const data = await resp.json();
+      const data = resp.data;
       if (kind === 'episodic') {
         // Render the recency log as a readable digest.
         const lines = (data.records || []).map(r =>
@@ -19832,9 +19887,9 @@ const MCPPanel = (function () {
     if (!el) return;
     el.innerHTML = '<div class="model-empty">Loading…</div>';
     try {
-      const r = await fetch('/api/mcp/servers', { headers: _headers() });
+      const r = await Net.call('/api/mcp/servers', { init: { headers: _headers() } });
       if (!r.ok) { el.innerHTML = `<div class="model-empty" style="color:var(--danger)">Load failed (${r.status})</div>`; return; }
-      _servers = await r.json();
+      _servers = r.data;
       render();
     } catch (e) {
       el.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(e.message)}</div>`;
@@ -19918,8 +19973,10 @@ const MCPPanel = (function () {
 
   async function test(id) {
     try {
-      const r = await fetch(`/api/mcp/servers/${encodeURIComponent(id)}/test`, { method: 'POST', headers: _headers() });
-      const result = await r.json();
+      // Net.call (not postJson): result body is read regardless of status, and
+      // postJson would add a '{}' body to a body-less POST. retries:0 — live handshake.
+      const r = await Net.call(`/api/mcp/servers/${encodeURIComponent(id)}/test`, { retries: 0, init: { method: 'POST', headers: _headers() } });
+      const result = (r.data && typeof r.data === 'object') ? r.data : {};
       if (result.reachable) Toast.success('Server reachable', `${result.tools_count} tool(s) advertised`);
       else Toast.danger('Server unreachable', result.error || 'unknown');
       await load();
@@ -19928,8 +19985,9 @@ const MCPPanel = (function () {
 
   async function discoverTools(id) {
     try {
-      const r = await fetch(`/api/mcp/servers/${encodeURIComponent(id)}/tools?refresh=true`, { headers: _headers() });
-      if (!r.ok) { Toast.danger('Discover failed', await r.text()); return; }
+      // retries:0 — refresh triggers a live tool-discovery query against the server.
+      const r = await Net.call(`/api/mcp/servers/${encodeURIComponent(id)}/tools?refresh=true`, { retries: 0, init: { headers: _headers() } });
+      if (!r.ok) { Toast.danger('Discover failed', typeof r.data === 'string' ? r.data : (r.error || '')); return; }
       await load();
       _selected = id; renderDetail();
     } catch (e) { Toast.danger('Discover error', e.message); }
@@ -19937,9 +19995,12 @@ const MCPPanel = (function () {
 
   async function toggleEnabled(id, enabled) {
     try {
-      await fetch(`/api/mcp/servers/${encodeURIComponent(id)}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json', ..._headers() },
-        body: JSON.stringify({ enabled }),
+      await Net.call(`/api/mcp/servers/${encodeURIComponent(id)}`, {
+        retries: 0,
+        init: {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json', ..._headers() },
+          body: JSON.stringify({ enabled }),
+        },
       });
       await load();
     } catch (e) { Toast.danger('Toggle error', e.message); }
@@ -19949,7 +20010,7 @@ const MCPPanel = (function () {
     const ok = await Confirm.ask({ title: 'Delete MCP server', body: `Delete MCP server '${id}'?`, okLabel: 'Delete', danger: true });
     if (!ok) return;
     try {
-      await fetch(`/api/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE', headers: _headers() });
+      await Net.call(`/api/mcp/servers/${encodeURIComponent(id)}`, { retries: 0, init: { method: 'DELETE', headers: _headers() } });
       _selected = null;
       await load();
       renderDetail();
@@ -20037,22 +20098,27 @@ const MCPPanel = (function () {
     try {
       let r;
       if (isEdit) {
-        r = await fetch(`/api/mcp/servers/${encodeURIComponent(id)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', ..._headers() },
-          body: JSON.stringify(body),
+        r = await Net.call(`/api/mcp/servers/${encodeURIComponent(id)}`, {
+          retries: 0,
+          init: {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ..._headers() },
+            body: JSON.stringify(body),
+          },
         });
       } else {
         body.id = id;
-        r = await fetch('/api/mcp/servers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ..._headers() },
-          body: JSON.stringify(body),
+        r = await Net.call('/api/mcp/servers', {
+          retries: 0,
+          init: {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ..._headers() },
+            body: JSON.stringify(body),
+          },
         });
       }
       if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        _showError(err.detail || r.statusText);
+        _showError((r.data && r.data.detail) || r.error);
         return;
       }
       _closeModal();
@@ -20073,9 +20139,9 @@ const MCPPanel = (function () {
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
     try {
-      const r = await fetch('/api/mcp/discover', { headers: _headers() });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      const r = await Net.call('/api/mcp/discover', { init: { headers: _headers() } });
+      if (!r.ok) throw new Error(r.error || ('HTTP ' + r.status));
+      const d = r.data;
       const icon = (window.AgentIcons ? AgentIcons.svg('mcp') : '');
       const rows = (d.servers || []).map(s => {
         const envReq = (s.env_required || []);
@@ -20117,13 +20183,16 @@ const MCPPanel = (function () {
     }
     if (btn) { btn.disabled = true; btn.textContent = '…'; }
     try {
-      const r = await fetch(`/api/mcp/discover/${encodeURIComponent(entry.id)}/install`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ..._headers() },
-        body: JSON.stringify({ env }),
+      // retries:0 — install registers a server; don't double-register.
+      const r = await Net.call(`/api/mcp/discover/${encodeURIComponent(entry.id)}/install`, {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ..._headers() },
+          body: JSON.stringify({ env }),
+        },
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      if (!r.ok) throw new Error(r.error || ('HTTP ' + r.status));
       if (btn) { btn.outerHTML = '<span class="skill-disc-chip installed">installed</span>'; }
       if (window.Toast) Toast.success('MCP server registered', `${entry.id} — test the handshake from its detail panel.`);
       await load();
@@ -20311,16 +20380,8 @@ const AgentGen = (function () {
     const btn = document.getElementById('ag-generate-btn');
     btn.disabled = true; btn.textContent = 'Generating…';
     try {
-      const r = await fetch('/api/agents/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        _showError('ag-error', err.detail || r.statusText);
-        return;
-      }
-      const result = await r.json();
+      // retries:0 — slow LLM generation must not double-fire.
+      const result = await Net.postJson('/api/agents/generate', body, { retries: 0 });
       _draft = result.draft;
       _hydrateDraft(_draft);
       _showStep('draft');
@@ -20362,15 +20423,7 @@ const AgentGen = (function () {
       return false;
     }
     try {
-      const r = await fetch('/api/agents/generate/save', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft, overwrite: true }),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        _showError('ag-draft-error', err.detail || r.statusText);
-        return false;
-      }
+      await Net.postJson('/api/agents/generate/save', { draft, overwrite: true }, { retries: 0 });
       if (closeAfter) {
         close();
         if (typeof loadAgentsTab === 'function') loadAgentsTab();
@@ -20411,16 +20464,8 @@ const AgentGen = (function () {
     if (!ok) return;
     document.getElementById('ag-eval-results').innerHTML = '<div style="color:var(--text-dim);font-size:0.72rem">Running cases…</div>';
     try {
-      const r = await fetch(`/api/agents/${encodeURIComponent(draft.id)}/evaluate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cases }),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        _showError('ag-eval-error', err.detail || r.statusText);
-        return;
-      }
-      const report = await r.json();
+      // retries:0 — multi-case LLM evaluation must not double-fire.
+      const report = await Net.postJson(`/api/agents/${encodeURIComponent(draft.id)}/evaluate`, { cases }, { retries: 0 });
       document.getElementById('ag-eval-results').innerHTML = `
         <div style="font-size:0.72rem;margin-bottom:8px">
           <strong>${report.passed} passed</strong> · <span style="color:var(--danger)">${report.failed} failed</span>
@@ -20536,12 +20581,12 @@ const Projects = (function () {
       if (description) body.description = description;
       if (category) body.category = category;
       if (tags.length) body.tags = tags;
-      const r = await fetch('/api/projects', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      const r = await Net.call('/api/projects', {
+        retries: 0,
+        init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
       });
       if (!r.ok) {
-        const detail = await r.text();
+        const detail = typeof r.data === 'string' ? r.data : (r.data && (r.data.detail || r.data.error)) || r.error || '';
         errBox.hidden = false;
         errBox.textContent = `Create failed: ${detail}`;
         return;
@@ -20564,8 +20609,8 @@ const Projects = (function () {
     const wfId = (document.getElementById('df-wf-id') || {}).value;
     if (!wfId) { Toast.warn('Set a workflow ID first.'); return; }
     try {
-      const r = await fetch(`/api/projects/${encodeURIComponent(_active)}/artifacts/workflows/${encodeURIComponent(wfId)}`, { method: 'POST' });
-      if (!r.ok) { Toast.danger('Attach failed', await r.text()); return; }
+      const r = await Net.call(`/api/projects/${encodeURIComponent(_active)}/artifacts/workflows/${encodeURIComponent(wfId)}`, { retries: 0, init: { method: 'POST' } });
+      if (!r.ok) { Toast.danger('Attach failed', typeof r.data === 'string' ? r.data : (r.error || '')); return; }
       Toast.success(`Workflow '${wfId}' attached`, `project '${_active}'`);
       await load();
     } catch (e) { Toast.danger('Attach error', e.message); }
@@ -20574,9 +20619,9 @@ const Projects = (function () {
   async function exportBundle() {
     if (!_active) { Toast.warn('Pick a project first.'); return; }
     try {
-      const r = await fetch(`/api/projects/${encodeURIComponent(_active)}/export`);
-      if (!r.ok) { Toast.danger('Export failed', await r.text()); return; }
-      const bundle = await r.json();
+      const r = await Net.call(`/api/projects/${encodeURIComponent(_active)}/export`);
+      if (!r.ok) { Toast.danger('Export failed', typeof r.data === 'string' ? r.data : (r.error || '')); return; }
+      const bundle = r.data;
       const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -20595,12 +20640,12 @@ const Projects = (function () {
       const text = await file.text();
       try {
         const bundle = JSON.parse(text);
-        const r = await fetch('/api/projects/import?overwrite=true', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bundle),
+        const r = await Net.call('/api/projects/import?overwrite=true', {
+          retries: 0,
+          init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bundle) },
         });
-        if (!r.ok) { Toast.danger('Import failed', await r.text()); return; }
-        const result = await r.json();
+        if (!r.ok) { Toast.danger('Import failed', typeof r.data === 'string' ? r.data : (r.error || '')); return; }
+        const result = r.data;
         Toast.success(`Imported project '${result.project_id}'`);
         await load();
         setActive(result.project_id);
