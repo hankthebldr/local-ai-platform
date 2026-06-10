@@ -203,6 +203,17 @@ html { font-size: 14px; }
 .settings-row input:focus-visible,
 .settings-row select:focus-visible { outline: none; }
 
+/* Skip link — hidden off-canvas until keyboard focus lands on it. */
+.skip-link {
+  position: absolute; left: 8px; top: 8px; z-index: 1000;
+  transform: translateY(-200%);
+  background: var(--bg-elev-2); color: var(--text);
+  border: 1px solid var(--accent-dim); border-radius: 4px;
+  padding: 8px 14px; font-family: var(--mono); font-size: 0.7rem;
+  text-decoration: none;
+}
+.skip-link:focus { transform: translateY(0); }
+
 /* Respect reduced-motion users — disable our ambient/pulse animations. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -2967,6 +2978,10 @@ textarea.composer-desc-area {
   background: transparent; cursor: pointer;
 }
 .gc-slider:focus { outline: none; }
+/* Keyboard users need to see which slider holds focus — paint the ring
+   on the thumb (the track is visually inert). */
+.gc-slider:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gc-slider:focus-visible::-moz-range-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
 .gc-slider::-webkit-slider-runnable-track {
   height: 3px; background: var(--border); border-radius: 2px;
 }
@@ -5660,6 +5675,7 @@ textarea.composer-desc-area {
 </head>
 <body>
 
+<a class="skip-link" href="#main-content">Skip to main content</a>
 
 <div class="shell">
 
@@ -5770,6 +5786,9 @@ textarea.composer-desc-area {
     </div>
   </div>
 
+  <!-- Main landmark wraps every tab panel (the skip link targets it). -->
+  <main id="main-content">
+
   <!-- ═══ TAB: COMPOSER (formerly Dashboard) ════════════════════════
        The Workflow Composer is the primary user experience: a node-
        based DAG canvas surrounded by a step + workbench palette on the
@@ -5782,7 +5801,7 @@ textarea.composer-desc-area {
          exports include the right workflows, agents, MCP refs, and chats. -->
     <div class="composer-project-bar panel">
       <span class="corner-tr"></span><span class="corner-bl"></span>
-      <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Project</label>
+      <label for="project-select" style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Project</label>
       <select id="project-select" class="model-select" style="min-width:240px" onchange="Projects.setActive(this.value)">
         <option value="">— no project context —</option>
       </select>
@@ -5798,18 +5817,18 @@ textarea.composer-desc-area {
     <!-- Project create modal — replaces the prior prompt() flow with a
          proper form so users can supply name, description, category, tags
          without thinking about how to type a valid slug ID. -->
-    <div id="project-create-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+    <div id="project-create-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="project-create-modal-title">
       <div class="admin-modal-card" style="width:520px">
-        <h3>New Project</h3>
-        <label class="admin-modal-label">Name</label>
+        <h3 id="project-create-modal-title">New Project</h3>
+        <label for="project-create-name" class="admin-modal-label">Name</label>
         <input id="project-create-name" type="text" placeholder="e.g. Q4 Detection Playbooks" autocomplete="off">
-        <label class="admin-modal-label">ID <span style="color:var(--text-muted);font-weight:normal">(auto-derived; alphanum/_/- only)</span></label>
+        <label for="project-create-id" class="admin-modal-label">ID <span style="color:var(--text-muted);font-weight:normal">(auto-derived; alphanum/_/- only)</span></label>
         <input id="project-create-id" type="text" placeholder="auto from name" autocomplete="off">
-        <label class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <label for="project-create-desc" class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
         <textarea id="project-create-desc" rows="2" placeholder="What this project organizes."></textarea>
-        <label class="admin-modal-label">Category <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <label for="project-create-category" class="admin-modal-label">Category <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
         <input id="project-create-category" type="text" placeholder="e.g. security, research, ops" autocomplete="off">
-        <label class="admin-modal-label">Tags <span style="color:var(--text-muted);font-weight:normal">(comma-separated, optional)</span></label>
+        <label for="project-create-tags" class="admin-modal-label">Tags <span style="color:var(--text-muted);font-weight:normal">(comma-separated, optional)</span></label>
         <input id="project-create-tags" type="text" placeholder="xsiam, normalization" autocomplete="off">
         <div id="project-create-error" class="admin-modal-error" hidden></div>
         <div class="admin-modal-actions">
@@ -5824,17 +5843,17 @@ textarea.composer-desc-area {
       <span class="corner-tr"></span><span class="corner-bl"></span>
       <div class="composer-meta-row">
         <div class="composer-meta-field">
-          <label>Workflow ID</label>
+          <label for="df-wf-id">Workflow ID</label>
           <input type="text" id="df-wf-id" class="chat-input"
                  placeholder="my-workflow" />
         </div>
         <div class="composer-meta-field">
-          <label>Name</label>
+          <label for="df-wf-name">Name</label>
           <input type="text" id="df-wf-name" class="chat-input"
                  placeholder="My Workflow" />
         </div>
         <div class="composer-meta-field">
-          <label>Default Role</label>
+          <label for="df-wf-role">Default Role</label>
           <select id="df-wf-role" class="model-select">
             <option value="reasoning">reasoning</option>
             <option value="coding">coding</option>
@@ -5844,7 +5863,7 @@ textarea.composer-desc-area {
           </select>
         </div>
         <div class="composer-meta-field">
-          <label>Category</label>
+          <label for="df-wf-category">Category</label>
           <select id="df-wf-category" class="model-select">
             <option value="general" selected>general</option>
             <option value="security">security</option>
@@ -5857,7 +5876,7 @@ textarea.composer-desc-area {
           </select>
         </div>
         <div class="composer-meta-field composer-meta-grow">
-          <label>Description</label>
+          <label for="df-wf-desc">Description</label>
           <!-- Auto-sizing textarea — single-row by default but expands
                to fit multi-paragraph workflow descriptions without
                horizontally truncating. The oninput handler grows the
@@ -6060,11 +6079,11 @@ textarea.composer-desc-area {
           <span style="margin-left:8px;color:var(--text-muted);font-size:0.6rem;letter-spacing:0.1em">workflow interaction surface</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Agent</label>
+          <label for="agent-select" style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Agent</label>
           <select class="model-select" id="agent-select" onchange="onAgentSelectionChanged()">
             <option value="">— none (use model directly) —</option>
           </select>
-          <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Model</label>
+          <label for="model-select" style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Model</label>
           <select class="model-select" id="model-select"><option>loading…</option></select>
           <button class="action-btn ghost" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)">System</button>
           <button class="action-btn ghost" onclick="toggleAgentDock()" title="Collapse / expand the agent chat dock">▾</button>
@@ -6074,8 +6093,8 @@ textarea.composer-desc-area {
 
       <div class="system-prompt-row" id="system-prompt-row" style="display:none">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.15em;text-transform:uppercase">System Prompt</label>
-          <select id="sysprompt-role-select" class="model-select" style="min-width:180px;font-size:0.7rem" onchange="applyRoleAsSystemPrompt()">
+          <label for="system-prompt" style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.15em;text-transform:uppercase">System Prompt</label>
+          <select id="sysprompt-role-select" class="model-select" aria-label="Load system prompt from role library" style="min-width:180px;font-size:0.7rem" onchange="applyRoleAsSystemPrompt()">
             <option value="">— load from role library —</option>
           </select>
           <span style="flex:1"></span>
@@ -6101,7 +6120,7 @@ textarea.composer-desc-area {
           <button class="search-settings-close" onclick="toggleSettings()">&times;</button>
         </div>
         <div class="settings-row">
-          <label>Backend</label>
+          <label for="cfg-backend">Backend</label>
           <select id="cfg-backend" onchange="markSettingsDirty()">
             <option value="auto">Auto (DDG default)</option>
             <option value="duckduckgo">DuckDuckGo</option>
@@ -6109,10 +6128,10 @@ textarea.composer-desc-area {
             <option value="brave">Brave Search</option>
           </select>
         </div>
-        <div class="settings-row"><label>SearXNG URL</label><input type="text" id="cfg-searxng" placeholder="http://localhost:8888" oninput="markSettingsDirty()" /><span class="status-dot inactive" id="dot-searxng"></span></div>
-        <div class="settings-row"><label>Brave API Key</label><input type="password" id="cfg-brave" placeholder="Enter Brave Search API key..." oninput="markSettingsDirty()" /><span class="status-dot inactive" id="dot-brave"></span></div>
-        <div class="settings-row"><label>Max Results</label><input type="number" id="cfg-max-results" min="1" max="10" value="5" oninput="markSettingsDirty()" /></div>
-        <div class="settings-row"><label>Timeout (s)</label><input type="number" id="cfg-timeout" min="3" max="30" value="10" oninput="markSettingsDirty()" /></div>
+        <div class="settings-row"><label for="cfg-searxng">SearXNG URL</label><input type="text" id="cfg-searxng" placeholder="http://localhost:8888" oninput="markSettingsDirty()" /><span class="status-dot inactive" id="dot-searxng"></span></div>
+        <div class="settings-row"><label for="cfg-brave">Brave API Key</label><input type="password" id="cfg-brave" placeholder="Enter Brave Search API key..." oninput="markSettingsDirty()" /><span class="status-dot inactive" id="dot-brave"></span></div>
+        <div class="settings-row"><label for="cfg-max-results">Max Results</label><input type="number" id="cfg-max-results" min="1" max="10" value="5" oninput="markSettingsDirty()" /></div>
+        <div class="settings-row"><label for="cfg-timeout">Timeout (s)</label><input type="number" id="cfg-timeout" min="3" max="30" value="10" oninput="markSettingsDirty()" /></div>
         <div class="settings-active-backend" id="cfg-active">Active: <strong>DuckDuckGo</strong> (no API key required)</div>
         <div class="settings-actions">
           <button class="action-btn" onclick="toggleSettings()">Cancel</button>
@@ -6131,7 +6150,7 @@ textarea.composer-desc-area {
           <span class="toggle-label" id="search-label">Search: OFF</span>
           &#x1F310;
         </button>
-        <textarea class="chat-input" id="prompt" rows="1" placeholder="Talk to your agents… (Enter to send, Shift+Enter for newline)" autocomplete="off" spellcheck="false"></textarea>
+        <textarea class="chat-input" id="prompt" rows="1" aria-label="Chat message" placeholder="Talk to your agents… (Enter to send, Shift+Enter for newline)" autocomplete="off" spellcheck="false"></textarea>
         <button class="action-btn" onclick="toggleSettings()" title="Search settings" style="padding:0 12px;font-size:1rem;border-color:var(--border)">&#x2699;</button>
         <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
       </div>
@@ -6213,7 +6232,7 @@ textarea.composer-desc-area {
         <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">workflows/</span>
       </div>
       <div class="wfi-controls">
-        <input class="search-input" type="text" id="wfi-search" placeholder="Search workflows…" oninput="renderWorkflowIndex()" />
+        <input class="search-input" type="text" id="wfi-search" aria-label="Search workflows" placeholder="Search workflows…" oninput="renderWorkflowIndex()" />
         <div id="wfi-category-chips" class="wfi-category-chips"></div>
         <div style="flex:1"></div>
         <button class="action-btn" onclick="WorkflowIndex.refresh()">Refresh</button>
@@ -6233,7 +6252,7 @@ textarea.composer-desc-area {
       <div class="panel-label kanban-head">
         <span>// PROJECTS &amp; TASKS</span>
         <span class="kanban-head-controls">
-          <label class="kanban-project-label">project</label>
+          <label for="kanban-project-select" class="kanban-project-label">project</label>
           <select id="kanban-project-select" class="model-select"
                   onchange="Kanban.setActive(this.value)"
                   style="font-size:0.7rem;padding:3px 8px;min-width:180px">
@@ -6284,14 +6303,14 @@ textarea.composer-desc-area {
     </div>
 
     <!-- Kanban "new task" modal — reused for both new-task and new-project flows -->
-    <div id="kanban-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+    <div id="kanban-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="kanban-modal-title">
       <div class="admin-modal-card">
         <h3 id="kanban-modal-title">New task</h3>
-        <label class="admin-modal-label">Title</label>
+        <label for="kanban-modal-title-input" class="admin-modal-label">Title</label>
         <input id="kanban-modal-title-input" type="text" placeholder="e.g. Draft XQL rule for AcmeAuth" autocomplete="off">
-        <label class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <label for="kanban-modal-desc" class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
         <textarea id="kanban-modal-desc" rows="3" placeholder="What does done look like?"></textarea>
-        <label class="admin-modal-label">Labels <span style="color:var(--text-muted);font-weight:normal">(comma-separated)</span></label>
+        <label for="kanban-modal-labels" class="admin-modal-label">Labels <span style="color:var(--text-muted);font-weight:normal">(comma-separated)</span></label>
         <input id="kanban-modal-labels" type="text" placeholder="e.g. xql, urgent" autocomplete="off">
         <div id="kanban-modal-error" class="admin-modal-error" hidden></div>
         <div class="admin-modal-actions">
@@ -6329,7 +6348,7 @@ textarea.composer-desc-area {
     </div>
 
     <div class="inv-toolbar">
-      <input class="search-input" type="text" placeholder="Search models..." id="inv-search" oninput="filterCatalog()" />
+      <input class="search-input" type="text" aria-label="Search model catalog" placeholder="Search models..." id="inv-search" oninput="filterCatalog()" />
       <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
       <button class="filter-btn" onclick="setFilter('installed', this)">Installed</button>
       <button class="filter-btn" onclick="setFilter('available', this)">Available</button>
@@ -6451,7 +6470,7 @@ textarea.composer-desc-area {
 
     <!-- ── SESSION HISTORY & FACTS ──────────────────────────────────── -->
     <div style="display:flex;gap:12px;margin-top:16px;margin-bottom:16px;">
-      <input type="text" id="memory-search" placeholder="Search sessions and facts..."
+      <input type="text" id="memory-search" aria-label="Search sessions and facts" placeholder="Search sessions and facts..."
         style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:0.85rem;"
         oninput="searchMemory(this.value)">
     </div>
@@ -6473,7 +6492,7 @@ textarea.composer-desc-area {
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
         <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Pinned Facts</h3>
         <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <input type="text" id="new-fact-input" placeholder="Add a fact..."
+          <input type="text" id="new-fact-input" aria-label="New pinned fact" placeholder="Add a fact..."
             style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:0.8rem;"
             onkeydown="if(event.key==='Enter')addFact()">
           <button onclick="addFact()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Pin</button>
@@ -6550,7 +6569,7 @@ textarea.composer-desc-area {
         </div>
 
         <div class="inv-toolbar">
-          <input class="search-input" type="text" placeholder="Search discovered models..." id="disc-search" oninput="renderDiscovery()" />
+          <input class="search-input" type="text" aria-label="Search discovered models" placeholder="Search discovered models..." id="disc-search" oninput="renderDiscovery()" />
           <button class="filter-btn active" onclick="setDiscFilter('all', this)">All</button>
           <button class="filter-btn" onclick="setDiscFilter('trusted', this)">Trusted Authors</button>
           <button class="filter-btn" onclick="setDiscFilter('gguf', this)">GGUF Ready</button>
@@ -6575,9 +6594,9 @@ textarea.composer-desc-area {
       </summary>
       <div class="skills-discover-body" id="skills-discover-body" style="margin-top:14px">
         <div class="skills-discover-toolbar">
-          <input class="search-input" type="text" id="skills-discover-search"
+          <input class="search-input" type="text" id="skills-discover-search" aria-label="Filter discovered skills"
                  placeholder="Filter discovered skills…" oninput="SkillsDiscover.render()" />
-          <select class="model-select" id="skills-discover-cat" onchange="SkillsDiscover.render()">
+          <select class="model-select" id="skills-discover-cat" aria-label="Filter skills by category" onchange="SkillsDiscover.render()">
             <option value="">All categories</option>
           </select>
           <div class="skills-discover-viewtoggle" role="tablist" aria-label="View mode">
@@ -6673,7 +6692,7 @@ textarea.composer-desc-area {
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="runs-tab-list-head">
           <div class="panel-label" style="margin:0;flex:1">Recent Runs</div>
-          <input type="text" class="search-input" id="runs-tab-search" placeholder="Filter…"
+          <input type="text" class="search-input" id="runs-tab-search" aria-label="Filter runs" placeholder="Filter…"
                  oninput="RunsTab.render()" style="max-width:120px;font-size:0.66rem" />
           <button class="action-btn xs ghost" onclick="RunsTab.load()" title="Refresh">⟲</button>
         </div>
@@ -6926,13 +6945,13 @@ textarea.composer-desc-area {
           <span class="corner-tr"></span><span class="corner-bl"></span>
           <div class="panel-label">Deep Research Mode</div>
           <div class="deep-dive-form">
-            <input type="text" id="research-topic" placeholder="Enter research topic or question..." autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')runDeepDive()" />
+            <input type="text" id="research-topic" aria-label="Research topic" placeholder="Enter research topic or question..." autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')runDeepDive()" />
             <button class="action-btn pull" id="dive-btn" onclick="runDeepDive()">Research</button>
           </div>
           <div class="deep-dive-options">
-            <label>Model</label>
+            <label for="res-model-select">Model</label>
             <select id="res-model-select"><option>loading...</option></select>
-            <label style="margin-left:8px">Depth</label>
+            <label for="res-depth" style="margin-left:8px">Depth</label>
             <input type="number" id="res-depth" value="3" min="1" max="5" style="width:52px" />
             <span class="depth-label" id="depth-hint">3 sub-questions</span>
           </div>
@@ -7103,26 +7122,26 @@ textarea.composer-desc-area {
     <!-- Skill Builder modal — opens from the Skills section's
          + New Skill button. Authors a markdown body + registers it
          into a target plugin via POST /api/skills/create. -->
-    <div id="skill-builder-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+    <div id="skill-builder-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="skill-builder-modal-title">
       <div class="admin-modal-card" style="max-width:640px">
-        <h3>New Skill</h3>
+        <h3 id="skill-builder-modal-title">New Skill</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div>
-            <label class="admin-modal-label">Skill ID</label>
+            <label for="skill-builder-id" class="admin-modal-label">Skill ID</label>
             <input id="skill-builder-id" type="text" placeholder="concise-writer" autocomplete="off">
           </div>
           <div>
-            <label class="admin-modal-label">Name</label>
+            <label for="skill-builder-name" class="admin-modal-label">Name</label>
             <input id="skill-builder-name" type="text" placeholder="Concise Writer" autocomplete="off">
           </div>
         </div>
-        <label class="admin-modal-label">Target plugin</label>
+        <label for="skill-builder-plugin" class="admin-modal-label">Target plugin</label>
         <select id="skill-builder-plugin" class="model-select"></select>
-        <label class="admin-modal-label">Description</label>
+        <label for="skill-builder-desc" class="admin-modal-label">Description</label>
         <input id="skill-builder-desc" type="text" placeholder="Short one-liner that names the skill's job" autocomplete="off">
-        <label class="admin-modal-label">Trigger keywords <span style="color:var(--text-muted);font-weight:normal">(comma-separated; auto-injects when present)</span></label>
+        <label for="skill-builder-triggers" class="admin-modal-label">Trigger keywords <span style="color:var(--text-muted);font-weight:normal">(comma-separated; auto-injects when present)</span></label>
         <input id="skill-builder-triggers" type="text" placeholder="summarize, tighten, tl;dr" autocomplete="off">
-        <label class="admin-modal-label">Body (markdown — front-matter optional)</label>
+        <label for="skill-builder-body" class="admin-modal-label">Body (markdown — front-matter optional)</label>
         <textarea id="skill-builder-body" rows="10" placeholder="You are now in <skill-name> mode. Follow this protocol every turn:
 
 1. ..."></textarea>
@@ -7176,7 +7195,7 @@ textarea.composer-desc-area {
           <div class="doc-drop-zone-sub">Accepted: .txt, .md, .pdf</div>
         </div>
         <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" hidden
-               onchange="uploadDocument()">
+               aria-label="Document file" onchange="uploadDocument()">
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
           <span id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);flex:1;"></span>
           <button onclick="AgentGen.openFromText()" style="background:transparent;color:var(--accent);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.75rem;">Paste → Agent</button>
@@ -7186,7 +7205,7 @@ textarea.composer-desc-area {
       <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
         <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Search Preview</h3>
         <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <input type="text" id="doc-search-input" placeholder="Try a query..." style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:0.8rem;" onkeydown="if(event.key==='Enter')searchDocuments()">
+          <input type="text" id="doc-search-input" aria-label="Search documents" placeholder="Try a query..." style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:0.8rem;" onkeydown="if(event.key==='Enter')searchDocuments()">
           <button onclick="searchDocuments()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Search</button>
         </div>
         <div id="doc-search-results" style="max-height:400px;overflow-y:auto;"></div>
@@ -7232,7 +7251,7 @@ textarea.composer-desc-area {
       </div>
       <div id="agent-chat-messages" style="padding:14px;min-height:200px;max-height:400px;overflow-y:auto;font-size:0.82rem;display:flex;flex-direction:column;gap:10px;"></div>
       <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:8px;">
-        <input type="text" id="agent-chat-input" placeholder="Message the agent…"
+        <input type="text" id="agent-chat-input" aria-label="Message the agent" placeholder="Message the agent…"
           style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:4px;font-family:var(--mono);font-size:0.82rem;"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentMessage();}">
         <button onclick="sendAgentMessage()" style="background:var(--cyan);color:#000;border:none;padding:7px 16px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Send</button>
@@ -7313,11 +7332,11 @@ textarea.composer-desc-area {
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="panel-label">// SKILLS
           <span style="float:right">
-            <select id="skills-filter-plugin" class="model-select" style="font-size:0.62rem;padding:2px 6px;min-width:140px"
+            <select id="skills-filter-plugin" class="model-select" aria-label="Filter skills by plugin" style="font-size:0.62rem;padding:2px 6px;min-width:140px"
                     onchange="SkillsPanel.refresh()" title="Filter by plugin">
               <option value="">— all plugins —</option>
             </select>
-            <select id="skills-filter-role" class="model-select" style="font-size:0.62rem;padding:2px 6px;min-width:120px;margin-left:4px"
+            <select id="skills-filter-role" class="model-select" aria-label="Filter skills by role" style="font-size:0.62rem;padding:2px 6px;min-width:120px;margin-left:4px"
                     onchange="SkillsPanel.refresh()" title="Filter by role (matches the workflow step role each skill applies to)">
               <option value="">— all roles —</option>
               <option value="general">general</option>
@@ -7375,38 +7394,38 @@ textarea.composer-desc-area {
     </div>
 
     <!-- Register / edit modal -->
-    <div id="mcp-edit-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+    <div id="mcp-edit-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="mcp-edit-title">
       <div class="admin-modal-card" style="width:600px">
         <h3 id="mcp-edit-title">Register MCP server</h3>
-        <label class="admin-modal-label">ID (used in workflow refs)</label>
+        <label for="mcp-edit-id" class="admin-modal-label">ID (used in workflow refs)</label>
         <input id="mcp-edit-id" type="text" placeholder="e.g. local-fs" autocomplete="off">
-        <label class="admin-modal-label">Name</label>
+        <label for="mcp-edit-name" class="admin-modal-label">Name</label>
         <input id="mcp-edit-name" type="text" placeholder="e.g. Local Filesystem" autocomplete="off">
-        <label class="admin-modal-label">Description</label>
+        <label for="mcp-edit-desc" class="admin-modal-label">Description</label>
         <input id="mcp-edit-desc" type="text" placeholder="optional" autocomplete="off">
-        <label class="admin-modal-label">Transport</label>
+        <label for="mcp-edit-transport" class="admin-modal-label">Transport</label>
         <select id="mcp-edit-transport" onchange="MCPPanel._onTransportChange()">
           <option value="stdio">stdio (local process)</option>
           <option value="http">http (JSON-RPC over HTTP)</option>
           <option value="sse">sse (HTTP with Server-Sent Events)</option>
         </select>
         <div id="mcp-edit-stdio-fields">
-          <label class="admin-modal-label">Command</label>
+          <label for="mcp-edit-command" class="admin-modal-label">Command</label>
           <input id="mcp-edit-command" type="text" placeholder="/usr/local/bin/mcp-server-fs" autocomplete="off">
-          <label class="admin-modal-label">Args (space-separated)</label>
+          <label for="mcp-edit-args" class="admin-modal-label">Args (space-separated)</label>
           <input id="mcp-edit-args" type="text" placeholder="--root /workspace --readonly" autocomplete="off">
-          <label class="admin-modal-label">Env (KEY=VALUE per line)</label>
+          <label for="mcp-edit-env" class="admin-modal-label">Env (KEY=VALUE per line)</label>
           <textarea id="mcp-edit-env" rows="3" placeholder="API_KEY=…"></textarea>
         </div>
         <div id="mcp-edit-http-fields" style="display:none">
-          <label class="admin-modal-label">URL</label>
+          <label for="mcp-edit-url" class="admin-modal-label">URL</label>
           <input id="mcp-edit-url" type="text" placeholder="https://mcp.example.com/jsonrpc" autocomplete="off">
-          <label class="admin-modal-label">Headers (KEY: VALUE per line)</label>
+          <label for="mcp-edit-headers" class="admin-modal-label">Headers (KEY: VALUE per line)</label>
           <textarea id="mcp-edit-headers" rows="3" placeholder="Authorization: Bearer …"></textarea>
         </div>
-        <label class="admin-modal-label">Timeout (seconds)</label>
+        <label for="mcp-edit-timeout" class="admin-modal-label">Timeout (seconds)</label>
         <input id="mcp-edit-timeout" type="number" min="1" max="600" value="30">
-        <label class="admin-modal-label">Tags (comma-separated)</label>
+        <label for="mcp-edit-tags" class="admin-modal-label">Tags (comma-separated)</label>
         <input id="mcp-edit-tags" type="text" placeholder="filesystem, sandbox" autocomplete="off">
         <div id="mcp-edit-error" class="admin-modal-error" hidden></div>
         <div class="admin-modal-actions">
@@ -7452,28 +7471,28 @@ textarea.composer-desc-area {
     </div>
 
     <!-- Register / edit modal -->
-    <div id="cloud-edit-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+    <div id="cloud-edit-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="cloud-edit-title">
       <div class="admin-modal-card" style="width:600px">
         <h3 id="cloud-edit-title">Add cloud provider</h3>
-        <label class="admin-modal-label">ID <span style="color:var(--text-muted);font-weight:normal">(used in URLs; alphanum/_/- only)</span></label>
+        <label for="cloud-edit-id" class="admin-modal-label">ID <span style="color:var(--text-muted);font-weight:normal">(used in URLs; alphanum/_/- only)</span></label>
         <input id="cloud-edit-id" type="text" placeholder="e.g. openai-prod" autocomplete="off">
-        <label class="admin-modal-label">Display name</label>
+        <label for="cloud-edit-name" class="admin-modal-label">Display name</label>
         <input id="cloud-edit-name" type="text" placeholder="e.g. OpenAI · production" autocomplete="off">
-        <label class="admin-modal-label">Kind</label>
+        <label for="cloud-edit-kind" class="admin-modal-label">Kind</label>
         <select id="cloud-edit-kind" class="model-select" style="font-size:0.8rem">
           <option value="openai">openai (and OpenAI-compatible: Together, Groq, OpenRouter, vLLM-OpenAI)</option>
           <option value="anthropic">anthropic (Claude Messages API)</option>
           <option value="custom">custom (other / experimental)</option>
         </select>
-        <label class="admin-modal-label">Base URL</label>
+        <label for="cloud-edit-base-url" class="admin-modal-label">Base URL</label>
         <input id="cloud-edit-base-url" type="text" placeholder="https://api.openai.com" autocomplete="off">
-        <label class="admin-modal-label">API key <span style="color:var(--text-muted);font-weight:normal">(rotates when you save; leave empty on edit to keep the current key)</span></label>
+        <label for="cloud-edit-api-key" class="admin-modal-label">API key <span style="color:var(--text-muted);font-weight:normal">(rotates when you save; leave empty on edit to keep the current key)</span></label>
         <input id="cloud-edit-api-key" type="password" placeholder="sk-…" autocomplete="off">
-        <label class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <label for="cloud-edit-desc" class="admin-modal-label">Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
         <input id="cloud-edit-desc" type="text" placeholder="What this provider is for" autocomplete="off">
-        <label class="admin-modal-label">Curated model IDs <span style="color:var(--text-muted);font-weight:normal">(comma-separated; empty = fetch from /v1/models on first use)</span></label>
+        <label for="cloud-edit-models" class="admin-modal-label">Curated model IDs <span style="color:var(--text-muted);font-weight:normal">(comma-separated; empty = fetch from /v1/models on first use)</span></label>
         <input id="cloud-edit-models" type="text" placeholder="gpt-4o, gpt-4o-mini" autocomplete="off">
-        <label class="admin-modal-label">Tags <span style="color:var(--text-muted);font-weight:normal">(comma-separated)</span></label>
+        <label for="cloud-edit-tags" class="admin-modal-label">Tags <span style="color:var(--text-muted);font-weight:normal">(comma-separated)</span></label>
         <input id="cloud-edit-tags" type="text" placeholder="frontier, paid" autocomplete="off">
         <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.74rem;color:var(--text-dim)">
           <input id="cloud-edit-enabled" type="checkbox" checked> Enabled (surface in selection menus)
@@ -7522,7 +7541,7 @@ textarea.composer-desc-area {
         activation will replace this flow in a future build.
       </p>
       <input id="admin-signin-input" type="password" autocomplete="off"
-             placeholder="sk-..." />
+             aria-label="License key" placeholder="sk-..." />
       <div id="admin-signin-error" class="admin-modal-error" hidden>
         License key rejected.
       </div>
@@ -7541,16 +7560,16 @@ textarea.composer-desc-area {
     <div class="admin-modal-card" style="width:480px">
       <h3 id="create-key-title">Create API key</h3>
       <div id="create-key-form">
-        <label class="admin-modal-label">Name</label>
+        <label for="new-key-name" class="admin-modal-label">Name</label>
         <input id="new-key-name" type="text" placeholder="e.g. homelab-client" autocomplete="off">
 
-        <label class="admin-modal-label">Scopes</label>
-        <div id="new-key-scopes" class="scope-picker"></div>
+        <label id="new-key-scopes-label" class="admin-modal-label">Scopes</label>
+        <div id="new-key-scopes" class="scope-picker" role="group" aria-labelledby="new-key-scopes-label"></div>
 
-        <label class="admin-modal-label">Rate limit (requests / minute) — optional</label>
+        <label for="new-key-rpm" class="admin-modal-label">Rate limit (requests / minute) — optional</label>
         <input id="new-key-rpm" type="number" min="1" placeholder="leave blank for unlimited">
 
-        <label class="admin-modal-label">Expires — optional</label>
+        <label for="new-key-expires" class="admin-modal-label">Expires — optional</label>
         <input id="new-key-expires" type="date">
 
         <div id="create-key-error" class="admin-modal-error" hidden></div>
@@ -7567,9 +7586,9 @@ textarea.composer-desc-area {
         <div class="admin-modal-error" style="background:rgba(245,166,35,0.12);border-color:#F5A623;color:#F5A623;margin-bottom:12px">
           This is the only time this key will be displayed. Copy it now.
         </div>
-        <label class="admin-modal-label">Your new key</label>
+        <label id="new-key-value-label" class="admin-modal-label">Your new key</label>
         <div style="display:flex;gap:8px">
-          <code id="new-key-value" style="flex:1;background:var(--bg);border:1px solid var(--accent);color:var(--accent);padding:8px 10px;border-radius:4px;font-size:0.78rem;word-break:break-all"></code>
+          <code id="new-key-value" aria-labelledby="new-key-value-label" style="flex:1;background:var(--bg);border:1px solid var(--accent);color:var(--accent);padding:8px 10px;border-radius:4px;font-size:0.78rem;word-break:break-all"></code>
           <button class="admin-modal-btn primary" onclick="ApiKeysPanel._copyKey()">Copy</button>
         </div>
         <div id="copy-confirm" style="display:none;color:var(--accent);font-size:0.7rem;margin-top:6px">Copied to clipboard.</div>
@@ -7587,7 +7606,7 @@ textarea.composer-desc-area {
   </div>
 
   <!-- ── Export view modal ───────────────────────────────────────── -->
-  <div id="export-view-modal" class="admin-modal" hidden role="dialog" aria-modal="true">
+  <div id="export-view-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="export-view-title">
     <div class="admin-modal-card" style="width:760px;max-width:92vw;max-height:80vh;overflow:auto">
       <h3 id="export-view-title" style="margin-bottom:14px">Export</h3>
       <div id="export-view-body" style="font-size:0.78rem"></div>
@@ -7603,6 +7622,8 @@ textarea.composer-desc-area {
        Center: live system signals (model, queue, last run)
        Right:  service links + version + co-brand
        JS owns the inner span values; this is the chrome only. -->
+  </main>
+
   <div class="footer" role="contentinfo">
     <div class="footer-rail-section">
       <span class="footer-rail-stat is-accent">
@@ -7761,6 +7782,20 @@ window.Theme = (function () {
 
 /* ── TAB SWITCHING ─────────────────────────────────────────────── */
 function switchTab(name, el) {
+  // Legacy 'discover' routes (old links / bookmarks) land on Models with
+  // the Discover section popped open. This remap must happen BEFORE the
+  // panel lookup — there is no #tab-discover, so the old post-lookup
+  // redirect block was dead code (the lookup threw first).
+  if (name === 'discover') {
+    name = 'inventory';
+    const sect = document.getElementById('discover-section');
+    if (sect) sect.open = true;
+    if (typeof discoverLoaded !== 'undefined' && !discoverLoaded) loadDiscovery();
+  }
+  // Unknown tab names (stale hashes, removed tabs) must not take down the
+  // caller — warn and stay on the current tab instead of throwing.
+  const panel = document.getElementById('tab-' + name);
+  if (!panel) { console.warn('switchTab: no panel for "' + name + '"'); return; }
   // Reset both the .active class AND any inline display left over by
   // AdminMenu.showPanel — without this, the last-opened admin subtab
   // bleeds through under every operational tab.
@@ -7768,15 +7803,27 @@ function switchTab(name, el) {
     t.classList.remove('active');
     t.style.display = '';
   });
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('active');
+    if (b.getAttribute('role') === 'tab') {
+      b.setAttribute('aria-selected', 'false');
+      b.setAttribute('tabindex', '-1');
+    }
+  });
+  panel.classList.add('active');
   // Prefer explicitly-passed element; fall back to data-tab, then to onclick-string match.
   const btn = el
     || document.querySelector('.tab-btn[data-tab="' + name + '"]')
     || Array.from(document.querySelectorAll('.tab-btn')).find(
       b => (b.getAttribute('onclick') || '').indexOf("'" + name + "'") !== -1
     );
-  if (btn) btn.classList.add('active');
+  if (btn) {
+    btn.classList.add('active');
+    if (btn.getAttribute('role') === 'tab') {
+      btn.setAttribute('aria-selected', 'true');
+      btn.setAttribute('tabindex', '0');
+    }
+  }
 
   if (name === 'dashboard') ComposerView.init();
   // Workflow Index no longer needs to refresh Kanban — the panel
@@ -7808,16 +7855,8 @@ function switchTab(name, el) {
   }
   if (name === 'memory') { loadMemory(); loadMemoryTab(); loadArchitecturePanel(); WorkflowMemory && WorkflowMemory.refresh(); }
   else { _stopArchPressurePoll(); }
-  // Discover was promoted-then-demoted into Models tab as a collapsible
-  // sub-section. Legacy switchTab('discover', ...) calls (from old links
-  // or external bookmarks) redirect to inventory and pop the Discover
-  // section open so the user lands on the right content.
-  if (name === 'discover') {
-    if (!catalogLoaded) loadCatalog();
-    const sect = document.getElementById('discover-section');
-    if (sect) sect.open = true;
-    if (!discoverLoaded) loadDiscovery();
-  }
+  // (Legacy 'discover' redirect now lives at the top of this function —
+  // it has to run before the panel lookup to actually work.)
   // Skill Lab tab is gone from nav; Context now hosts the graph +
   // research panels. initResearch() runs from BOTH tab entries (the
   // hidden 'research' fallback is harmless).
@@ -7856,6 +7895,46 @@ function switchTab(name, el) {
     if (trig && (name === 'admin-keys')) trig.classList.add('active');
   }
 }
+
+/* ── TABLIST SEMANTICS (a11y) ───────────────────────────────────────
+   The markup keeps plain .tab-btn buttons; roles + roving tabindex are
+   assigned here so the nav is a real WAI-ARIA tablist: screen readers
+   announce "tab, N of M, selected" and ←/→/Home/End move focus between
+   tabs (manual activation — Enter/Space activates, so arrowing across
+   the strip doesn't fire every panel's lazy loaders). The admin
+   dropdown trigger inside .tab-nav is a menu button, not a tab — it
+   keeps its own semantics and stays out of the roving order. */
+document.addEventListener('DOMContentLoaded', () => {
+  const nav = document.querySelector('.tab-nav');
+  if (!nav) return;
+  const tabs = Array.from(nav.querySelectorAll('.tab-btn[data-tab]'));
+  tabs.forEach(btn => {
+    const name = btn.dataset.tab;
+    btn.setAttribute('role', 'tab');
+    if (!btn.id) btn.id = 'tabbtn-' + name;
+    btn.setAttribute('aria-controls', 'tab-' + name);
+    const active = btn.classList.contains('active');
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    btn.setAttribute('tabindex', active ? '0' : '-1');
+    const panel = document.getElementById('tab-' + name);
+    if (panel) {
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('aria-labelledby', btn.id);
+    }
+  });
+  nav.addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const current = tabs.indexOf(document.activeElement);
+    if (current === -1) return;
+    e.preventDefault();
+    let next = current;
+    if (e.key === 'ArrowLeft')  next = (current - 1 + tabs.length) % tabs.length;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    if (e.key === 'Home') next = 0;
+    if (e.key === 'End')  next = tabs.length - 1;
+    tabs[next].focus();
+  });
+});
 
 /* ── CLOCK ──────────────────────────────────────────────────────── */
 const startTime = Date.now();
@@ -14227,6 +14306,10 @@ window.Toast = (function () {
     if (!c) {
       c = document.createElement('div');
       c.id = 'enclave-toasts';
+      // Live region: every async notification in the app funnels through
+      // this one container, so screen readers hear all of them for free.
+      c.setAttribute('role', 'status');
+      c.setAttribute('aria-live', 'polite');
       document.body.appendChild(c);
     }
     return c;
@@ -14239,6 +14322,9 @@ window.Toast = (function () {
     opts = opts || {};
     const el = document.createElement('div');
     el.className = 'enclave-toast kind-' + kind;
+    // Danger toasts interrupt (role=alert → assertive); the rest queue
+    // politely behind whatever the screen reader is saying.
+    if (kind === 'danger') el.setAttribute('role', 'alert');
     el.innerHTML =
       (title ? '<div class="toast-title">' + _esc(title) + '</div>' : '') +
       '<div class="toast-body">' + _esc(body || title) + '</div>';
@@ -14566,6 +14652,8 @@ window.Confirm = (function () {
         m.className = 'admin-modal';
         m.setAttribute('role', 'dialog');
         m.setAttribute('aria-modal', 'true');
+        m.setAttribute('aria-labelledby', 'enclave-confirm-title');
+        m.setAttribute('aria-describedby', 'enclave-confirm-body');
         m.innerHTML = `
           <div class="admin-modal-card" style="width:min(440px,90vw)">
             <h3 id="enclave-confirm-title">Confirm</h3>
@@ -14586,11 +14674,17 @@ window.Confirm = (function () {
       okBtn.className = 'admin-modal-btn primary' + (opts.danger ? ' kind-danger' : '');
       m.hidden = false;
 
+      const _restoreFocus = document.activeElement;
       function _close(value) {
         m.hidden = true;
         okBtn.removeEventListener('click', _yes);
         cancelBtn.removeEventListener('click', _no);
         document.removeEventListener('keydown', _onKey);
+        // Hand focus back to whatever opened the dialog (keyboard users
+        // otherwise land back at the top of the document).
+        if (_restoreFocus && _restoreFocus.isConnected) {
+          try { _restoreFocus.focus(); } catch (_) {}
+        }
         resolve(value);
       }
       function _yes() { _close(true); }
