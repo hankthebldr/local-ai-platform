@@ -214,6 +214,9 @@ html { font-size: 14px; }
 }
 .skip-link:focus { transform: translateY(0); }
 
+/* Reset for span/div→button conversions; the global :focus-visible rule supplies the focus ring. */
+.btn-unstyled { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: inherit; cursor: pointer; }
+
 /* Respect reduced-motion users — disable our ambient/pulse animations. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1834,6 +1837,7 @@ body::after {
   align-items: start;
 }
 .plugin-card {
+  display: block;  /* explicit: rendered as <button> (UA inline-block) since the a11y conversion */
   border: 1px solid var(--border);
   padding: 10px 12px;
   cursor: pointer;
@@ -3394,6 +3398,7 @@ textarea.composer-desc-area {
 
 /* Role Library (v2 prompt framework) */
 .wf-role-card {
+  display: block;  /* explicit: rendered as <button> (UA inline-block) since the a11y conversion */
   border: 1px solid var(--border);
   padding: 10px 12px;
   cursor: pointer;
@@ -8927,7 +8932,7 @@ const CatalogPage = (function () {
       const persona = (window.AgentIcons ? AgentIcons.resolve(a) : 'general');
       const icon = (window.AgentIcons ? AgentIcons.svg(persona) : '');
       const tone = (window.AgentIcons ? AgentIcons.tone(persona) : 'accent');
-      return `<div class="agent-tile" onclick="if(typeof openAgentChat==='function')openAgentChat('${esc(a.id)}')">
+      return `<div class="agent-tile" role="button" tabindex="0" aria-label="Open chat with ${esc(a.name || a.id)}" onclick="if(typeof openAgentChat==='function')openAgentChat('${esc(a.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();if(typeof openAgentChat==='function')openAgentChat('${esc(a.id)}')}">
         <div class="agent-tile-head">
           <span class="agent-tile-icon tone-${esc(tone)}">${icon}</span>
           <div class="agent-tile-titleblock">
@@ -11139,11 +11144,11 @@ async function loadRoles() {
       return;
     }
     container.innerHTML = roles.map(r => `
-      <div class="wf-role-card" onclick="previewRole('${esc(r.id)}')">
+      <button type="button" class="btn-unstyled wf-role-card" style="width:100%" onclick="previewRole('${esc(r.id)}')">
         <div class="wf-role-name">${esc(r.name)}</div>
         <div class="wf-role-summary">${esc(r.summary)}</div>
         <div class="wf-role-id">${esc(r.id)}</div>
-      </div>
+      </button>
     `).join('');
   } catch (e) {
     container.innerHTML = `<div class="model-empty">Failed to load roles: ${esc(e.message)}</div>`;
@@ -11378,7 +11383,7 @@ function renderStepBox(step, status, result) {
   // Role chip: prefer v2 prompt.role_ref (clickable), fallback to v1 role.
   const roleRef = step.prompt && step.prompt.role_ref;
   const roleChip = roleRef
-    ? `<span class="wf-role-chip" onclick="previewRole('${esc(roleRef)}')">role: ${esc(roleRef)}</span>`
+    ? `<button type="button" class="btn-unstyled wf-role-chip" onclick="previewRole('${esc(roleRef)}')">role: ${esc(roleRef)}</button>`
     : (step.role
       ? `<span class="wf-role-chip inline" title="v1 role alias">role: ${esc(step.role)}</span>`
       : '');
@@ -11537,7 +11542,7 @@ async function loadRecentRuns() {
                    title="Resume from the last checkpointed step">Resume</button>`
         : '';
       return `
-        <div class="wf-run-item" onclick="viewRun('${esc(r.run_id)}')">
+        <div class="wf-run-item" role="button" tabindex="0" aria-label="View run ${(r.run_id || '').slice(0, 8)} of ${esc(r.workflow_id)}" onclick="viewRun('${esc(r.run_id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewRun('${esc(r.run_id)}')}">
           <span class="wf-run-wf">${esc(r.workflow_id)}</span>
           <span class="wf-run-status" style="color:${statusColor}">${r.status}</span>
           <span class="wf-run-id">${(r.run_id || '').slice(0, 8)}...</span>
@@ -11811,7 +11816,7 @@ async function loadSessions() {
       return;
     }
     el.innerHTML = sessions.map(s => `
-      <div style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="toggleSessionDetail('${esc(s.id)}')">
+      <div style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;" role="button" tabindex="0" aria-expanded="false" aria-controls="session-detail-${esc(s.id)}" onclick="toggleSessionDetail('${esc(s.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSessionDetail('${esc(s.id)}')}">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div style="font-size:0.85rem;color:var(--text);max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.preview || 'No preview')}</div>
           <button onclick="event.stopPropagation();deleteSession('${esc(s.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
@@ -11828,7 +11833,8 @@ async function loadSessions() {
 async function toggleSessionDetail(id) {
   const el = document.getElementById('session-detail-' + id);
   if (!el) return;
-  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  const row = el.closest('[role="button"]');  // session row carries aria-expanded
+  if (el.style.display !== 'none') { el.style.display = 'none'; if (row) row.setAttribute('aria-expanded', 'false'); return; }
   try {
     const r = await fetch('/api/memory/sessions/' + id);
     const s = await r.json();
@@ -11846,7 +11852,8 @@ async function toggleSessionDetail(id) {
     html += '</div>';
     el.innerHTML = html;
     el.style.display = '';
-  } catch(e) { el.innerHTML = '<div style="color:var(--red);">Failed to load</div>'; el.style.display = ''; }
+    if (row) row.setAttribute('aria-expanded', 'true');
+  } catch(e) { el.innerHTML = '<div style="color:var(--red);">Failed to load</div>'; el.style.display = ''; if (row) row.setAttribute('aria-expanded', 'true'); }
 }
 
 async function deleteSession(id) {
@@ -11874,7 +11881,9 @@ async function loadFacts() {
         <div style="flex:1;min-width:0;">
           <div class="fact-content" id="fact-content-${esc(f.id)}"
                style="font-size:0.85rem;color:var(--text);cursor:text;word-wrap:break-word;"
+               role="button" tabindex="0" aria-label="Edit fact"
                onclick="editFact('${esc(f.id)}', this)"
+               onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();editFact('${esc(f.id)}', this)}"
                title="Click to edit">${esc(f.content)}</div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">
             ${(f.tags||[]).map(t => '<span style="color:var(--cyan);">#'+esc(t)+'</span>').join(' ')}
@@ -12823,7 +12832,7 @@ function dfRenderConfigPanel(nodeId) {
       </div>` : ''}
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">${data.is_decision ? 'Output Format' : 'Outputs'}</div>
-        <div id="df-outputs-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${data.outputs.map((o,i)=>`<span class="df-tag">${esc(o)}<span class="df-tag-remove" onclick="dfRemoveOutput(${nodeId},${i})">✕</span></span>`).join('')}</div>
+        <div id="df-outputs-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${data.outputs.map((o,i)=>`<span class="df-tag">${esc(o)}<button type="button" class="btn-unstyled df-tag-remove" aria-label="Remove output ${esc(o)}" onclick="dfRemoveOutput(${nodeId},${i})">✕</button></span>`).join('')}</div>
         <div style="display:flex;gap:4px"><input type="text" id="df-new-output-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="output_key" onkeydown="if(event.key==='Enter'){dfAddOutput(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddOutput(${nodeId})">Add</button></div>
         <div style="margin-top:6px"><label class="df-config-label">Output format</label><select class="model-select" style="font-size:0.64rem;padding:2px 4px" onchange="dfUpdateNodeData(${nodeId},'output_format',this.value)">${fmtOptions}</select></div>
       </div>
@@ -13538,7 +13547,7 @@ async function loadAgentsTab() {
     const tone     = (window.AgentIcons ? AgentIcons.tone(persona) : 'accent');
     const subtitle = (a.description || '').split('\n')[0].trim().slice(0, 90);
     return `
-    <div class="agent-tile" onclick="openAgentChat('${esc(a.id)}')">
+    <div class="agent-tile" role="button" tabindex="0" aria-label="Open chat with ${esc(a.name)}" onclick="openAgentChat('${esc(a.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAgentChat('${esc(a.id)}')}">
       <div class="agent-tile-head">
         <span class="agent-tile-icon tone-${esc(tone)}" data-persona="${esc(persona)}">${iconSvg}</span>
         <div class="agent-tile-titleblock">
@@ -13692,7 +13701,7 @@ async function sendAgentMessage() {
   if (result.model_fallback) {
     const fb = result.model_fallback;
     const pullHint = fb.requested
-      ? ` <span style="opacity:.7;cursor:pointer;text-decoration:underline" title="Copy pull command" onclick="navigator.clipboard.writeText('ollama pull ${esc(fb.requested)}')">ollama pull ${esc(fb.requested)}</span>`
+      ? ` <button type="button" class="btn-unstyled" style="opacity:.7;text-decoration:underline" title="Copy pull command" onclick="navigator.clipboard.writeText('ollama pull ${esc(fb.requested)}')">ollama pull ${esc(fb.requested)}</button>`
       : '';
     msgEl.insertAdjacentHTML('beforeend',
       `<div style="align-self:stretch;background:rgba(255,200,0,.07);border:1px solid rgba(255,200,0,.35);border-radius:4px;padding:5px 9px;font-size:0.7rem;color:var(--text-muted);display:flex;gap:6px;align-items:center;">` +
@@ -15753,8 +15762,8 @@ window.ApiKeysPanel = (function () {
     const scopes = await _ensureScopes();
     const picker = document.getElementById('new-key-scopes');
     picker.innerHTML = scopes.map(s =>
-      `<span class="scope-chip" data-scope="${esc(s)}"
-        onclick="ApiKeysPanel._toggleScope('${esc(s)}', this)">${esc(s)}</span>`
+      `<button type="button" class="btn-unstyled scope-chip" data-scope="${esc(s)}" aria-pressed="false"
+        onclick="ApiKeysPanel._toggleScope('${esc(s)}', this)">${esc(s)}</button>`
     ).join('');
 
     document.getElementById('create-key-modal').hidden = false;
@@ -15769,6 +15778,7 @@ window.ApiKeysPanel = (function () {
       _selectedScopes.add(s);
       el.classList.add('selected');
     }
+    el.setAttribute('aria-pressed', _selectedScopes.has(s) ? 'true' : 'false');
   }
 
   async function _submitCreate() {
@@ -15933,7 +15943,8 @@ window.PluginsPanel = (function () {
       // and the System-page Discover sections.
       const icon = (window.AgentIcons ? AgentIcons.svg('plugin') : '');
       const tone = (window.AgentIcons ? AgentIcons.tone('plugin') : 'green');
-      return `<div class="plugin-card ${p.id === _selectedId ? 'selected' : ''}"
+      return `<button type="button" class="btn-unstyled plugin-card ${p.id === _selectedId ? 'selected' : ''}"
+           style="width:100%" aria-pressed="${p.id === _selectedId}"
            onclick="PluginsPanel.select('${esc(p.id)}')">
         <div class="plugin-card-head">
           <span class="admin-card-icon tone-${esc(tone)}">${icon}</span>
@@ -15949,7 +15960,7 @@ window.PluginsPanel = (function () {
           </div>
         </div>
         <div class="plugin-card-desc">${esc(p.description || '')}</div>
-      </div>`;
+      </button>`;
     }).join('');
 
     // Auto-select first if none selected.
@@ -16282,7 +16293,8 @@ window.SkillsPanel = (function () {
         (window.AgentIcons ? AgentIcons.resolve({ name: it.name, description: it.description }) : 'skill');
       const icon = (window.AgentIcons ? AgentIcons.svg(persona) : '');
       const tone = (window.AgentIcons ? AgentIcons.tone(persona) : 'amber');
-      return `<div class="plugin-card ${compositeId === _selectedId ? 'selected' : ''}"
+      return `<button type="button" class="btn-unstyled plugin-card ${compositeId === _selectedId ? 'selected' : ''}"
+                   style="width:100%" aria-pressed="${compositeId === _selectedId}"
                    onclick="SkillsPanel.select('${esc(compositeId)}')">
         <div class="plugin-card-head">
           <span class="admin-card-icon tone-${esc(tone)}">${icon}</span>
@@ -16298,7 +16310,7 @@ window.SkillsPanel = (function () {
           </div>
         </div>
         <div class="plugin-card-desc">${esc((it.description || '').slice(0, 140))}</div>
-      </div>`;
+      </button>`;
     }).join('');
 
     // Auto-select first match if nothing is currently selected.
@@ -16409,7 +16421,8 @@ window.CloudPanel = (function () {
       return;
     }
     list.innerHTML = _items.map(p => `
-      <div class="plugin-card ${p.id === _selectedId ? 'selected' : ''}"
+      <button type="button" class="btn-unstyled plugin-card ${p.id === _selectedId ? 'selected' : ''}"
+           style="width:100%" aria-pressed="${p.id === _selectedId}"
            onclick="CloudPanel.select('${esc(p.id)}')">
         <div class="plugin-card-title">
           <span class="plugin-status-pip ${p.enabled ? '' : 'error'}"></span>${esc(p.name || p.id)}
@@ -16420,7 +16433,7 @@ window.CloudPanel = (function () {
           · ${(p.models || []).length} curated model${(p.models || []).length === 1 ? '' : 's'}
         </div>
         <div class="plugin-card-desc"><code style="color:var(--text-muted)">${esc(p.base_url || '')}</code></div>
-      </div>
+      </button>
     `).join('');
     if (!_selectedId && _items.length) select(_items[0].id);
   }
@@ -17027,9 +17040,11 @@ function renderAgentsWorkbench(agents) {
     // the center of the canvas. Drag still works when it works; click
     // is the always-reliable path. The dblclick prevents an accidental
     // double-spawn on rapid clicks.
-    return `<div class="workbench-item agent-card" draggable="true"
+    return `<div class="workbench-item agent-card" draggable="true" role="button" tabindex="0"
+       aria-label="Add agent ${esc(a.name || a.id)} to canvas"
        ondragstart="event.dataTransfer.setData('application/df-agent', '${esc(a.id)}')"
        onclick="composerAddAgentAtCenter('${esc(a.id)}')"
+       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();composerAddAgentAtCenter('${esc(a.id)}')}"
        ondblclick="event.preventDefault();event.stopPropagation()"
        title="Click to add (or drag onto the canvas)">
       <div class="agent-card-head">
@@ -17272,14 +17287,14 @@ const SkillsDiscover = (function () {
           ? `<button class="action-btn sm accent" onclick="SkillsDiscover.install('${esc(s.id)}')">Install</button>`
           : '');
     return `<div class="workbench-item agent-card cap-card skill-disc-card cap-skill" data-skill-id="${esc(s.id)}">
-      <div class="agent-card-head" style="cursor:pointer" title="Open detail" onclick="SkillsDiscover.openDetail('${esc(s.id)}')">
+      <button type="button" class="btn-unstyled agent-card-head" title="Open detail" onclick="SkillsDiscover.openDetail('${esc(s.id)}')">
         <span class="agent-card-icon tone-${esc(tone)}">${iconSvg}</span>
         <div class="agent-card-titleblock">
           <div class="agent-card-title">${esc(s.name)}</div>
           <div class="agent-card-subtitle">${esc(s.description || '')}</div>
         </div>
         ${stateChip}
-      </div>
+      </button>
       <div class="cap-card-foot">
         <code class="cap-card-id">${esc(s.id)}</code>
         ${triggers ? `<span class="cap-card-meta">${triggers}</span>` : ''}
@@ -18596,12 +18611,13 @@ const RunsTab = (function () {
       const s = (r.status || 'unknown').toLowerCase();
       const ts = r.started_at || r.created_at || '';
       const sel = r.run_id === _selectedId ? ' selected' : '';
-      return `<div class="runs-tab-row${sel}" data-run-id="${esc(r.run_id)}"
+      return `<button type="button" class="btn-unstyled runs-tab-row${sel}" style="width:100%" data-run-id="${esc(r.run_id)}"
+                   aria-pressed="${r.run_id === _selectedId}"
                    onclick="RunsTab.select('${esc(r.run_id)}')">
         <span class="runs-tab-row-title">${esc(r.workflow_id || '?')}</span>
         <span class="runs-tab-row-status ${esc(s)}">${esc(s)}</span>
         <span class="runs-tab-row-meta">${esc((r.run_id || '').slice(0, 12))} · ${esc(ts)}</span>
-      </div>`;
+      </button>`;
     }).join('');
   }
 
@@ -19180,11 +19196,13 @@ const RunsTab = (function () {
 
       return `<div class="ws-run-step ws-run-step-${cls} ${isRoot ? 'is-root-fail' : ''} ${isStarved ? 'is-starved' : ''}"
                    data-step-id="${esc(s.step_id)}">
-        <div class="ws-run-step-head"
+        <div class="ws-run-step-head" role="button" tabindex="0"
              onclick="RunsTab.openStepDetail('${esc(s.step_id)}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();RunsTab.openStepDetail('${esc(s.step_id)}')}"
              title="Open full step detail">
-          <span class="run-step-caret" title="Quick inline peek"
-                onclick="event.stopPropagation();RunsTab.toggleStepExpand('${esc(s.step_id)}')">${isExpanded ? '▾' : '▸'}</span>
+          <button type="button" class="btn-unstyled run-step-caret" title="Quick inline peek"
+                aria-label="Toggle inline details for step ${esc(s.step_id)}" aria-expanded="${isExpanded}"
+                onclick="event.stopPropagation();RunsTab.toggleStepExpand('${esc(s.step_id)}')">${isExpanded ? '▾' : '▸'}</button>
           <span class="ws-run-step-id">${esc(s.step_id)}</span>
           <span class="run-step-kind kind-${esc(s.kind || 'llm')}" title="step kind">${esc(s.kind || 'llm')}</span>
           <span class="ws-run-step-model">${esc(s.model_used || '—')}</span>
@@ -19227,13 +19245,13 @@ const RunsTab = (function () {
       return s.replace(/\s+/g, ' ').slice(0, 44) + (s.length > 44 ? '…' : '');
     };
     const anchorRow = (cls, glyph, label, kind, entries) => `
-      <div class="ws-run-step ws-run-anchor-row ${cls}" onclick="RunsTab.openAnchorDetail('${kind}')" title="Open the full ${kind} (actual values)">
+      <button type="button" class="btn-unstyled ws-run-step ws-run-anchor-row ${cls}" style="width:100%" onclick="RunsTab.openAnchorDetail('${kind}')" title="Open the full ${kind} (actual values)">
         <span class="run-step-caret">${glyph}</span>
         <span class="ws-run-step-id">${label}</span>
         <span class="ws-anchor-count">${entries.length} field${entries.length === 1 ? '' : 's'}</span>
         <span style="flex:1"></span>
         <span class="ws-anchor-keys-inline">${entries.length ? esc(entries.map(e => e[0]).join(', ')) + ' · ' + esc(previewOf(entries)) : '—'}</span>
-      </div>`;
+      </button>`;
     const startRow = anchorRow('ws-anchor-start-row', '▶', 'START · seed', 'seed', seedEntries);
     const endRow = anchorRow('ws-anchor-end-row', '■', 'END · deliverable', 'deliverable', delivEntries);
 
@@ -19266,13 +19284,13 @@ const RunsTab = (function () {
       const open = _expandedOutputs.has(s.step_id + '::' + key);
       const preview = text.replace(/\s+/g, ' ').slice(0, 60) + (text.length > 60 ? '…' : '');
       return `<div class="run-step-output${open ? ' open' : ''}">
-        <div class="run-step-output-head" onclick="RunsTab.toggleStepOutput('${esc(s.step_id)}','${esc(key)}')">
+        <button type="button" class="btn-unstyled run-step-output-head" style="width:100%" aria-expanded="${open}" onclick="RunsTab.toggleStepOutput('${esc(s.step_id)}','${esc(key)}')">
           <span class="run-step-caret">${open ? '▾' : '▸'}</span>
           <span class="ctx-field-k">${esc(label)}</span>
           ${open ? '' : `<span class="ctx-field-v">${esc(preview)}</span>`}
           <span style="flex:1"></span>
           <span class="run-step-output-meta">${text.length} chars</span>
-        </div>
+        </button>
         ${open ? `<pre class="run-step-output-full">${esc(text)}</pre>` : ''}
       </div>`;
     }).join('');
@@ -19313,13 +19331,13 @@ const RunsTab = (function () {
         : (Array.isArray(v) ? `${v.length} items` : (v === null ? '' : 'object'));
       const open = _expandedOutputs.has(stepId + '::' + k);
       return `<div class="run-step-output${open ? ' open' : ''}">
-        <div class="run-step-output-head" onclick="RunsTab.toggleStepOutput('${esc(stepId)}','${esc(k)}')">
+        <button type="button" class="btn-unstyled run-step-output-head" style="width:100%" aria-expanded="${open}" onclick="RunsTab.toggleStepOutput('${esc(stepId)}','${esc(k)}')">
           <span class="run-step-caret">${open ? '▾' : '▸'}</span>
           <span class="ctx-field-k">${esc(k)}</span>
           ${open ? '' : `<span class="ctx-field-v">${esc(String(preview))}</span>`}
           <span style="flex:1"></span>
           <span class="run-step-output-meta">${esc(meta)}</span>
-        </div>
+        </button>
         ${open ? `<pre class="run-step-output-full">${esc(full)}</pre>` : ''}
       </div>`;
     }).join('');
@@ -19806,10 +19824,10 @@ const WorkflowMemory = (function () {
           const meta = (t.kind === 'episodic')
             ? `${it.record_count} rec${it.record_count !== 1 ? 's' : ''}`
             : `${(it.size_bytes || 0).toLocaleString()} B`;
-          return `<div class="wm-item" onclick="WorkflowMemory.open('${esc(t.kind)}', '${esc(it.name)}')">
+          return `<button type="button" class="btn-unstyled wm-item" style="width:100%" onclick="WorkflowMemory.open('${esc(t.kind)}', '${esc(it.name)}')">
             <span class="wm-item-name">${esc(it.name)}</span>
             <span class="wm-item-meta">${esc(meta)}</span>
-          </div>`;
+          </button>`;
         }).join('');
       } catch (e) {
         listEl.innerHTML = `<div class="wm-empty">Failed: ${esc(String(e))}</div>`;
@@ -19901,14 +19919,14 @@ const MCPPanel = (function () {
       // with purple tone, matching the System-page Discover surface.
       const icon = (window.AgentIcons ? AgentIcons.svg('mcp') : '');
       const tone = (window.AgentIcons ? AgentIcons.tone('mcp') : 'purple');
-      return `<div class="mcp-row ${_selected === s.id ? 'selected' : ''}" onclick="MCPPanel.select('${esc(s.id)}')">
+      return `<button type="button" class="btn-unstyled mcp-row ${_selected === s.id ? 'selected' : ''}" style="width:100%" aria-pressed="${_selected === s.id}" onclick="MCPPanel.select('${esc(s.id)}')">
         <span class="admin-card-icon admin-card-icon-sm tone-${esc(tone)}">${icon}</span>
         <span class="mcp-row-dot ${s.tools_count > 0 ? 'up' : 'unknown'}"></span>
         <div style="flex:1;min-width:0">
           <div class="mcp-row-title">${esc(s.name || s.id)}</div>
           <div class="mcp-row-meta">${esc(s.transport)} · ${s.enabled ? 'enabled' : 'disabled'} · ${s.tools_count || 0} tools</div>
         </div>
-      </div>`;
+      </button>`;
     }).join('');
   }
 
