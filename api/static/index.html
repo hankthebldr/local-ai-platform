@@ -6274,11 +6274,9 @@ textarea.composer-desc-area {
             <span class="kanban-col-count" data-count></span>
           </header>
           <div class="kanban-col-body"
-               ondragover="event.preventDefault(); this.classList.add('drop-target')"
-               ondragleave="this.classList.remove('drop-target')"
-               ondrop="Kanban.drop(event, 'todo')"></div>
+               data-action="kanban.dropzone" data-status="todo"></div>
           <button class="action-btn xs ghost full kanban-col-add"
-                  onclick="Kanban.showCreateTask('todo')">+ Add task</button>
+                  data-action="kanban.add" data-status="todo">+ Add task</button>
         </div>
         <div class="kanban-col" data-column="doing">
           <header class="kanban-col-head">
@@ -6286,11 +6284,9 @@ textarea.composer-desc-area {
             <span class="kanban-col-count" data-count></span>
           </header>
           <div class="kanban-col-body"
-               ondragover="event.preventDefault(); this.classList.add('drop-target')"
-               ondragleave="this.classList.remove('drop-target')"
-               ondrop="Kanban.drop(event, 'doing')"></div>
+               data-action="kanban.dropzone" data-status="doing"></div>
           <button class="action-btn xs ghost full kanban-col-add"
-                  onclick="Kanban.showCreateTask('doing')">+ Add task</button>
+                  data-action="kanban.add" data-status="doing">+ Add task</button>
         </div>
         <div class="kanban-col" data-column="done">
           <header class="kanban-col-head">
@@ -6298,11 +6294,9 @@ textarea.composer-desc-area {
             <span class="kanban-col-count" data-count></span>
           </header>
           <div class="kanban-col-body"
-               ondragover="event.preventDefault(); this.classList.add('drop-target')"
-               ondragleave="this.classList.remove('drop-target')"
-               ondrop="Kanban.drop(event, 'done')"></div>
+               data-action="kanban.dropzone" data-status="done"></div>
           <button class="action-btn xs ghost full kanban-col-add"
-                  onclick="Kanban.showCreateTask('done')">+ Add task</button>
+                  data-action="kanban.add" data-status="done">+ Add task</button>
         </div>
       </div>
     </div>
@@ -8715,10 +8709,10 @@ async function loadInstalledLocal() {
         actions = `<span class="rm-pinned" title="Served by vLLM; change via docker compose (VLLM_MODEL)">pinned</span>`;
       } else {
         actions =
-          (running ? `<button class="action-btn unload" onclick="unloadModel('${esc(m.name)}')">Unload</button>` : '') +
-          `<button class="action-btn xs danger" onclick="removeLocalModel('${esc(m.name)}')">Remove</button>`;
+          (running ? `<button class="action-btn unload" data-action="models.unload" data-model="${esc(m.name)}">Unload</button>` : '') +
+          `<button class="action-btn xs danger" data-action="models.remove-local" data-model="${esc(m.name)}">Remove</button>`;
       }
-      return `<div class="running-model-card rm-clickable" ondblclick="openModelDetail('${esc(m.name)}')" title="Double-click for details, metadata, and supported workflows">
+      return `<div class="running-model-card rm-clickable" data-action="models.detail" data-model="${esc(m.name)}" title="Double-click for details, metadata, and supported workflows">
         <div class="rm-info">
           <div class="rm-name">${esc(m.name)} ${badge} ${status}</div>
           <div class="rm-detail">${size} · ${m.in_catalog ? 'in catalog' : 'not in catalog'} · <span style="color:var(--text-muted)">double-click for details</span></div>
@@ -8741,7 +8735,6 @@ async function openModelDetail(name) {
   modal.appendChild(inner);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
-  const close = "this.closest('div[style*=fixed]').remove()";
   try {
     const d = await Net.getJson('/api/inventory/model/' + encodeURIComponent(name));
     const det = d.details || {};
@@ -8759,17 +8752,17 @@ async function openModelDetail(name) {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <div style="font-family:var(--mono);font-weight:600;font-size:0.92rem;flex:1;word-break:break-all">${esc(name)}</div>
         <span class="rm-backend rm-backend-${d.backend === 'vllm' ? 'vllm' : 'ollama'}">${d.backend === 'vllm' ? 'vLLM · GPU' : 'Ollama'}</span>
-        <button class="action-btn xs ghost" onclick="${close}">×</button>
+        <button class="action-btn xs ghost" data-action="models.close">×</button>
       </div>
       ${d.note ? `<div style="font-size:0.66rem;color:var(--text-muted);margin-bottom:10px">${esc(d.note)}</div>` : ''}
       ${d.error ? `<div class="admin-modal-error" style="margin:0 0 10px">${esc(d.error)}</div>` : ''}
       <div class="md-detail-grid">${rows.map(([k, v]) => `<div class="metric-row"><span class="metric-key">${esc(k)}</span><span class="metric-val">${esc(String(v))}</span></div>`).join('')}</div>
       <div class="panel-label" style="margin-top:16px">Supported workflows ${wfs.length ? `(${wfs.length})` : ''}</div>
       <div>${wfs.length
-        ? wfs.map(w => `<div class="md-wf-row"><span class="md-wf-name">${esc(w.name)}</span><span class="md-wf-meta">${w.steps} steps</span><button class="action-btn xs" onclick="${close};switchTab('workflow-index')">Open ↗</button></div>`).join('')
+        ? wfs.map(w => `<div class="md-wf-row"><span class="md-wf-name">${esc(w.name)}</span><span class="md-wf-meta">${w.steps} steps</span><button class="action-btn xs" data-action="models.open-workflows">Open ↗</button></div>`).join('')
         : '<div style="color:var(--text-muted);font-size:0.66rem;padding:4px 0">No workflows reference this model yet.</div>'}</div>
       <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:16px">
-        <button class="action-btn sm cyan" onclick="${close};testModel('${esc(name)}')">Test in chat</button>
+        <button class="action-btn sm cyan" data-action="models.modal-test" data-model="${esc(name)}">Test in chat</button>
       </div>`;
   } catch (e) {
     inner.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed to load model detail: ${esc(e.message)}</div>`;
@@ -9129,7 +9122,7 @@ function _renderExternalProviderShell(p) {
     .join('');
   return `<details class="ext-prov" data-source="${esc(p.source)}"
                    ${p.implemented ? '' : 'data-stub="1"'}
-                   ontoggle="ExtDiscover._toggle(this)">
+                   data-action="ext.toggle">
     <summary class="ext-prov-summary">
       <span class="ext-prov-name">${esc(p.name)}</span>
       ${status}
@@ -9187,7 +9180,7 @@ const ExtDiscover = (function () {
         ? `<span class="ext-feed-synced">synced ${new Date(feed.last_synced * 1000).toLocaleTimeString()}</span>`
         : ''}
       <span style="flex:1"></span>
-      <button class="action-btn xs ghost" onclick="ExtDiscover.refresh('${esc(source)}')">⟲ Refresh</button>
+      <button class="action-btn xs ghost" data-action="ext.refresh" data-source="${esc(source)}">⟲ Refresh</button>
     </div>`;
     if (feed.error) {
       return `${head}
@@ -9229,6 +9222,20 @@ const ExtDiscover = (function () {
   return { _toggle, refresh };
 })();
 window.ExtDiscover = ExtDiscover;
+
+// Delegated actions for the external-discovery rails. `toggle` doesn't
+// bubble — Actions registers toggle listeners with capture:true, so the
+// document-level dispatcher still sees it on the <details> target. The
+// homepage link's inline stopPropagation stays inline: a document-level
+// handler runs too late to keep the click from activating the <summary>.
+(function () {
+  Actions.on('toggle', {
+    'ext.toggle': el => ExtDiscover._toggle(el)
+  });
+  Actions.click({
+    'ext.refresh': el => ExtDiscover.refresh(el.dataset.source)
+  });
+})();
 
 function setFilter(f, el) {
   activeFilter = f;
@@ -9278,19 +9285,19 @@ function renderCatalog() {
     // Remove) and styling used across every catalog in the product.
     const repo = m.huggingface || m.gguf || '';
     const reviewBtn = repo
-      ? `<button class="action-btn sm" onclick="reviewModel('${esc(repo)}')" title="View source on Hugging Face">Review</button>`
+      ? `<button class="action-btn sm" data-action="models.review" data-repo="${esc(repo)}" title="View source on Hugging Face">Review</button>`
       : '';
     if (m.installed) {
       actions =
-        `<button class="action-btn sm cyan" onclick="testModel('${esc(m.ollama || m.id)}')" title="Open this model in the Composer chat">Test</button>` +
+        `<button class="action-btn sm cyan" data-action="models.test" data-model="${esc(m.ollama || m.id)}" title="Open this model in the Composer chat">Test</button>` +
         reviewBtn +
-        `<button class="action-btn sm danger" onclick="removeModel('${esc(m.ollama || m.id)}')">Remove</button>`;
+        `<button class="action-btn sm danger" data-action="models.remove" data-model="${esc(m.ollama || m.id)}">Remove</button>`;
     } else {
       // GGUF-only models are now pullable via Ollama's hf.co/ path instead of
       // being a dead "GGUF only" label.
       const pullTarget = m.ollama || (m.gguf ? 'hf.co/' + m.gguf : '');
       const pullBtn = pullTarget
-        ? `<button class="action-btn sm accent pull" id="pull-btn-${m.id}" onclick="pullModel('${esc(pullTarget)}', '${m.id}')">Pull</button>`
+        ? `<button class="action-btn sm accent pull" id="pull-btn-${m.id}" data-action="models.pull" data-model="${esc(pullTarget)}" data-model-id="${m.id}">Pull</button>`
         : '';
       actions = pullBtn + reviewBtn;
     }
@@ -9561,7 +9568,7 @@ async function loadMemory() {
         // vLLM pins its model at server start — there's nothing to unload.
         const action = isVllm
           ? `<span class="rm-pinned" title="vLLM loads its model at server start; restart the vllm service to change it">pinned</span>`
-          : `<button class="action-btn unload" onclick="unloadModel('${esc(m.name)}')">Unload</button>`;
+          : `<button class="action-btn unload" data-action="models.unload" data-model="${esc(m.name)}">Unload</button>`;
         return `<div class="running-model-card">
           <div class="rm-info">
             <div class="rm-name">${esc(m.name)} ${badge}</div>
@@ -9583,6 +9590,29 @@ async function unloadModel(name) {
     loadMemory();
   } catch(e) {}
 }
+
+// Delegated actions for the Models surfaces — local-models list, catalog
+// grid, memory panel, and the model-detail modal. The modal's former
+// `${close}` snippet interpolation becomes models.close / compound modal
+// actions; each button carries data-model (esc()'d) instead of an inline
+// call. The detail card opens on dblclick, matching the old ondblclick.
+(function () {
+  const closeModal = el => { const m = el.closest('div[style*=fixed]'); if (m) m.remove(); };
+  Actions.click({
+    'models.unload':       el => unloadModel(el.dataset.model),
+    'models.remove-local': el => removeLocalModel(el.dataset.model),
+    'models.remove':       el => removeModel(el.dataset.model),
+    'models.test':         el => testModel(el.dataset.model),
+    'models.review':       el => reviewModel(el.dataset.repo),
+    'models.pull':         el => pullModel(el.dataset.model, el.dataset.modelId),
+    'models.close':        closeModal,
+    'models.open-workflows': el => { closeModal(el); switchTab('workflow-index'); },
+    'models.modal-test':   el => { closeModal(el); testModel(el.dataset.model); }
+  });
+  Actions.on('dblclick', {
+    'models.detail': el => openModelDetail(el.dataset.model)
+  });
+})();
 
 /* ── Architecture & Pressure panel (Phase 2 observability) ──────────
  *
@@ -10070,7 +10100,7 @@ function _renderGraphLegendToggles(data) {
     const on = (!active.size || active.has(kind));
     return `<button type="button" class="link-kind-chip tone-${esc(s.tone)} ${on ? 'on' : 'off'}"
               data-kind="${esc(kind)}"
-              onclick="toggleGraphLinkKind('${esc(kind)}')"
+              data-action="graph.link-kind"
               title="${esc(kind)} — ${counts[kind]} link${counts[kind] === 1 ? '' : 's'}">
       <span class="link-kind-swatch" style="background:${esc(s.color)}"></span>
       <span>${esc(s.label || kind)}</span>
@@ -10078,7 +10108,7 @@ function _renderGraphLegendToggles(data) {
     </button>`;
   });
   row.innerHTML = '<span class="legend-row-label">Show</span>' + chips.join('') +
-    ' <button type="button" class="link-kind-chip reset" onclick="resetGraphLinkFilter()" title="Show all link kinds">All</button>';
+    ' <button type="button" class="link-kind-chip reset" data-action="graph.link-reset" title="Show all link kinds">All</button>';
 
   const modes = [
     ['importance', 'Importance', 'Size by reference count / citations / tag count'],
@@ -10088,7 +10118,7 @@ function _renderGraphLegendToggles(data) {
   picker.innerHTML = '<span class="legend-row-label">Size by</span>' + modes.map(([k, label, help]) =>
     `<button type="button" class="link-kind-chip ${graphConfig.sizingMode === k ? 'on' : 'off'}"
        data-mode="${esc(k)}"
-       onclick="setGraphSizingMode('${esc(k)}')"
+       data-action="graph.sizing"
        title="${esc(help)}">${esc(label)}</button>`
   ).join('');
 }
@@ -10143,7 +10173,7 @@ function _renderGraphConfigPanel() {
           <label class="gc-label" for="gc-${esc(f.k)}">${esc(f.label)}</label>
           <input type="checkbox" id="gc-${esc(f.k)}" class="gc-toggle"
                  ${v ? 'checked' : ''}
-                 onchange="setGraphConfigValue('${esc(f.k)}', this.checked)" />
+                 data-action="graph.config-toggle" data-key="${esc(f.k)}" />
         </div>`;
       }
       const displayVal = Number.isInteger(f.step) ? v : Number(v).toFixed(2);
@@ -10151,7 +10181,7 @@ function _renderGraphConfigPanel() {
         <label class="gc-label" for="gc-${esc(f.k)}">${esc(f.label)}</label>
         <input type="range" id="gc-${esc(f.k)}" class="gc-slider"
                min="${f.min}" max="${f.max}" step="${f.step}" value="${esc(String(v))}"
-               oninput="setGraphConfigValue('${esc(f.k)}', parseFloat(this.value))" />
+               data-action="graph.config-slider" data-key="${esc(f.k)}" />
         <span class="gc-val" id="gc-val-${esc(f.k)}">${esc(String(displayVal))}</span>
       </div>`;
     }).join('');
@@ -10182,6 +10212,22 @@ function setGraphConfigValue(key, value) {
     renderGraph(window.graphData);
   }
 }
+
+// Delegated actions for the graph config panel + legend — chips and the
+// slider rail re-render whenever the panel opens or the graph reloads.
+// Slider values coerce via parseFloat (same as the old inline oninput);
+// the toggle reads el.checked directly.
+Actions.click({
+  'graph.link-kind':  el => toggleGraphLinkKind(el.dataset.kind),
+  'graph.link-reset': () => resetGraphLinkFilter(),
+  'graph.sizing':     el => setGraphSizingMode(el.dataset.mode)
+});
+Actions.change({
+  'graph.config-toggle': el => setGraphConfigValue(el.dataset.key, el.checked)
+});
+Actions.input({
+  'graph.config-slider': el => setGraphConfigValue(el.dataset.key, parseFloat(el.value))
+});
 
 function _applyGraphForces() {
   const sim = window.graphSim;
@@ -10680,7 +10726,7 @@ function selectNode(d) {
             .map(s => `<span class="conn-shared-chip">${esc(String(s).slice(0, 20))}</span>`)
             .join('');
           return `<button type="button" class="detail-conn-row" data-node-id="${esc(n.id)}"
-                          onclick="selectNodeById('${esc(n.id)}')"
+                          data-action="graph.node-select"
                           title="Drill into ${esc(n.label || n.id)} — connected by ${esc(kind)}">
             <span class="detail-conn-dot kind-${esc(n.type)}"></span>
             <span class="detail-conn-label">${esc((n.label || n.id).slice(0, 60))}</span>
@@ -10689,7 +10735,7 @@ function selectNode(d) {
         }).join('');
         const expandBtn = items.length > 5
           ? `<button type="button" class="detail-conn-expand"
-                onclick="toggleConnGroupExpand('${esc(kind)}')">
+                data-action="graph.conn-group" data-kind="${esc(kind)}">
                 ${showAll ? '↑ collapse' : `+${moreCount} more`}
              </button>`
           : '';
@@ -10711,11 +10757,11 @@ function selectNode(d) {
   if (actEl) {
     if (d.type === 'session') {
       actEl.innerHTML =
-        `<button class="action-btn" onclick="loadSessionIntoChat()" style="font-size:0.65rem;padding:4px 10px">Open in Chat</button>
-         <button class="action-btn" onclick="deepDiveFromSession()" style="font-size:0.65rem;padding:4px 10px;border-color:var(--amber);color:var(--amber)">Deep Dive</button>`;
+        `<button class="action-btn" data-action="graph.session-chat" style="font-size:0.65rem;padding:4px 10px">Open in Chat</button>
+         <button class="action-btn" data-action="graph.session-deep-dive" style="font-size:0.65rem;padding:4px 10px;border-color:var(--amber);color:var(--amber)">Deep Dive</button>`;
     } else if (d.type === 'topic') {
       actEl.innerHTML =
-        `<button class="action-btn" onclick="deepDiveFromNode()" style="font-size:0.65rem;padding:4px 10px;border-color:var(--amber);color:var(--amber)">Deep Dive on Topic</button>`;
+        `<button class="action-btn" data-action="graph.node-deep-dive" style="font-size:0.65rem;padding:4px 10px;border-color:var(--amber);color:var(--amber)">Deep Dive on Topic</button>`;
     } else if (d.type === 'source') {
       actEl.innerHTML = d.url
         ? `<a class="action-btn" target="_blank" rel="noopener" href="${esc(d.url)}" style="font-size:0.65rem;padding:4px 10px;text-decoration:none;display:inline-block">Open Source ↗</a>`
@@ -10786,6 +10832,17 @@ function deepDiveFromNode() {
   document.getElementById('session-detail').classList.remove('open');
   runDeepDive();
 }
+
+// Delegated actions for the graph node-inspector panel — connection rows,
+// expanders, and the per-node-type action footer all re-render on every
+// node selection. Rows reuse their existing data-node-id attr.
+Actions.click({
+  'graph.node-select':       el => selectNodeById(el.dataset.nodeId),
+  'graph.conn-group':        el => toggleConnGroupExpand(el.dataset.kind),
+  'graph.session-chat':      () => loadSessionIntoChat(),
+  'graph.session-deep-dive': () => deepDiveFromSession(),
+  'graph.node-deep-dive':    () => deepDiveFromNode()
+});
 
 /* ── Deep Research ──────────────────────────────────────────────── */
 async function runDeepDive() {
@@ -10867,6 +10924,11 @@ async function runDeepDive() {
 function renderResearchResults(data) {
   const out = document.getElementById('research-output');
 
+  // Capture payloads live in ResearchArtifacts module state keyed by
+  // data-idx — NOT URI-encoded into onclick attributes (sub-question
+  // contexts can run to megabytes).
+  ResearchArtifacts.resetPayloads();
+
   // Each sub-question gets its own "thinking" card — expandable, showing
   // what the research agent actually looked at for that angle. Backend's
   // `data.research` is [{question, context, sources}] aligned with sub_questions.
@@ -10879,13 +10941,13 @@ function renderResearchResults(data) {
       : '<span style="color:var(--text-muted);font-size:0.62rem">no sources for this angle</span>';
     const ctxPreview = (sec.context || '').slice(0, 320);
     const safeQ = esc(sec.question || '');
-    const payloadAttr = encodeURIComponent(JSON.stringify({
+    const payloadIdx = ResearchArtifacts.addPayload({
       source: 'research',
       title: 'Sub-finding: ' + (sec.question || ''),
       body: (sec.context || '') + '\n\nSources:\n' + qSrcs.map(s => '- ' + (s.url || '')).join('\n'),
       tags: ['research', 'sub-question'],
       context: { parent_topic: data.topic, sub_question: sec.question, model: data.model }
-    }));
+    });
     return `
       <details class="research-thinking-card">
         <summary>
@@ -10897,7 +10959,7 @@ function renderResearchResults(data) {
           <div class="thinking-step-context">${ctxPreview ? esc(ctxPreview) + (sec.context && sec.context.length > 320 ? '…' : '') : '<em style="color:var(--text-muted)">no context gathered</em>'}</div>
           <div class="thinking-step-sources">${srcHtml}</div>
           <div class="thinking-step-actions">
-            <button class="action-btn xs cyan" onclick='ResearchArtifacts.captureRaw(decodeURIComponent("${payloadAttr}"))'>+ Capture as artifact</button>
+            <button class="action-btn xs cyan" data-action="research.capture" data-idx="${payloadIdx}">+ Capture as artifact</button>
           </div>
         </div>
       </details>
@@ -10911,7 +10973,7 @@ function renderResearchResults(data) {
 
   // Render synthesis markdown (basic)
   const synthesis = renderMarkdownBasic(data.synthesis || '');
-  const synthPayload = encodeURIComponent(JSON.stringify({
+  const synthIdx = ResearchArtifacts.addPayload({
     source: 'research',
     title: 'Synthesis: ' + (data.topic || 'untitled'),
     body: data.synthesis || '',
@@ -10922,7 +10984,7 @@ function renderResearchResults(data) {
       sub_questions: data.sub_questions || [],
       source_count: (data.sources || []).length,
     }
-  }));
+  });
 
   out.innerHTML = `
     <div class="research-topic-bar">
@@ -10942,9 +11004,9 @@ function renderResearchResults(data) {
     </div>
     ${chips ? `<div style="margin-top:12px;font-size:0.62rem;color:var(--text-muted);margin-bottom:6px">ALL SOURCES</div><div class="res-sources">${chips}</div>` : ''}
     <div class="research-actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="action-btn accent" onclick='ResearchArtifacts.captureRaw(decodeURIComponent("${synthPayload}"))'>+ Capture synthesis as artifact</button>
-      <button class="action-btn cyan" onclick="ResearchArtifacts.openLibrary()">View captured artifacts</button>
-      <button class="action-btn" onclick="exportResearch()">Export as MD</button>
+      <button class="action-btn accent" data-action="research.capture" data-idx="${synthIdx}">+ Capture synthesis as artifact</button>
+      <button class="action-btn cyan" data-action="research.library">View captured artifacts</button>
+      <button class="action-btn" data-action="research.export">Export as MD</button>
     </div>
   `;
 
@@ -10957,6 +11019,12 @@ function renderResearchResults(data) {
 // a durable record (and best-effort RAG-ingests it server-side so the
 // artifact becomes semantically searchable in the Context tab).
 window.ResearchArtifacts = (function () {
+  // Capture payloads staged by renderResearchResults — buttons carry only
+  // a data-idx into this array, never the (potentially huge) payload itself.
+  let _payloads = [];
+  function resetPayloads() { _payloads = []; }
+  function addPayload(p) { return _payloads.push(p) - 1; }
+
   async function captureRaw(payloadJson) {
     let payload;
     try {
@@ -11008,7 +11076,7 @@ window.ResearchArtifacts = (function () {
         <div class="admin-modal-card" style="width:680px;max-height:78vh;display:flex;flex-direction:column">
           <h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px">
             <span>Captured artifacts</span>
-            <button type="button" class="action-btn xs" onclick="document.getElementById('artifact-library-modal').hidden=true">close</button>
+            <button type="button" class="action-btn xs" data-action="research.lib-close">close</button>
           </h3>
           <div id="artifact-library-body" style="flex:1;overflow:auto;font-size:0.72rem"></div>
         </div>
@@ -11038,7 +11106,22 @@ window.ResearchArtifacts = (function () {
     }
   }
 
-  return { captureRaw, openLibrary };
+  // Delegated actions — the research output re-renders per run; buttons
+  // resolve their payload from _payloads by data-idx (module state).
+  Actions.click({
+    'research.capture': el => {
+      const p = _payloads[Number(el.dataset.idx)];
+      if (p) captureRaw(p);
+    },
+    'research.library':   () => openLibrary(),
+    'research.export':    () => exportResearch(),
+    'research.lib-close': () => {
+      const m = document.getElementById('artifact-library-modal');
+      if (m) m.hidden = true;
+    }
+  });
+
+  return { captureRaw, openLibrary, resetPayloads, addPayload };
 })();
 
 function renderMarkdownBasic(text) {
@@ -11146,7 +11229,7 @@ async function loadRoles() {
       return;
     }
     container.innerHTML = roles.map(r => `
-      <button type="button" class="btn-unstyled wf-role-card" style="width:100%" onclick="previewRole('${esc(r.id)}')">
+      <button type="button" class="btn-unstyled wf-role-card" style="width:100%" data-action="roles.preview" data-id="${esc(r.id)}">
         <div class="wf-role-name">${esc(r.name)}</div>
         <div class="wf-role-summary">${esc(r.summary)}</div>
         <div class="wf-role-id">${esc(r.id)}</div>
@@ -11156,6 +11239,10 @@ async function loadRoles() {
     container.innerHTML = `<div class="model-empty">Failed to load roles: ${esc(e.message)}</div>`;
   }
 }
+
+// Delegated action shared by the role cards (loadRoles) and the role
+// chips rendered inside workflow detail views.
+Actions.click({ 'roles.preview': el => previewRole(el.dataset.id) });
 
 async function previewRole(id) {
   const box = document.getElementById('wf-role-preview');
@@ -11390,7 +11477,7 @@ function renderStepBox(step, status, result) {
   // Role chip: prefer v2 prompt.role_ref (clickable), fallback to v1 role.
   const roleRef = step.prompt && step.prompt.role_ref;
   const roleChip = roleRef
-    ? `<button type="button" class="btn-unstyled wf-role-chip" onclick="previewRole('${esc(roleRef)}')">role: ${esc(roleRef)}</button>`
+    ? `<button type="button" class="btn-unstyled wf-role-chip" data-action="roles.preview" data-id="${esc(roleRef)}">role: ${esc(roleRef)}</button>`
     : (step.role
       ? `<span class="wf-role-chip inline" title="v1 role alias">role: ${esc(step.role)}</span>`
       : '');
@@ -11549,11 +11636,11 @@ async function loadRecentRuns() {
       // because resume() is a no-op for them.
       const resumeBtn = r.status === 'running'
         ? `<button class="action-btn" style="padding:2px 8px;font-size:0.65rem;color:var(--amber);border-color:var(--amber);"
-                   onclick="event.stopPropagation();resumeRun('${esc(r.run_id)}', this)"
+                   data-action="runhist.resume"
                    title="Resume from the last checkpointed step">Resume</button>`
         : '';
       return `
-        <div class="wf-run-item" role="button" tabindex="0" aria-label="View run ${(r.run_id || '').slice(0, 8)} of ${esc(r.workflow_id)}" onclick="viewRun('${esc(r.run_id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewRun('${esc(r.run_id)}')}">
+        <div class="wf-run-item" role="button" tabindex="0" aria-label="View run ${(r.run_id || '').slice(0, 8)} of ${esc(r.workflow_id)}" data-action="runhist.view" data-run-id="${esc(r.run_id)}">
           <span class="wf-run-wf">${esc(r.workflow_id)}</span>
           <span class="wf-run-status" style="color:${statusColor}">${r.status}</span>
           <span class="wf-run-id">${(r.run_id || '').slice(0, 8)}...</span>
@@ -11566,6 +11653,28 @@ async function loadRecentRuns() {
     console.error('Failed to load runs:', e);
   }
 }
+
+// Delegated actions for the Composer run-history rows — the list refreshes
+// after every run/resume. The row (role=button) carries data-run-id; the
+// Resume button resolves it via closest() and keeps keyboard parity for
+// the row through the delegated keydown below.
+(function () {
+  const runIdOf = el => {
+    const row = el.closest('[data-run-id]');
+    return row ? row.dataset.runId : '';
+  };
+  Actions.click({
+    'runhist.view':   el => viewRun(runIdOf(el)),
+    'runhist.resume': el => resumeRun(runIdOf(el), el)
+  });
+  Actions.on('keydown', {
+    'runhist.view': (el, e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      viewRun(runIdOf(el));
+    }
+  });
+})();
 
 async function resumeRun(runId, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Resuming...'; }
@@ -11750,7 +11859,7 @@ async function loadActiveSessions() {
             </div>
             <div style="display:flex;gap:6px;align-items:center">
               <span style="font-size:0.62rem;color:var(--text-dim)">${s.message_count||0} msgs · ${(s.tool_calls||[]).length} tools</span>
-              <button onclick="closeSession('${esc(s.conversation_id)}')"
+              <button data-action="mem.session-close" data-id="${esc(s.conversation_id)}"
                 style="background:none;border:1px solid var(--red);color:var(--red);cursor:pointer;font-size:0.6rem;padding:1px 6px;border-radius:3px">close</button>
             </div>
           </div>
@@ -11814,10 +11923,10 @@ async function loadSessions() {
       return;
     }
     el.innerHTML = sessions.map(s => `
-      <div style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;" role="button" tabindex="0" aria-expanded="false" aria-controls="session-detail-${esc(s.id)}" onclick="toggleSessionDetail('${esc(s.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSessionDetail('${esc(s.id)}')}">
+      <div style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;" role="button" tabindex="0" aria-expanded="false" aria-controls="session-detail-${esc(s.id)}" data-action="mem.session-toggle" data-id="${esc(s.id)}">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div style="font-size:0.85rem;color:var(--text);max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.preview || 'No preview')}</div>
-          <button onclick="event.stopPropagation();deleteSession('${esc(s.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+          <button data-action="mem.session-delete" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
         </div>
         <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
           ${esc(s.model || '')} · ${s.message_count || 0} msgs · ${s.tool_calls_count || 0} tool calls · ${s.duration_minutes || 0}m
@@ -11879,20 +11988,19 @@ async function loadFacts() {
           <div class="fact-content" id="fact-content-${esc(f.id)}"
                style="font-size:0.85rem;color:var(--text);cursor:text;word-wrap:break-word;"
                role="button" tabindex="0" aria-label="Edit fact"
-               onclick="editFact('${esc(f.id)}', this)"
-               onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();editFact('${esc(f.id)}', this)}"
+               data-action="mem.fact-edit" data-id="${esc(f.id)}"
                title="Click to edit">${esc(f.content)}</div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">
             ${(f.tags||[]).map(t => '<span style="color:var(--cyan);">#'+esc(t)+'</span>').join(' ')}
           </div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-          <button onclick="toggleFact('${esc(f.id)}', ${enabled})"
+          <button data-action="mem.fact-toggle" data-id="${esc(f.id)}" data-enabled="${enabled}"
                   title="${enabled ? 'Disable (parks the fact, won\'t inject)' : 'Enable (resume injection)'}"
                   style="background:none;border:1px solid var(--border);color:${enabled ? 'var(--cyan)' : 'var(--text-muted)'};cursor:pointer;font-size:0.7rem;padding:2px 8px;border-radius:3px;">
             ${enabled ? 'on' : 'off'}
           </button>
-          <button onclick="deleteFact('${esc(f.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+          <button data-action="mem.fact-delete" data-id="${esc(f.id)}" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
         </div>
       </div>
     `;
@@ -11970,6 +12078,40 @@ async function deleteFact(id) {
   loadInjectionPreview();
   loadMemoryStats();
 }
+
+// Delegated actions for the Memory tab dynamic rows — active sessions,
+// saved sessions, and pinned facts all re-render on search/refresh. The
+// fact toggle's former boolean `${enabled}` arg rides as a data-enabled
+// "true"/"false" string; role=button divs keep Enter/Space operability
+// via delegated keydown. The fact-edit keydown only fires for keys on
+// the div itself (e.target check) so Space/Enter typed in the inline
+// edit textarea aren't swallowed.
+(function () {
+  const idOf = el => {
+    const host = el.closest('[data-id]');
+    return host ? host.dataset.id : '';
+  };
+  Actions.click({
+    'mem.session-close':  el => closeSession(el.dataset.id),
+    'mem.session-toggle': el => toggleSessionDetail(el.dataset.id),
+    'mem.session-delete': el => deleteSession(idOf(el)),
+    'mem.fact-edit':      el => editFact(el.dataset.id, el),
+    'mem.fact-toggle':    el => toggleFact(el.dataset.id, el.dataset.enabled === 'true'),
+    'mem.fact-delete':    el => deleteFact(el.dataset.id)
+  });
+  Actions.on('keydown', {
+    'mem.session-toggle': (el, e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      toggleSessionDetail(el.dataset.id);
+    },
+    'mem.fact-edit': (el, e) => {
+      if (e.target !== el || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      editFact(el.dataset.id, el);
+    }
+  });
+})();
 
 async function loadMemoryStats() {
   try {
@@ -12067,9 +12209,9 @@ async function loadDocumentsList() {
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="font-size:0.85rem;color:var(--text);max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.filename)}</div>
             <div>
-              <button onclick="AgentGen.openFromDocument('${esc(d.id)}', '${esc(d.filename||'')}')" title="Generate an agent from this document" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;margin-right:8px;font-weight:600;">→ Agent</button>
-              <button onclick="reindexDocument('${esc(d.id)}')" style="background:none;border:none;color:var(--cyan);cursor:pointer;font-size:0.75rem;margin-right:8px;">reindex</button>
-              <button onclick="deleteDocument('${esc(d.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
+              <button data-action="docs.agent" data-id="${esc(d.id)}" data-filename="${esc(d.filename||'')}" title="Generate an agent from this document" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;margin-right:8px;font-weight:600;">→ Agent</button>
+              <button data-action="docs.reindex" data-id="${esc(d.id)}" style="background:none;border:none;color:var(--cyan);cursor:pointer;font-size:0.75rem;margin-right:8px;">reindex</button>
+              <button data-action="docs.delete" data-id="${esc(d.id)}" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.75rem;">delete</button>
             </div>
           </div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
@@ -12355,6 +12497,14 @@ async function reindexDocument(id) {
   loadDocumentsList();
   loadDocStats();
 }
+
+// Delegated actions for the Documents tab rows — the list re-renders on
+// every upload/reindex/delete.
+Actions.click({
+  'docs.agent':   el => AgentGen.openFromDocument(el.dataset.id, el.dataset.filename),
+  'docs.reindex': el => reindexDocument(el.dataset.id),
+  'docs.delete':  el => deleteDocument(el.dataset.id)
+});
 
 async function searchDocuments() {
   const input = document.getElementById('doc-search-input');
@@ -13403,9 +13553,15 @@ function dfAutoLayout() {
 function dfImportYaml() {
   const modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
-  modal.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);padding:20px;width:600px;max-height:80vh;display:flex;flex-direction:column;gap:10px"><div style="font-size:0.8rem;color:var(--text);font-weight:600">Import Workflow YAML</div><div style="font-size:0.6rem;color:var(--text-dim)">Paste a workflow YAML definition. All current nodes will be replaced.</div><textarea id="df-import-textarea" style="width:100%;min-height:300px;background:var(--bg-deep);color:var(--text);border:1px solid var(--border);font-family:var(--mono);font-size:0.65rem;padding:10px;resize:vertical"></textarea><div style="display:flex;gap:8px;justify-content:flex-end"><button class="action-btn" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button><button class="action-btn" onclick="dfDoImport()" style="color:var(--cyan);border-color:var(--cyan-dim)">Import</button></div></div>`;
+  modal.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);padding:20px;width:600px;max-height:80vh;display:flex;flex-direction:column;gap:10px"><div style="font-size:0.8rem;color:var(--text);font-weight:600">Import Workflow YAML</div><div style="font-size:0.6rem;color:var(--text-dim)">Paste a workflow YAML definition. All current nodes will be replaced.</div><textarea id="df-import-textarea" style="width:100%;min-height:300px;background:var(--bg-deep);color:var(--text);border:1px solid var(--border);font-family:var(--mono);font-size:0.65rem;padding:10px;resize:vertical"></textarea><div style="display:flex;gap:8px;justify-content:flex-end"><button class="action-btn" data-action="df.import-cancel">Cancel</button><button class="action-btn" data-action="df.import-run" style="color:var(--cyan);border-color:var(--cyan-dim)">Import</button></div></div>`;
   document.body.appendChild(modal);
 }
+
+// Delegated actions for the YAML import modal (dfImportYaml).
+Actions.click({
+  'df.import-cancel': el => { const m = el.closest('div[style*=fixed]'); if (m) m.remove(); },
+  'df.import-run':    () => dfDoImport()
+});
 
 function dfDoImport() {
   const textarea = document.getElementById('df-import-textarea');
@@ -13810,7 +13966,7 @@ async function sendAgentMessage() {
   if (result.model_fallback) {
     const fb = result.model_fallback;
     const pullHint = fb.requested
-      ? ` <button type="button" class="btn-unstyled" style="opacity:.7;text-decoration:underline" title="Copy pull command" onclick="navigator.clipboard.writeText('ollama pull ${esc(fb.requested)}')">ollama pull ${esc(fb.requested)}</button>`
+      ? ` <button type="button" class="btn-unstyled" style="opacity:.7;text-decoration:underline" title="Copy pull command" data-action="agents.copy-pull" data-cmd="ollama pull ${esc(fb.requested)}">ollama pull ${esc(fb.requested)}</button>`
       : '';
     msgEl.insertAdjacentHTML('beforeend',
       `<div style="align-self:stretch;background:rgba(255,200,0,.07);border:1px solid rgba(255,200,0,.35);border-radius:4px;padding:5px 9px;font-size:0.7rem;color:var(--text-muted);display:flex;gap:6px;align-items:center;">` +
@@ -13928,15 +14084,15 @@ function _agentModalHtml(mode, a) {
       <input id="am-ctx-value" class="search-input" style="flex:1" placeholder="value (text, doc id, URL, query…)" list="am-ctx-docs">
       <datalist id="am-ctx-docs"></datalist>
       <input id="am-ctx-label" class="search-input" style="width:110px" placeholder="label">
-      <button type="button" class="action-btn sm accent" onclick="_agentCtxAdd()">Add</button>
+      <button type="button" class="action-btn sm accent" data-action="agents.ctx-add">Add</button>
     </div>
   </div>
   <input type="hidden" id="am-context-json" value="${esc(contextJson)}">
   <input type="hidden" id="am-tools-json" value="${esc(toolsJson)}">
   <div id="am-error" style="display:none;color:var(--red,#f44);font-size:0.72rem;margin-top:8px;padding:6px 8px;background:rgba(255,68,68,0.08);border-radius:4px;"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
-    <button class="action-btn" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button>
-    <button class="action-btn" id="am-save-btn" onclick="_saveAgentModal('${isEdit?a.id:''}')"
+    <button class="action-btn" data-action="agents.modal-cancel">Cancel</button>
+    <button class="action-btn" id="am-save-btn" data-action="agents.modal-save" data-agent-id="${isEdit ? esc(a.id) : ''}"
             style="color:var(--cyan);border-color:var(--cyan-dim);">${isEdit ? 'Save changes' : 'Create agent'}</button>
   </div>`;
 }
@@ -14020,7 +14176,7 @@ async function _renderAgentToolsPicker(selected) {
 
   const chip = (key, label, sub, on) => `
     <label class="am-tool-chip${on ? ' on' : ''}" title="${esc(sub || '')}">
-      <input type="checkbox" data-tool="${esc(key)}" ${on ? 'checked' : ''} onchange="_syncAgentTools()">
+      <input type="checkbox" data-tool="${esc(key)}" ${on ? 'checked' : ''} data-action="agents.tool-sync">
       <span class="am-tool-name">${esc(label)}</span>
     </label>`;
   host.innerHTML = groups.map(([gl, items]) =>
@@ -14082,7 +14238,7 @@ function _agentCtxRender() {
       <div class="am-ctx-row">
         <span class="am-ctx-type">${esc(s.type)}</span>
         <span class="am-ctx-val" title="${esc(s.value || '')}">${esc(s.label || s.value || '')}</span>
-        <button type="button" class="am-ctx-rm" onclick="_agentCtxRemove(${i})" title="Remove">×</button>
+        <button type="button" class="am-ctx-rm" data-action="agents.ctx-remove" data-idx="${i}" title="Remove">×</button>
       </div>`).join('')
     : '<div style="color:var(--text-muted);font-size:0.66rem;padding:2px 0">No context sources yet — add grounding data below.</div>';
   _agentCtxSync();
@@ -14105,6 +14261,23 @@ function _agentCtxSync() {
   const h = document.getElementById('am-context-json');
   if (h) h.value = JSON.stringify(_agentCtx);
 }
+
+// Delegated actions for the agent create/edit modal internals (context
+// picker rows, tools checkboxes, save/cancel) + the model-fallback
+// copy-pull chip in agent chat. The save button carries the edit id in
+// data-agent-id ('' for create, matching the old interpolated arg).
+(function () {
+  Actions.click({
+    'agents.ctx-add':      () => _agentCtxAdd(),
+    'agents.ctx-remove':   el => _agentCtxRemove(Number(el.dataset.idx)),
+    'agents.modal-cancel': el => { const m = el.closest('div[style*=fixed]'); if (m) m.remove(); },
+    'agents.modal-save':   el => _saveAgentModal(el.dataset.agentId),
+    'agents.copy-pull':    el => navigator.clipboard.writeText(el.dataset.cmd)
+  });
+  Actions.change({
+    'agents.tool-sync': () => _syncAgentTools()
+  });
+})();
 
 async function _saveAgentModal(existingId) {
   const isEdit = !!existingId;
@@ -14314,7 +14487,7 @@ window.AdminAuth = (function () {
         <div class="lock-icon" aria-hidden="true">🔒</div>
         <div class="lock-msg">Admin actions require the master key.</div>
         ${banner ? `<div class="admin-modal-error" style="margin:0">${banner}</div>` : ''}
-        <button class="lock-btn" onclick="AdminAuth.signIn('${panelId}')">Sign in as admin</button>
+        <button class="lock-btn" data-action="admin.sign-in" data-panel="${panelId}">Sign in as admin</button>
       </div>
     `;
   }
@@ -14405,6 +14578,10 @@ window.AdminAuth = (function () {
   return { isSignedIn, getKey, setKey, clearKey, authHeaders, fetch, renderLock,
            signIn, signOut, _cancelSignIn, _submitSignIn };
 })();
+
+// Delegated action for the admin lock screens (renderLock re-renders one
+// per gated panel).
+Actions.click({ 'admin.sign-in': el => AdminAuth.signIn(el.dataset.panel) });
 
 // ── Auth — single-tier wrapper around AdminAuth ─────────────────────────
 // Collapses the legacy dual-tier (operator vs. admin master key) into one
@@ -14869,7 +15046,7 @@ window.Shortcuts = (function () {
       <div class="admin-modal-card" style="width:min(560px,90vw)">
         <h3 style="display:flex;align-items:center;justify-content:space-between">
           <span>Keyboard shortcuts</span>
-          <button class="action-btn xs" type="button" onclick="Shortcuts.toggle(false)">close</button>
+          <button class="action-btn xs" type="button" data-action="shortcuts.close">close</button>
         </h3>
         <p class="admin-modal-sub">
           Shortcuts ignore your keystrokes when focus is on a text input,
@@ -14927,6 +15104,9 @@ window.Shortcuts = (function () {
   document.addEventListener('keydown', _onKey);
   return { toggle };
 })();
+
+// Delegated action for the shortcuts overlay close button.
+Actions.click({ 'shortcuts.close': () => Shortcuts.toggle(false) });
 
 // ── Kanban (Projects + Tasks) ─────────────────────────────────────────────
 // Lightweight task board inside Workflow Index. Tasks live server-side as
@@ -15025,17 +15205,15 @@ window.Kanban = (function () {
     return `
       <div class="kanban-card" draggable="true"
            data-task-id="${esc(t.id)}"
-           ondragstart="Kanban._dragStart(event, '${esc(t.id)}')"
-           ondragend="Kanban._dragEnd(event)"
-           ondblclick="Kanban.showEditTask('${esc(t.id)}')">
+           data-action="kanban.card">
         <div class="kanban-card-title">${esc(t.title || '')}</div>
         ${desc}
         ${labels ? `<div class="kanban-card-labels">${labels}</div>` : ''}
         <div class="kanban-card-actions">
           <button class="kanban-card-btn" title="Edit"
-                  onclick="event.stopPropagation(); Kanban.showEditTask('${esc(t.id)}')">edit</button>
+                  data-action="kanban.edit">edit</button>
           <button class="kanban-card-btn danger" title="Delete"
-                  onclick="event.stopPropagation(); Kanban.deleteTask('${esc(t.id)}')">×</button>
+                  data-action="kanban.delete">×</button>
         </div>
       </div>
     `;
@@ -15216,6 +15394,42 @@ window.Kanban = (function () {
     showCreateTask, showEditTask, showCreateProject, deleteTask, drop,
     _dragStart, _dragEnd, _cancelModal, _submitModal,
   };
+})();
+
+// Delegated actions for the Kanban board — cards re-render on every board
+// mutation; the card carries data-task-id + data-action="kanban.card" and
+// the column bodies are dropzones keyed by data-status. dragover MUST
+// preventDefault for the body to stay a valid drop target (same contract
+// the old inline ondragover honored); drop itself preventDefaults inside
+// Kanban.drop.
+(function () {
+  const taskIdOf = el => {
+    const card = el.closest('[data-task-id]');
+    return card ? card.dataset.taskId : '';
+  };
+  Actions.on('dragstart', {
+    'kanban.card': (el, e) => Kanban._dragStart(e, taskIdOf(el))
+  });
+  Actions.on('dragend', {
+    'kanban.card': (el, e) => Kanban._dragEnd(e)
+  });
+  Actions.on('dblclick', {
+    'kanban.card': el => Kanban.showEditTask(taskIdOf(el))
+  });
+  Actions.click({
+    'kanban.edit':   el => Kanban.showEditTask(taskIdOf(el)),
+    'kanban.delete': el => Kanban.deleteTask(taskIdOf(el)),
+    'kanban.add':    el => Kanban.showCreateTask(el.dataset.status)
+  });
+  Actions.on('dragover', {
+    'kanban.dropzone': (el, e) => { e.preventDefault(); el.classList.add('drop-target'); }
+  });
+  Actions.on('dragleave', {
+    'kanban.dropzone': el => el.classList.remove('drop-target')
+  });
+  Actions.on('drop', {
+    'kanban.dropzone': (el, e) => Kanban.drop(e, el.dataset.status)
+  });
 })();
 
 // ── Composer Workstream ───────────────────────────────────────────────────
@@ -15870,8 +16084,8 @@ window.ApiKeysPanel = (function () {
           : '<span style="color:var(--text-muted)">revoked</span>'}</td>
         <td class="row-actions">
           ${enabled ? `
-            <button class="action-btn small" onclick="ApiKeysPanel.rotate('${esc(k.id)}','${esc(k.name)}')">Rotate</button>
-            <button class="action-btn small danger" onclick="ApiKeysPanel.revoke('${esc(k.id)}','${esc(k.name)}')">Revoke</button>
+            <button class="action-btn small" data-action="keys.rotate" data-key-id="${esc(k.id)}" data-key-name="${esc(k.name)}">Rotate</button>
+            <button class="action-btn small danger" data-action="keys.revoke" data-key-id="${esc(k.id)}" data-key-name="${esc(k.name)}">Revoke</button>
           ` : ''}
         </td>
       </tr>
@@ -15904,7 +16118,7 @@ window.ApiKeysPanel = (function () {
     const picker = document.getElementById('new-key-scopes');
     picker.innerHTML = scopes.map(s =>
       `<button type="button" class="btn-unstyled scope-chip" data-scope="${esc(s)}" aria-pressed="false"
-        onclick="ApiKeysPanel._toggleScope('${esc(s)}', this)">${esc(s)}</button>`
+        data-action="keys.scope">${esc(s)}</button>`
     ).join('');
 
     document.getElementById('create-key-modal').hidden = false;
@@ -16051,6 +16265,15 @@ window.ApiKeysPanel = (function () {
            _toggleScope, _submitCreate, _copyKey, _closeCreate };
 })();
 
+// Delegated actions — key rows re-render on every load/rotate/revoke;
+// scope chips re-render per showCreate(). Chips reuse their existing
+// data-scope attr (aria-pressed templating unchanged).
+Actions.click({
+  'keys.rotate': el => ApiKeysPanel.rotate(el.dataset.keyId, el.dataset.keyName),
+  'keys.revoke': el => ApiKeysPanel.revoke(el.dataset.keyId, el.dataset.keyName),
+  'keys.scope':  el => ApiKeysPanel._toggleScope(el.dataset.scope, el)
+});
+
 // ── PluginsPanel ──────────────────────────────────────────────────────────
 window.PluginsPanel = (function () {
   let _selectedId = null;
@@ -16088,7 +16311,7 @@ window.PluginsPanel = (function () {
       const tone = (window.AgentIcons ? AgentIcons.tone('plugin') : 'green');
       return `<button type="button" class="btn-unstyled plugin-card ${p.id === _selectedId ? 'selected' : ''}"
            style="width:100%" aria-pressed="${p.id === _selectedId}"
-           onclick="PluginsPanel.select('${esc(p.id)}')">
+           data-action="plugins.select" data-id="${esc(p.id)}">
         <div class="plugin-card-head">
           <span class="admin-card-icon tone-${esc(tone)}">${icon}</span>
           <div class="plugin-card-head-text">
@@ -16169,7 +16392,7 @@ window.PluginsPanel = (function () {
           <span style="color:var(--text-muted);font-size:0.66rem">${esc(tool.description || '')}</span>
         </summary>
         <div class="body">
-          <form id="tool-form-${esc(key)}" onsubmit="event.preventDefault(); PluginsPanel.runTool('${esc(pluginId)}','${esc(tool.id)}')">
+          <form id="tool-form-${esc(key)}" data-action="plugins.run-tool" data-plugin-id="${esc(pluginId)}" data-tool-id="${esc(tool.id)}">
             ${renderToolForm(tool)}
             <div style="display:flex;justify-content:flex-end;margin-top:10px">
               <button type="submit" id="tool-tester-run-${esc(key)}"
@@ -16327,6 +16550,19 @@ window.PluginsPanel = (function () {
     if (e.detail && e.detail.panel === 'admin-plugins') load();
   });
 
+  // Delegated actions — plugin rows + tool-tester forms re-render per
+  // load/select. The form's submit delegates (submit bubbles) and keeps
+  // the old inline preventDefault.
+  Actions.click({
+    'plugins.select': el => select(el.dataset.id)
+  });
+  Actions.on('submit', {
+    'plugins.run-tool': (el, e) => {
+      e.preventDefault();
+      runTool(el.dataset.pluginId, el.dataset.toolId);
+    }
+  });
+
   return { load, refresh, select, renderDetail, renderToolAccordion,
            runTool, renderToolForm, _collectParams };
 })();
@@ -16438,7 +16674,7 @@ window.SkillsPanel = (function () {
       const tone = (window.AgentIcons ? AgentIcons.tone(persona) : 'amber');
       return `<button type="button" class="btn-unstyled plugin-card ${compositeId === _selectedId ? 'selected' : ''}"
                    style="width:100%" aria-pressed="${compositeId === _selectedId}"
-                   onclick="SkillsPanel.select('${esc(compositeId)}')">
+                   data-action="skills.select" data-id="${esc(compositeId)}">
         <div class="plugin-card-head">
           <span class="admin-card-icon tone-${esc(tone)}">${icon}</span>
           <div class="plugin-card-head-text">
@@ -16463,7 +16699,7 @@ window.SkillsPanel = (function () {
   function select(compositeId) {
     _selectedId = compositeId;
     document.querySelectorAll('#skills-list .plugin-card').forEach(c => c.classList.remove('selected'));
-    document.querySelectorAll(`#skills-list .plugin-card[onclick*="${compositeId.replace(/'/g, "\\'")}"]`)
+    document.querySelectorAll(`#skills-list .plugin-card[data-id="${CSS.escape(compositeId)}"]`)
       .forEach(c => c.classList.add('selected'));
 
     const detail = document.getElementById('skill-detail');
@@ -16502,6 +16738,9 @@ window.SkillsPanel = (function () {
   window.addEventListener('adminPanelActivated', e => {
     if (e.detail && e.detail.panel === 'admin-skills') load();
   });
+
+  // Delegated action — skill rows re-render per filter/load.
+  Actions.click({ 'skills.select': el => select(el.dataset.id) });
 
   return { load, refresh, select };
 })();
@@ -16566,7 +16805,7 @@ window.CloudPanel = (function () {
     list.innerHTML = _items.map(p => `
       <button type="button" class="btn-unstyled plugin-card ${p.id === _selectedId ? 'selected' : ''}"
            style="width:100%" aria-pressed="${p.id === _selectedId}"
-           onclick="CloudPanel.select('${esc(p.id)}')">
+           data-action="cloud.select" data-id="${esc(p.id)}">
         <div class="plugin-card-title">
           <span class="plugin-status-pip ${p.enabled ? '' : 'error'}"></span>${esc(p.name || p.id)}
           <span style="color:var(--text-muted);font-size:0.66rem;margin-left:6px">${esc(p.kind || 'custom')}</span>
@@ -16591,7 +16830,7 @@ window.CloudPanel = (function () {
   function select(id) {
     _selectedId = id;
     document.querySelectorAll('#cloud-list .plugin-card').forEach(c => c.classList.remove('selected'));
-    const card = document.querySelector(`#cloud-list .plugin-card[onclick*="'${id.replace(/'/g, "\\'")}'"]`);
+    const card = document.querySelector(`#cloud-list .plugin-card[data-id="${CSS.escape(id)}"]`);
     if (card) card.classList.add('selected');
 
     const p = _items.find(x => x.id === id);
@@ -16614,8 +16853,8 @@ window.CloudPanel = (function () {
         <div style="color:var(--text-muted)">Description</div><div>${esc(p.description || '(none)')}</div>
       </div>
       <div class="admin-modal-actions" style="justify-content:flex-end">
-        <button type="button" class="admin-modal-btn" onclick="CloudPanel.showEdit('${esc(p.id)}')">Edit</button>
-        <button type="button" class="admin-modal-btn" style="color:var(--danger);border-color:var(--danger-dim)" onclick="CloudPanel.del('${esc(p.id)}')">Delete</button>
+        <button type="button" class="admin-modal-btn" data-action="cloud.edit" data-id="${esc(p.id)}">Edit</button>
+        <button type="button" class="admin-modal-btn" style="color:var(--danger);border-color:var(--danger-dim)" data-action="cloud.delete" data-id="${esc(p.id)}">Delete</button>
       </div>
     `;
   }
@@ -16742,6 +16981,14 @@ window.CloudPanel = (function () {
     if (e.detail && e.detail.panel === 'admin-cloud') load();
   });
 
+  // Delegated actions — provider rows + detail buttons re-render per
+  // load/select.
+  Actions.click({
+    'cloud.select': el => select(el.dataset.id),
+    'cloud.edit':   el => showEdit(el.dataset.id),
+    'cloud.delete': el => del(el.dataset.id)
+  });
+
   return { load, refresh, select, showCreate, showEdit, del, _closeModal, _submit };
 })();
 
@@ -16775,7 +17022,7 @@ window.ExportsPanel = (function () {
     }
     list.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;font-size:0.66rem;color:var(--text-dim);margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)">
-        <input type="checkbox" id="exports-select-all" onchange="ExportsPanel._toggleSelectAll(this.checked)">
+        <input type="checkbox" id="exports-select-all" data-action="exports.select-all">
         <span>Select all</span>
       </div>
       ${_items.map(rowHtml).join('')}
@@ -16788,18 +17035,18 @@ window.ExportsPanel = (function () {
     const date = new Date(e.modified * 1000).toLocaleString();
     const checked = _selected.has(e.filename) ? 'checked' : '';
     return `
-      <div class="export-row" id="export-row-${esc(e.filename)}" style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div class="export-row" id="export-row-${esc(e.filename)}" data-filename="${esc(e.filename)}" style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
         <input type="checkbox" data-filename="${esc(e.filename)}" ${checked}
-               onchange="ExportsPanel._toggle('${esc(e.filename)}', this.checked)" style="margin-top:3px">
+               data-action="exports.toggle" style="margin-top:3px">
         <div style="flex:1;min-width:0">
           <div style="font-size:0.8rem;color:var(--text);font-weight:500">${esc(e.filename)}</div>
           <div style="font-size:0.66rem;color:var(--text-dim);margin-top:2px">${date} · ${kb} KB</div>
           <div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;white-space:pre-wrap;max-height:48px;overflow:hidden">${esc((e.preview || '').trim())}</div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;align-self:flex-start">
-          <button class="action-btn small" onclick="ExportsPanel.view('${esc(e.filename)}')">View</button>
-          <button class="action-btn small" onclick="ExportsPanel.download('${esc(e.filename)}')">Download</button>
-          <button class="action-btn small danger" onclick="ExportsPanel.deleteOne('${esc(e.filename)}')">Delete</button>
+          <button class="action-btn small" data-action="exports.view">View</button>
+          <button class="action-btn small" data-action="exports.download">Download</button>
+          <button class="action-btn small danger" data-action="exports.delete">Delete</button>
         </div>
       </div>
     `;
@@ -16904,6 +17151,24 @@ window.ExportsPanel = (function () {
   document.addEventListener('keydown', e => {
     const m = document.getElementById('export-view-modal');
     if (m && !m.hidden && e.key === 'Escape') _closeView();
+  });
+
+  // Delegated actions — rows re-render on every load(). Row buttons
+  // resolve the filename from the row's data-filename; the checkboxes
+  // read el.checked directly (change event), same as the old inline
+  // this.checked args.
+  const _filenameOf = el => {
+    const host = el.closest('[data-filename]');
+    return host ? host.dataset.filename : '';
+  };
+  Actions.click({
+    'exports.view':     el => view(_filenameOf(el)),
+    'exports.download': el => download(_filenameOf(el)),
+    'exports.delete':   el => deleteOne(_filenameOf(el))
+  });
+  Actions.change({
+    'exports.toggle':     el => _toggle(el.dataset.filename, el.checked),
+    'exports.select-all': el => _toggleSelectAll(el.checked)
   });
 
   return { load, refresh, view, download, deleteOne, downloadZip, bulkDelete,
@@ -17452,12 +17717,12 @@ const SkillsDiscover = (function () {
     // Same .action-btn sizing/vocabulary as the Models catalog cards so the
     // install/remove experience reads identically across the product.
     const action = s.installed
-      ? `<button class="action-btn sm danger" onclick="SkillsDiscover.uninstall('${esc(s.id)}', '${esc((s.installed_in || [])[0] || '')}')">Remove</button>`
+      ? `<button class="action-btn sm danger" data-action="sdisc.uninstall">Remove</button>`
       : (s.has_body
-          ? `<button class="action-btn sm accent" onclick="SkillsDiscover.install('${esc(s.id)}')">Install</button>`
+          ? `<button class="action-btn sm accent" data-action="sdisc.install">Install</button>`
           : '');
     return `<div class="workbench-item agent-card cap-card skill-disc-card cap-skill" data-skill-id="${esc(s.id)}">
-      <button type="button" class="btn-unstyled agent-card-head" title="Open detail" onclick="SkillsDiscover.openDetail('${esc(s.id)}')">
+      <button type="button" class="btn-unstyled agent-card-head" title="Open detail" data-action="sdisc.detail">
         <span class="agent-card-icon tone-${esc(tone)}">${iconSvg}</span>
         <div class="agent-card-titleblock">
           <div class="agent-card-title">${esc(s.name)}</div>
@@ -17549,7 +17814,6 @@ const SkillsDiscover = (function () {
     modal.appendChild(inner);
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
-    const close = "this.closest('div[style*=fixed]').remove()";
     try {
       // getJson's thrown message already prefers the body's detail/error
       // field, matching the old d.detail || HTTP-status throw.
@@ -17560,12 +17824,12 @@ const SkillsDiscover = (function () {
             <div class="gh-skill-name">${esc(s.name)}</div>
             <div class="gh-skill-desc">${esc(s.description || s.path || '')}</div>
           </div>
-          <button class="action-btn sm accent" onclick="SkillsDiscover._installGithub('${esc(s.raw_url)}','${esc(s.id)}',this)">Install</button>
+          <button class="action-btn sm accent" data-action="sdisc.gh-install" data-raw-url="${esc(s.raw_url)}" data-skill-id="${esc(s.id)}">Install</button>
         </div>`).join('');
       inner.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
           <div style="font-family:var(--mono);font-weight:600;flex:1">${esc(d.repo)} <span style="color:var(--text-muted);font-weight:400">· ${d.count} skill${d.count === 1 ? '' : 's'}</span></div>
-          <button class="action-btn xs ghost" onclick="${close}">×</button>
+          <button class="action-btn xs ghost" data-action="sdisc.close">×</button>
         </div>
         <div style="font-size:0.64rem;color:var(--text-muted);margin-bottom:10px">Installs go to <code>general-skills</code> and activate immediately.</div>
         <div class="gh-skills">${rows || '<div class="model-empty">No SKILL.md files found in this repo.</div>'}</div>`;
@@ -17630,9 +17894,9 @@ const SkillsDiscover = (function () {
       const tiles = skillsIn.map(s => {
         const icon = (window.AgentIcons ? AgentIcons.svg(p) : '');
         const action = s.installed
-          ? `<button class="skill-tile-action uninstall" onclick="event.stopPropagation();SkillsDiscover.uninstall('${esc(s.id)}','${esc((s.installed_in || [])[0] || '')}')" title="Uninstall this skill">−</button>`
+          ? `<button class="skill-tile-action uninstall" data-action="sdisc.uninstall" title="Uninstall this skill">−</button>`
           : (s.has_body
-              ? `<button class="skill-tile-action install" onclick="event.stopPropagation();SkillsDiscover.install('${esc(s.id)}')" title="Install this skill">+</button>`
+              ? `<button class="skill-tile-action install" data-action="sdisc.install" title="Install this skill">+</button>`
               : '');
         const stateClass = s.installed ? 'installed' : (s.has_body ? 'available' : 'bundled');
         return `<div class="skill-tile ${stateClass}" data-skill-id="${esc(s.id)}"
@@ -17694,11 +17958,11 @@ const SkillsDiscover = (function () {
       ? `installed${plugin ? ' · ' + esc(plugin) : ''}`
       : (s.marketplace || s.source === 'remote' ? 'marketplace' : (s.has_body ? 'available' : 'bundled'));
     const removeBtn = (s.installed && plugin)
-      ? `<button class="action-btn sm danger" onclick="SkillsDiscover.uninstall('${esc(skillId)}','${esc(plugin)}');this.closest('.skill-detail-overlay').remove()">Remove</button>` : '';
+      ? `<button class="action-btn sm danger" data-action="sdisc.overlay-uninstall" data-skill-id="${esc(skillId)}" data-plugin="${esc(plugin)}">Remove</button>` : '';
     const installBtn = (!s.installed && s.has_body)
-      ? `<button class="action-btn sm accent" onclick="SkillsDiscover.install('${esc(skillId)}');this.closest('.skill-detail-overlay').remove()">Install</button>` : '';
+      ? `<button class="action-btn sm accent" data-action="sdisc.overlay-install" data-skill-id="${esc(skillId)}">Install</button>` : '';
     const editControls = editable
-      ? `<button class="action-btn sm" id="skill-edit-toggle" onclick="SkillsDiscover._toggleEdit('${esc(skillId)}','${esc(srcPlugin)}')">Edit</button>` : '';
+      ? `<button class="action-btn sm" id="skill-edit-toggle" data-action="sdisc.edit-toggle">Edit</button>` : '';
 
     inner.innerHTML = `
       <div style="display:flex;align-items:flex-start;gap:11px;padding:16px 18px;border-bottom:1px solid var(--border)">
@@ -17712,7 +17976,7 @@ const SkillsDiscover = (function () {
             ${triggers ? `<span class="cap-card-meta">${triggers}</span>` : ''}
           </div>
         </div>
-        <button class="action-btn xs ghost" onclick="this.closest('.skill-detail-overlay').remove()">×</button>
+        <button class="action-btn xs ghost" data-action="sdisc.overlay-close">×</button>
       </div>
       <div style="flex:1;min-height:0;overflow:auto;padding:14px 18px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -17725,8 +17989,8 @@ const SkillsDiscover = (function () {
       <div style="display:flex;gap:8px;align-items:center;padding:12px 18px;border-top:1px solid var(--border)">
         ${editControls}
         <span id="skill-edit-save-wrap" style="display:none;gap:8px">
-          <button class="action-btn sm accent" id="skill-edit-save" onclick="SkillsDiscover._saveEdit('${esc(skillId)}','${esc(srcPlugin)}')">Save &amp; reload</button>
-          <button class="action-btn sm ghost" onclick="SkillsDiscover._cancelEdit()">Cancel</button>
+          <button class="action-btn sm accent" id="skill-edit-save" data-action="sdisc.edit-save" data-skill-id="${esc(skillId)}" data-plugin="${esc(srcPlugin)}">Save &amp; reload</button>
+          <button class="action-btn sm ghost" data-action="sdisc.edit-cancel">Cancel</button>
         </span>
         <span style="flex:1"></span>
         ${installBtn}${removeBtn}
@@ -17796,6 +18060,34 @@ const SkillsDiscover = (function () {
       if (save) { save.disabled = false; save.textContent = 'Save & reload'; }
     }
   }
+
+  // Delegated actions — the discover grid re-renders per keystroke, so
+  // cards/tiles carry data-action and resolve the skill id via the closest
+  // data-skill-id host. The (s.installed_in||[])[0] target-plugin lookup
+  // lives here against module state instead of being interpolated into
+  // attribute strings. Registered inside the module for _data access.
+  const _skillIdOf = el => {
+    const host = el.closest('[data-skill-id]');
+    return host ? host.dataset.skillId : '';
+  };
+  const _installedPluginOf = id => {
+    const s = ((_data && _data.skills) || []).find(x => x.id === id);
+    return (s && (s.installed_in || [])[0]) || '';
+  };
+  const _overlayOf = el => el.closest('.skill-detail-overlay');
+  Actions.click({
+    'sdisc.install':    el => install(_skillIdOf(el)),
+    'sdisc.uninstall':  el => uninstall(_skillIdOf(el), _installedPluginOf(_skillIdOf(el))),
+    'sdisc.detail':     el => openDetail(_skillIdOf(el)),
+    'sdisc.gh-install': el => _installGithub(el.dataset.rawUrl, el.dataset.skillId, el),
+    'sdisc.close':      el => { const m = el.closest('div[style*=fixed]'); if (m) m.remove(); },
+    'sdisc.overlay-close':     el => { const o = _overlayOf(el); if (o) o.remove(); },
+    'sdisc.overlay-install':   el => { install(el.dataset.skillId); const o = _overlayOf(el); if (o) o.remove(); },
+    'sdisc.overlay-uninstall': el => { uninstall(el.dataset.skillId, el.dataset.plugin); const o = _overlayOf(el); if (o) o.remove(); },
+    'sdisc.edit-toggle': () => _toggleEdit(),
+    'sdisc.edit-save':   el => _saveEdit(el.dataset.skillId, el.dataset.plugin),
+    'sdisc.edit-cancel': () => _cancelEdit()
+  });
 
   return { load, render, install, uninstall, setView, importFromUrl, browseGithubRepo, _installGithub,
            openDetail, _toggleEdit, _cancelEdit, _saveEdit };
@@ -18317,7 +18609,7 @@ const WorkflowIndex = (function () {
     if (!el) return;
     const chips = [{id:'all', count:_data.total || 0}].concat(_data.categories || []);
     el.innerHTML = chips.map(c => `<button class="wfi-category-chip ${_activeCat===c.id?'active':''}"
-      onclick="WorkflowIndex.setCategory('${esc(c.id)}')">${esc(c.id)} · ${c.count || 0}</button>`).join('');
+      data-action="wfi.category" data-category="${esc(c.id)}">${esc(c.id)} · ${c.count || 0}</button>`).join('');
   }
 
   function render() {
@@ -18352,7 +18644,7 @@ const WorkflowIndex = (function () {
       // composerNewWorkflow() on every stray click (description text,
       // tags, mini-DAG) and silently wiped unsaved composer state.
       // Explicit buttons stay as the only action affordance.
-      return `<div class="wfi-card" ondblclick="WorkflowIndex.deepDive('${esc(w.id)}')" title="Double-click to deep-dive into the steps, prompts, and outputs">
+      return `<div class="wfi-card" data-action="wfi.card" data-workflow-id="${esc(w.id)}" title="Double-click to deep-dive into the steps, prompts, and outputs">
         <div class="wfi-card-head">
           <span class="wfi-card-icon tone-${esc(tone)}" data-cat="${esc(w.category)}">${iconSvg}</span>
           <span class="wfi-card-title">${esc(w.name)}</span>
@@ -18373,10 +18665,10 @@ const WorkflowIndex = (function () {
         </div>
         <div class="wfi-card-refs">${refTags.map(t => `<span class="wfi-card-tag">${esc(t)}</span>`).join('')}</div>
         <div class="wfi-card-actions">
-          <button class="action-btn accent" onclick="WorkflowIndex.deepDive('${esc(w.id)}')">Deep Dive</button>
-          <button class="action-btn" onclick="WorkflowIndex.openInComposer('${esc(w.id)}')">Compose</button>
-          <button class="action-btn" onclick="WorkflowIndex.run('${esc(w.id)}')">Run</button>
-          <button class="action-btn" onclick="WorkflowIndex.exportBundle('${esc(w.id)}')">Export</button>
+          <button class="action-btn accent" data-action="wfi.deep-dive">Deep Dive</button>
+          <button class="action-btn" data-action="wfi.compose">Compose</button>
+          <button class="action-btn" data-action="wfi.run">Run</button>
+          <button class="action-btn" data-action="wfi.export">Export</button>
         </div>
       </div>`;
     }).join('');
@@ -18596,7 +18888,6 @@ const WorkflowIndex = (function () {
     modal.appendChild(inner);
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
-    const close = "this.closest('div[style*=fixed]').remove()";
     const asKey = x => typeof x === 'string' ? x : (x && (x.key || x.name) || JSON.stringify(x));
     try {
       const w = await Net.getJson('/api/workflows/' + encodeURIComponent(id));
@@ -18627,14 +18918,14 @@ const WorkflowIndex = (function () {
       inner.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
           <div style="font-weight:600;font-size:0.95rem;flex:1">${esc(w.name || id)}</div>
-          <button class="action-btn xs ghost" onclick="${close}">×</button>
+          <button class="action-btn xs ghost" data-action="wfi.close">×</button>
         </div>
         <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:12px">${esc(w.description || '')}</div>
         <div class="panel-label">Steps (${steps.length})</div>
         <div class="wf-dd-steps">${steps.map(stepCard).join('')}</div>
         <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:14px">
-          <button class="action-btn sm" onclick="${close};WorkflowIndex.run('${esc(id)}')">Run ▶</button>
-          <button class="action-btn sm accent" onclick="${close};WorkflowIndex.openInComposer('${esc(id)}')">Edit in Composer</button>
+          <button class="action-btn sm" data-action="wfi.modal-run" data-workflow-id="${esc(id)}">Run ▶</button>
+          <button class="action-btn sm accent" data-action="wfi.modal-compose" data-workflow-id="${esc(id)}">Edit in Composer</button>
         </div>`;
     } catch (e) {
       inner.innerHTML = `<div class="model-empty" style="color:var(--red)">Failed to load workflow: ${esc(e.message)}</div>`;
@@ -18682,6 +18973,31 @@ const WorkflowIndex = (function () {
   return { load, refresh, setCategory, openInComposer, deepDive, run, exportBundle, openImportDialog };
 })();
 
+// Delegated actions for the Workflow Index — category chips + cards
+// re-render on every search keystroke. Card buttons resolve the workflow
+// id from the card root's data-workflow-id; the deep-dive modal's former
+// `${close}` snippet becomes wfi.close / compound wfi.modal-* actions.
+(function () {
+  const wfIdOf = el => {
+    const host = el.closest('[data-workflow-id]');
+    return host ? host.dataset.workflowId : '';
+  };
+  const closeModal = el => { const m = el.closest('div[style*=fixed]'); if (m) m.remove(); };
+  Actions.click({
+    'wfi.category':  el => WorkflowIndex.setCategory(el.dataset.category),
+    'wfi.deep-dive': el => WorkflowIndex.deepDive(wfIdOf(el)),
+    'wfi.compose':   el => WorkflowIndex.openInComposer(wfIdOf(el)),
+    'wfi.run':       el => WorkflowIndex.run(wfIdOf(el)),
+    'wfi.export':    el => WorkflowIndex.exportBundle(wfIdOf(el)),
+    'wfi.close':     closeModal,
+    'wfi.modal-run':     el => { closeModal(el); WorkflowIndex.run(el.dataset.workflowId); },
+    'wfi.modal-compose': el => { closeModal(el); WorkflowIndex.openInComposer(el.dataset.workflowId); }
+  });
+  Actions.on('dblclick', {
+    'wfi.card': el => WorkflowIndex.deepDive(wfIdOf(el))
+  });
+})();
+
 // ── Runs tab ────────────────────────────────────────────────────────
 // A read-only mirror of the composer canvas, populated with whichever
 // workflow run the operator selects. Per-step status overlays come from
@@ -18696,6 +19012,7 @@ const RunsTab = (function () {
   let _pollHandle = null;
   let _currentRun = null;      // last fetched run (for cascade / context analysis)
   let _currentSteps = [];      // step list used for the rendered DAG
+  let _drawerCopyTexts = [];   // bottom-drawer Copy payloads, keyed by data-idx
   const _expandedSteps = new Set();  // step_ids the user clicked to expand
   const _expandedOutputs = new Set();  // "stepId::key" of fully-expanded outputs
 
@@ -19677,7 +19994,6 @@ const RunsTab = (function () {
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
     const inner = document.createElement('div');
     inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:20px;width:min(720px,94vw);max-height:88vh;overflow-y:auto;border-radius:6px;';
-    const close = "this.closest('div[style*=fixed]').remove()";
     const blocks = entries.length
       ? entries.map(([k, v]) => {
           const text = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
@@ -19690,7 +20006,7 @@ const RunsTab = (function () {
     inner.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <div style="font-family:var(--mono);font-weight:600;font-size:0.92rem;flex:1;color:${accent}">${esc(title)}</div>
-        <button class="action-btn xs ghost" onclick="${close}">×</button>
+        <button class="action-btn xs ghost" data-action="runs.modal-close">×</button>
       </div>
       <div style="font-size:0.66rem;color:var(--text-muted);margin-bottom:12px">${esc(sub)}</div>
       ${blocks}`;
@@ -19862,17 +20178,21 @@ const RunsTab = (function () {
     const seed = (run.context && run.context.seed) || {};
     const workspace = (run.context && run.context.workspace) || {};
     const shared = (run.context && run.context.shared) || {};
+    // Copy payloads live in module state keyed by data-idx — the raw JSON
+    // can be huge and JSON.stringify-into-onclick was attribute-hostile.
+    _drawerCopyTexts = [];
     function _jsonPre(label, obj) {
       const txt = JSON.stringify(obj, null, 2);
       const lines = txt.split('\n').length;
       const truncated = lines > 80
         ? txt.split('\n').slice(0, 80).join('\n') + `\n… (${lines - 80} more lines)`
         : txt;
+      const copyIdx = _drawerCopyTexts.push(txt) - 1;
       return `<div class="rdd-block">
         <div class="rdd-block-head">
           <span class="rdd-block-label">${esc(label)}</span>
           <button class="action-btn xs ghost"
-                  onclick="navigator.clipboard.writeText(${JSON.stringify(txt)})"
+                  data-action="runs.copy-json" data-idx="${copyIdx}"
                   title="Copy raw JSON to clipboard">Copy</button>
         </div>
         <pre class="rdd-block-pre">${esc(truncated)}</pre>
@@ -19958,6 +20278,15 @@ const RunsTab = (function () {
     try { _runTabAutoLayout(); } catch (_) {}
   }
 
+  // Registered inside the module for _drawerCopyTexts access — the rest
+  // of the runs.* actions live in the block after the module.
+  Actions.click({
+    'runs.copy-json': el => {
+      const t = _drawerCopyTexts[Number(el.dataset.idx)];
+      if (t != null) navigator.clipboard.writeText(t);
+    }
+  });
+
   return { init, load, render, setFilter, select,
     resumeCurrent, cancelCurrent, pauseCurrent, rerunCurrent,
     toggleStepExpand, toggleStepOutput, toggleBottomDrawer, markFailed,
@@ -19984,7 +20313,8 @@ window.RunsTab = RunsTab;
     'runs.step-detail': el => RunsTab.openStepDetail(stepIdOf(el)),
     'runs.step-expand': el => RunsTab.toggleStepExpand(stepIdOf(el)),
     'runs.anchor-detail': el => RunsTab.openAnchorDetail(el.dataset.kind),
-    'runs.output-toggle': el => RunsTab.toggleStepOutput(el.dataset.stepId, el.dataset.key)
+    'runs.output-toggle': el => RunsTab.toggleStepOutput(el.dataset.stepId, el.dataset.key),
+    'runs.modal-close':   el => { const m = el.closest('div[style*=fixed]'); if (m) m.remove(); }
   });
   // The step head is a role=button div — keep keyboard operability.
   Actions.on('keydown', {
@@ -20029,7 +20359,7 @@ const WorkflowMemory = (function () {
           const meta = (t.kind === 'episodic')
             ? `${it.record_count} rec${it.record_count !== 1 ? 's' : ''}`
             : `${(it.size_bytes || 0).toLocaleString()} B`;
-          return `<button type="button" class="btn-unstyled wm-item" style="width:100%" onclick="WorkflowMemory.open('${esc(t.kind)}', '${esc(it.name)}')">
+          return `<button type="button" class="btn-unstyled wm-item" style="width:100%" data-action="wm.open" data-kind="${esc(t.kind)}" data-name="${esc(it.name)}">
             <span class="wm-item-name">${esc(it.name)}</span>
             <span class="wm-item-meta">${esc(meta)}</span>
           </button>`;
@@ -20075,6 +20405,9 @@ const WorkflowMemory = (function () {
     if (detail) detail.hidden = true;
   }
 
+  // Delegated action — the three store lists re-render on every refresh.
+  Actions.click({ 'wm.open': el => open(el.dataset.kind, el.dataset.name) });
+
   return { refresh, open, closeDetail };
 })();
 window.WorkflowMemory = WorkflowMemory;
@@ -20091,6 +20424,10 @@ function renderWorkflowIndex() { WorkflowIndex && WorkflowIndex.refresh && docum
 const MCPPanel = (function () {
   let _servers = [];
   let _selected = null;
+  // Marketplace catalog entries from the last browseMarketplace() fetch —
+  // install buttons reference them by data-idx instead of serializing the
+  // whole entry object into an onclick attribute.
+  let _catalogItems = [];
 
   function _headers() {
     return (window.AdminAuth && AdminAuth.authHeaders) ? AdminAuth.authHeaders() : {};
@@ -20124,7 +20461,7 @@ const MCPPanel = (function () {
       // with purple tone, matching the System-page Discover surface.
       const icon = (window.AgentIcons ? AgentIcons.svg('mcp') : '');
       const tone = (window.AgentIcons ? AgentIcons.tone('mcp') : 'purple');
-      return `<button type="button" class="btn-unstyled mcp-row ${_selected === s.id ? 'selected' : ''}" style="width:100%" aria-pressed="${_selected === s.id}" onclick="MCPPanel.select('${esc(s.id)}')">
+      return `<button type="button" class="btn-unstyled mcp-row ${_selected === s.id ? 'selected' : ''}" style="width:100%" aria-pressed="${_selected === s.id}" data-action="mcp.select" data-id="${esc(s.id)}">
         <span class="admin-card-icon admin-card-icon-sm tone-${esc(tone)}">${icon}</span>
         <span class="mcp-row-dot ${s.tools_count > 0 ? 'up' : 'unknown'}"></span>
         <div style="flex:1;min-width:0">
@@ -20167,11 +20504,11 @@ const MCPPanel = (function () {
         <div style="color:var(--text-muted)">Description</div><div>${esc(s.description || '')}</div>
       </div>
       <div style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap">
-        <button class="action-btn" onclick="MCPPanel.test('${esc(s.id)}')">Test handshake</button>
-        <button class="action-btn" onclick="MCPPanel.discoverTools('${esc(s.id)}')">Discover tools</button>
-        <button class="action-btn" onclick="MCPPanel.toggleEnabled('${esc(s.id)}', ${!s.enabled})">${s.enabled ? 'Disable' : 'Enable'}</button>
-        <button class="action-btn" onclick="MCPPanel.edit('${esc(s.id)}')">Edit</button>
-        <button class="action-btn" onclick="MCPPanel.remove('${esc(s.id)}')" style="color:var(--danger);border-color:var(--danger-dim)">Delete</button>
+        <button class="action-btn" data-action="mcp.test" data-id="${esc(s.id)}">Test handshake</button>
+        <button class="action-btn" data-action="mcp.discover" data-id="${esc(s.id)}">Discover tools</button>
+        <button class="action-btn" data-action="mcp.toggle" data-id="${esc(s.id)}" data-enabled="${!s.enabled}">${s.enabled ? 'Disable' : 'Enable'}</button>
+        <button class="action-btn" data-action="mcp.edit" data-id="${esc(s.id)}">Edit</button>
+        <button class="action-btn" data-action="mcp.remove" data-id="${esc(s.id)}" style="color:var(--danger);border-color:var(--danger-dim)">Delete</button>
       </div>
       <div id="mcp-detail-tools" style="margin-top:14px">
         <div class="panel-label" style="margin-bottom:6px">Tools (${(s.tools || []).length})</div>
@@ -20356,15 +20693,16 @@ const MCPPanel = (function () {
       const r = await Net.call('/api/mcp/discover', { init: { headers: _headers() } });
       if (!r.ok) throw new Error(r.error || ('HTTP ' + r.status));
       const d = r.data;
+      _catalogItems = d.servers || [];
       const icon = (window.AgentIcons ? AgentIcons.svg('mcp') : '');
-      const rows = (d.servers || []).map(s => {
+      const rows = _catalogItems.map((s, i) => {
         const envReq = (s.env_required || []);
         const reqChip = envReq.length
           ? `<span class="skill-disc-chip available" title="${esc(envReq.map(e => e.key).join(', '))}">needs ${envReq.length} secret${envReq.length === 1 ? '' : 's'}</span>` : '';
         const srcChip = s.marketplace ? '<span class="skill-disc-chip marketplace">remote</span>' : '';
         const action = s.installed
           ? '<span class="skill-disc-chip installed">installed</span>'
-          : `<button class="action-btn sm accent" onclick='MCPPanel._installFromCatalog(${JSON.stringify(s).replace(/'/g, "&#39;")}, this)'>Install</button>`;
+          : `<button class="action-btn sm accent" data-action="mcp.mkt-install" data-idx="${i}">Install</button>`;
         return `<div class="gh-skill-row">
           <span class="admin-card-icon admin-card-icon-sm tone-purple" style="flex:0 0 auto">${icon}</span>
           <div class="gh-skill-info">
@@ -20378,7 +20716,7 @@ const MCPPanel = (function () {
       inner.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--border)">
           <div style="font-family:var(--mono);font-weight:600;flex:1">MCP Marketplace <span style="color:var(--text-muted);font-weight:400">· ${d.count} server${d.count === 1 ? '' : 's'}</span></div>
-          <button class="action-btn xs ghost" onclick="this.closest('.mcp-mkt-overlay').remove()">×</button>
+          <button class="action-btn xs ghost" data-action="mcp.mkt-close">×</button>
         </div>
         <div style="font-size:0.64rem;color:var(--text-muted);padding:8px 18px 0">Servers run as local processes under your account. Servers needing a path/DSN install with a placeholder — edit the registration afterward. Secrets are collected on install.</div>
         <div class="gh-skills" style="overflow:auto;padding:10px 18px 18px">${rows || '<div class="model-empty">Catalog is empty.</div>'}</div>`;
@@ -20420,6 +20758,24 @@ const MCPPanel = (function () {
   // Refresh when the panel becomes visible.
   window.addEventListener('adminPanelActivated', e => {
     if (e.detail && e.detail.panel === 'admin-mcp') load();
+  });
+
+  // Delegated actions — server rows + detail buttons re-render on every
+  // select/load; marketplace install resolves its catalog entry from
+  // _catalogItems by data-idx (registered inside the module for state
+  // access). data-enabled is a "true"/"false" string by dataset contract.
+  Actions.click({
+    'mcp.select':   el => select(el.dataset.id),
+    'mcp.test':     el => test(el.dataset.id),
+    'mcp.discover': el => discoverTools(el.dataset.id),
+    'mcp.toggle':   el => toggleEnabled(el.dataset.id, el.dataset.enabled === 'true'),
+    'mcp.edit':     el => edit(el.dataset.id),
+    'mcp.remove':   el => remove(el.dataset.id),
+    'mcp.mkt-install': el => {
+      const entry = _catalogItems[Number(el.dataset.idx)];
+      if (entry) _installFromCatalog(entry, el);
+    },
+    'mcp.mkt-close': el => { const o = el.closest('.mcp-mkt-overlay'); if (o) o.remove(); }
   });
 
   return { load, refresh, render, select, test, discoverTools, toggleEnabled, remove,
@@ -20513,8 +20869,8 @@ const AgentGen = (function () {
           </select>
           <div id="ag-error" class="admin-modal-error" hidden></div>
           <div class="admin-modal-actions">
-            <button type="button" class="admin-modal-btn" onclick="AgentGen.close()">Cancel</button>
-            <button type="button" class="admin-modal-btn primary" id="ag-generate-btn" onclick="AgentGen.generate()">Generate draft</button>
+            <button type="button" class="admin-modal-btn" data-action="agentgen.close">Cancel</button>
+            <button type="button" class="admin-modal-btn primary" id="ag-generate-btn" data-action="agentgen.generate">Generate draft</button>
           </div>
         </div>
 
@@ -20542,9 +20898,9 @@ const AgentGen = (function () {
           <input type="text" id="ag-draft-tags">
           <div id="ag-draft-error" class="admin-modal-error" hidden></div>
           <div class="admin-modal-actions">
-            <button type="button" class="admin-modal-btn" onclick="AgentGen._showStep('input')">← Back</button>
-            <button type="button" class="admin-modal-btn" onclick="AgentGen.save(false)">Save (no eval)</button>
-            <button type="button" class="admin-modal-btn primary" onclick="AgentGen._showStep('eval')">Continue → Validate</button>
+            <button type="button" class="admin-modal-btn" data-action="agentgen.step" data-step="input">← Back</button>
+            <button type="button" class="admin-modal-btn" data-action="agentgen.save">Save (no eval)</button>
+            <button type="button" class="admin-modal-btn primary" data-action="agentgen.step" data-step="eval">Continue → Validate</button>
           </div>
         </div>
 
@@ -20555,12 +20911,12 @@ const AgentGen = (function () {
             and then evaluated; results show pass/fail per case.
           </div>
           <div id="ag-cases" style="display:flex;flex-direction:column;gap:6px"></div>
-          <button class="action-btn" onclick="AgentGen.addCase()" style="margin-top:6px">+ Add case</button>
+          <button class="action-btn" data-action="agentgen.add-case" style="margin-top:6px">+ Add case</button>
           <div id="ag-eval-results" style="margin-top:14px"></div>
           <div id="ag-eval-error" class="admin-modal-error" hidden></div>
           <div class="admin-modal-actions">
-            <button type="button" class="admin-modal-btn" onclick="AgentGen._showStep('draft')">← Back</button>
-            <button type="button" class="admin-modal-btn primary" onclick="AgentGen.saveAndEvaluate()">Save + Run cases</button>
+            <button type="button" class="admin-modal-btn" data-action="agentgen.step" data-step="draft">← Back</button>
+            <button type="button" class="admin-modal-btn primary" data-action="agentgen.save-eval">Save + Run cases</button>
           </div>
         </div>
       </div>
@@ -20656,7 +21012,7 @@ const AgentGen = (function () {
     row.innerHTML = `
       <input type="text" class="ag-case-prompt" placeholder="Prompt to send the agent">
       <input type="text" class="ag-case-expected" placeholder="Expected substring (optional)">
-      <button class="action-btn" onclick="this.parentElement.remove()" style="padding:3px 8px;color:var(--danger);border-color:var(--danger-dim)">✕</button>
+      <button class="action-btn" data-action="agentgen.case-remove" style="padding:3px 8px;color:var(--danger);border-color:var(--danger-dim)">✕</button>
     `;
     el.appendChild(row);
   }
@@ -20701,6 +21057,19 @@ const AgentGen = (function () {
   function close() {
     if (_modal) _modal.hidden = true;
   }
+
+  // Delegated actions — the modal shell + eval-case rows are all
+  // JS-rendered templates. agentgen.save mirrors the old explicit
+  // AgentGen.save(false) arg.
+  Actions.click({
+    'agentgen.close':       () => close(),
+    'agentgen.generate':    () => generate(),
+    'agentgen.step':        el => _showStep(el.dataset.step),
+    'agentgen.save':        () => save(false),
+    'agentgen.save-eval':   () => saveAndEvaluate(),
+    'agentgen.add-case':    () => addCase(),
+    'agentgen.case-remove': el => el.parentElement.remove()
+  });
 
   return { openFromDocument, openFromText, generate, save, saveAndEvaluate, addCase, close, _showStep };
 })();
