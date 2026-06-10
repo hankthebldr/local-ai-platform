@@ -3,15 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#070A0F">
 <title>ENCLAVE</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
 <link href="/static/vendor/fonts/fonts.css" rel="stylesheet">
 <script src="/static/vendor/d3.v7.min.js" defer></script>
 <link href="/static/vendor/drawflow.min.css" rel="stylesheet">
-<script src="/static/vendor/dagre.min.js"></script>
-<script src="/static/vendor/drawflow.min.js"></script>
-<script src="/static/vendor/js-yaml.min.js"></script>
+<!-- defer is safe for all three: every reference lives behind user
+     interaction or DOMContentLoaded handlers (which by spec run after
+     deferred scripts), matching the d3 tag above. Order is preserved. -->
+<script src="/static/vendor/dagre.min.js" defer></script>
+<script src="/static/vendor/drawflow.min.js" defer></script>
+<script src="/static/vendor/js-yaml.min.js" defer></script>
 <script>
 // Theme bootstrap — runs synchronously in <head> before <body> paints to
 // avoid a flash-of-wrong-theme. Precedence: explicit user choice in
@@ -22,6 +26,10 @@
     var theme = stored
       || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
     if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    // Keep the browser-chrome color (Android URL bar, iOS standalone) in
+    // lockstep with the active palette. Values mirror --bg-deep per theme.
+    var tc = document.querySelector('meta[name="theme-color"]');
+    if (tc) tc.setAttribute('content', theme === 'light' ? '#F2F4F7' : '#070A0F');
   } catch (e) { /* private mode or storage disabled — fall through to dark */ }
 })();
 </script>
@@ -36,6 +44,10 @@
    --green / --red / --purple aliases retained so the 800+ existing
    token references in this file rebrand transparently. */
 :root {
+  /* Native form controls, scrollbars, and UA chrome render dark to match
+     the brand default (the light theme flips this below). */
+  color-scheme: dark;
+
   /* ─ Canvas (Cortex-style slate, not pure black) ─ */
   --bg-deep: #070A0F;             /* outer canvas / body */
   --bg: #0B0F14;                  /* primary surface */
@@ -122,6 +134,8 @@
    blue accents desaturated for white backgrounds. PANW orange keeps
    its hue (it's the brand). */
 :root[data-theme="light"] {
+  color-scheme: light;
+
   --bg-deep: #F2F4F7;
   --bg: #FFFFFF;
   --bg-elev: #F8FAFC;
@@ -2029,7 +2043,7 @@ details[open] > summary::before { transform: rotate(90deg); }
   border: 1px solid #ffffff08;
   border-left: 2px solid var(--cyan-dim);
   font-size: 0.8rem;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-left-color 0.2s ease;
   cursor: default;
 }
 .model-item:hover { background: #00CC6608; border-left-color: var(--cyan); }
@@ -2140,7 +2154,7 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
   border: 1px solid var(--border);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   position: relative;
   font-size: 1.1rem;
   flex-shrink: 0;
@@ -2339,7 +2353,7 @@ textarea.composer-desc-area {
   text-transform: uppercase;
   padding: 0 24px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
   position: relative;
   overflow: hidden;
 }
@@ -2375,7 +2389,7 @@ textarea.composer-desc-area {
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
 .filter-btn:hover { border-color: var(--text-dim); color: var(--text); }
 .filter-btn.active { border-color: var(--cyan); color: var(--cyan); background: #00CC6608; }
@@ -2400,7 +2414,7 @@ textarea.composer-desc-area {
   background: var(--bg-panel);
   border: 1px solid #ffffff08;
   padding: 16px;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
 }
 .inv-card:hover { border-color: var(--cyan-dim); background: #00CC6606; }
 .inv-card.installed { border-left: 3px solid var(--green-dim); }
@@ -2485,7 +2499,8 @@ textarea.composer-desc-area {
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease,
+              box-shadow 0.2s ease, opacity 0.2s ease;
 }
 /* === .action-btn system ==========================================
    Canonical button across every panel surface. Variants compose
@@ -2632,7 +2647,10 @@ textarea.composer-desc-area {
   width: 35% !important;
   animation: pullShimmer 1.1s ease-in-out infinite;
 }
-@keyframes pullShimmer { 0%{margin-left:-35%} 100%{margin-left:100%} }
+/* translateX percentages are relative to the fill itself (35% of the
+   track), so -100%..286% sweeps the same -35%..100% of the track the
+   old margin-left animation covered — without triggering layout. */
+@keyframes pullShimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(286%)} }
 .pull-progress-label {
   margin-top: 4px; font-family: var(--mono); font-size: 0.62rem;
   color: var(--cyan); letter-spacing: 0.04em;
@@ -3240,7 +3258,7 @@ textarea.composer-desc-area {
   border: 1px solid var(--border);
   padding: 12px 16px;
   text-align: center;
-  transition: all 0.3s ease;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
   width: 100%;
   position: relative;
 }
@@ -3351,7 +3369,7 @@ textarea.composer-desc-area {
   margin-bottom: 4px;
   font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 .wf-run-item:hover { background: #00CC6608; border-color: var(--cyan-dim); }
 .wf-run-id { color: var(--text-dim); font-size: 0.68rem; }
@@ -3544,7 +3562,7 @@ textarea.composer-desc-area {
   color: var(--text-dim);
   border: none;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 .wf-mode-btn.active { background: var(--cyan-ghost); color: var(--cyan); }
 .wf-mode-btn:hover:not(.active) { color: var(--text); }
@@ -4195,17 +4213,19 @@ textarea.composer-desc-area {
   white-space: pre-wrap; word-break: break-word;
 }
 .runs-tab-floor { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.runs-tab-graph {
-  flex: 1; min-height: 280px; position: relative;
-  /* Unified sleek canvas surface — IDENTICAL to the Composer canvas: a soft
-     accent-glow gradient at the top over a subtle dot grid. Keep this block in
-     lockstep with .composer-canvas-panel so the two views read as one. */
+/* Unified sleek canvas surface — single source of truth for the Composer
+   canvas AND the Runs DAG (the #149 "keep in lockstep" duplication, now
+   actually one rule): a soft accent-glow gradient over a subtle dot grid. */
+.composer-canvas-panel, .runs-tab-graph {
   background-color: var(--bg-deep);
   background-image:
     radial-gradient(ellipse 85% 55% at 50% -8%, var(--accent-ghost) 0%, transparent 58%),
     radial-gradient(var(--border) 1px, transparent 1px);
   background-size: 100% 100%, 22px 22px;
   background-repeat: no-repeat, repeat;
+}
+.runs-tab-graph {
+  flex: 1; min-height: 280px; position: relative;
   border: 1px solid var(--border); border-radius: 6px;
   overflow: hidden;
 }
@@ -4250,8 +4270,11 @@ textarea.composer-desc-area {
 .wf-anchor-keys span { font-size: 0.56rem; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); }
 .wf-anchor-start { border-color: var(--accent-dim); background: var(--accent-ghost); }
 .wf-anchor-start .wf-anchor-label { color: var(--accent); }
-.wf-anchor-end { border-color: var(--cyan-dim); background: rgba(0,220,240,0.06); }
-.wf-anchor-end .wf-anchor-label { color: var(--cyan); }
+/* END uses the secondary (cool-blue) family — NOT --cyan, which the rebrand
+   aliases to green. The old hardcoded rgba(0,220,240,…) cyan wash clashed
+   with the green text --cyan actually resolves to. */
+.wf-anchor-end { border-color: var(--accent-2-dim); background: var(--accent-2-ghost); }
+.wf-anchor-end .wf-anchor-label { color: var(--accent-2); }
 
 /* START/END rows in the Step Results list */
 .ws-run-anchor-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 4px; border: 1px solid; font-family: var(--mono); }
@@ -4259,8 +4282,8 @@ textarea.composer-desc-area {
 .ws-anchor-keys-inline { font-size: 0.64rem; color: var(--text-dim); }
 .ws-anchor-start-row { border-color: var(--accent-dim); background: var(--accent-ghost); }
 .ws-anchor-start-row .run-step-caret, .ws-anchor-start-row .ws-run-step-id { color: var(--accent); }
-.ws-anchor-end-row { border-color: var(--cyan-dim); background: rgba(0,220,240,0.06); }
-.ws-anchor-end-row .run-step-caret, .ws-anchor-end-row .ws-run-step-id { color: var(--cyan); }
+.ws-anchor-end-row { border-color: var(--accent-2-dim); background: var(--accent-2-ghost); }
+.ws-anchor-end-row .run-step-caret, .ws-anchor-end-row .ws-run-step-id { color: var(--accent-2); }
 
 /* Full step-output viewer — each workspace key expands to its complete value. */
 .run-step-outputs { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
@@ -4784,15 +4807,8 @@ textarea.composer-desc-area {
   border: none;
   border-radius: 6px;          /* keep the corner radius for the clip mask */
   overflow: hidden;
-  /* Unified sleek canvas surface — IDENTICAL to the runs graph: a soft
-     accent-glow gradient at the top over a subtle dot grid. Keep this block in
-     lockstep with .runs-tab-graph so the two views read as one. */
-  background-color: var(--bg-deep);
-  background-image:
-    radial-gradient(ellipse 85% 55% at 50% -8%, var(--accent-ghost) 0%, transparent 58%),
-    radial-gradient(var(--border) 1px, transparent 1px);
-  background-size: 100% 100%, 22px 22px;
-  background-repeat: no-repeat, repeat;
+  /* Canvas-surface background comes from the shared
+     `.composer-canvas-panel, .runs-tab-graph` rule (see Runs tab CSS). */
 }
 /* Suppress the .panel scan-line + corner crosshair markers on the
    canvas — they look misplaced over a full-bleed grid. */
@@ -5648,15 +5664,17 @@ textarea.composer-desc-area {
 <div class="shell">
 
   <!-- HEADER — Cortex command bar -->
-  <div class="header">
+  <header class="header">
     <div class="logo">
-      <div class="logo-mark" aria-label="Enclave logo">
+      <div class="logo-mark">
         <!-- Canonical Enclave mark: nested rectangles (enclosure / containment
              / layered security). Mirrors assets/logo/enclave-mark.svg and the
              installer DMG background. Uses currentColor so CSS themes it.
              A pulsing health pip is painted via .logo-mark::after to turn the
              brand mark into a live system signal — Cortex product UI pattern. -->
-        <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" role="img">
+        <!-- Decorative: the ENCLAVE wordmark right next to it carries the
+             brand for assistive tech, so the mark itself stays silent. -->
+        <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
           <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
           <rect x="28" y="28" width="24" height="24" rx="2" fill="currentColor" opacity="0.2"/>
@@ -5664,9 +5682,9 @@ textarea.composer-desc-area {
         </svg>
       </div>
       <div class="logo-text">
-        <div class="logo-title">
+        <h1 class="logo-title">
           <span>ENCLAVE</span>
-        </div>
+        </h1>
         <div class="logo-sub">
           <span>Local Sovereign AI</span>
           <span class="sep">·</span>
@@ -7712,6 +7730,9 @@ window.Theme = (function () {
     } else {
       document.documentElement.removeAttribute('data-theme');
     }
+    // Browser-chrome color follows the palette (mirrors --bg-deep).
+    var tc = document.querySelector('meta[name="theme-color"]');
+    if (tc) tc.setAttribute('content', theme === 'light' ? '#F2F4F7' : '#070A0F');
     _syncIcon();
   }
 
