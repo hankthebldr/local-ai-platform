@@ -49,6 +49,10 @@
      pure black. Teal is the living primary; deep emerald gives structure
      and success; ember is the sparing Ubuntu-grub warmth. */
 
+  /* Native form controls, scrollbars, and UA chrome render dark to match
+     the brand default (the light theme flips this below). */
+  color-scheme: dark;
+
   /* ─ Canvas — warm charcoal ─ */
   --bg-deep: #0B0E0D;             /* outer canvas / body */
   --bg: #101413;                  /* primary surface */
@@ -227,6 +231,8 @@
    its hue (it's the brand). */
 :root[data-theme="light"] {
   /* Light is a courtesy scope — warm greys, teal deepened for contrast. */
+  color-scheme: light;
+
   --bg-deep: #EBEEEB;
   --bg: #F6F8F6;
   --bg-elev: #FFFFFF;
