@@ -21296,7 +21296,7 @@ async function composerLoadById(wfId) {
     const defn = r.data;
     if (!defn.id) defn.id = wfId;
     composerLoadDefinition(defn);
-  } catch (e) { alert('Load error: ' + e.message); }
+  } catch (e) { Toast.danger('Load error', e.message); }
 }
 
 // Load a workflow-definition OBJECT directly onto the canvas. Shared by
