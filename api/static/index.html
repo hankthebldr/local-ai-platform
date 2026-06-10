@@ -7899,6 +7899,18 @@ function switchTab(name, el) {
     const trig = document.getElementById('admin-trigger');
     if (trig && (name === 'admin-keys')) trig.classList.add('active');
   }
+
+  // Deep-link: mirror the active tab into the hash. replaceState (not
+  // location.hash=) so no hashchange feedback loop and no history spam.
+  // Deeper paths under the same tab (#/runs/<id>) are preserved — the
+  // startsWith check keeps bootSignIn's soft re-fire from clobbering a
+  // restored run selection.
+  try {
+    const want = '#/' + name;
+    if (!(location.hash + '/').startsWith(want + '/')) {
+      history.replaceState(null, '', want);
+    }
+  } catch (_) { /* sandboxed contexts may deny history access */ }
 }
 
 /* ── TABLIST SEMANTICS (a11y) ───────────────────────────────────────
@@ -12242,6 +12254,41 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('wf-role-preview-ctx').id = 'wf-role-preview';
   }
 });
+
+/* ── HASH ROUTES (deep links) ───────────────────────────────────────
+   #/<tab> mirrors the active tab; #/runs/<run_id> additionally selects
+   that run. replaceState keeps history clean — back/forward tab-surfing
+   is deliberately NOT a feature (tabs are workspace state, not pages),
+   but every tab, filter view, and selected run is now shareable and
+   reload-safe. Registration order matters: this DOMContentLoaded
+   handler must run AFTER the IA relocators above (moved panels exist)
+   and BEFORE the ComposerView lazy-boot (whose dashboard-active guard
+   then correctly skips when the hash routed elsewhere). bootSignIn's
+   soft re-init re-fires the active tab, which is hash-stable. */
+(function HashRoutes() {
+  function parse() {
+    const m = (location.hash || '').match(/^#\/([A-Za-z0-9_-]+)(?:\/(.+))?$/);
+    if (!m) return null;
+    let arg = null;
+    if (m[2]) { try { arg = decodeURIComponent(m[2]); } catch (_) { arg = m[2]; } }
+    return { tab: m[1], arg };
+  }
+  function go(route) {
+    if (!route) return;
+    // Whitelist against real panels ('discover' is a legacy alias that
+    // switchTab remaps to inventory). switchTab itself warns on junk —
+    // this guard just avoids touching RunsTab state for a bad hash.
+    if (!document.getElementById('tab-' + route.tab) && route.tab !== 'discover') return;
+    switchTab(route.tab);
+    if (route.tab === 'runs' && route.arg && window.RunsTab) {
+      // select() fetches the run directly, so it works before the runs
+      // list lands; the row highlight catches up when load() renders.
+      RunsTab.select(route.arg);
+    }
+  }
+  document.addEventListener('DOMContentLoaded', () => go(parse()));
+  window.addEventListener('hashchange', () => go(parse()));
+})();
 
 document.addEventListener('DOMContentLoaded', () => {
   const zone = document.getElementById('doc-drop-zone');
@@ -18611,6 +18658,13 @@ const RunsTab = (function () {
   async function select(runId) {
     _selectedId = runId;
     render();
+    // Deep-link: a selected run is shareable + reload-safe. Only when
+    // the Runs tab owns the hash (select can fire from cross-tab jumps).
+    try {
+      if ((location.hash || '').indexOf('#/runs') === 0) {
+        history.replaceState(null, '', '#/runs/' + encodeURIComponent(runId));
+      }
+    } catch (_) {}
     // Detail head + buttons.
     const meta = document.getElementById('runs-tab-detail-meta');
     if (meta) meta.textContent = `Loading ${runId.slice(0, 12)}…`;
