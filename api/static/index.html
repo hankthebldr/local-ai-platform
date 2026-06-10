@@ -8731,7 +8731,8 @@ async function openModelDetail(name) {
 }
 
 async function removeLocalModel(name) {
-  if (!confirm(`Remove "${name}" from local storage? This deletes the weights from Ollama.`)) return;
+  const ok = await Confirm.ask({ title: 'Remove model', body: `Remove "${name}" from local storage? This deletes the weights from Ollama.`, okLabel: 'Remove', danger: true });
+  if (!ok) return;
   try {
     const r = await fetch('/api/inventory/remove', {
       method: 'POST',
@@ -8742,7 +8743,7 @@ async function removeLocalModel(name) {
     loadInstalledLocal();
     if (typeof loadCatalog === 'function') { catalogLoaded = false; loadCatalog(); }
   } catch (e) {
-    alert('Remove failed: ' + e.message);
+    Toast.danger('Remove failed', e.message);
   }
 }
 
@@ -9391,7 +9392,8 @@ async function pullModel(ollamaName, modelId) {
 }
 
 async function removeModel(name) {
-  if (!confirm(`Remove model "${name}"? This will delete the model files.`)) return;
+  const ok = await Confirm.ask({ title: 'Remove model', body: `Remove model "${name}"? This will delete the model files.`, okLabel: 'Remove', danger: true });
+  if (!ok) return;
   try {
     const r = await fetch('/api/inventory/remove', {
       method: 'POST',
@@ -11420,7 +11422,7 @@ async function runWorkflow() {
   try {
     seed = JSON.parse(document.getElementById('wf-seed').value || '{}');
   } catch (e) {
-    alert('Invalid JSON in seed data');
+    Toast.warn('Invalid JSON in seed data');
     btn.disabled = false;
     btn.textContent = 'Run';
     return;
@@ -11571,7 +11573,7 @@ async function resumeRun(runId, btn) {
     viewRun(run.run_id);
   } catch (e) {
     console.error('Resume failed:', e);
-    alert('Resume failed: ' + e.message);
+    Toast.danger('Resume failed', e.message);
     loadRecentRuns();
   }
 }
@@ -11773,7 +11775,7 @@ async function closeSession(convId) {
     if (!r.ok) throw new Error(r.statusText);
     loadActiveSessions();
   } catch (e) {
-    alert('Failed to close session: ' + e);
+    Toast.danger('Failed to close session', String(e));
   }
 }
 
@@ -11785,7 +11787,7 @@ async function cleanupStaleSessions() {
     await loadActiveSessions();
     if (typeof showToast === 'function') showToast('Cleaned up ' + (d.closed || 0) + ' stale session(s)');
   } catch (e) {
-    alert('Cleanup failed: ' + e);
+    Toast.danger('Cleanup failed', String(e));
   }
 }
 
@@ -12518,7 +12520,7 @@ async function dfAddNodeFromAgent(agentId, x, y) {
   // Fetch agent definition; spawn an AgentStep clone.
   try {
     const r = await fetch(`/api/agents/${encodeURIComponent(agentId)}`);
-    if (!r.ok) { alert(`Could not load agent '${agentId}': HTTP ${r.status}`); return; }
+    if (!r.ok) { Toast.danger(`Could not load agent '${agentId}'`, `HTTP ${r.status}`); return; }
     const a = await r.json();
     const data = {
       id: agentId + '_' + (++dfNextId),
@@ -12544,7 +12546,7 @@ async function dfAddNodeFromAgent(agentId, x, y) {
     dfRenderConfigPanel(nodeId);
     return nodeId;
   } catch (e) {
-    alert(`Drop failed: ${e.message}`);
+    Toast.danger('Drop failed', e.message);
   }
 }
 
@@ -13156,26 +13158,26 @@ async function dfSave() {
   const yamlText = dfExportYaml();
   if (!yamlText) return;
   let definition;
-  try { definition = jsyaml.load(yamlText); } catch (e) { alert('YAML error: ' + e.message); return; }
+  try { definition = jsyaml.load(yamlText); } catch (e) { Toast.warn('YAML error', e.message); return; }
   const overwrite = true;
   try {
     const resp = await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite }) });
     if (resp.ok) {
       const result = await resp.json();
-      alert('Saved: ' + result.path);
+      Toast.success('Saved', result.path);
       if (typeof refreshWorkflows === 'function') refreshWorkflows();
     } else {
       const err = await resp.json();
-      alert('Save failed: ' + (err.detail || JSON.stringify(err)));
+      Toast.danger('Save failed', err.detail || JSON.stringify(err));
     }
-  } catch (e) { alert('Save error: ' + e.message); }
+  } catch (e) { Toast.danger('Save error', e.message); }
 }
 
 async function dfRunWorkflow() {
   const yamlText = dfExportYaml();
   if (!yamlText) return;
   let definition;
-  try { definition = jsyaml.load(yamlText); } catch (e) { alert('YAML error: ' + e.message); return; }
+  try { definition = jsyaml.load(yamlText); } catch (e) { Toast.warn('YAML error', e.message); return; }
   try { await fetch('/api/workflows/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ definition, overwrite: true }) }); } catch (e) { /* ignore save errors for run */ }
   setWfMode('run');
   const id = document.getElementById('df-wf-id')?.value || 'my-workflow';
@@ -13338,8 +13340,8 @@ function dfDoImport() {
   if (!yamlText.trim()) return;
 
   let parsed;
-  try { parsed = jsyaml.load(yamlText); } catch (e) { alert('Invalid YAML: ' + e.message); return; }
-  if (!parsed || !parsed.steps || !Array.isArray(parsed.steps)) { alert('YAML must have a "steps" array'); return; }
+  try { parsed = jsyaml.load(yamlText); } catch (e) { Toast.warn('Invalid YAML', e.message); return; }
+  if (!parsed || !parsed.steps || !Array.isArray(parsed.steps)) { Toast.warn('YAML must have a "steps" array'); return; }
 
   dfEditor.clear();
   dfNodeData = {};
@@ -13591,7 +13593,7 @@ async function openAgentChat(agentId) {
     if (!r.ok) throw new Error('not found');
     agent = await r.json();
   } catch(e) {
-    alert('Failed to load agent: ' + agentId);
+    Toast.danger('Failed to load agent', agentId);
     return;
   }
   // Render the SVG persona glyph in the chat header (tone-tinted block).
@@ -13720,14 +13722,15 @@ async function sendAgentMessage() {
 }
 
 async function deleteAgent(agentId) {
-  if (!confirm(`Delete agent "${agentId}"?`)) return;
+  const ok = await Confirm.ask({ title: 'Delete agent', body: `Delete agent "${agentId}"?`, okLabel: 'Delete', danger: true });
+  if (!ok) return;
   try {
     const r = await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
     if (!r.ok) throw new Error((await r.json()).detail || 'Delete failed');
     loadAgentsTab();
     if (_activeAgentId === agentId) closeAgentChat();
   } catch(e) {
-    alert('Failed to delete agent: ' + e.message);
+    Toast.danger('Failed to delete agent', e.message);
   }
 }
 
@@ -13852,7 +13855,7 @@ async function showEditAgentModal(agentId) {
     if (!r.ok) throw new Error('not found');
     agent = await r.json();
   } catch(e) {
-    alert('Failed to load agent for editing: ' + agentId);
+    Toast.danger('Failed to load agent for editing', agentId);
     return;
   }
   const modal = document.createElement('div');
@@ -15837,12 +15840,13 @@ window.ApiKeysPanel = (function () {
   }
 
   async function rotate(id, name) {
-    if (!confirm(`Rotate key "${name}"?\n\nThe old key will stop working immediately.`)) return;
+    const ok = await Confirm.ask({ title: `Rotate key "${name}"?`, body: 'The old key will stop working immediately.', okLabel: 'Rotate', danger: true });
+    if (!ok) return;
     const r = await AdminAuth.fetch(`/api/keys/${encodeURIComponent(id)}/rotate`, {
       method: 'POST',
     }, 'admin-keys');
     if (!r.ok) {
-      alert(`Rotate failed (HTTP ${r.status})`);
+      Toast.danger('Rotate failed', `HTTP ${r.status}`);
       return;
     }
     const result = await r.json();
@@ -15859,12 +15863,13 @@ window.ApiKeysPanel = (function () {
   }
 
   async function revoke(id, name) {
-    if (!confirm(`Revoke key "${name}"?\n\nThis cannot be undone via the UI.`)) return;
+    const ok = await Confirm.ask({ title: `Revoke key "${name}"?`, body: 'This cannot be undone via the UI.', okLabel: 'Revoke', danger: true });
+    if (!ok) return;
     const r = await AdminAuth.fetch(`/api/keys/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }, 'admin-keys');
     if (!r.ok) {
-      alert(`Revoke failed (HTTP ${r.status})`);
+      Toast.danger('Revoke failed', `HTTP ${r.status}`);
       return;
     }
     load();
@@ -16581,12 +16586,13 @@ window.CloudPanel = (function () {
   }
 
   async function del(id) {
-    if (!confirm(`Delete cloud provider '${id}'?`)) return;
+    const ok = await Confirm.ask({ title: 'Delete cloud provider', body: `Delete cloud provider '${id}'?`, okLabel: 'Delete', danger: true });
+    if (!ok) return;
     const r = await AdminAuth.fetch(`/api/cloud-providers/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }, 'admin-cloud');
     if (!r.ok) {
-      alert(`Delete failed (HTTP ${r.status})`);
+      Toast.danger('Delete failed', `HTTP ${r.status}`);
       return;
     }
     if (_selectedId === id) _selectedId = null;
@@ -16683,7 +16689,7 @@ window.ExportsPanel = (function () {
 
   async function view(filename) {
     const r = await fetch('/api/exports/' + encodeURIComponent(filename), {headers: AdminAuth.authHeaders()});
-    if (!r.ok) { alert('Export not found.'); return; }
+    if (!r.ok) { Toast.warn('Export not found'); return; }
     const text = await r.text();
     document.getElementById('export-view-title').textContent = filename;
     document.getElementById('export-view-body').innerHTML = renderMarkdown(text);
@@ -16705,12 +16711,13 @@ window.ExportsPanel = (function () {
   }
 
   async function deleteOne(filename) {
-    if (!confirm(`Delete "${filename}"?`)) return;
+    const ok = await Confirm.ask({ title: 'Delete export', body: `Delete "${filename}"?`, okLabel: 'Delete', danger: true });
+    if (!ok) return;
     const r = await fetch('/api/exports/' + encodeURIComponent(filename), {
       method: 'DELETE',
       headers: AdminAuth.authHeaders(),
     });
-    if (!r.ok) { alert(`Delete failed (HTTP ${r.status})`); return; }
+    if (!r.ok) { Toast.danger('Delete failed', `HTTP ${r.status}`); return; }
     _selected.delete(filename);
     load();
   }
@@ -16732,7 +16739,8 @@ window.ExportsPanel = (function () {
   async function bulkDelete() {
     const count = _selected.size;
     if (count === 0) return;
-    if (!confirm(`Delete ${count} export${count === 1 ? '' : 's'}?`)) return;
+    const ok = await Confirm.ask({ title: 'Delete exports', body: `Delete ${count} export${count === 1 ? '' : 's'}?`, okLabel: 'Delete', danger: true });
+    if (!ok) return;
     // Fire deletes in parallel.
     const names = Array.from(_selected);
     const results = await Promise.all(names.map(n =>
@@ -16742,7 +16750,7 @@ window.ExportsPanel = (function () {
       })
     ));
     const failed = names.filter((_, i) => !results[i].ok);
-    if (failed.length) alert(`Delete failed for: ${failed.join(', ')}`);
+    if (failed.length) Toast.danger('Delete failed', failed.join(', '));
     _selected.clear();
     load();
   }
@@ -17317,8 +17325,7 @@ const SkillsDiscover = (function () {
     });
     if (!r.ok) {
       const body = await r.text();
-      if (window.Toast) Toast.danger(`Install failed`, body || `HTTP ${r.status}`);
-      else alert(`Install failed: ${body}`);
+      Toast.danger('Install failed', body || `HTTP ${r.status}`);
       return;
     }
     if (window.Toast) Toast.success('Skill installed', `${skillId} → ${target}`);
@@ -17330,15 +17337,15 @@ const SkillsDiscover = (function () {
 
   async function uninstall(skillId, pluginId) {
     if (!pluginId) {
-      alert('Could not determine target plugin');
+      Toast.warn('Could not determine target plugin');
       return;
     }
-    if (!confirm(`Uninstall '${skillId}' from '${pluginId}'? This deletes the skill .md and removes the registration.`)) return;
+    const ok = await Confirm.ask({ title: 'Uninstall skill', body: `Uninstall '${skillId}' from '${pluginId}'? This deletes the skill .md and removes the registration.`, okLabel: 'Uninstall', danger: true });
+    if (!ok) return;
     const r = await fetch(`/api/skills/discover/${encodeURIComponent(skillId)}/uninstall?plugin_id=${encodeURIComponent(pluginId)}`, { method: 'DELETE' });
     if (!r.ok) {
       const body = await r.text();
-      if (window.Toast) Toast.danger('Uninstall failed', body || `HTTP ${r.status}`);
-      else alert(`Uninstall failed: ${body}`);
+      Toast.danger('Uninstall failed', body || `HTTP ${r.status}`);
       return;
     }
     if (window.Toast) Toast.success('Skill uninstalled', `${skillId} ↛ ${pluginId}`);
@@ -17417,7 +17424,7 @@ const SkillsDiscover = (function () {
       load(true);
     } catch (e) {
       btn.disabled = false; btn.textContent = 'Retry';
-      if (window.Toast) Toast.error('Install failed: ' + e.message);
+      if (window.Toast) Toast.danger('Install failed', e.message);
     }
   }
 
@@ -17443,11 +17450,10 @@ const SkillsDiscover = (function () {
       let active = false;
       try { active = (await fetch('/api/plugins/reload', { method: 'POST' })).ok; } catch (_) {}
       const msg = `Imported "${d.name || d.skill_id}" → ${d.plugin_id}` + (active ? ' — active now.' : ' (reload to activate).');
-      if (window.Toast) Toast.info(msg); else alert(msg);
+      Toast.info(msg);
       load(true);
     } catch (e) {
-      if (window.Toast) Toast.error('Import failed: ' + e.message);
-      else alert('Import failed: ' + e.message);
+      Toast.danger('Import failed', e.message);
       _setMeta('');
     }
   }
@@ -17604,7 +17610,7 @@ const SkillsDiscover = (function () {
     const st = document.getElementById('skill-edit-status');
     if (!ta) return;
     const newBody = ta.value;
-    if (!newBody.trim()) { if (window.Toast) Toast.error('Skill body cannot be empty'); return; }
+    if (!newBody.trim()) { if (window.Toast) Toast.danger('Skill body cannot be empty'); return; }
     if (save) { save.disabled = true; save.textContent = 'Saving…'; }
     try {
       const r = await fetch(`/api/skills/source/${encodeURIComponent(skillId)}`, {
@@ -17626,7 +17632,7 @@ const SkillsDiscover = (function () {
       if (window.Toast) Toast.success('Skill saved', `${skillId} → ${pluginId}`);
       load(true);
     } catch (e) {
-      if (window.Toast) Toast.error('Save failed: ' + e.message);
+      if (window.Toast) Toast.danger('Save failed', e.message);
       if (st) st.textContent = 'save failed';
     } finally {
       if (save) { save.disabled = false; save.textContent = 'Save & reload'; }
@@ -17818,12 +17824,12 @@ window.syncCompositionModelsToChatPicker = syncCompositionModelsToChatPicker;
 /* ── Bundle import / export from composer ─────────────────────────── */
 async function composerExportBundle() {
   const wfId = (document.getElementById('df-wf-id') || {}).value;
-  if (!wfId) { alert('Set a workflow ID first.'); return; }
+  if (!wfId) { Toast.warn('Set a workflow ID first.'); return; }
   // Save first so the export reflects the current canvas state.
   await dfSave().catch(() => { /* user dismissed */ });
   try {
     const r = await fetch(`/api/workflow-index/${encodeURIComponent(wfId)}/export`);
-    if (!r.ok) { alert('Export failed: ' + (await r.text())); return; }
+    if (!r.ok) { Toast.danger('Export failed', await r.text()); return; }
     const bundle = await r.json();
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -17831,7 +17837,7 @@ async function composerExportBundle() {
     a.href = url; a.download = `${wfId}.bundle.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  } catch (e) { alert('Export error: ' + e.message); }
+  } catch (e) { Toast.danger('Export error', e.message); }
 }
 
 function dfImportBundle() {
@@ -17842,19 +17848,19 @@ function dfImportBundle() {
     if (!file) return;
     const text = await file.text();
     let bundle;
-    try { bundle = JSON.parse(text); } catch (e) { alert('Invalid JSON: ' + e.message); return; }
+    try { bundle = JSON.parse(text); } catch (e) { Toast.warn('Invalid JSON', e.message); return; }
     try {
       const r = await fetch('/api/workflow-index/import?overwrite=true', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bundle),
       });
-      if (!r.ok) { alert('Import failed: ' + (await r.text())); return; }
+      if (!r.ok) { Toast.danger('Import failed', await r.text()); return; }
       const result = await r.json();
-      alert(`Imported workflow '${result.workflow_id}' (+${result.agents_installed.length} agents).`);
+      Toast.success(`Imported workflow '${result.workflow_id}'`, `+${result.agents_installed.length} agents`);
       if (typeof WorkflowIndex !== 'undefined') WorkflowIndex.load();
       if (typeof refreshWorkflows === 'function') refreshWorkflows();
-    } catch (e) { alert('Import error: ' + e.message); }
+    } catch (e) { Toast.danger('Import error', e.message); }
   };
   inp.click();
 }
@@ -17863,8 +17869,8 @@ function dfImportBundle() {
 // Explicit "Clear" — prompts before wiping so unsaved composer state
 // isn't lost to a stray click. Falls through to composerNewWorkflow
 // (the existing cleanup path); the only difference is the confirm
-// gate. Returning false from confirm() leaves the composer untouched.
-function composerClearWithConfirm() {
+// gate. Cancelling the Confirm.ask dialog leaves the composer untouched.
+async function composerClearWithConfirm() {
   const hasNodes = (typeof dfEditor !== 'undefined' && dfEditor &&
                     Object.keys(dfEditor.drawflow.drawflow.Home.data || {}).length > 0);
   const hasMeta = ['df-wf-id', 'df-wf-name', 'df-wf-desc']
@@ -17878,7 +17884,8 @@ function composerClearWithConfirm() {
   const msg = hasNodes
     ? 'Clear the composer? All canvas nodes + metadata will be wiped. (Unsaved work cannot be recovered.)'
     : 'Clear the workflow metadata? (No canvas nodes will be affected.)';
-  if (!confirm(msg)) return;
+  const ok = await Confirm.ask({ title: 'Clear composer', body: msg, okLabel: 'Clear', danger: hasNodes });
+  if (!ok) return;
   composerNewWorkflow();
   if (window.Toast) Toast.info('Composer cleared', '', { ttl: 1600 });
 }
@@ -17907,7 +17914,7 @@ async function composerLoadById(wfId) {
   if (!wfId) return;
   try {
     const r = await fetch(`/api/workflows/${encodeURIComponent(wfId)}`);
-    if (!r.ok) { alert('Load failed: ' + (await r.text())); return; }
+    if (!r.ok) { Toast.danger('Load failed', await r.text()); return; }
     const defn = await r.json();
     // Re-use the YAML import path so node placement / connections work the
     // same as a paste-import — fewest moving parts.
@@ -18032,12 +18039,12 @@ async function composerLoadById(wfId) {
       );
     }
     ComposerView.updateCanvasEmptyState();
-  } catch (e) { alert('Load error: ' + e.message); }
+  } catch (e) { Toast.danger('Load error', e.message); }
 }
 
 async function composerLoadByIdAndSwitch() {
   const sel = document.getElementById('wf-select');
-  if (!sel || !sel.value) { alert('Pick a workflow first.'); return; }
+  if (!sel || !sel.value) { Toast.warn('Pick a workflow first.'); return; }
   switchTab('dashboard');
   setTimeout(() => composerLoadById(sel.value), 100);
 }
@@ -18493,15 +18500,14 @@ const WorkflowIndex = (function () {
       }, 80);
       if (window.Toast) Toast.success('Run started', `${id} · ${(out.run_id || '').slice(0, 12)}…`);
     } catch (e) {
-      if (window.Toast) Toast.danger('Run failed', e.message);
-      else alert('Run failed: ' + e.message);
+      Toast.danger('Run failed', e.message);
     }
   }
 
   async function exportBundle(id) {
     try {
       const r = await fetch(`/api/workflow-index/${encodeURIComponent(id)}/export`);
-      if (!r.ok) { alert('Export failed: ' + (await r.text())); return; }
+      if (!r.ok) { Toast.danger('Export failed', await r.text()); return; }
       const bundle = await r.json();
       const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -18509,7 +18515,7 @@ const WorkflowIndex = (function () {
       a.href = url; a.download = `${id}.bundle.json`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (e) { alert('Export error: ' + e.message); }
+    } catch (e) { Toast.danger('Export error', e.message); }
   }
 
   function openImportDialog() { dfImportBundle(); }
@@ -19026,7 +19032,8 @@ const RunsTab = (function () {
 
   async function markFailed() {
     if (!_selectedId) return;
-    if (!confirm('Mark this stalled run as failed? This persists status="failed" so the UI stops polling.')) return;
+    const ok = await Confirm.ask({ title: 'Mark run failed', body: 'Mark this stalled run as failed? This persists status="failed" so the UI stops polling.', okLabel: 'Mark Failed', danger: true });
+    if (!ok) return;
     try {
       // The cancel endpoint accepts running/queued and marks them
       // canceled — which is the closest existing signal we have for
@@ -19609,7 +19616,8 @@ const RunsTab = (function () {
   }
   async function cancelCurrent() {
     if (!_selectedId) return;
-    if (!confirm('Stop this run? The in-flight LLM call will complete first; no further steps will execute.')) return;
+    const ok = await Confirm.ask({ title: 'Stop run', body: 'Stop this run? The in-flight LLM call will complete first; no further steps will execute.', okLabel: 'Stop Run', danger: true });
+    if (!ok) return;
     try {
       const r = await fetch(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/cancel`, { method: 'POST' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -19631,7 +19639,8 @@ const RunsTab = (function () {
       if (window.Toast) Toast.danger('Re-run failed', 'No workflow_id on this run.');
       return;
     }
-    if (!confirm(`Re-run ${wfId} with the same seed?`)) return;
+    const ok = await Confirm.ask({ title: 'Re-run workflow', body: `Re-run ${wfId} with the same seed?`, okLabel: 'Re-run' });
+    if (!ok) return;
     try {
       // Prefer the async endpoint so the runs tab can immediately
       // start polling without blocking on a possibly-long sync run.
@@ -19984,19 +19993,19 @@ const MCPPanel = (function () {
     try {
       const r = await fetch(`/api/mcp/servers/${encodeURIComponent(id)}/test`, { method: 'POST', headers: _headers() });
       const result = await r.json();
-      if (result.reachable) alert(`OK — ${result.tools_count} tool(s) advertised.`);
-      else alert('Server unreachable: ' + (result.error || 'unknown'));
+      if (result.reachable) Toast.success('Server reachable', `${result.tools_count} tool(s) advertised`);
+      else Toast.danger('Server unreachable', result.error || 'unknown');
       await load();
-    } catch (e) { alert('Test error: ' + e.message); }
+    } catch (e) { Toast.danger('Test error', e.message); }
   }
 
   async function discoverTools(id) {
     try {
       const r = await fetch(`/api/mcp/servers/${encodeURIComponent(id)}/tools?refresh=true`, { headers: _headers() });
-      if (!r.ok) { alert('Discover failed: ' + (await r.text())); return; }
+      if (!r.ok) { Toast.danger('Discover failed', await r.text()); return; }
       await load();
       _selected = id; renderDetail();
-    } catch (e) { alert('Discover error: ' + e.message); }
+    } catch (e) { Toast.danger('Discover error', e.message); }
   }
 
   async function toggleEnabled(id, enabled) {
@@ -20006,17 +20015,18 @@ const MCPPanel = (function () {
         body: JSON.stringify({ enabled }),
       });
       await load();
-    } catch (e) { alert('Toggle error: ' + e.message); }
+    } catch (e) { Toast.danger('Toggle error', e.message); }
   }
 
   async function remove(id) {
-    if (!confirm(`Delete MCP server '${id}'?`)) return;
+    const ok = await Confirm.ask({ title: 'Delete MCP server', body: `Delete MCP server '${id}'?`, okLabel: 'Delete', danger: true });
+    if (!ok) return;
     try {
       await fetch(`/api/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE', headers: _headers() });
       _selected = null;
       await load();
       renderDetail();
-    } catch (e) { alert('Delete error: ' + e.message); }
+    } catch (e) { Toast.danger('Delete error', e.message); }
   }
 
   // ── Create / Edit modal ─────────────────────────────────────────
@@ -20193,8 +20203,7 @@ const MCPPanel = (function () {
       select(entry.id);
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
-      if (window.Toast) Toast.error('Install failed: ' + e.message);
-      else alert('Install failed: ' + e.message);
+      Toast.danger('Install failed', e.message);
     }
   }
 
@@ -20207,6 +20216,9 @@ const MCPPanel = (function () {
            showCreate, edit, _onTransportChange, _closeModal, _submit,
            browseMarketplace, _installFromCatalog };
 })();
+// Export for the static-HTML onclick guard (`if(window.MCPPanel)MCPPanel.showCreate()`):
+// without this the Catalog '+ Register' button is a silent no-op.
+window.MCPPanel = MCPPanel;
 
 /* Refresh workbenches whenever the composer becomes the active tab. */
 (function () {
@@ -20436,7 +20448,7 @@ const AgentGen = (function () {
         close();
         if (typeof loadAgentsTab === 'function') loadAgentsTab();
         if (typeof loadAgentsForSelector === 'function') loadAgentsForSelector();
-        alert(`Agent '${draft.id}' saved.`);
+        Toast.success(`Agent '${draft.id}' saved`);
       }
       return true;
     } catch (e) { _showError('ag-draft-error', e.message); return false; }
@@ -20623,22 +20635,22 @@ const Projects = (function () {
   async function create() { showCreate(); }
 
   async function attachCurrentWorkflow() {
-    if (!_active) { alert('Pick a project first.'); return; }
+    if (!_active) { Toast.warn('Pick a project first.'); return; }
     const wfId = (document.getElementById('df-wf-id') || {}).value;
-    if (!wfId) { alert('Set a workflow ID first.'); return; }
+    if (!wfId) { Toast.warn('Set a workflow ID first.'); return; }
     try {
       const r = await fetch(`/api/projects/${encodeURIComponent(_active)}/artifacts/workflows/${encodeURIComponent(wfId)}`, { method: 'POST' });
-      if (!r.ok) { alert('Attach failed: ' + (await r.text())); return; }
-      alert(`Workflow '${wfId}' attached to project '${_active}'.`);
+      if (!r.ok) { Toast.danger('Attach failed', await r.text()); return; }
+      Toast.success(`Workflow '${wfId}' attached`, `project '${_active}'`);
       await load();
-    } catch (e) { alert('Attach error: ' + e.message); }
+    } catch (e) { Toast.danger('Attach error', e.message); }
   }
 
   async function exportBundle() {
-    if (!_active) { alert('Pick a project first.'); return; }
+    if (!_active) { Toast.warn('Pick a project first.'); return; }
     try {
       const r = await fetch(`/api/projects/${encodeURIComponent(_active)}/export`);
-      if (!r.ok) { alert('Export failed: ' + (await r.text())); return; }
+      if (!r.ok) { Toast.danger('Export failed', await r.text()); return; }
       const bundle = await r.json();
       const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -20646,7 +20658,7 @@ const Projects = (function () {
       a.href = url; a.download = `${_active}.project.json`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (e) { alert('Export error: ' + e.message); }
+    } catch (e) { Toast.danger('Export error', e.message); }
   }
 
   function importBundle() {
@@ -20662,12 +20674,12 @@ const Projects = (function () {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bundle),
         });
-        if (!r.ok) { alert('Import failed: ' + (await r.text())); return; }
+        if (!r.ok) { Toast.danger('Import failed', await r.text()); return; }
         const result = await r.json();
-        alert(`Imported project '${result.project_id}'.`);
+        Toast.success(`Imported project '${result.project_id}'`);
         await load();
         setActive(result.project_id);
-      } catch (e) { alert('Import error: ' + e.message); }
+      } catch (e) { Toast.danger('Import error', e.message); }
     };
     inp.click();
   }
