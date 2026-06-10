@@ -8545,6 +8545,33 @@ async function sendMessage() {
 
 function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
+/* ── Actions: delegated events ─────────────────────────────────────
+   data-action="ns.verb" + data-* args; one document-level listener per
+   event type, lazily installed. Innermost [data-action] wins (closest),
+   so nested actionables don't need stopPropagation. CSP-clean and
+   module-split-safe: handlers are registered, not global. */
+window.Actions = (function () {
+  const registry = Object.create(null);
+  const installed = new Set();
+  function _dispatch(e) {
+    let el = e.target instanceof Element ? e.target.closest('[data-action]') : null;
+    while (el) {
+      const fn = registry[e.type + ':' + el.dataset.action];
+      if (fn) { fn(el, e); return; }
+      el = el.parentElement && el.parentElement.closest('[data-action]');
+    }
+  }
+  function on(type, map) {
+    if (!installed.has(type)) {
+      // toggle/focus don't bubble — capture handles them uniformly.
+      document.addEventListener(type, _dispatch, { capture: type === 'toggle' });
+      installed.add(type);
+    }
+    for (const k in map) registry[type + ':' + k] = map[k];
+  }
+  return { on, click: m => on('click', m), change: m => on('change', m), input: m => on('input', m) };
+})();
+
 /* ── SESSION EXPORT ──────────────────────────────────────────────── */
 
 function generateSessionMarkdown() {
@@ -8928,7 +8955,7 @@ const CatalogPage = (function () {
       const persona = (window.AgentIcons ? AgentIcons.resolve(a) : 'general');
       const icon = (window.AgentIcons ? AgentIcons.svg(persona) : '');
       const tone = (window.AgentIcons ? AgentIcons.tone(persona) : 'accent');
-      return `<div class="agent-tile" role="button" tabindex="0" aria-label="Open chat with ${esc(a.name || a.id)}" onclick="if(typeof openAgentChat==='function')openAgentChat('${esc(a.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();if(typeof openAgentChat==='function')openAgentChat('${esc(a.id)}')}">
+      return `<div class="agent-tile" role="button" tabindex="0" aria-label="Open chat with ${esc(a.name || a.id)}" data-action="agents.chat" data-agent-id="${esc(a.id)}">
         <div class="agent-tile-head">
           <span class="agent-tile-icon tone-${esc(tone)}">${icon}</span>
           <div class="agent-tile-titleblock">
@@ -8936,9 +8963,9 @@ const CatalogPage = (function () {
             <div class="agent-tile-subtitle">${esc((a.description || '').split('\n')[0].slice(0, 90))}</div>
           </div>
           <div class="agent-tile-actions">
-            <button onclick="event.stopPropagation();if(typeof showEditAgentModal==='function')showEditAgentModal('${esc(a.id)}')"
+            <button data-action="agents.edit"
                     class="agent-tile-action" title="Edit">✎</button>
-            <button onclick="event.stopPropagation();if(typeof deleteAgent==='function')deleteAgent('${esc(a.id)}')"
+            <button data-action="agents.delete"
                     class="agent-tile-action" title="Delete">✕</button>
           </div>
         </div>
@@ -12788,32 +12815,30 @@ function dfRenderConfigPanel(nodeId) {
   const gateOps = ['not_empty','contains','not_contains','matches','has_key','all_keys','gt','lt','gte','lte','equals','not_equals','length_gt','length_lt','is_type'];
   let gatesHtml = (data.quality_gates || []).map((gate, idx) => `
     <div class="df-gate-row">
-      <input type="text" value="${esc(gate.field||'')}" class="chat-input" placeholder="field" onchange="dfUpdateGate(${nodeId},${idx},'field',this.value)" />
-      <select class="model-select" onchange="dfUpdateGate(${nodeId},${idx},'operator',this.value)">${gateOps.map(op => `<option value="${op}"${gate.operator===op?' selected':''}>${op}</option>`).join('')}</select>
-      <input type="text" value="${esc(gate.value||'')}" class="chat-input" placeholder="value" onchange="dfUpdateGate(${nodeId},${idx},'value',this.value)" />
-      <button onclick="dfRemoveGate(${nodeId},${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;padding:2px 4px">✕</button>
+      <input type="text" value="${esc(gate.field||'')}" class="chat-input" placeholder="field" data-action="df.gate-update" data-idx="${idx}" data-field="field" />
+      <select class="model-select" data-action="df.gate-update" data-idx="${idx}" data-field="operator">${gateOps.map(op => `<option value="${op}"${gate.operator===op?' selected':''}>${op}</option>`).join('')}</select>
+      <input type="text" value="${esc(gate.value||'')}" class="chat-input" placeholder="value" data-action="df.gate-update" data-idx="${idx}" data-field="value" />
+      <button data-action="df.gate-remove" data-idx="${idx}" style="background:none;border:none;color:var(--red);cursor:pointer;padding:2px 4px">✕</button>
     </div>`).join('');
   const fmtOptions = Object.keys(dfFmtDescs).map(f => `<option value="${f}"${data.output_format===f?' selected':''}>${f}</option>`).join('');
   const html = `
-    <div style="display:flex;flex-direction:column;gap:0">
+    <div style="display:flex;flex-direction:column;gap:0" data-node-id="${nodeId}">
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Identity</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
           <div><label class="df-config-label">Step ID</label><input type="text" value="${esc(data.id)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px"
-            oninput="dfUpdateNodeData(${nodeId},'id',this.value,{live:true})"
-            onchange="dfUpdateNodeData(${nodeId},'id',this.value,{commit:true})" /></div>
+            data-action="df.node-field" data-field="id" /></div>
           <div><label class="df-config-label">Name</label><input type="text" value="${esc(data.name)}" class="chat-input" style="font-size:0.68rem;padding:4px 8px"
-            oninput="dfUpdateNodeData(${nodeId},'name',this.value,{live:true})"
-            onchange="dfUpdateNodeData(${nodeId},'name',this.value,{commit:true})" /></div>
+            data-action="df.node-field" data-field="name" /></div>
         </div>
         <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
           <div><label class="df-config-label">Role</label>
-            <select class="model-select" style="font-size:0.66rem;padding:3px 6px;width:100%" onchange="dfUpdateNodeData(${nodeId},'role',this.value)">
+            <select class="model-select" style="font-size:0.66rem;padding:3px 6px;width:100%" data-action="df.node-set" data-field="role">
               ${Object.keys(dfRoleColors).map(r=>`<option value="${r}"${data.role===r?' selected':''}>${r}</option>`).join('')}
             </select>
           </div>
           <div><label class="df-config-label">Model</label>
-            <select class="model-select" style="font-size:0.66rem;padding:3px 6px;width:100%" onchange="dfUpdateNodeData(${nodeId},'model',this.value)"
+            <select class="model-select" style="font-size:0.66rem;padding:3px 6px;width:100%" data-action="df.node-set" data-field="model"
                     title="Pin a specific model. Leave on '(role-based)' to let the resolver pick the best match for the role.">
               <option value=""${!data.model?' selected':''}>(role-based)</option>
               ${(window._chatModels || []).map(m=>`<option value="${esc(m)}"${data.model===m?' selected':''}>${esc(m)}</option>`).join('')}
@@ -12826,8 +12851,7 @@ function dfRenderConfigPanel(nodeId) {
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Prompt</div>
         <textarea class="chat-input" style="min-height:80px;font-size:0.66rem;resize:vertical"
-          oninput="dfUpdateNodeData(${nodeId},'system_prompt',this.value,{live:true})"
-          onchange="dfUpdateNodeData(${nodeId},'system_prompt',this.value,{commit:true})">${esc(data.system_prompt)}</textarea>
+          data-action="df.node-field" data-field="system_prompt">${esc(data.system_prompt)}</textarea>
       </div>
       ${data.is_decision ? `
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
@@ -12838,8 +12862,7 @@ function dfRenderConfigPanel(nodeId) {
               <span style="font-size:0.5rem;color:var(--text-muted);width:18px;text-align:right">${i + 1}</span>
               <input type="text" class="chat-input" style="font-size:0.66rem;padding:3px 8px;flex:1"
                 value="${esc(label)}"
-                oninput="dfUpdateDecisionBranch(${nodeId},${i},this.value,{live:true})"
-                onchange="dfUpdateDecisionBranch(${nodeId},${i},this.value,{commit:true})" />
+                data-action="df.branch" data-idx="${i}" />
             </div>`).join('')}
         </div>
         <div style="font-size:0.5rem;color:var(--text-muted);margin-top:6px;letter-spacing:0.04em">
@@ -12848,16 +12871,16 @@ function dfRenderConfigPanel(nodeId) {
       </div>` : ''}
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">${data.is_decision ? 'Output Format' : 'Outputs'}</div>
-        <div id="df-outputs-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${data.outputs.map((o,i)=>`<span class="df-tag">${esc(o)}<button type="button" class="btn-unstyled df-tag-remove" aria-label="Remove output ${esc(o)}" onclick="dfRemoveOutput(${nodeId},${i})">✕</button></span>`).join('')}</div>
-        <div style="display:flex;gap:4px"><input type="text" id="df-new-output-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="output_key" onkeydown="if(event.key==='Enter'){dfAddOutput(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddOutput(${nodeId})">Add</button></div>
-        <div style="margin-top:6px"><label class="df-config-label">Output format</label><select class="model-select" style="font-size:0.64rem;padding:2px 4px" onchange="dfUpdateNodeData(${nodeId},'output_format',this.value)">${fmtOptions}</select></div>
+        <div id="df-outputs-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${data.outputs.map((o,i)=>`<span class="df-tag">${esc(o)}<button type="button" class="btn-unstyled df-tag-remove" aria-label="Remove output ${esc(o)}" data-action="df.output-remove" data-idx="${i}">✕</button></span>`).join('')}</div>
+        <div style="display:flex;gap:4px"><input type="text" id="df-new-output-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="output_key" data-action="df.output-add" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" data-action="df.output-add">Add</button></div>
+        <div style="margin-top:6px"><label class="df-config-label">Output format</label><select class="model-select" style="font-size:0.64rem;padding:2px 4px" data-action="df.node-set" data-field="output_format">${fmtOptions}</select></div>
       </div>
       <div style="padding:8px 0">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Quality Gates</div>
         <div id="df-gates-${nodeId}">${gatesHtml}</div>
-        <button class="action-btn" style="font-size:0.56rem;padding:2px 8px;margin-top:4px" onclick="dfAddGate(${nodeId})">+ Gate</button>
+        <button class="action-btn" style="font-size:0.56rem;padding:2px 8px;margin-top:4px" data-action="df.gate-add">+ Gate</button>
         <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
-          <button class="action-btn" style="font-size:0.56rem;padding:2px 10px;color:var(--red);border-color:var(--red)" onclick="dfDeleteNode(${nodeId})">Delete Node</button>
+          <button class="action-btn" style="font-size:0.56rem;padding:2px 10px;color:var(--red);border-color:var(--red)" data-action="df.node-delete">Delete Node</button>
         </div>
       </div>
     </div>`;
@@ -13083,6 +13106,44 @@ function dfDeleteNode(nodeId) {
   if (!dfEditor) return;
   dfEditor.removeNodeId('node-' + nodeId);
 }
+
+// Delegated actions for the step-config dock/popup (dfRenderConfigPanel).
+// The panel root carries data-node-id; per-control data-field/data-idx args.
+// input → {live:true} (debounced repaint), change → {commit:true} (panel
+// re-render); df.node-set selects pass no opts (immediate, no re-render),
+// matching the original inline handlers exactly.
+(function () {
+  const nodeIdOf = el => {
+    const root = el.closest('[data-node-id]');
+    return root ? Number(root.dataset.nodeId) : NaN;
+  };
+  const fieldOpts = e => e.type === 'input' ? { live: true } : { commit: true };
+  const nodeField = (el, e) => dfUpdateNodeData(nodeIdOf(el), el.dataset.field, el.value, fieldOpts(e));
+  const branch    = (el, e) => dfUpdateDecisionBranch(nodeIdOf(el), Number(el.dataset.idx), el.value, fieldOpts(e));
+  Actions.input({ 'df.node-field': nodeField, 'df.branch': branch });
+  Actions.change({
+    'df.node-field': nodeField,
+    'df.branch': branch,
+    'df.node-set':    el => dfUpdateNodeData(nodeIdOf(el), el.dataset.field, el.value),
+    'df.gate-update': el => dfUpdateGate(nodeIdOf(el), Number(el.dataset.idx), el.dataset.field, el.value)
+  });
+  Actions.click({
+    'df.gate-add':      el => dfAddGate(nodeIdOf(el)),
+    'df.gate-remove':   el => dfRemoveGate(nodeIdOf(el), Number(el.dataset.idx)),
+    'df.output-remove': el => dfRemoveOutput(nodeIdOf(el), Number(el.dataset.idx)),
+    // The "output_key" text input shares this action for Enter-to-add;
+    // ignore plain clicks on it (focusing the input must not add).
+    'df.output-add':    el => { if (el.tagName !== 'INPUT') dfAddOutput(nodeIdOf(el)); }
+  });
+  Actions.on('keydown', {
+    'df.output-add': (el, e) => {
+      if (el.tagName !== 'INPUT' || e.key !== 'Enter') return;
+      e.preventDefault();
+      dfAddOutput(nodeIdOf(el));
+    }
+  });
+  Actions.click({ 'df.node-delete': el => dfDeleteNode(nodeIdOf(el)) });
+})();
 
 function dfOnConnectionCreated(conn) {
   const fromId = parseInt(conn.output_id), toId = parseInt(conn.input_id);
@@ -13562,7 +13623,7 @@ async function loadAgentsTab() {
     const tone     = (window.AgentIcons ? AgentIcons.tone(persona) : 'accent');
     const subtitle = (a.description || '').split('\n')[0].trim().slice(0, 90);
     return `
-    <div class="agent-tile" role="button" tabindex="0" aria-label="Open chat with ${esc(a.name)}" onclick="openAgentChat('${esc(a.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAgentChat('${esc(a.id)}')}">
+    <div class="agent-tile" role="button" tabindex="0" aria-label="Open chat with ${esc(a.name)}" data-action="agents.chat" data-agent-id="${esc(a.id)}">
       <div class="agent-tile-head">
         <span class="agent-tile-icon tone-${esc(tone)}" data-persona="${esc(persona)}">${iconSvg}</span>
         <div class="agent-tile-titleblock">
@@ -13570,9 +13631,9 @@ async function loadAgentsTab() {
           <div class="agent-tile-subtitle">${esc(subtitle || (a.role ? 'Role · ' + a.role : ''))}</div>
         </div>
         <div class="agent-tile-actions">
-          <button onclick="event.stopPropagation();showEditAgentModal('${esc(a.id)}')"
+          <button data-action="agents.edit"
                   class="agent-tile-action" title="Edit agent">✎</button>
-          <button onclick="event.stopPropagation();deleteAgent('${esc(a.id)}')"
+          <button data-action="agents.delete"
                   class="agent-tile-action" title="Delete agent">✕</button>
         </div>
       </div>
@@ -13584,7 +13645,7 @@ async function loadAgentsTab() {
       ${a.starters && a.starters.length ? `
         <div class="agent-tile-starters">
           ${a.starters.slice(0,2).map(s=>`
-            <button onclick="event.stopPropagation();openAgentChatWithStarter('${esc(a.id)}','${esc(s)}')"
+            <button data-action="agents.starter" data-starter="${esc(s)}"
                     class="agent-tile-starter">
               <span class="starter-arrow">↗</span> ${esc(s)}
             </button>`).join('')}
@@ -13631,6 +13692,32 @@ function openAgentChatWithStarter(agentId, starter) {
     sendAgentMessage();
   });
 }
+
+// Delegated actions shared by BOTH agent-grid render paths (the Agents tab
+// grid and the CatalogPage preview copy). The tile carries data-agent-id;
+// inner edit/delete/starter buttons resolve it via closest(). Innermost
+// data-action wins in the dispatcher, so the inner buttons no longer need
+// the stopPropagation guards (the tile's agents.chat never fires for them).
+(function () {
+  const agentIdOf = el => {
+    const tile = el.closest('[data-agent-id]');
+    return tile ? tile.dataset.agentId : '';
+  };
+  Actions.click({
+    'agents.chat':    el => openAgentChat(agentIdOf(el)),
+    'agents.edit':    el => showEditAgentModal(agentIdOf(el)),
+    'agents.delete':  el => deleteAgent(agentIdOf(el)),
+    'agents.starter': el => openAgentChatWithStarter(agentIdOf(el), el.dataset.starter)
+  });
+  // Tile is a role=button div — keep Enter/Space operability.
+  Actions.on('keydown', {
+    'agents.chat': (el, e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      openAgentChat(agentIdOf(el));
+    }
+  });
+})();
 
 function closeAgentChat() {
   _activeAgentId = null;
@@ -15201,9 +15288,9 @@ window.ComposerWorkstream = (function () {
         <strong>${esc(last.workflow_id || '?')}</strong>
         <span class="ws-run-meta">run_id ${esc((last.run_id || '').slice(0, 12))} · status ${esc(last.status || '?')}</span>
         <span style="flex:1"></span>
-        <button type="button" class="ws-run-action" onclick="ComposerWorkstream.clearRun()"
+        <button type="button" class="ws-run-action" data-action="ws.clear-run"
                 title="Clear this run output">Clear</button>
-        <button type="button" class="ws-run-action ghost" onclick="ComposerWorkstream.toggleRunCollapse()"
+        <button type="button" class="ws-run-action ghost" data-action="ws.run-collapse"
                 id="ws-run-collapse-btn" title="Minimize / expand the run output">▾</button>
       </div>
       <div class="ws-run-body-collapsible" id="ws-run-body-collapsible">
@@ -15289,9 +15376,9 @@ window.ComposerWorkstream = (function () {
           <strong>${esc(runId.slice(0, 12))}…</strong>
           <span class="ws-run-meta">starting…</span>
           <span style="flex:1"></span>
-          <button type="button" class="ws-run-action" onclick="ComposerWorkstream.clearRun()"
+          <button type="button" class="ws-run-action" data-action="ws.clear-run"
                   title="Cancel + clear this run output">Cancel</button>
-          <button type="button" class="ws-run-action ghost" onclick="ComposerWorkstream.toggleRunCollapse()"
+          <button type="button" class="ws-run-action ghost" data-action="ws.run-collapse"
                   id="ws-run-collapse-btn" title="Minimize / expand the run output">▾</button>
         </div>
         <div class="ws-run-body-collapsible" id="ws-run-body-collapsible">
@@ -15454,6 +15541,13 @@ window.ComposerWorkstream = (function () {
   };
 })();
 
+// Delegated actions for the workstream Active Run pane — its head row is
+// re-rendered on every poll tick during live runs.
+Actions.click({
+  'ws.clear-run':    () => ComposerWorkstream.clearRun(),
+  'ws.run-collapse': () => ComposerWorkstream.toggleRunCollapse()
+});
+
 // ── Chat Rating ───────────────────────────────────────────────────────────
 // Thumbs up/down + optional note on every assistant message. Each rating
 // is appended to a localStorage log keyed by message id, AND posted to
@@ -15484,15 +15578,15 @@ window.ChatRating = (function () {
     return (
       '<div class="msg-actions" data-msg-id="' + msgId + '" data-msg-meta="' + metaAttr + '">' +
         '<button type="button" class="msg-rating-btn up" title="Rate this response good"' +
-                ' onclick="ChatRating.rate(\'' + msgId + '\', \'up\', this)">' +
+                ' data-action="chat.rate" data-dir="up">' +
           '<span aria-hidden="true">▲</span>' +
         '</button>' +
         '<button type="button" class="msg-rating-btn down" title="Rate this response bad"' +
-                ' onclick="ChatRating.rate(\'' + msgId + '\', \'down\', this)">' +
+                ' data-action="chat.rate" data-dir="down">' +
           '<span aria-hidden="true">▼</span>' +
         '</button>' +
         '<button type="button" class="msg-rating-btn copy" title="Copy message text"' +
-                ' onclick="ChatRating.copy(\'' + msgId + '\', this)">copy</button>' +
+                ' data-action="chat.copy">copy</button>' +
         '<span class="msg-rating-status" data-status></span>' +
       '</div>'
     );
@@ -15582,6 +15676,20 @@ window.ChatRating = (function () {
   }
 
   return { nextId, toolbarHtml, rate, copy, ratingsFor, rehydrate };
+})();
+
+// Delegated actions for the per-message rating toolbar — appended with
+// every chat message, so the markup stays handler-free. The msg id lives
+// on the .msg-actions container (data-msg-id).
+(function () {
+  const msgIdOf = el => {
+    const host = el.closest('[data-msg-id]');
+    return host ? host.dataset.msgId : '';
+  };
+  Actions.click({
+    'chat.rate': el => ChatRating.rate(msgIdOf(el), el.dataset.dir, el),
+    'chat.copy': el => ChatRating.copy(msgIdOf(el), el)
+  });
 })();
 
 // ── Skeleton helper ───────────────────────────────────────────────────────
@@ -17081,10 +17189,8 @@ function renderAgentsWorkbench(agents) {
     // double-spawn on rapid clicks.
     return `<div class="workbench-item agent-card" draggable="true" role="button" tabindex="0"
        aria-label="Add agent ${esc(a.name || a.id)} to canvas"
-       ondragstart="event.dataTransfer.setData('application/df-agent', '${esc(a.id)}')"
-       onclick="composerAddAgentAtCenter('${esc(a.id)}')"
-       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();composerAddAgentAtCenter('${esc(a.id)}')}"
-       ondblclick="event.preventDefault();event.stopPropagation()"
+       data-action="bench.add-agent" data-agent-id="${esc(a.id)}"
+       data-drag-mime="application/df-agent" data-drag-value="${esc(a.id)}"
        title="Click to add (or drag onto the canvas)">
       <div class="agent-card-head">
         <span class="agent-card-icon tone-${esc(tone)}" data-persona="${esc(persona)}">${icon}</span>
@@ -17125,7 +17231,7 @@ function _capCard(opts) {
   const iconSvg = (window.AgentIcons ? AgentIcons.svg(opts.iconKey) : '');
   const tone    = (window.AgentIcons ? AgentIcons.tone(opts.iconKey) : 'accent');
   const draggable = opts.drag
-    ? `draggable="true" ondragstart="event.dataTransfer.setData('${esc(opts.drag.mime)}', '${esc(opts.drag.value)}')"`
+    ? `draggable="true" data-action="bench.drag" data-drag-mime="${esc(opts.drag.mime)}" data-drag-value="${esc(opts.drag.value)}"`
     : '';
   const pillCls = opts.pillKind ? `workbench-item-pill ${opts.pillKind}` : 'workbench-item-pill';
   return `<div class="workbench-item agent-card cap-card cap-${esc(opts.iconKey)}" ${draggable} ${opts.title ? `title="${esc(opts.titleAttr || opts.title)}"` : ''}>
@@ -17180,7 +17286,7 @@ function renderPluginsWorkbench(plugins) {
     const toolCount = (p.tools || []).length;
     const toolRows = (p.tools || []).map(t => `
       <div class="cap-tool-row" draggable="true"
-           ondragstart="event.dataTransfer.setData('application/df-tool', '${esc(p.id)}__${esc(t.id)}')"
+           data-action="bench.drag" data-drag-mime="application/df-tool" data-drag-value="${esc(p.id)}__${esc(t.id)}"
            title="Drag onto a step to attach this tool">
         <span class="cap-tool-icon">${window.AgentIcons ? AgentIcons.svg('tool') : ''}</span>
         <code class="cap-tool-id">${esc(p.id)}__${esc(t.id)}</code>
@@ -17218,7 +17324,7 @@ function renderMcpsWorkbench(servers) {
           <div class="cap-card-tools-head">tools · <span style="color:var(--text)">${toolCount}</span></div>
           ${(s.tools || []).map(t => `
             <div class="cap-tool-row" draggable="true"
-                 ondragstart="event.dataTransfer.setData('application/df-mcp', '${esc(s.id)}::${esc(t.name)}')"
+                 data-action="bench.drag" data-drag-mime="application/df-mcp" data-drag-value="${esc(s.id)}::${esc(t.name)}"
                  title="Drag onto a step to invoke this MCP tool">
               <span class="cap-tool-icon">${window.AgentIcons ? AgentIcons.svg('tool') : ''}</span>
               <code class="cap-tool-id">mcp__${esc(s.id)}__${esc(t.name)}</code>
@@ -17234,6 +17340,33 @@ function renderMcpsWorkbench(servers) {
     });
   }).join('');
 }
+
+// Delegated actions for the composer benches (agents / skills / plugins /
+// MCP rails). One generic dragstart reads data-drag-mime/data-drag-value;
+// agent cards also add-on-click (with keyboard parity for the role=button
+// div) and swallow dblclick so a rapid double-click can't mis-select text.
+(function () {
+  const benchDrag = (el, e) => {
+    e.dataTransfer.setData(el.dataset.dragMime, el.dataset.dragValue);
+  };
+  Actions.on('dragstart', {
+    'bench.drag': benchDrag,
+    'bench.add-agent': benchDrag  // agent cards: click adds, drag still works
+  });
+  Actions.click({
+    'bench.add-agent': el => composerAddAgentAtCenter(el.dataset.agentId)
+  });
+  Actions.on('keydown', {
+    'bench.add-agent': (el, e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      composerAddAgentAtCenter(el.dataset.agentId);
+    }
+  });
+  Actions.on('dblclick', {
+    'bench.add-agent': (el, e) => { e.preventDefault(); }
+  });
+})();
 
 // ── Skills Discover ──────────────────────────────────────────────────────
 // Skills Lab counterpart to the Models tab's HuggingFace discover. Backed
@@ -18611,7 +18744,7 @@ const RunsTab = (function () {
     } catch (e) {
       box.innerHTML =
         `<div class="model-empty" style="color:var(--red)">Failed to load runs: ${esc(e.message)}.
-          <br><br><button class="action-btn xs" onclick="RunsTab.load()">Retry</button></div>`;
+          <br><br><button class="action-btn xs" data-action="runs.load">Retry</button></div>`;
     }
   }
 
@@ -18647,7 +18780,7 @@ const RunsTab = (function () {
       const sel = r.run_id === _selectedId ? ' selected' : '';
       return `<button type="button" class="btn-unstyled runs-tab-row${sel}" style="width:100%" data-run-id="${esc(r.run_id)}"
                    aria-pressed="${r.run_id === _selectedId}"
-                   onclick="RunsTab.select('${esc(r.run_id)}')">
+                   data-action="runs.select">
         <span class="runs-tab-row-title">${esc(r.workflow_id || '?')}</span>
         <span class="runs-tab-row-status ${esc(s)}">${esc(s)}</span>
         <span class="runs-tab-row-meta">${esc((r.run_id || '').slice(0, 12))} · ${esc(ts)}</span>
@@ -19060,7 +19193,7 @@ const RunsTab = (function () {
         progress for over 10 minutes. The engine likely restarted mid-run,
         leaving the run status frozen as <code>${esc(run.status || '')}</code>.
       </span>
-      <button class="action-btn xs" onclick="RunsTab.markFailed()">Mark Failed</button>`;
+      <button class="action-btn xs" data-action="runs.mark-failed">Mark Failed</button>`;
     stepsBody.prepend(banner);
   }
 
@@ -19142,10 +19275,10 @@ const RunsTab = (function () {
       <div class="agb-actions">
         <button class="action-btn xs"
                 style="color:var(--green);border-color:var(--green)"
-                onclick="RunsTab.resolveGate('${esc(run.run_id)}','${esc(gate.gate_id)}','approve')">Approve</button>
+                data-action="runs.gate" data-run-id="${esc(run.run_id)}" data-gate-id="${esc(gate.gate_id)}" data-decision="approve">Approve</button>
         <button class="action-btn xs"
                 style="color:var(--red);border-color:var(--red)"
-                onclick="RunsTab.resolveGate('${esc(run.run_id)}','${esc(gate.gate_id)}','reject')">Reject</button>
+                data-action="runs.gate" data-run-id="${esc(run.run_id)}" data-gate-id="${esc(gate.gate_id)}" data-decision="reject">Reject</button>
       </div>`;
     body.prepend(el);
   }
@@ -19233,12 +19366,11 @@ const RunsTab = (function () {
       return `<div class="ws-run-step ws-run-step-${cls} ${isRoot ? 'is-root-fail' : ''} ${isStarved ? 'is-starved' : ''}"
                    data-step-id="${esc(s.step_id)}">
         <div class="ws-run-step-head" role="button" tabindex="0"
-             onclick="RunsTab.openStepDetail('${esc(s.step_id)}')"
-             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();RunsTab.openStepDetail('${esc(s.step_id)}')}"
+             data-action="runs.step-detail"
              title="Open full step detail">
           <button type="button" class="btn-unstyled run-step-caret" title="Quick inline peek"
                 aria-label="Toggle inline details for step ${esc(s.step_id)}" aria-expanded="${isExpanded}"
-                onclick="event.stopPropagation();RunsTab.toggleStepExpand('${esc(s.step_id)}')">${isExpanded ? '▾' : '▸'}</button>
+                data-action="runs.step-expand">${isExpanded ? '▾' : '▸'}</button>
           <span class="ws-run-step-id">${esc(s.step_id)}</span>
           <span class="run-step-kind kind-${esc(s.kind || 'llm')}" title="step kind">${esc(s.kind || 'llm')}</span>
           <span class="ws-run-step-model">${esc(s.model_used || '—')}</span>
@@ -19281,7 +19413,7 @@ const RunsTab = (function () {
       return s.replace(/\s+/g, ' ').slice(0, 44) + (s.length > 44 ? '…' : '');
     };
     const anchorRow = (cls, glyph, label, kind, entries) => `
-      <button type="button" class="btn-unstyled ws-run-step ws-run-anchor-row ${cls}" style="width:100%" onclick="RunsTab.openAnchorDetail('${kind}')" title="Open the full ${kind} (actual values)">
+      <button type="button" class="btn-unstyled ws-run-step ws-run-anchor-row ${cls}" style="width:100%" data-action="runs.anchor-detail" data-kind="${kind}" title="Open the full ${kind} (actual values)">
         <span class="run-step-caret">${glyph}</span>
         <span class="ws-run-step-id">${label}</span>
         <span class="ws-anchor-count">${entries.length} field${entries.length === 1 ? '' : 's'}</span>
@@ -19320,7 +19452,7 @@ const RunsTab = (function () {
       const open = _expandedOutputs.has(s.step_id + '::' + key);
       const preview = text.replace(/\s+/g, ' ').slice(0, 60) + (text.length > 60 ? '…' : '');
       return `<div class="run-step-output${open ? ' open' : ''}">
-        <button type="button" class="btn-unstyled run-step-output-head" style="width:100%" aria-expanded="${open}" onclick="RunsTab.toggleStepOutput('${esc(s.step_id)}','${esc(key)}')">
+        <button type="button" class="btn-unstyled run-step-output-head" style="width:100%" aria-expanded="${open}" data-action="runs.output-toggle" data-step-id="${esc(s.step_id)}" data-key="${esc(key)}">
           <span class="run-step-caret">${open ? '▾' : '▸'}</span>
           <span class="ctx-field-k">${esc(label)}</span>
           ${open ? '' : `<span class="ctx-field-v">${esc(preview)}</span>`}
@@ -19367,7 +19499,7 @@ const RunsTab = (function () {
         : (Array.isArray(v) ? `${v.length} items` : (v === null ? '' : 'object'));
       const open = _expandedOutputs.has(stepId + '::' + k);
       return `<div class="run-step-output${open ? ' open' : ''}">
-        <button type="button" class="btn-unstyled run-step-output-head" style="width:100%" aria-expanded="${open}" onclick="RunsTab.toggleStepOutput('${esc(stepId)}','${esc(k)}')">
+        <button type="button" class="btn-unstyled run-step-output-head" style="width:100%" aria-expanded="${open}" data-action="runs.output-toggle" data-step-id="${esc(stepId)}" data-key="${esc(k)}">
           <span class="run-step-caret">${open ? '▾' : '▸'}</span>
           <span class="ctx-field-k">${esc(k)}</span>
           ${open ? '' : `<span class="ctx-field-v">${esc(String(preview))}</span>`}
@@ -19835,6 +19967,34 @@ const RunsTab = (function () {
     resolveGate };
 })();
 window.RunsTab = RunsTab;
+
+// Delegated actions for the RunsTab dynamic surfaces (run list, step strip,
+// gate bar, output disclosures) — these re-render on the 1.5s live poll, so
+// the markup carries data-action instead of inline handlers.
+(function () {
+  const stepIdOf = el => {
+    const row = el.closest('[data-step-id]');
+    return row ? row.dataset.stepId : '';
+  };
+  Actions.click({
+    'runs.load':        () => RunsTab.load(),
+    'runs.select':      el => RunsTab.select(el.dataset.runId),
+    'runs.mark-failed': () => RunsTab.markFailed(),
+    'runs.gate':        el => RunsTab.resolveGate(el.dataset.runId, el.dataset.gateId, el.dataset.decision),
+    'runs.step-detail': el => RunsTab.openStepDetail(stepIdOf(el)),
+    'runs.step-expand': el => RunsTab.toggleStepExpand(stepIdOf(el)),
+    'runs.anchor-detail': el => RunsTab.openAnchorDetail(el.dataset.kind),
+    'runs.output-toggle': el => RunsTab.toggleStepOutput(el.dataset.stepId, el.dataset.key)
+  });
+  // The step head is a role=button div — keep keyboard operability.
+  Actions.on('keydown', {
+    'runs.step-detail': (el, e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      RunsTab.openStepDetail(stepIdOf(el));
+    }
+  });
+})();
 
 // ── Workflow Memory panel ──────────────────────────────────────────────
 // Backs the Memory tab's "Workflow Memory" panel against the three durable
