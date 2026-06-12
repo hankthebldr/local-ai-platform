@@ -1,0 +1,36 @@
+<!-- @dsCard group="Colors" viewport="700x230" name="Semantic status — gradients & textures" subtitle="Each status as solid, gradient, soft glow, and hatched texture" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg); padding: 16px 20px; font-family: var(--font-mono); }
+  .head { display: grid; grid-template-columns: 86px repeat(4, 1fr); gap: 10px; margin-bottom: 8px; }
+  .head .h { font-size: 8px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); align-self: center; }
+  .head .h:first-child { color: transparent; }
+  .grid { display: grid; grid-template-columns: 86px repeat(4, 1fr); gap: 10px; align-items: center; margin-bottom: 9px; }
+  .name { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--text); letter-spacing: .03em; }
+  .name .d { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+  .cell { height: 34px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  .solid { background: var(--c); }
+  .grad { background: linear-gradient(120deg, var(--c), var(--c2)); }
+  .glow { background: var(--ghost); box-shadow: inset 0 0 16px var(--dim); border-color: var(--dim); }
+  .hatch { background-color: var(--ghost); background-image: repeating-linear-gradient(45deg, var(--dim) 0, var(--dim) 1.5px, transparent 1.5px, transparent 7px); border-color: var(--dim); }
+
+  .r-success { --c: var(--success); --c2: var(--teal-400); --dim: var(--success-dim); --ghost: var(--success-ghost); }
+  .r-warn    { --c: var(--warn); --c2: var(--ember-400); --dim: var(--warn-dim); --ghost: var(--warn-ghost); }
+  .r-danger  { --c: var(--danger); --c2: #B43A52; --dim: var(--danger-dim); --ghost: var(--danger-ghost); }
+  .r-info    { --c: var(--info); --c2: var(--teal-300); --dim: var(--info-dim); --ghost: var(--info-ghost); }
+</style>
+</head>
+<body>
+  <div class="head">
+    <span class="h">x</span><span class="h">Solid</span><span class="h">Gradient</span><span class="h">Soft glow</span><span class="h">Hatched</span>
+  </div>
+  <div class="grid r-success"><span class="name"><span class="d"></span>Success</span><div class="cell solid"></div><div class="cell grad"></div><div class="cell glow"></div><div class="cell hatch"></div></div>
+  <div class="grid r-info"><span class="name"><span class="d"></span>Running</span><div class="cell solid"></div><div class="cell grad"></div><div class="cell glow"></div><div class="cell hatch"></div></div>
+  <div class="grid r-warn"><span class="name"><span class="d"></span>Warn</span><div class="cell solid"></div><div class="cell grad"></div><div class="cell glow"></div><div class="cell hatch"></div></div>
+  <div class="grid r-danger"><span class="name"><span class="d"></span>Danger</span><div class="cell solid"></div><div class="cell grad"></div><div class="cell glow"></div><div class="cell hatch"></div></div>
+</body>
+</html>

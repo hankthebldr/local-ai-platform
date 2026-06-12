@@ -1,0 +1,55 @@
+<!-- @dsCard group="Colors" viewport="700x230" name="Teal — primary + light alt" subtitle="The teal signal scale, plus an unexpected light 'aurora' alt palette" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg); padding: 18px 20px; font-family: var(--font-mono); }
+  .lab { font-size: 8.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+  .lab::after { content: ""; flex: 1; height: 1px; background: var(--border-faint); }
+  .row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .sw { flex: 1; border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; }
+  .chip { height: 46px; }
+  .meta { padding: 5px 7px; background: var(--surface-card); }
+  .name { font-size: 9px; color: var(--text); letter-spacing: .03em; }
+  .hex { font-size: 8px; color: var(--text-muted); text-transform: uppercase; }
+  .primary { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* light alt row sits on its own warm-paper ground (Ubuntu light) */
+  .altwrap { background: #FAFAFA; border-radius: var(--radius-sm); padding: 10px 12px 12px; }
+  .altwrap .lab { color: #6E6A66; }
+  .altwrap .lab::after { background: #D6D2CE; }
+  .alt { display: flex; gap: 8px; }
+  .alt .sw { border-color: #DBD7D2; }
+  .alt .meta { background: #F3F1EE; }
+  .alt .name { color: #2B2926; }
+  .alt .hex { color: #6E6A66; }
+  .alt .primary-g { outline: 2px solid #E95420; outline-offset: 2px; }
+</style>
+</head>
+<body>
+  <div class="lab">Teal · primary signal scale</div>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--teal-700)"></div><div class="meta"><div class="name">700</div><div class="hex">#0E5A50</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--teal-600)"></div><div class="meta"><div class="name">600 deep</div><div class="hex">#128A78</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--teal-500)"></div><div class="meta"><div class="name">500</div><div class="hex">#18B89E</div></div></div>
+    <div class="sw primary"><div class="chip" style="background:var(--teal-400)"></div><div class="meta"><div class="name">400 accent</div><div class="hex">#2BD4B4</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--teal-300)"></div><div class="meta"><div class="name">300</div><div class="hex">#5DE9CE</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--teal-200)"></div><div class="meta"><div class="name">200</div><div class="hex">#93F2DE</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--teal-100)"></div><div class="meta"><div class="name">100</div><div class="hex">#C5F8ED</div></div></div>
+  </div>
+
+  <div class="altwrap">
+    <div class="lab">Ubuntu light · grey-primary — warm greys lead, Ubuntu orange + aubergine accent</div>
+    <div class="alt">
+      <div class="sw"><div class="chip" style="background:#F2F0ED"></div><div class="meta"><div class="name">Porcelain</div><div class="hex">#F2F0ED</div></div></div>
+      <div class="sw"><div class="chip" style="background:#CFC9C2"></div><div class="meta"><div class="name">Light Grey</div><div class="hex">#CFC9C2</div></div></div>
+      <div class="sw primary-g"><div class="chip" style="background:#AEA79F"></div><div class="meta"><div class="name">Warm Grey ★</div><div class="hex">#AEA79F</div></div></div>
+      <div class="sw"><div class="chip" style="background:#6E6A66"></div><div class="meta"><div class="name">Slate</div><div class="hex">#6E6A66</div></div></div>
+      <div class="sw"><div class="chip" style="background:#3B3835"></div><div class="meta"><div class="name">Cool Grey</div><div class="hex">#3B3835</div></div></div>
+      <div class="sw"><div class="chip" style="background:#E95420"></div><div class="meta"><div class="name">Ubuntu Orange</div><div class="hex">#E95420</div></div></div>
+      <div class="sw"><div class="chip" style="background:#77216F"></div><div class="meta"><div class="name">Aubergine</div><div class="hex">#77216F</div></div></div>
+    </div>
+  </div>
+</body>
+</html>

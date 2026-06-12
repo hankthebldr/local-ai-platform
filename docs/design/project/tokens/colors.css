@@ -1,0 +1,198 @@
+/* ============================================================================
+   ENCLAVE · COLOR TOKENS
+   ----------------------------------------------------------------------------
+   A warm-charcoal, workflow-first palette. Teal leads (the living signal),
+   deep emerald gives structure and success, a soft ember adds Ubuntu-grub
+   warmth used sparingly. Neutrals carry a faint green-grey undertone so the
+   canvas reads warm and approachable rather than cold blue slate.
+
+   Two layers:
+     1. Raw scales  — fixed ramps (--ink-*, --teal-*, --emerald-*, …)
+     2. Semantic    — role aliases the components actually consume
+                      (--bg, --surface-card, --text-body, --accent, …)
+   Recolor the brand by editing the scales; every component follows.
+   ========================================================================== */
+
+:root {
+  /* ── Neutral ramp — warm charcoal, green-grey undertone ─────────────── */
+  --ink-990: #090B0A;   /* outermost void */
+  --ink-950: #0B0E0D;   /* app canvas / body */
+  --ink-900: #101413;   /* primary surface */
+  --ink-850: #14191700; /* (reserved) */
+  --ink-840: #141A18;   /* sunken well */
+  --ink-800: #171C1A;   /* elevated card */
+  --ink-750: #1B2220;   /* raised card / hover */
+  --ink-700: #1F2522;   /* most elevated — modals, popovers */
+  --ink-650: #242C29;   /* hairline on elevated */
+  --ink-600: #28302D;   /* default border */
+  --ink-500: #36413B;   /* strong border */
+  --ink-450: #44514A;   /* faint text / disabled rule */
+  --ink-400: #56635B;   /* faint text */
+  --ink-300: #6B776F;   /* muted text */
+  --ink-200: #9CA8A1;   /* dim text */
+  --ink-150: #BFC8C2;   /* secondary text */
+  --ink-100: #D7DED9;   /* high text */
+  --ink-50:  #ECEFEC;   /* primary text */
+  --ink-0:   #F6F8F6;   /* pure-ish white, headings on dark */
+
+  /* ── Teal — primary accent (the signal that something is live) ──────── */
+  --teal-800: #093E37;
+  --teal-700: #0E5A50;
+  --teal-600: #128A78;
+  --teal-500: #18B89E;
+  --teal-400: #2BD4B4;  /* PRIMARY accent */
+  --teal-300: #5DE9CE;  /* hover / focus emphasis */
+  --teal-200: #93F2DE;
+  --teal-100: #C5F8ED;
+
+  /* ── Emerald — deep secondary, structure + success ─────────────────── */
+  --emerald-800: #073B2A;
+  --emerald-700: #0A573E;
+  --emerald-600: #0E7351;
+  --emerald-500: #149468;  /* deep emerald — secondary CTA / structure */
+  --emerald-400: #1FB983;  /* success */
+  --emerald-300: #46D49E;
+  --emerald-200: #84E7C0;
+
+  /* ── Ember — Ubuntu-grub warmth, used sparingly ─────────────────────── */
+  --ember-600: #B45F2C;
+  --ember-500: #CE7438;
+  --ember-400: #E08A4C;  /* warm highlight / brand co-mark */
+  --ember-300: #EDA871;
+  --ember-200: #F4C7A0;
+
+  /* ── Status hues ───────────────────────────────────────────────────── */
+  --amber-400: #E0A33C;  /* warning */
+  --amber-300: #EDBE6B;
+  --coral-500: #D8584B;
+  --coral-400: #E5685A;  /* danger (warm, not harsh red) */
+  --coral-300: #EF8C81;
+  --sky-400:   #57C4D2;  /* info (soft cyan-teal) */
+  --sky-300:   #8AD8E2;
+
+  /* ════════════════════════════════════════════════════════════════════
+     SEMANTIC ALIASES — what components reference
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* Surfaces */
+  --bg-deep:    var(--ink-950);
+  --bg:         var(--ink-900);
+  --bg-sunken:  var(--ink-840);
+  --surface:        var(--ink-800);
+  --surface-card:   var(--ink-800);
+  --surface-raised: var(--ink-750);
+  --surface-overlay: var(--ink-700);
+  --surface-panel:  rgba(23, 28, 26, 0.86);   /* translucent panel w/ blur */
+  --surface-inset:  rgba(9, 11, 10, 0.45);
+
+  /* Borders + rules */
+  --border:        var(--ink-600);
+  --border-strong: var(--ink-500);
+  --border-faint:  var(--ink-650);
+  --border-glow:   rgba(43, 212, 180, 0.22);   /* teal-tinted accent rule */
+
+  /* Primary accent (teal) */
+  --accent:        var(--teal-400);
+  --accent-bright: var(--teal-300);
+  --accent-deep:   var(--teal-600);
+  --accent-dim:    rgba(43, 212, 180, 0.42);
+  --accent-ghost:  rgba(43, 212, 180, 0.12);
+  --accent-trace:  rgba(43, 212, 180, 0.06);
+  --on-accent:     #06201B;                     /* text on a teal fill */
+
+  /* Secondary accent (emerald) */
+  --accent-2:        var(--emerald-500);
+  --accent-2-bright: var(--emerald-400);
+  --accent-2-dim:    rgba(20, 148, 104, 0.42);
+  --accent-2-ghost:  rgba(20, 148, 104, 0.12);
+  --on-accent-2:     #03160F;
+
+  /* Warm accent (ember) */
+  --accent-warm:       var(--ember-400);
+  --accent-warm-dim:   rgba(224, 138, 76, 0.40);
+  --accent-warm-ghost: rgba(224, 138, 76, 0.12);
+
+  /* Text hierarchy */
+  --text:        var(--ink-50);
+  --text-strong: var(--ink-0);
+  --text-dim:    var(--ink-200);
+  --text-muted:  var(--ink-300);
+  --text-faint:  var(--ink-400);
+  --text-accent: var(--teal-300);
+
+  /* Semantic status */
+  --success:      var(--emerald-400);
+  --success-dim:  rgba(31, 185, 131, 0.40);
+  --success-ghost: rgba(31, 185, 131, 0.12);
+  --warn:         var(--amber-400);
+  --warn-dim:     rgba(224, 163, 60, 0.40);
+  --warn-ghost:   rgba(224, 163, 60, 0.12);
+  --danger:       var(--coral-400);
+  --danger-dim:   rgba(229, 104, 90, 0.40);
+  --danger-ghost: rgba(229, 104, 90, 0.12);
+  --info:         var(--sky-400);
+  --info-dim:     rgba(87, 196, 210, 0.40);
+  --info-ghost:   rgba(87, 196, 210, 0.12);
+
+  /* Glows — soft, small halos (not ambient bloom) */
+  --glow-accent: 0 0 0 1px rgba(43,212,180,0.30), 0 0 14px rgba(43,212,180,0.22);
+  --glow-emerald: 0 0 0 1px rgba(31,185,131,0.28), 0 0 14px rgba(31,185,131,0.18);
+  --glow-warm:   0 0 0 1px rgba(224,138,76,0.28), 0 0 14px rgba(224,138,76,0.18);
+  --glow-danger: 0 0 0 1px rgba(229,104,90,0.28), 0 0 14px rgba(229,104,90,0.18);
+
+  /* Workflow node category tints — for the composer canvas */
+  --node-reasoning: var(--teal-400);
+  --node-coding:    var(--sky-400);
+  --node-fast:      var(--amber-400);
+  --node-general:   var(--emerald-400);
+  --node-uncensored: var(--ember-400);
+
+  /* Data-viz / graph link kinds */
+  --viz-1: var(--teal-400);
+  --viz-2: var(--emerald-400);
+  --viz-3: var(--sky-400);
+  --viz-4: var(--ember-400);
+  --viz-5: var(--amber-400);
+}
+
+/* ── Optional light theme — dark is the hero; light is a courtesy scope ── */
+:root[data-theme="light"] {
+  --bg-deep:    #EBEEEB;
+  --bg:         #F6F8F6;
+  --bg-sunken:  #EEF1EE;
+  --surface:        #FFFFFF;
+  --surface-card:   #FFFFFF;
+  --surface-raised: #FFFFFF;
+  --surface-overlay: #FFFFFF;
+  --surface-panel:  rgba(255, 255, 255, 0.92);
+  --surface-inset:  rgba(16, 20, 19, 0.04);
+
+  --border:        #DDE4E0;
+  --border-strong: #C5CEC8;
+  --border-faint:  #E8EDEA;
+  --border-glow:   rgba(18, 138, 120, 0.20);
+
+  --accent:        #0E9C82;
+  --accent-bright: #12B89A;
+  --accent-deep:   #0B7A66;
+  --accent-dim:    rgba(14, 156, 130, 0.38);
+  --accent-ghost:  rgba(14, 156, 130, 0.10);
+  --accent-trace:  rgba(14, 156, 130, 0.05);
+  --on-accent:     #FFFFFF;
+
+  --accent-2:        #0E7351;
+  --accent-2-bright: #149468;
+  --on-accent-2:     #FFFFFF;
+
+  --text:        #121716;
+  --text-strong: #060A09;
+  --text-dim:    #45504A;
+  --text-muted:  #66726B;
+  --text-faint:  #9098929e;
+  --text-accent: #0B7A66;
+
+  --success: #0E9468;
+  --warn:    #B7791F;
+  --danger:  #C2483B;
+  --info:    #2C8A98;
+}

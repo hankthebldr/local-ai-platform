@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console v2 — Wireframe Storyboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="wireframe.css">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ════════ HEADER ════════ -->
+  <header data-screen-label="Storyboard header" class="col" style="gap:14px; max-width:1020px;">
+    <div class="mono">Enclave · console v2 exploration · wireframe pass · for review</div>
+    <h1>The chat-led console</h1>
+    <p style="font-size:17px; max-width:860px;">The v1 kit made the Composer the home screen — canvas first, chat docked underneath. This pass inverts it: <strong>the conversation is the home, and everything else is a graduation of it.</strong> A chat grows structure, converts into a workflow, and the canvas (kept, with its palette) becomes the place you refine what the chat already proved.</p>
+    <div class="row" style="gap:24px; align-items:flex-start; flex-wrap:wrap;">
+      <div class="frame" style="padding:14px 18px; max-width:450px;">
+        <div class="mono" style="margin-bottom:6px;">What this corrects from v1</div>
+        <ul style="margin:0; padding-left:18px; line-height:1.6;">
+          <li>Home was the canvas — intimidating empty state, no on-ramp.</li>
+          <li>Chat was a dock — an accessory, not the way in.</li>
+          <li>No path from "talking to a model" to "owning a workflow".</li>
+          <li>Creating models / agents / skills / plugins each felt different.</li>
+        </ul>
+      </div>
+      <div style="background:var(--accbg); border:1.5px solid var(--acc); border-radius:6px 10px 7px 12px / 10px 6px 12px 7px; padding:14px 18px; max-width:450px;">
+        <div class="mono" style="color:var(--accink); margin-bottom:6px;">My recommendation</div>
+        <p style="line-height:1.55;"><strong>Direction C — "one thread, two modes."</strong> Chat home for seeding and shaping; an explicit <em>Convert</em> scaffolds a DAG and opens the existing Composer as a takeover, with the same thread docked as the test surface. Drill-downs use one <em>peek → push</em> card; every wizard verifies the same way — you talk to the thing.</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- ════════ 1 · THE BUILD LADDER ════════ -->
+  <section data-screen-label="1 The build ladder" class="sec">
+    <div class="sechead"><span class="num">1</span><h2>The build ladder — how a user matures on the platform</h2></div>
+    <div class="frame" style="padding:24px 26px;">
+      <div class="row" style="gap:0; align-items:stretch;">
+        <div class="col grow" style="padding:13px; border:1.2px solid var(--line); border-radius:4px;">
+          <div class="mono">Rung 1</div>
+          <div class="script" style="font-size:26px;">Seed</div>
+          <div style="font-size:13.5px;">Start a chat. Pick a role, the model is auto-fit, attach context — right in the composer.</div>
+          <div class="row" style="margin-top:auto;"><span class="mono">surface</span><span class="chip">chat home</span></div>
+        </div>
+        <div class="arrowg" style="padding:0 7px;">→</div>
+        <div class="col grow" style="padding:13px; border:1.2px solid var(--line); border-radius:4px;">
+          <div class="mono">Rung 2</div>
+          <div class="script" style="font-size:26px;">Shape</div>
+          <div style="font-size:13.5px;">Make it reusable. Pin the system prompt + context; save the persona as an agent.</div>
+          <div class="row" style="margin-top:auto;"><span class="mono">surface</span><span class="chip">thread header</span></div>
+        </div>
+        <div class="arrowg" style="padding:0 7px;">→</div>
+        <div class="col grow" style="padding:13px; border:1.2px solid var(--line); border-radius:4px;">
+          <div class="mono">Rung 3</div>
+          <div class="script" style="font-size:26px;">Chain</div>
+          <div style="font-size:13.5px;">Add the next brain. Bring a second agent into the thread; test the hand-off on real output.</div>
+          <div class="row" style="margin-top:auto;"><span class="mono">surface</span><span class="chip">structure rail</span></div>
+        </div>
+        <div class="arrowg" style="padding:0 7px;">→</div>
+        <div class="col grow" style="padding:13px; border:1.5px solid var(--acc); border-radius:4px; background:var(--accbg);">
+          <div class="mono" style="color:var(--accink);">Rung 4</div>
+          <div class="script" style="font-size:26px;">Formalize</div>
+          <div style="font-size:13.5px;">Convert to workflow. A DAG is scaffolded from the thread; refine it on the canvas you already have.</div>
+          <div class="row" style="margin-top:auto;"><span class="mono" style="color:var(--accink);">surface</span><span class="chip acc">composer (kept)</span></div>
+        </div>
+        <div class="arrowg" style="padding:0 7px;">→</div>
+        <div class="col grow" style="padding:13px; border:1.2px solid var(--line); border-radius:4px;">
+          <div class="mono">Rung 5</div>
+          <div class="script" style="font-size:26px;">Operate</div>
+          <div style="font-size:13.5px;">Run it for real. Runs, checkpoints, schedules — and drill-downs back into every part.</div>
+          <div class="row" style="margin-top:auto;"><span class="mono">surface</span><span class="chip">runs</span></div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:16px; justify-content:space-between; align-items:baseline; gap:24px;">
+        <p class="note">Every object is born in a conversation. The console's job is graduation — and it should always show the next rung.</p>
+        <span class="mono" style="white-space:nowrap;">chat → agent → chain → workflow → run</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ 2 · SHELL DIRECTIONS ════════ -->
+  <section data-screen-label="2 Shell directions" class="sec">
+    <div class="sechead"><span class="num">2</span><h2>Three shell directions — what is "home" now?</h2></div>
+
+    <!-- ── Direction A ── -->
+    <div class="fr" data-screen-label="Direction A — thread rail">
+      <div class="fcap"><span class="stepn">A</span>Thread rail — chat is home, structure grows beside it<span class="mono">1 mode · always-on structure</span></div>
+      <div class="frame board" style="height:540px;">
+        <div class="topbar">
+          <span class="logo"></span><span class="mono" style="color:var(--ink);">enclave</span>
+          <span class="navtab on">Chats</span><span class="navtab">Workflows</span><span class="navtab">Library</span><span class="navtab">Runs</span>
+          <span class="grow"></span>
+          <span class="mono">m4 pro · 38 tok/s</span><span class="chip ghost">⌘K</span>
+        </div>
+        <div class="row grow" style="gap:0; align-items:stretch; min-height:0;">
+          <div class="col" style="width:200px; flex:none; border-right:1.2px solid var(--line); padding:10px;">
+            <div class="row" style="justify-content:space-between;"><span class="mono">threads</span><span class="btn ghost" style="padding:0 8px;">+ new</span></div>
+            <div class="row wbox" style="padding:5px 7px; border-color:var(--ink);"><span class="pip"></span><div class="col grow" style="gap:3px;"><span style="font-size:12px; font-weight:700;">xsiam log triage</span><span class="scrib s1" style="width:70%;"></span></div><span class="tag acc">chat</span></div>
+            <div class="row wbox" style="padding:5px 7px;"><span class="pip off"></span><div class="col grow" style="gap:3px;"><span style="font-size:12px;">threat intel notes</span><span class="scrib s1" style="width:55%;"></span></div><span class="tag">agent</span></div>
+            <div class="row wbox" style="padding:5px 7px;"><span class="pip off"></span><div class="col grow" style="gap:3px;"><span style="font-size:12px;">pr review loop</span><span class="scrib s1" style="width:60%;"></span></div><span class="tag">wf</span></div>
+            <div class="row wbox" style="padding:5px 7px;"><span class="pip off"></span><div class="col grow" style="gap:3px;"><span style="font-size:12px;">detection drafting</span><span class="scrib s1" style="width:65%;"></span></div><span class="tag">wf</span></div>
+            <div class="row wbox" style="padding:5px 7px;"><span class="pip off"></span><div class="col grow" style="gap:3px;"><span style="font-size:12px;">model bake-off</span><span class="scrib s1" style="width:50%;"></span></div><span class="tag acc">chat</span></div>
+          </div>
+          <div class="col grow" style="padding:12px 16px; min-width:0;">
+            <div class="row" style="flex-wrap:wrap;">
+              <span style="font-weight:700;">xsiam log triage</span>
+              <span class="chip">role: reasoning</span><span class="chip">model: dolphin-mixtral</span><span class="chip">ctx: xsiam-docs</span>
+              <span class="grow"></span>
+              <span class="mono">maturity</span><span class="meter"><i class="on"></i><i class="on"></i><i></i><i></i></span>
+            </div>
+            <div class="col grow" style="gap:9px; padding:10px 4px; min-height:0;">
+              <div class="msg user"><span class="scrib s2" style="width:240px;"></span></div>
+              <div class="msg bot" style="width:75%;"><span class="scrib s4" style="display:block;"></span></div>
+              <div class="row" style="margin-left:8px;"><span class="chip acc">⌖ pin as step</span><span class="chip ghost">save as skill</span><span class="chip ghost">branch</span></div>
+              <div class="msg user"><span class="scrib s2" style="width:180px;"></span></div>
+            </div>
+            <div class="composer">
+              <span class="scrib s2" style="width:55%;"></span>
+              <div class="row"><span class="chip ghost">+ context</span><span class="chip ghost">agent ▾</span><span class="grow"></span><span class="btn">⚡ send</span></div>
+            </div>
+          </div>
+          <div class="col" style="width:240px; flex:none; border-left:1.2px solid var(--line); padding:10px;">
+            <span class="mono">structure — detected steps</span>
+            <div class="col wbox" style="padding:6px 8px; gap:3px; border-color:var(--ink);"><div class="row"><span class="stepn" style="width:16px; height:16px; font-size:10px;">1</span><span style="font-size:12.5px; font-weight:700;">analyze</span><span class="grow"></span><span class="tag acc">pinned ✓</span></div><span class="mono">reasoning · msg #4</span></div>
+            <div class="col wbox" style="padding:6px 8px; gap:3px; border-color:var(--ink);"><div class="row"><span class="stepn" style="width:16px; height:16px; font-size:10px;">2</span><span style="font-size:12.5px; font-weight:700;">normalize</span><span class="grow"></span><span class="tag acc">pinned ✓</span></div><span class="mono">coding · msg #7</span></div>
+            <div class="col wbox" style="padding:6px 8px; gap:3px; border-style:dashed;"><div class="row"><span class="stepn" style="width:16px; height:16px; font-size:10px;">+</span><span style="font-size:12.5px; color:var(--dim);">add a step…</span></div></div>
+            <span class="grow"></span>
+            <span class="btn acc" style="justify-content:center;">Convert to workflow →</span>
+          </div>
+        </div>
+      </div>
+      <div class="proscons"><span class="p">structure is always visible — conversion feels inevitable, not modal</span><span class="p">pin-as-step teaches the workflow vocabulary while chatting</span><span class="c">right rail competes with chat width all the time</span><span class="c">the canvas still lives somewhere else</span></div>
+    </div>
+
+    <!-- ── Direction B ── -->
+    <div class="fr" data-screen-label="Direction B — studio split">
+      <div class="fcap"><span class="stepn">B</span>Studio split — chat and canvas share the stage permanently<span class="mono">1 mode · zero switching</span></div>
+      <div class="frame board" style="height:540px;">
+        <div class="topbar">
+          <span class="logo"></span><span class="mono" style="color:var(--ink);">enclave</span>
+          <span class="navtab on">Studio</span><span class="navtab">Runs</span><span class="navtab">Library</span>
+          <span class="grow"></span>
+          <span class="mono">m4 pro · 38 tok/s</span><span class="chip ghost">⌘K</span>
+        </div>
+        <div class="row grow" style="gap:0; align-items:stretch; min-height:0;">
+          <div class="col" style="width:36%; flex:none; border-right:1.2px solid var(--line); padding:12px;">
+            <div class="row" style="flex-wrap:wrap;"><span style="font-weight:700;">xsiam log triage</span><span class="chip">reasoning</span><span class="chip">dolphin-mixtral</span></div>
+            <div class="col grow" style="gap:9px; padding:8px 2px;">
+              <div class="msg user"><span class="scrib s2" style="width:160px;"></span></div>
+              <div class="msg bot" style="width:86%;"><span class="scrib s4" style="display:block;"></span></div>
+              <div class="msg bot" style="width:70%; border-color:var(--acc); position:relative;"><span class="scrib s2" style="display:block;"></span><span class="tag acc" style="position:absolute; top:-9px; right:8px; background:var(--card);">⠿ drag me →</span></div>
+            </div>
+            <div class="composer"><span class="scrib s2" style="width:60%;"></span><div class="row"><span class="chip ghost">+ context</span><span class="grow"></span><span class="btn">⚡ send</span></div></div>
+          </div>
+          <div class="col grow" style="min-width:0; gap:0;">
+            <div class="row" style="padding:8px 12px; border-bottom:1.2px solid var(--line);">
+              <span class="mono">palette</span>
+              <span class="chip">roles</span><span class="chip ghost">agents</span><span class="chip ghost">skills</span><span class="chip ghost">plugins</span><span class="chip ghost">mcps</span>
+              <span class="grow"></span><span class="btn ghost">export yaml</span><span class="btn acc">▶ run</span>
+            </div>
+            <div class="col grow" style="padding:18px; justify-content:center; position:relative;">
+              <p class="note" style="position:absolute; top:10px; right:18px;">drop a message here → it becomes a step</p>
+              <div class="row" style="gap:14px; justify-content:center;">
+                <div class="nodebox"><span class="t">analyze</span><span class="mono">reasoning</span></div>
+                <span class="arrowg">→</span>
+                <div class="col" style="gap:12px;">
+                  <div class="nodebox sel"><span class="t">normalize</span><span class="mono">coding</span></div>
+                  <div class="nodebox"><span class="t">validate</span><span class="mono">fast</span></div>
+                </div>
+                <span class="arrowg">→</span>
+                <div class="nodebox dash"><span class="t">＋ next step</span><span class="mono">drop here</span></div>
+              </div>
+            </div>
+            <div class="row" style="padding:7px 12px; border-top:1.2px solid var(--line);">
+              <span class="pip"></span><span class="mono" style="color:var(--ink);">run-7f3a · running · 2/4</span><span class="bar" style="max-width:200px;"><i style="width:50%;"></i></span><span class="grow"></span><span class="mono">41 tok/s</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="proscons"><span class="p">zero mode switch — the chat literally feeds the canvas</span><span class="p">cause and effect visible in one glance</span><span class="c">heavy first-run: an empty canvas next to an empty chat</span><span class="c">both panes starve for width; bad below ~1440px</span><span class="c">canvas pressure pushes casual users away from chatting</span></div>
+    </div>
+
+    <!-- ── Direction C ── -->
+    <div class="fr" data-screen-label="Direction C — one thread two modes">
+      <span class="reco">★ recommended</span>
+      <div class="fcap"><span class="stepn">C</span>One thread, two modes — chat home, composer takeover on convert<span class="mono">2 modes · explicit graduation</span></div>
+      <div class="frame board" style="height:560px;">
+        <div class="row grow" style="gap:0; align-items:stretch; min-height:0;">
+          <!-- mode 1 -->
+          <div class="col grow" style="gap:0; min-width:0;">
+            <div class="row" style="padding:6px 12px; border-bottom:1.2px dashed var(--line);"><span class="mono" style="color:var(--ink);">mode 1 — chat home</span><span class="grow"></span><span class="mono">calm, full-width</span></div>
+            <div class="topbar"><span class="logo"></span><span class="navtab on">Chats</span><span class="navtab">Workflows</span><span class="navtab">Library</span><span class="navtab">Runs</span><span class="grow"></span><span class="chip ghost">⌘K</span></div>
+            <div class="row grow" style="gap:0; align-items:stretch; min-height:0;">
+              <div class="col" style="width:150px; flex:none; border-right:1.2px solid var(--line); padding:8px; gap:6px;">
+                <span class="mono">threads</span>
+                <span class="scrib s2" style="width:90%;"></span><span class="scrib s2" style="width:75%;"></span><span class="scrib s2" style="width:85%;"></span><span class="scrib s2" style="width:70%;"></span>
+              </div>
+              <div class="col grow" style="padding:12px 20px; min-width:0;">
+                <div class="row" style="flex-wrap:wrap;">
+                  <span style="font-weight:700;">xsiam log triage</span>
+                  <span class="chip">reasoning</span><span class="chip">dolphin-mixtral</span><span class="chip">ctx: xsiam-docs</span>
+                  <span class="grow"></span>
+                  <span class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>
+                  <span class="btn acc">Convert →</span>
+                </div>
+                <div class="col grow" style="gap:9px; padding:12px 0; max-width:560px; align-self:center; width:100%;">
+                  <div class="msg user"><span class="scrib s2" style="width:200px;"></span></div>
+                  <div class="msg bot" style="width:80%;"><span class="scrib s4" style="display:block;"></span></div>
+                  <div class="msg user"><span class="scrib s2" style="width:150px;"></span></div>
+                  <div class="msg bot" style="width:65%;"><span class="scrib s2" style="display:block;"></span></div>
+                </div>
+                <div class="composer" style="max-width:560px; align-self:center; width:100%;"><span class="scrib s2" style="width:50%;"></span><div class="row"><span class="chip ghost">+ context</span><span class="chip ghost">agent ▾</span><span class="grow"></span><span class="btn">⚡ send</span></div></div>
+              </div>
+            </div>
+          </div>
+          <div style="width:2px; background:repeating-linear-gradient(to bottom, var(--ink) 0 8px, transparent 8px 16px); flex:none;"></div>
+          <!-- mode 2 -->
+          <div class="col grow" style="gap:0; min-width:0;">
+            <div class="row" style="padding:6px 12px; border-bottom:1.2px dashed var(--line);"><span class="mono" style="color:var(--ink);">mode 2 — composer takeover (after convert)</span><span class="grow"></span><span class="mono">= existing v1 kit, re-entered</span></div>
+            <div class="topbar"><span class="btn ghost" style="padding:0 8px;">←</span><span style="font-size:12.5px; font-weight:700;">xsiam log triage</span><span class="tag acc">workflow</span><span class="grow"></span><span class="btn ghost">yaml</span><span class="btn acc">▶ run</span></div>
+            <div class="row grow" style="gap:0; align-items:stretch; min-height:0;">
+              <div class="col" style="width:105px; flex:none; border-right:1.2px solid var(--line); padding:8px; gap:6px;">
+                <span class="mono">palette</span>
+                <span class="chip" style="font-size:11px;">roles</span><span class="chip ghost" style="font-size:11px;">agents</span><span class="chip ghost" style="font-size:11px;">skills</span><span class="chip ghost" style="font-size:11px;">plugins</span><span class="chip ghost" style="font-size:11px;">mcps</span>
+              </div>
+              <div class="col grow" style="padding:14px; justify-content:center; min-width:0;">
+                <div class="row" style="gap:10px; justify-content:center;">
+                  <div class="nodebox" style="min-width:78px;"><span class="t">analyze</span><span class="mono">reasoning</span></div>
+                  <span class="arrowg">→</span>
+                  <div class="col" style="gap:10px;">
+                    <div class="nodebox sel" style="min-width:78px;"><span class="t">normalize</span><span class="mono">coding</span></div>
+                    <div class="nodebox" style="min-width:78px;"><span class="t">validate</span><span class="mono">fast</span></div>
+                  </div>
+                  <span class="arrowg">→</span>
+                  <div class="nodebox" style="min-width:78px;"><span class="t">emit</span><span class="mono">general</span></div>
+                </div>
+              </div>
+              <div class="col" style="width:118px; flex:none; border-left:1.2px solid var(--line); padding:8px; gap:6px;">
+                <span class="mono">inspector</span>
+                <span class="scrib s2"></span><span class="scrib s4"></span><span class="scrib s2" style="width:70%;"></span>
+              </div>
+            </div>
+            <div class="col" style="border-top:1.4px solid var(--acc); padding:8px 12px; gap:5px; flex:none;">
+              <div class="row"><span class="pip"></span><span class="mono" style="color:var(--accink);">same thread — now the test surface</span></div>
+              <div class="row"><span class="scrib s2 grow"></span><span class="btn" style="font-size:11px;">⚡</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="proscons"><span class="p">chat-led entry, calm and full-width — nothing competes until you ask for it</span><span class="p">keeps the v1 composer kit (canvas + palette) nearly intact as mode 2</span><span class="p">clear mental model: one thread, chat mode ↔ workflow mode</span><span class="c">conversion is a bigger context switch — mitigated by the scaffold preview (flow 2)</span></div>
+    </div>
+  </section>
+
+  <!-- ════════ 3 · FLOW STORYBOARDS ════════ -->
+  <section data-screen-label="3 Flow storyboards" class="sec">
+    <div class="sechead"><span class="num">3</span><h2>Flow storyboards — the atomic build moments</h2></div>
+
+    <!-- Flow 1 -->
+    <div class="fr" data-screen-label="Flow 1 — seed a chat">
+      <div class="fcap">Flow 1 · Seed a chat<span class="mono">rung 1 — role + model + context, no settings page</span></div>
+      <div class="flowrow">
+        <div class="fr" style="width:330px;">
+          <div class="fcap"><span class="stepn">1</span>Empty home asks one question</div>
+          <div class="frame col" style="height:300px; padding:16px; justify-content:center; gap:12px;">
+            <p class="script" style="font-size:25px; text-align:center;">What are we building?</p>
+            <div class="composer"><span class="scrib s2" style="width:45%;"></span><div class="row"><span class="chip ghost">+ context</span><span class="grow"></span><span class="btn">⚡</span></div></div>
+            <div class="row" style="flex-wrap:wrap; justify-content:center;">
+              <span class="chip acc">reasoning</span><span class="chip">coding</span><span class="chip">fast</span><span class="chip">general</span><span class="chip">uncensored</span>
+            </div>
+            <div class="row" style="justify-content:center;"><span class="mono">model auto-fit</span><span class="chip">dolphin-mixtral · 12 tok/s</span></div>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:330px;">
+          <div class="fcap"><span class="stepn">2</span>Seed panel — the one tuning surface</div>
+          <div class="frame col" style="height:300px; padding:12px; gap:8px;">
+            <div class="row"><span class="chip">model</span><span class="chip ghost">context</span><span class="chip ghost">prompt</span></div>
+            <div class="row wbox" style="padding:5px 8px; border-color:var(--ink);"><span class="pip"></span><span style="font-size:12.5px; font-weight:700;">dolphin-mixtral</span><span class="grow"></span><span class="mono">12 tok/s · 26 gb</span><span class="bar" style="max-width:50px;"><i style="width:85%;"></i></span></div>
+            <div class="row wbox" style="padding:5px 8px;"><span class="pip"></span><span style="font-size:12.5px;">qwen2.5-coder</span><span class="grow"></span><span class="mono">47 tok/s · 4.7 gb</span><span class="bar" style="max-width:50px;"><i style="width:45%;"></i></span></div>
+            <div class="row wbox" style="padding:5px 8px;"><span class="pip off"></span><span style="font-size:12.5px;">yi-34b</span><span class="grow"></span><span class="mono">cold · 20 gb</span><span class="bar" style="max-width:50px;"><i style="width:70%;"></i></span></div>
+            <div class="row"><span class="mono">context</span><span class="chip acc">xsiam-docs · 142 chunks</span><span class="chip ghost">+ new</span></div>
+            <div class="row"><span class="mono">system prompt</span></div>
+            <span class="scrib s4"></span>
+            <div class="row" style="margin-top:auto;"><span class="grow"></span><span class="btn acc">start chat →</span></div>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:330px;">
+          <div class="fcap"><span class="stepn">3</span>Every reply can become a part</div>
+          <div class="frame col" style="height:300px; padding:14px; gap:9px;">
+            <div class="row"><span style="font-weight:700; font-size:13px;">xsiam log triage</span><span class="chip" style="font-size:11px;">reasoning</span><span class="chip" style="font-size:11px;">dolphin-mixtral</span></div>
+            <div class="msg user"><span class="scrib s2" style="width:170px;"></span></div>
+            <div class="msg bot" style="width:85%; border-color:var(--acc);"><span class="scrib s4" style="display:block;"></span></div>
+            <div class="row"><span class="chip acc">⌖ pin as step</span><span class="chip ghost">save as skill</span><span class="chip ghost">branch</span></div>
+            <div class="msg user"><span class="scrib s2" style="width:130px;"></span></div>
+            <p class="note" style="margin-top:auto;">hover actions teach the vocabulary: step, skill, branch</p>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:330px;">
+          <div class="fcap"><span class="stepn">4</span>The thread accrues maturity</div>
+          <div class="frame col" style="height:300px; padding:14px; gap:10px;">
+            <div class="row" style="flex-wrap:wrap;"><span style="font-weight:700; font-size:13px;">xsiam log triage</span><span class="tag acc">2 pinned</span><span class="grow"></span><span class="meter"><i class="on"></i><i class="on"></i><i></i><i></i></span></div>
+            <div class="row"><span class="btn acc">Convert to workflow →</span><span class="mono">appears once ≥2 steps pinned</span></div>
+            <div class="col wbox" style="padding:8px; gap:5px;">
+              <span class="mono">structure so far</span>
+              <div class="row"><span class="stepn" style="width:16px; height:16px; font-size:10px;">1</span><span style="font-size:12px;">analyze</span><span class="grow"></span><span class="mono">msg #4</span></div>
+              <div class="row"><span class="stepn" style="width:16px; height:16px; font-size:10px;">2</span><span style="font-size:12px;">normalize</span><span class="grow"></span><span class="mono">msg #7</span></div>
+            </div>
+            <p class="note" style="margin-top:auto;">structure is a side-effect of chatting — never a prerequisite</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flow 2 -->
+    <div class="fr" data-screen-label="Flow 2 — convert to workflow">
+      <div class="fcap">Flow 2 · Convert to workflow<span class="mono">rung 4 — explicit action, scaffolded DAG, nothing re-entered</span></div>
+      <div class="flowrow">
+        <div class="fr" style="width:450px;">
+          <div class="fcap"><span class="stepn">1</span>Scaffold preview — see it before you commit</div>
+          <div class="frame col" style="height:310px; padding:12px; gap:8px;">
+            <div class="row"><span style="font-weight:700;">Convert "xsiam log triage"</span><span class="grow"></span><span class="btn ghost" style="padding:0 7px;">✕</span></div>
+            <div class="row grow" style="gap:12px; align-items:stretch;">
+              <div class="col grow wbox" style="padding:10px; justify-content:center; gap:8px;">
+                <span class="mono">derived dag</span>
+                <div class="row" style="gap:8px;">
+                  <div class="nodebox" style="min-width:70px;"><span class="t">analyze</span></div><span class="arrowg">→</span>
+                  <div class="nodebox" style="min-width:70px;"><span class="t">normalize</span></div><span class="arrowg">→</span>
+                  <div class="nodebox dash" style="min-width:70px;"><span class="t">validate?</span><span class="mono">inferred</span></div>
+                </div>
+              </div>
+              <div class="col" style="width:160px; flex:none; gap:6px;">
+                <span class="mono">traceability</span>
+                <div class="col wbox" style="padding:5px 7px; gap:2px;"><span style="font-size:12px; font-weight:700;">analyze</span><span class="mono">← msg #4 · pinned</span></div>
+                <div class="col wbox" style="padding:5px 7px; gap:2px;"><span style="font-size:12px; font-weight:700;">normalize</span><span class="mono">← msg #7 · pinned</span></div>
+                <div class="col wbox" style="padding:5px 7px; gap:2px; border-style:dashed;"><span style="font-size:12px;">validate</span><span class="mono">← suggested</span></div>
+              </div>
+            </div>
+            <div class="row"><span class="chip ghost">keep chatting instead</span><span class="grow"></span><span class="btn acc">edit on canvas →</span></div>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:420px;">
+          <div class="fcap"><span class="stepn">2</span>Canvas opens — seed flows into steps</div>
+          <div class="frame col" style="height:310px; padding:12px; gap:8px;">
+            <div class="row"><span class="btn ghost" style="padding:0 8px;">←</span><span style="font-weight:700; font-size:13px;">xsiam log triage</span><span class="tag acc">workflow</span><span class="grow"></span><span class="btn acc">▶ run</span></div>
+            <div class="row grow" style="gap:10px; align-items:stretch;">
+              <div class="col grow wbox" style="padding:10px; justify-content:center;">
+                <div class="row" style="gap:8px; justify-content:center;">
+                  <div class="nodebox" style="min-width:70px;"><span class="t">analyze</span></div><span class="arrowg">→</span>
+                  <div class="nodebox sel" style="min-width:70px;"><span class="t">normalize</span></div><span class="arrowg">→</span>
+                  <div class="nodebox" style="min-width:70px;"><span class="t">validate</span></div>
+                </div>
+              </div>
+              <div class="col" style="width:150px; flex:none; gap:5px;">
+                <span class="mono">inspector — normalize</span>
+                <div class="row"><span class="mono">role</span><span class="chip" style="font-size:11px;">coding</span></div>
+                <div class="row"><span class="mono">model</span><span class="chip" style="font-size:11px;">qwen2.5-coder</span></div>
+                <div class="row"><span class="mono">ctx</span><span class="chip acc" style="font-size:11px;">xsiam-docs</span></div>
+                <span class="mono">prompt · from msg #7</span>
+                <span class="scrib s4"></span>
+              </div>
+            </div>
+            <p class="note">role, model, context, prompt — all inherited from the seed. nothing re-entered.</p>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:420px;">
+          <div class="fcap"><span class="stepn">3</span>The chat stays — docked as the test surface</div>
+          <div class="frame col" style="height:310px; padding:12px; gap:8px;">
+            <div class="col grow wbox" style="padding:10px; justify-content:center;">
+              <div class="row" style="gap:8px; justify-content:center;">
+                <div class="nodebox" style="min-width:70px;"><span class="t">analyze</span><span class="tag acc">✓</span></div><span class="arrowg">→</span>
+                <div class="nodebox" style="min-width:70px;"><span class="t">normalize</span><span class="tag">running</span></div><span class="arrowg">→</span>
+                <div class="nodebox" style="min-width:70px;"><span class="t">validate</span></div>
+              </div>
+            </div>
+            <div class="col" style="border:1.4px solid var(--acc); border-radius:6px; padding:8px 10px; gap:5px;">
+              <div class="row"><span class="pip"></span><span class="mono" style="color:var(--accink);">thread: xsiam log triage — test surface</span></div>
+              <div class="msg bot" style="max-width:100%; width:80%;"><span class="scrib s2" style="display:block;"></span></div>
+              <div class="row"><span class="scrib s2 grow"></span><span class="btn" style="font-size:11px;">⚡</span></div>
+            </div>
+            <p class="note">the conversation that proved the idea now exercises the workflow</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flow 3 -->
+    <div class="fr" data-screen-label="Flow 3 — add the next agent and test it">
+      <div class="fcap">Flow 3 · Add the next agent — and test it in place<span class="mono">rung 3 — real upstream data, no separate playground</span></div>
+      <div class="flowrow">
+        <div class="fr" style="width:420px;">
+          <div class="fcap"><span class="stepn">1</span>Insert on the edge, from the palette</div>
+          <div class="frame col" style="height:300px; padding:12px; gap:8px;">
+            <div class="row grow" style="gap:10px; align-items:stretch;">
+              <div class="col" style="width:140px; flex:none; gap:5px;">
+                <div class="row"><span class="chip ghost" style="font-size:11px;">roles</span><span class="chip" style="font-size:11px;">agents</span></div>
+                <div class="col wbox" style="padding:5px 7px; gap:2px;"><span style="font-size:12px; font-weight:700;">xsiam-analyst</span><span class="mono">reasoning</span></div>
+                <div class="col wbox" style="padding:5px 7px; gap:2px; border-color:var(--acc);"><span style="font-size:12px; font-weight:700;">red-teamer</span><span class="mono">uncensored</span></div>
+                <div class="col wbox" style="padding:5px 7px; gap:2px;"><span style="font-size:12px; font-weight:700;">normalizer</span><span class="mono">coding</span></div>
+              </div>
+              <div class="col grow wbox" style="padding:10px; justify-content:center;">
+                <div class="row" style="gap:6px; justify-content:center;">
+                  <div class="nodebox" style="min-width:66px;"><span class="t">normalize</span></div>
+                  <span class="stepn" style="border-color:var(--acc); color:var(--accink);">+</span>
+                  <div class="nodebox dash" style="min-width:66px;"><span class="t">red-team</span><span class="mono">dropping…</span></div>
+                  <span class="arrowg">→</span>
+                  <div class="nodebox" style="min-width:56px;"><span class="t">emit</span></div>
+                </div>
+              </div>
+            </div>
+            <p class="note">the palette survives from v1 — same five tabs</p>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:420px;">
+          <div class="fcap"><span class="stepn">2</span>Inspector with a built-in test bench</div>
+          <div class="frame col" style="height:300px; padding:12px; gap:7px;">
+            <div class="row"><span style="font-weight:700;">red-team</span><span class="tag">uncensored</span><span class="grow"></span><span class="chip" style="font-size:11px;">wizardlm · 38 tok/s</span></div>
+            <div class="row"><span class="mono">prompt</span></div>
+            <span class="scrib s4"></span>
+            <div class="col" style="border:1.4px solid var(--ink); border-radius:6px; padding:8px 10px; gap:6px; margin-top:auto;">
+              <div class="row"><span class="mono" style="color:var(--ink);">test step</span><span class="grow"></span><span class="mono">fixture ▾</span></div>
+              <div class="row wbox" style="padding:4px 7px;"><span class="mono">input ← normalize output · run-7f3a</span></div>
+              <div class="row"><span class="grow"></span><span class="btn acc">▶ test this step only</span></div>
+            </div>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:420px;">
+          <div class="fcap"><span class="stepn">3</span>Result inline — keep it or swap the model</div>
+          <div class="frame col" style="height:300px; padding:12px; gap:7px;">
+            <div class="row"><span class="mono">test result · red-team</span><span class="grow"></span><span class="mono" style="color:var(--accink);">✓ 1.2s · 38 tok/s</span></div>
+            <div class="row grow" style="gap:8px; align-items:stretch;">
+              <div class="col grow wbox" style="padding:7px; gap:4px;"><span class="mono">input</span><span class="scrib s6"></span></div>
+              <span class="arrowg">→</span>
+              <div class="col grow" style="padding:7px; gap:4px; border:1.2px solid var(--acc); border-radius:4px;"><span class="mono" style="color:var(--accink);">output</span><span class="scrib s6"></span></div>
+            </div>
+            <div class="row"><span class="chip acc">pin as expectation</span><span class="chip ghost">swap model ▾</span><span class="grow"></span><span class="btn">keep step</span></div>
+            <p class="note">tight loop: add → test on real upstream output → keep or swap</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flow 4 -->
+    <div class="fr" data-screen-label="Flow 4 — model drill-down and fit">
+      <div class="fcap">Flow 4 · Which model is better for this? — drill-down &amp; compare<span class="mono">unified card → peek → compare; ends in a chat-shaped action</span></div>
+      <div class="flowrow">
+        <div class="fr" style="width:420px;">
+          <div class="fcap"><span class="stepn">1</span>Library — one card anatomy for everything</div>
+          <div class="frame col" style="height:310px; padding:12px; gap:8px;">
+            <div class="row"><span class="chip">models</span><span class="chip ghost">agents</span><span class="chip ghost">skills</span><span class="chip ghost">plugins</span><span class="chip ghost">workflows</span><span class="grow"></span><span class="chip ghost">⊞ install</span></div>
+            <div class="row grow" style="gap:8px; align-items:stretch;">
+              <div class="col grow wbox" style="padding:8px; gap:5px; border-color:var(--ink);">
+                <div class="row"><span class="pip"></span><span style="font-size:12.5px; font-weight:700;">qwen2.5-coder</span></div>
+                <span class="mono">4.7 gb · q4_k_m · 47 tok/s</span>
+                <div class="row"><span class="mono" style="width:46px;">coding</span><span class="bar"><i style="width:90%;"></i></span></div>
+                <div class="row"><span class="mono" style="width:46px;">reason</span><span class="bar"><i style="width:40%;"></i></span></div>
+                <div class="row" style="margin-top:auto;"><span class="grow"></span><span class="chip" style="font-size:11px;">peek ▸</span></div>
+              </div>
+              <div class="col grow wbox" style="padding:8px; gap:5px;">
+                <div class="row"><span class="pip"></span><span style="font-size:12.5px; font-weight:700;">dolphin-mixtral</span></div>
+                <span class="mono">26 gb · q4_k_m · 12 tok/s</span>
+                <div class="row"><span class="mono" style="width:46px;">coding</span><span class="bar"><i style="width:55%;"></i></span></div>
+                <div class="row"><span class="mono" style="width:46px;">reason</span><span class="bar"><i style="width:88%;"></i></span></div>
+                <div class="row" style="margin-top:auto;"><span class="grow"></span><span class="chip ghost" style="font-size:11px;">peek ▸</span></div>
+              </div>
+              <div class="col grow wbox" style="padding:8px; gap:5px;">
+                <div class="row"><span class="pip off"></span><span style="font-size:12.5px; font-weight:700;">yi-34b</span></div>
+                <span class="mono">20 gb · q3_k_m · cold</span>
+                <div class="row"><span class="mono" style="width:46px;">coding</span><span class="bar"><i style="width:45%;"></i></span></div>
+                <div class="row"><span class="mono" style="width:46px;">reason</span><span class="bar"><i style="width:80%;"></i></span></div>
+                <div class="row" style="margin-top:auto;"><span class="grow"></span><span class="chip ghost" style="font-size:11px;">peek ▸</span></div>
+              </div>
+            </div>
+            <p class="note">pip + mono id + role-fit bars: same skeleton for every entity</p>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:420px;">
+          <div class="fcap"><span class="stepn">2</span>Peek — depth without leaving the list</div>
+          <div class="frame row" style="height:310px; gap:0; align-items:stretch; overflow:hidden;">
+            <div class="col" style="width:38%; flex:none; padding:10px; gap:6px; border-right:1.2px solid var(--line); opacity:.45;">
+              <span class="mono">models</span>
+              <span class="scrib s4"></span><span class="scrib s4"></span><span class="scrib s4"></span>
+            </div>
+            <div class="col grow" style="padding:10px 12px; gap:7px;">
+              <div class="row"><span class="pip"></span><span style="font-weight:700;">qwen2.5-coder</span><span class="tag">model</span><span class="grow"></span><span class="btn" style="font-size:11px;">load</span></div>
+              <div class="row"><span class="chip" style="font-size:11px;">overview</span><span class="chip ghost" style="font-size:11px;">usage</span><span class="chip ghost" style="font-size:11px;">bench</span><span class="chip ghost" style="font-size:11px;">raw</span></div>
+              <div class="row"><span class="mono">used by</span><span class="tag">3 steps</span><span class="tag">2 agents</span><span class="tag">1 workflow</span></div>
+              <div class="row"><span class="mono" style="width:46px;">coding</span><span class="bar"><i style="width:90%;"></i></span><span class="mono">best on fleet</span></div>
+              <div class="row"><span class="mono" style="width:46px;">fast</span><span class="bar"><i style="width:65%;"></i></span></div>
+              <span class="scrib s4" style="margin-top:4px;"></span>
+              <div class="row" style="margin-top:auto;"><span class="chip acc">test in chat</span><span class="chip ghost">compare ▸</span></div>
+            </div>
+          </div>
+          <p class="note">esc closes; ⤢ pushes to a full page for real work</p>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:420px;">
+          <div class="fcap"><span class="stepn">3</span>Compare for a use case — then act</div>
+          <div class="frame col" style="height:310px; padding:12px; gap:8px;">
+            <div class="row"><span class="mono">compare · best for:</span><span class="chip">coding</span><span class="chip ghost">reasoning ▾</span></div>
+            <div class="row grow" style="gap:8px; align-items:stretch;">
+              <div class="col grow" style="padding:8px; gap:6px; border:1.4px solid var(--acc); border-radius:4px; background:var(--accbg);">
+                <span style="font-size:12px; font-weight:700;">qwen2.5-coder ★</span>
+                <span class="mono">47 tok/s</span><span class="mono">4.7 gb ram</span>
+                <div class="row"><span class="mono">fit</span><span class="bar"><i style="width:90%;"></i></span></div>
+                <span class="mono">used 2h ago</span>
+              </div>
+              <div class="col grow wbox" style="padding:8px; gap:6px;">
+                <span style="font-size:12px; font-weight:700;">dolphin-mixtral</span>
+                <span class="mono">12 tok/s</span><span class="mono">26 gb ram</span>
+                <div class="row"><span class="mono">fit</span><span class="bar"><i style="width:55%;"></i></span></div>
+                <span class="mono">used 5m ago</span>
+              </div>
+              <div class="col grow wbox" style="padding:8px; gap:6px;">
+                <span style="font-size:12px; font-weight:700;">yi-34b</span>
+                <span class="mono">cold start</span><span class="mono">20 gb ram</span>
+                <div class="row"><span class="mono">fit</span><span class="bar"><i style="width:45%;"></i></span></div>
+                <span class="mono">used 4d ago</span>
+              </div>
+            </div>
+            <div class="row"><span class="grow"></span><span class="btn acc">seed a chat with qwen2.5-coder →</span></div>
+            <p class="note">every drill-down ends in a chat-shaped action — the loop closes</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flow 5 -->
+    <div class="fr" data-screen-label="Flow 5 — context from research to agent">
+      <div class="fcap">Flow 5 · Build context by researching — then mint an agent from the thread<span class="mono">rungs 1→2 — the ladder applied to context</span></div>
+      <div class="flowrow">
+        <div class="fr" style="width:330px;">
+          <div class="fcap"><span class="stepn">1</span>A research-seeded chat</div>
+          <div class="frame col" style="height:300px; padding:14px; gap:9px;">
+            <div class="row" style="flex-wrap:wrap;"><span style="font-weight:700; font-size:13px;">xsiam dm research</span><span class="chip acc" style="font-size:11px;">⊕ web-search on</span><span class="chip" style="font-size:11px;">reasoning</span></div>
+            <div class="msg user" style="max-width:100%;">build me context on the XSIAM data model — fields, mappings, gotchas</div>
+            <div class="msg bot" style="width:80%;"><span class="scrib s4" style="display:block;"></span></div>
+            <p class="note" style="margin-top:auto;">research is just a chat with a plugin seeded in</p>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:330px;">
+          <div class="fcap"><span class="stepn">2</span>Findings collect into a bundle tray</div>
+          <div class="frame row" style="height:300px; gap:0; align-items:stretch; overflow:hidden;">
+            <div class="col grow" style="padding:10px; gap:7px;">
+              <div class="col wbox" style="padding:6px 8px; gap:3px;"><span class="scrib s2"></span><div class="row"><span class="mono">source · unit42 docs</span><span class="grow"></span><span class="chip acc" style="font-size:10.5px;">+ bundle</span></div></div>
+              <div class="col wbox" style="padding:6px 8px; gap:3px;"><span class="scrib s2"></span><div class="row"><span class="mono">source · schema ref</span><span class="grow"></span><span class="chip acc" style="font-size:10.5px;">+ bundle</span></div></div>
+              <div class="col wbox" style="padding:6px 8px; gap:3px;"><span class="scrib s2"></span><div class="row"><span class="mono">note · from chat</span><span class="grow"></span><span class="chip ghost" style="font-size:10.5px;">added ✓</span></div></div>
+            </div>
+            <div class="col" style="width:108px; flex:none; border-left:1.2px solid var(--line); padding:8px; gap:5px;">
+              <span class="mono">bundle · 7</span>
+              <span class="scrib s2"></span><span class="scrib s2"></span><span class="scrib s2"></span><span class="scrib s2"></span>
+              <span class="btn" style="font-size:11px; justify-content:center; margin-top:auto;">save ↓</span>
+            </div>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:330px;">
+          <div class="fcap"><span class="stepn">3</span>Saved as a context object</div>
+          <div class="frame col" style="height:300px; padding:14px; gap:9px; justify-content:center;">
+            <div class="col wbox" style="padding:10px; gap:6px; border-color:var(--ink); box-shadow:3px 3px 0 rgba(42,42,40,.1);">
+              <div class="row"><span class="pip"></span><span style="font-weight:700;">xsiam-dm-v1</span><span class="tag">context</span></div>
+              <span class="mono">7 docs · graph: 41 nodes · 142 chunks</span>
+              <div class="row"><span class="chip ghost" style="font-size:11px;">pin to chat</span><span class="chip ghost" style="font-size:11px;">attach to agent</span><span class="chip ghost" style="font-size:11px;">peek ▸</span></div>
+            </div>
+            <p class="note">same unified card anatomy — context is an entity like any other</p>
+          </div>
+        </div>
+        <span class="arrowg">→</span>
+        <div class="fr" style="width:330px;">
+          <div class="fcap"><span class="stepn">4</span>"Create agent from thread" — prefilled</div>
+          <div class="frame col" style="height:300px; padding:12px; gap:7px;">
+            <div class="row"><span class="mono">new agent · from thread</span><span class="grow"></span><span class="mono">2 / 4 configure</span></div>
+            <div class="row"><span class="mono" style="width:44px;">role</span><span class="chip" style="font-size:11px;">reasoning</span></div>
+            <div class="row"><span class="mono" style="width:44px;">model</span><span class="chip" style="font-size:11px;">dolphin-mixtral</span></div>
+            <div class="row"><span class="mono" style="width:44px;">ctx</span><span class="chip acc" style="font-size:11px;">xsiam-dm-v1</span></div>
+            <div class="row"><span class="mono" style="width:44px;">prompt</span><span class="tag">distilled from thread ✎</span></div>
+            <span class="scrib s4"></span>
+            <div class="row" style="margin-top:auto;"><span class="chip ghost">back</span><span class="grow"></span><span class="btn acc">verify → trial chat</span></div>
+            <p class="note">the wizard's verify step is… a chat. always.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ 4 · UNIFIED PATTERNS ════════ -->
+  <section data-screen-label="4 Unified patterns" class="sec">
+    <div class="sechead"><span class="num">4</span><h2>Unified patterns — drill-down, install wizard, guided maturity</h2></div>
+
+    <!-- P1 drill-down -->
+    <div class="fr" data-screen-label="Pattern — drill-down card">
+      <div class="fcap">Pattern · One drill-down for every entity<span class="mono">card → peek → push · same header everywhere = muscle memory</span></div>
+      <div class="frame" style="padding:18px 20px;">
+        <div class="flowrow" style="align-items:stretch;">
+          <div class="fr" style="width:250px;">
+            <div class="fcap" style="font-size:13.5px;"><span class="stepn">1</span>Card — in the grid</div>
+            <div class="col wbox" style="padding:9px; gap:6px; border-color:var(--ink); height:150px;">
+              <div class="row" style="border:1.3px dashed var(--acc); border-radius:4px; padding:3px 5px;"><span class="pip"></span><span style="font-size:12.5px; font-weight:700;">entity-id</span><span class="tag">type</span></div>
+              <span class="mono">key metric · key metric</span>
+              <div class="row"><span class="mono" style="width:36px;">fit</span><span class="bar"><i style="width:70%;"></i></span></div>
+              <div class="row" style="margin-top:auto;"><span class="grow"></span><span class="chip ghost" style="font-size:11px;">peek ▸</span></div>
+            </div>
+          </div>
+          <span class="arrowg">→</span>
+          <div class="fr" style="width:330px;">
+            <div class="fcap" style="font-size:13.5px;"><span class="stepn">2</span>Peek — overlay panel, list stays</div>
+            <div class="row wbox" style="gap:0; align-items:stretch; height:150px; overflow:hidden;">
+              <div class="col" style="width:90px; flex:none; padding:7px; gap:5px; border-right:1.2px solid var(--line); opacity:.4;"><span class="scrib s4"></span><span class="scrib s4"></span></div>
+              <div class="col grow" style="padding:8px; gap:5px;">
+                <div class="row" style="border:1.3px dashed var(--acc); border-radius:4px; padding:3px 5px;"><span class="pip"></span><span style="font-size:12px; font-weight:700;">entity-id</span><span class="tag">type</span><span class="grow"></span><span class="btn" style="font-size:10.5px; padding:0 7px;">action</span></div>
+                <div class="row"><span class="chip" style="font-size:10.5px;">overview</span><span class="chip ghost" style="font-size:10.5px;">usage</span><span class="chip ghost" style="font-size:10.5px;">history</span><span class="chip ghost" style="font-size:10.5px;">raw</span></div>
+                <span class="scrib s4"></span>
+                <div class="row" style="margin-top:auto;"><span class="grow"></span><span class="chip ghost" style="font-size:10.5px;">⤢ open full</span></div>
+              </div>
+            </div>
+          </div>
+          <span class="arrowg">→</span>
+          <div class="fr" style="width:330px;">
+            <div class="fcap" style="font-size:13.5px;"><span class="stepn">3</span>Push — full page for real work</div>
+            <div class="col wbox" style="height:150px; padding:8px 10px; gap:5px;">
+              <div class="row"><span class="mono">library / models /</span><span style="font-size:12px; font-weight:700;">entity-id</span></div>
+              <div class="row" style="border:1.3px dashed var(--acc); border-radius:4px; padding:3px 5px;"><span class="pip"></span><span style="font-size:12px; font-weight:700;">entity-id</span><span class="tag">type</span><span class="grow"></span><span class="btn" style="font-size:10.5px; padding:0 7px;">action</span></div>
+              <div class="row grow" style="gap:6px; align-items:stretch;"><span class="scrib grow" style="height:auto;"></span><span class="scrib grow" style="height:auto;"></span></div>
+            </div>
+          </div>
+          <div class="col" style="width:280px; gap:8px; justify-content:center;">
+            <p class="note" style="font-size:20px;">the dashed header is the invariant: pip + mono id + type + primary action.</p>
+            <p style="font-size:13px;">tabs are fixed: <strong>overview · usage · history · raw</strong>. "usage" answers <em>what depends on this?</em> for models, agents, skills, plugins, contexts, workflows, runs — and chats show <em>what they became</em>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- P2 wizard -->
+    <div class="fr" data-screen-label="Pattern — unified install wizard">
+      <div class="fcap">Pattern · One install wizard for every object<span class="mono">source → configure → verify → land · verify is always a conversation</span></div>
+      <div class="frame col" style="padding:18px 20px; gap:16px;">
+        <div class="flowrow" style="align-items:stretch;">
+          <div class="col grow wbox" style="padding:10px; gap:6px;">
+            <div class="row"><span class="stepn" style="width:17px; height:17px; font-size:10px;">1</span><span class="mono" style="color:var(--ink);">source</span></div>
+            <div class="row wbox" style="padding:4px 7px;"><span style="font-size:12px;">from registry / url</span></div>
+            <div class="row wbox" style="padding:4px 7px; border-color:var(--acc);"><span style="font-size:12px;">from a thread ★</span></div>
+            <div class="row wbox" style="padding:4px 7px;"><span style="font-size:12px;">from yaml / file</span></div>
+          </div>
+          <span class="arrowg">→</span>
+          <div class="col grow wbox" style="padding:10px; gap:6px;">
+            <div class="row"><span class="stepn" style="width:17px; height:17px; font-size:10px;">2</span><span class="mono" style="color:var(--ink);">configure</span></div>
+            <div class="row"><span class="mono" style="width:40px;">name</span><span class="scrib s2 grow"></span></div>
+            <div class="row"><span class="mono" style="width:40px;">role</span><span class="chip" style="font-size:11px;">reasoning</span></div>
+            <div class="row"><span class="mono" style="width:40px;">opts</span><span class="scrib s2 grow"></span></div>
+          </div>
+          <span class="arrowg">→</span>
+          <div class="col grow" style="padding:10px; gap:6px; border:1.4px solid var(--acc); border-radius:4px; background:var(--accbg);">
+            <div class="row"><span class="stepn" style="width:17px; height:17px; font-size:10px; border-color:var(--acc); color:var(--accink);">3</span><span class="mono" style="color:var(--accink);">verify — talk to it</span></div>
+            <div class="msg user" style="font-size:11.5px; max-width:100%;">try a sample prompt…</div>
+            <div class="msg bot" style="font-size:11.5px; width:85%; background:var(--card);"><span class="scrib s2" style="display:block;"></span></div>
+            <div class="row"><span class="mono" style="color:var(--accink);">✓ responds · 41 tok/s</span></div>
+          </div>
+          <span class="arrowg">→</span>
+          <div class="col grow wbox" style="padding:10px; gap:6px;">
+            <div class="row"><span class="stepn" style="width:17px; height:17px; font-size:10px;">4</span><span class="mono" style="color:var(--ink);">land</span></div>
+            <div style="font-size:12.5px;">lands in the library + palette, and offers the next rung:</div>
+            <span class="chip acc" style="font-size:11px;">seed a chat with it →</span>
+            <span class="chip ghost" style="font-size:11px;">add to a workflow →</span>
+          </div>
+        </div>
+        <table class="mx">
+          <tr><th style="width:110px;">object</th><th>source</th><th>configure</th><th>verify</th><th>land</th></tr>
+          <tr><td>model</td><td>registry · hf url · local gguf</td><td>quant pick · role mapping · target box</td><td>test prompt in a chat</td><td>library + auto-fit suggestions</td></tr>
+          <tr><td>agent</td><td>from a thread ★ · blank</td><td>role + model + prompt + context</td><td>trial conversation</td><td>palette · "seed a chat"</td></tr>
+          <tr><td>skill</td><td>markdown file · from a pinned reply</td><td>trigger keywords</td><td>trigger it in a test message</td><td>auto-injects · palette</td></tr>
+          <tr><td>plugin / mcp</td><td>url · catalog</td><td>permissions · env keys</td><td>dry-run a tool call in chat</td><td>callable from steps</td></tr>
+          <tr><td>workflow</td><td>yaml import · from a thread ★</td><td>map steps to local models</td><td>dry run with sample input</td><td>composer + runs</td></tr>
+        </table>
+        <p class="note">★ "from a thread" is a first-class source everywhere — the ladder again. one stepper skeleton, five payloads.</p>
+      </div>
+    </div>
+
+    <!-- P3 guided maturity -->
+    <div class="fr" data-screen-label="Pattern — guided maturity">
+      <div class="fcap">Pattern · Guided maturity — the console always shows the next rung<span class="mono">next-best-action chips + operator's path</span></div>
+      <div class="frame row" style="gap:0; align-items:stretch; height:330px; overflow:hidden;">
+        <div class="col grow" style="padding:14px 18px; min-width:0;">
+          <div class="row"><span style="font-weight:700;">xsiam log triage</span><span class="chip" style="font-size:11px;">reasoning</span><span class="grow"></span><span class="meter"><i class="on"></i><i class="on"></i><i></i><i></i></span></div>
+          <div class="col grow" style="gap:9px; padding:10px 0; max-width:560px;">
+            <div class="msg bot" style="width:75%;"><span class="scrib s2" style="display:block;"></span></div>
+            <div class="msg user"><span class="scrib s2" style="width:170px;"></span></div>
+          </div>
+          <div class="row" style="flex-wrap:wrap; padding-bottom:8px;">
+            <span class="chip acc">you've re-run this 3× — convert to a workflow?</span>
+            <span class="chip ghost">no context attached — research it?</span>
+          </div>
+          <div class="composer"><span class="scrib s2" style="width:50%;"></span><div class="row"><span class="chip ghost">+ context</span><span class="grow"></span><span class="btn">⚡ send</span></div></div>
+        </div>
+        <div class="col" style="width:300px; flex:none; border-left:1.2px solid var(--line); padding:14px; gap:9px;">
+          <span class="mono">operator's path</span>
+          <div class="row"><span class="stepn" style="width:17px; height:17px; font-size:10px; background:var(--acc); border-color:var(--acc); color:#06201B;">✓</span><span style="font-size:12.5px;">seed your first chat</span></div>
+          <div class="row"><span class="stepn" style="width:17px; height:17px; font-size:10px; background:var(--acc); border-color:var(--acc); color:#06201B;">✓</span><span style="font-size:12.5px;">pin a reply as a step</span></div>
+          <div class="row"><span class="stepn" style="width:17px; height:17px; font-size:10px;">3</span><span style="font-size:12.5px; font-weight:700;">save a persona as an agent</span></div>
+          <div class="row" style="opacity:.55;"><span class="stepn" style="width:17px; height:17px; font-size:10px;">4</span><span style="font-size:12.5px;">convert a thread to a workflow</span></div>
+          <div class="row" style="opacity:.55;"><span class="stepn" style="width:17px; height:17px; font-size:10px;">5</span><span style="font-size:12.5px;">schedule a run on the fleet</span></div>
+          <p class="note" style="margin-top:auto;">progressive disclosure: the palette, canvas and wizard only surface when the rung calls for them. dismissible, never modal.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ FOOTER ════════ -->
+  <footer class="row" style="border-top:1.5px dashed var(--line); padding-top:18px; align-items:baseline;">
+    <span class="mono">next step</span>
+    <span>Pick a shell direction (or a hybrid) + flag any flow that feels wrong → I hi-fi the winner as <span class="mono" style="font-size:11px; text-transform:none; letter-spacing:.04em;">ui_kits/console-v2</span> on the real Enclave tokens.</span>
+  </footer>
+
+</div>
+</body>
+</html>

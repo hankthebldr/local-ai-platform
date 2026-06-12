@@ -1,0 +1,88 @@
+<!-- @dsCard group="Components" viewport="720x560" name="Console" subtitle="EntityCard · SeedChip · MaturityMeter · FitBar · ActionChip · WizardStepper — the chat-led console atoms" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+  body { background: var(--bg-deep); padding: 22px 24px; }
+  .grid { display: flex; flex-direction: column; gap: 20px; }
+  .sect { display: flex; flex-direction: column; gap: 10px; }
+  .sect > .ds-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-faint); }
+  .strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 560px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { EntityCard, SeedChip, MaturityMeter, FitBar, ActionChip, WizardStepper } = window.EnclaveDesignSystem_47ed55;
+const Ico = ({ n, ...p }) => <i data-lucide={n} {...p} />;
+
+function Demo() {
+  React.useEffect(() => { window.lucide && window.lucide.createIcons(); });
+  return (
+    <div className="grid">
+      <div className="sect">
+        <span className="ds-label">EntityCard — one anatomy for every entity</span>
+        <div className="cards">
+          <EntityCard id="qwen2.5-coder" type="model" status="online"
+            meta="4.7 GB · Q4_K_M · 47 tok/s"
+            fits={{ coding: 90, reasoning: 40, fast: 65 }}
+            usedBy="3 steps · 2 agents" />
+          <EntityCard id="xsiam-analyst" type="agent" status="online"
+            meta="reasoning · dolphin-mixtral" desc="Security triage persona"
+            usedBy="2 steps · 3 threads"
+            actions={<ActionChip icon={<Ico n="chevron-right" />}>peek</ActionChip>} />
+        </div>
+      </div>
+
+      <div className="sect">
+        <span className="ds-label">SeedChip + MaturityMeter — a thread header</span>
+        <div className="strip">
+          <SeedChip k="role" v="reasoning" />
+          <SeedChip k="model" v="dolphin-mixtral" />
+          <SeedChip k="ctx" v="xsiam-docs" tone="accent" />
+          <SeedChip v="+ context" ghost />
+          <MaturityMeter value={2} hot label="maturity" />
+        </div>
+      </div>
+
+      <div className="sect">
+        <span className="ds-label">ActionChip — hover actions + next-best-action nudges</span>
+        <div className="strip">
+          <ActionChip icon={<Ico n="pin" />} accent>pin as step</ActionChip>
+          <ActionChip icon={<Ico n="scissors" />}>save as skill</ActionChip>
+          <ActionChip icon={<Ico n="git-branch" />}>branch</ActionChip>
+          <ActionChip lg accent icon={<Ico n="git-merge" />} onDismiss={() => {}}>you've pinned 2 steps — convert to a workflow?</ActionChip>
+        </div>
+      </div>
+
+      <div className="sect">
+        <span className="ds-label">FitBar — which model is better for this?</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 340 }}>
+          <FitBar label="coding" value={90} hint="best on fleet" />
+          <FitBar label="reasoning" value={40} />
+          <FitBar label="mem" value={72} color="var(--warn)" showValue={false} />
+        </div>
+      </div>
+
+      <div className="sect">
+        <span className="ds-label">WizardStepper — one install skeleton, five payloads</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 460 }}>
+          <WizardStepper active={0} />
+          <WizardStepper active={2} />
+        </div>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>

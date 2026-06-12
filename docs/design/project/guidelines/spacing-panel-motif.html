@@ -1,0 +1,34 @@
+<!-- @dsCard group="Spacing" viewport="700x190" name="Panel motif — corner ticks & glow" subtitle="Blueprint registration marks; the teal halo on live elements" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg-deep); padding: 24px; font-family: var(--font-mono); display: flex; gap: 20px; }
+  .panel { position: relative; flex: 1; background: var(--surface-panel); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 18px 16px; backdrop-filter: blur(var(--blur-panel)); }
+  .corner { position: absolute; width: 9px; height: 9px; }
+  .tr { top: -1px; right: -1px; border-top: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); }
+  .bl { bottom: -1px; left: -1px; border-bottom: 1.5px solid var(--accent); border-left: 1.5px solid var(--accent); }
+  .lab { font-size: var(--text-xs); letter-spacing: .18em; text-transform: uppercase; color: var(--text-muted); }
+  .body { font-family: var(--font-sans); font-size: 11px; color: var(--text-dim); margin-top: 10px; line-height: 1.4; }
+  .live { display:flex; align-items:center; gap:8px; margin-top:14px; }
+  .pip { width:9px; height:9px; border-radius:var(--radius-pill); background:var(--accent); box-shadow:var(--glow-accent); }
+  .live span { font-size:9px; color:var(--accent); letter-spacing:.12em; text-transform:uppercase; }
+  .glowbox { box-shadow: var(--glow-accent); border-color: transparent; }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <span class="corner tr"></span><span class="corner bl"></span>
+    <div class="lab">Panel</div>
+    <div class="body">Corner ticks register every panel — a blueprint detail. Translucent surface + 14px backdrop blur for floating chrome.</div>
+  </div>
+  <div class="panel glowbox">
+    <span class="corner tr"></span><span class="corner bl"></span>
+    <div class="lab" style="color:var(--accent)">Live</div>
+    <div class="body">Active elements gain the teal glow — a 1px ring + soft halo, never ambient bloom.</div>
+    <div class="live"><span class="pip"></span><span>running</span></div>
+  </div>
+</body>
+</html>

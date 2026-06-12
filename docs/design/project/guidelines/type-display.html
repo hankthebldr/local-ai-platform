@@ -1,0 +1,51 @@
+<!-- @dsCard group="Type" viewport="700x340" name="Display face — candidates" subtitle="Pick the display/heading voice. Recommended: Ubuntu (on-brand grub heritage)" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&family=Sora:wght@400;600;700&family=Hanken+Grotesk:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  body { background: var(--bg); padding: 18px 22px; font-family: var(--font-sans); }
+  .opt { display: flex; align-items: center; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--border-faint); }
+  .opt:last-child { border-bottom: none; }
+  .hl { font-size: 30px; font-weight: 600; letter-spacing: -.02em; color: var(--text-strong); line-height: 1; flex: 1; }
+  .hl .ac { color: var(--accent); }
+  .tag { width: 168px; flex: none; }
+  .tag .fn { font-family: var(--font-mono); font-size: 11px; color: var(--text); letter-spacing: .02em; }
+  .tag .nt { font-family: var(--font-mono); font-size: 8px; color: var(--text-muted); letter-spacing: .08em; text-transform: uppercase; margin-top: 3px; }
+  .rec { display: inline-block; font-family: var(--font-mono); font-size: 7px; letter-spacing: .12em; text-transform: uppercase; color: var(--on-accent); background: var(--accent); border-radius: var(--radius-xs); padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+  .f-ubuntu { font-family: 'Ubuntu', sans-serif; }
+  .f-sora { font-family: 'Sora', sans-serif; }
+  .f-hanken { font-family: 'Hanken Grotesk', sans-serif; }
+  .f-space { font-family: 'Space Grotesk', sans-serif; }
+  .f-mono { font-family: var(--font-mono); font-weight: 700; letter-spacing: -.01em; }
+  .meta { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); letter-spacing: .14em; text-transform: uppercase; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <div class="opt">
+    <div class="hl f-ubuntu">Compose the <span class="ac">workflow</span>.</div>
+    <div class="tag"><div class="fn">Ubuntu<span class="rec">recommended</span></div><div class="nt">humanist · grub heritage</div></div>
+  </div>
+  <div class="opt">
+    <div class="hl f-mono">Compose the <span class="ac">workflow</span>.</div>
+    <div class="tag"><div class="fn">JetBrains Mono</div><div class="nt">all-mono · max nerd</div></div>
+  </div>
+  <div class="opt">
+    <div class="hl f-sora">Compose the <span class="ac">workflow</span>.</div>
+    <div class="tag"><div class="fn">Sora</div><div class="nt">geometric · technical</div></div>
+  </div>
+  <div class="opt">
+    <div class="hl f-hanken">Compose the <span class="ac">workflow</span>.</div>
+    <div class="tag"><div class="fn">Hanken Grotesk</div><div class="nt">neutral · clean</div></div>
+  </div>
+  <div class="opt">
+    <div class="hl f-space">Compose the <span class="ac">workflow</span>.</div>
+    <div class="tag"><div class="fn">Space Grotesk</div><div class="nt">current · quirky</div></div>
+  </div>
+  <div class="meta">tell me which to ship — i'll wire the webfont + swap the --font-display token</div>
+</body>
+</html>

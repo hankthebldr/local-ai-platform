@@ -89,6 +89,7 @@ Roadmap (single-operator-appliance track):
 - **Architecture-aware orchestration (1.3.0 WIP):** design at `docs/plans/2026-05-19-architecture-aware-orchestration-design.md`; impl plan at `docs/plans/2026-05-19-architecture-aware-orchestration-implementation.md`. Introduces `Architecture` + `Deployment` abstractions, freshness-by-default eviction, sequential execution model.
 - **MCP & Skills instrumentation (1.3.0 WIP):** design at `docs/plans/2026-05-19-mcp-skills-instrumentation-design.md`; impl plan at `docs/plans/2026-05-19-mcp-skills-instrumentation-implementation.md`. Step-scoped MCP runners, archetype registry, resource-maximization compiler.
 - **Ollama version pinning:** `docs/deployment/ollama-version.md` documents the 0.23.4 baseline + upgrade procedure.
+- **Enclave design system (Claude Design handoff, 2026-06-12):** `docs/design/` — tokens, brand assets, React component specs, and the canonical chat-led console prototype (`docs/design/project/ui_kits/console-v2/`). `docs/design/README.md` explains the bundle; `docs/design/chats/` holds the design-intent transcripts. The rebrand tokens + in-shell Chat↔Canvas pivot are implemented in `api/static/index.html`; the remaining console-v2 IA (thread rail, pin-as-step, EntityCard peeks, install wizard, dataviz band) is unimplemented roadmap — design from these files, don't reinvent.
 
 ## Conventions
 
