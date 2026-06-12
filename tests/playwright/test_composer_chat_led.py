@@ -288,3 +288,148 @@ def test_dispatch_cancel_keeps_chat(signed_in_page, no_console_errors):
     assert "is-primed" not in (
         page.locator("#composer-split").get_attribute("class") or ""
     )
+
+
+# ── Context swap: chat -> composer handoff hygiene ──────────────────────────
+
+
+def _stub_planner(page):
+    page.route(
+        "**/api/composer/capture-spec",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json", body=_CAPTURE_JSON
+        ),
+    )
+    page.route(
+        "**/api/composer/scaffold",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json", body=_SCAFFOLD_JSON
+        ),
+    )
+
+
+def _promote_once(page):
+    """Run dispatch -> confirm and wait for the primed DAG."""
+    _seed_assistant_message(page)
+    page.locator(".bs-dispatch").last.click()
+    page.wait_for_function(
+        "() => { const b = document.querySelector('.bs-cmd-confirm'); return b && !b.disabled; }",
+        timeout=15_000,
+    )
+    page.locator(".bs-cmd-confirm").click()
+    page.wait_for_function(
+        "() => document.getElementById('composer-split').classList.contains('is-primed')",
+        timeout=10_000,
+    )
+    page.wait_for_function(
+        "() => { try { return Object.keys(dfNodeData || {}).length >= 2; } catch (e) { return false; } }",
+        timeout=10_000,
+    )
+    # Wait out the card's power-down cleanup (setTimeout ~320ms) — a second
+    # dispatch while the old card lingers early-returns ("one plan at a time").
+    page.wait_for_function(
+        "() => !document.getElementById('bs-plan-card')", timeout=10_000
+    )
+
+
+def test_status_strip_renders_runner_stats(signed_in_page, no_console_errors):
+    """The chat-system-strip must stay in strip grammar after the status
+    poller writes (regression: loadStatus used to clobber #status-content
+    with .metric-row panel markup -> one jammed run of text), and it must
+    name each inference runner distinctly instead of folding vLLM into
+    Ollama."""
+    page = signed_in_page
+    # The static markup ships placeholder strip-stats ("--"); wait for the
+    # poller's first real write (it stamps the API version digit).
+    page.wait_for_function(
+        "() => /v\\d/.test(document.getElementById('status-content').innerText)",
+        timeout=15_000,
+    )
+    assert page.locator("#status-content .strip-stat").count() >= 2
+    # No legacy panel markup inside the strip.
+    assert page.locator("#status-content .metric-row").count() == 0
+    text = page.locator("#status-content").inner_text().lower()
+    assert "api" in text
+    assert "ollama" in text
+    # Every runner the backend reports gets its own stat.
+    runners = page.evaluate(
+        "() => fetch('/health').then(r => r.json()).then(d => (d.runners || []).map(r => r.name))"
+    )
+    for name in runners:
+        assert name in text, f"runner {name!r} missing from the status strip"
+
+
+def test_promote_marks_transcript(signed_in_page, no_console_errors):
+    """Confirming a plan must leave a marker in the chat transcript — the
+    conversation is the operator's timeline and the handoff is part of it."""
+    page = signed_in_page
+    _stub_planner(page)
+    page.wait_for_selector("#composer-split", timeout=10_000)
+    _promote_once(page)
+    transcript = page.locator("#messages").inner_text()
+    assert "Conversation promoted" in transcript
+    assert "Vendor Email" in transcript  # names the workflow it became
+
+
+def test_new_workflow_clears_step_engage(signed_in_page, no_console_errors):
+    """Wiping the canvas must drop the chat's step-engage pointer. dfNextId
+    resets on wipe, so node ids recur — a stale pointer would re-match a
+    DIFFERENT step in the next workflow and silently route chat turns to it."""
+    page = signed_in_page
+    page.wait_for_selector("#composer-split", timeout=10_000)
+    cleared = page.evaluate("""() => {
+            window._composerEngagedNodeId = 7;
+            const badge = document.getElementById('step-engage-badge');
+            if (badge) badge.hidden = false;
+            composerNewWorkflow();
+            return {
+                engaged: window._composerEngagedNodeId,
+                badgeHidden: badge ? badge.hidden : true,
+            };
+        }""")
+    assert cleared["engaged"] is None
+    assert cleared["badgeHidden"] is True
+
+
+def test_promote_over_existing_canvas_asks_first(signed_in_page, no_console_errors):
+    """A second promotion onto a populated canvas must ask before clobbering
+    (composerLoadDefinition wipes the canvas). Dismiss keeps the existing
+    DAG; accept replaces it."""
+    page = signed_in_page
+    _stub_planner(page)
+    page.wait_for_selector("#composer-split", timeout=10_000)
+    _promote_once(page)
+    node_ids_before = page.evaluate("() => Object.keys(dfNodeData)")
+
+    # Second dispatch; DISMISS the replace dialog -> canvas untouched.
+    dialogs = {"n": 0}
+
+    def _dismiss(dialog):
+        dialogs["n"] += 1
+        dialog.dismiss()
+
+    page.once("dialog", _dismiss)
+    _seed_assistant_message(page)
+    # JS clicks from here on: with the canvas primed, spine nodes can overlap
+    # the transcript's hit-test region and intercept a pointer click.
+    page.evaluate("() => [...document.querySelectorAll('.bs-dispatch')].pop().click()")
+    page.wait_for_function(
+        "() => { const b = document.querySelector('.bs-cmd-confirm'); return b && !b.disabled; }",
+        timeout=15_000,
+    )
+    page.evaluate("() => document.querySelector('.bs-cmd-confirm').click()")
+    page.wait_for_timeout(500)
+    assert dialogs["n"] == 1, "confirm over a populated canvas must ask"
+    assert page.evaluate("() => Object.keys(dfNodeData)") == node_ids_before
+
+    # Same plan card, now ACCEPT -> canvas replaced (fresh node ids).
+    page.once("dialog", lambda d: d.accept())
+    page.evaluate("() => document.querySelector('.bs-cmd-confirm').click()")
+    page.wait_for_function(
+        "() => document.getElementById('composer-split').classList.contains('is-primed')",
+        timeout=10_000,
+    )
+    page.wait_for_function(
+        "() => { try { return Object.keys(dfNodeData || {}).length >= 2; } catch (e) { return false; } }",
+        timeout=10_000,
+    )

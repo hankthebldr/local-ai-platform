@@ -165,10 +165,20 @@ def no_console_errors(page):
     # Ignore well-known noise that doesn't break user experience.
     ignored_patterns = [
         "favicon",
-        "Failed to load resource",  # network 404s for optional assets
         "manifest",
     ]
-    real_errors = [e for e in errors if not any(p in e for p in ignored_patterns)]
+
+    def _is_noise(e: str) -> bool:
+        if any(p in e for p in ignored_patterns):
+            return True
+        # Network failures for optional assets (404s) are noise, but auth
+        # failures are not: a 401 in the console means a panel fetch went
+        # out without credentials (the boot race this filter used to mask).
+        if "Failed to load resource" in e and "401" not in e:
+            return True
+        return False
+
+    real_errors = [e for e in errors if not _is_noise(e)]
     assert not real_errors, "Unexpected console errors:\n  - " + "\n  - ".join(
         real_errors
     )
