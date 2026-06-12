@@ -389,3 +389,61 @@ All verified clean. The data visualization layer is now settled across the syste
 
 Good next steps whenever you want them: tok/s sparklines on Library model cards, the fleet-strip flyout (the rack view from the roadmap), or per-run token-rate traces in the run scrubber.
 
+## User
+
+lets talk about the pivot betewen the runs and the composor, after we run a workflow, we gottle over the composure to inspace the metadata elements -- how can we optimize/make this an innovative experiance
+
+## Assistant
+
+## Assistant
+
+_[tool: read_file]_
+
+_[tool: read_file]_
+
+Good instinct — that toggle (Runs ⇄ Composer to inspect what happened) is a join the operator is currently doing in their head. The strongest move: **don't go to the run — bring the run onto the structure.** Let me re-read the current canvas and shell code, then I'll lay out the concept and build it:
+
+_[tool: write_file]_
+
+_[tool: str_replace_edit]_
+
+_[tool: str_replace_edit]_
+
+_[tool: done]_
+
+_[tool: fork_verifier_agent]_
+
+The Run lens is built and live in the v2 kit. What changed about the Runs ⇄ Composer pivot:
+
+**Before:** run finishes → go to Runs → read a trace → toggle back to the Composer → mentally map rows onto nodes.
+
+**Now:** one canvas, two lenses —
+- **"Inspect on canvas"** on any run row lands you in the **Run lens**: same DAG, repainted with that run. Failed runs land scrubbed to the failure, ember on the exact node.
+- **Scrub timeline** (floating at the canvas foot) — segments sized by wall-clock share, so it doubles as a heatmap: you *see* which step eats the run before reading a number. Click to scrub, ▶ to replay, "jump to failure" when there is one.
+- **Metadata plates** — executed nodes wear `8.2s · 41 tok/s` plates right on the canvas; the failed one wears `✕ contract`.
+- **Recorded-step inspector** — the right panel flips from edit-fields to the step *as executed*: run/status/duration/throughput, prompt + injected context, output, and the loop-closers: *pin output as fixture · open thread here · re-run from this step*.
+- **Run rail** — the palette column becomes recent-run cards (each with its own mini duration bar); one click repaints. After a live run completes, an *"inspect this run →"* chip appears in the header — no trip to the Runs tab at all.
+
+Design stays safe: the Run lens is read-only paint; Design lens keeps full editing. Verifier is exercising the whole loop now.
+
+## User
+
+No issues found
+
+## Assistant
+
+_[tool: snip]_
+
+Verified clean — the full inspect loop works end to end: Runs → "inspect on canvas" → jump-to-failure → scrub/replay → recorded-step inspector → back to Design lens, no errors.
+
+The Runs ⇄ Composer toggle is now a **lens flip instead of a context switch**: run metadata paints directly onto the workflow's structure (duration-proportional timeline-as-heatmap, on-canvas dur/tok-per-step plates, as-executed prompt inspector), and every dead end has an exit — *pin output as fixture*, *open thread here*, *re-run from this step*.
+
+Worth considering as follow-ons when you're ready:
+- **A/B run overlay** — ghost a second run onto the same canvas to compare durations per node (regression hunting after a model swap)
+- **Edge payload peek** — click an edge in Run lens to see the actual payload that crossed it, with contract status
+- Folding the Run-lens pattern into the design system as documented components (ScrubTimeline, RunPlate) once the interaction settles
+
+## User
+
+can you please create a spec for all the front end UI/UI changes to be implemented, specifically the user story, consol, wireframe/components
+

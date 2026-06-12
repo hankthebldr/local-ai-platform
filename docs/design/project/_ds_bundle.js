@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":3,"namespace":"EnclaveDesignSystem_47ed55","components":[{"name":"ActionChip","sourcePath":"components/console/ActionChip.jsx"},{"name":"EntityCard","sourcePath":"components/console/EntityCard.jsx"},{"name":"FitBar","sourcePath":"components/console/FitBar.jsx"},{"name":"MaturityMeter","sourcePath":"components/console/MaturityMeter.jsx"},{"name":"SeedChip","sourcePath":"components/console/SeedChip.jsx"},{"name":"WizardStepper","sourcePath":"components/console/WizardStepper.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"IconButton","sourcePath":"components/core/IconButton.jsx"},{"name":"Input","sourcePath":"components/core/Input.jsx"},{"name":"Panel","sourcePath":"components/core/Panel.jsx"},{"name":"Select","sourcePath":"components/core/Select.jsx"},{"name":"StatusPip","sourcePath":"components/core/StatusPip.jsx"},{"name":"Toggle","sourcePath":"components/core/Toggle.jsx"},{"name":"Sparkline","sourcePath":"components/dataviz/Sparkline.jsx"},{"name":"TrendStat","sourcePath":"components/dataviz/TrendStat.jsx"},{"name":"UtilChart","sourcePath":"components/dataviz/UtilChart.jsx"},{"name":"MetricStat","sourcePath":"components/workflow/MetricStat.jsx"},{"name":"RoleChip","sourcePath":"components/workflow/RoleChip.jsx"},{"name":"RunStatus","sourcePath":"components/workflow/RunStatus.jsx"},{"name":"WorkflowNode","sourcePath":"components/workflow/WorkflowNode.jsx"}],"sourceHashes":{"components/console/ActionChip.jsx":"0e8b2602b856","components/console/EntityCard.jsx":"b494ee961437","components/console/FitBar.jsx":"4b74be1402c9","components/console/MaturityMeter.jsx":"771c66a727f3","components/console/SeedChip.jsx":"be09d0b4dacd","components/console/WizardStepper.jsx":"14677dcab8d2","components/core/Badge.jsx":"49d54c0b04e5","components/core/Button.jsx":"4e787b0d25e3","components/core/IconButton.jsx":"f7888a1db7d8","components/core/Input.jsx":"62df883d0c93","components/core/Panel.jsx":"3ed1564799f0","components/core/Select.jsx":"1bfe429c33a1","components/core/StatusPip.jsx":"018a6cc5644c","components/core/Toggle.jsx":"a542e2a07204","components/dataviz/Sparkline.jsx":"7f55faaf7838","components/dataviz/TrendStat.jsx":"ec759fe16f1c","components/dataviz/UtilChart.jsx":"6947b0ffed57","components/workflow/MetricStat.jsx":"9a20174f0d6b","components/workflow/RoleChip.jsx":"ed4bbce17802","components/workflow/RunStatus.jsx":"e40fcbba4c4b","components/workflow/WorkflowNode.jsx":"730927771695","ui_kits/console-v2/CanvasMode.jsx":"4cc44357801e","ui_kits/console-v2/ChatHome.jsx":"54d437cdb5ac","ui_kits/console-v2/Library2.jsx":"3042fbe92cc9","ui_kits/console-v2/data2.js":"98821720e290","ui_kits/console-v2/parts2.jsx":"be195e96d878","ui_kits/console-v2/shell2.jsx":"60424d6e0d8c","ui_kits/console/Composer.jsx":"551c230e9cee","ui_kits/console/data.js":"101cb25520b5","ui_kits/console/primitives.jsx":"5b2a46544bb4","ui_kits/console/views.jsx":"b769f53e7d2f"},"inlinedExternals":[],"unexposedExports":[]} */
+/* @ds-bundle: {"format":3,"namespace":"EnclaveDesignSystem_47ed55","components":[{"name":"ActionChip","sourcePath":"components/console/ActionChip.jsx"},{"name":"EntityCard","sourcePath":"components/console/EntityCard.jsx"},{"name":"FitBar","sourcePath":"components/console/FitBar.jsx"},{"name":"MaturityMeter","sourcePath":"components/console/MaturityMeter.jsx"},{"name":"SeedChip","sourcePath":"components/console/SeedChip.jsx"},{"name":"WizardStepper","sourcePath":"components/console/WizardStepper.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"IconButton","sourcePath":"components/core/IconButton.jsx"},{"name":"Input","sourcePath":"components/core/Input.jsx"},{"name":"Panel","sourcePath":"components/core/Panel.jsx"},{"name":"Select","sourcePath":"components/core/Select.jsx"},{"name":"StatusPip","sourcePath":"components/core/StatusPip.jsx"},{"name":"Toggle","sourcePath":"components/core/Toggle.jsx"},{"name":"Sparkline","sourcePath":"components/dataviz/Sparkline.jsx"},{"name":"TrendStat","sourcePath":"components/dataviz/TrendStat.jsx"},{"name":"UtilChart","sourcePath":"components/dataviz/UtilChart.jsx"},{"name":"MetricStat","sourcePath":"components/workflow/MetricStat.jsx"},{"name":"RoleChip","sourcePath":"components/workflow/RoleChip.jsx"},{"name":"RunStatus","sourcePath":"components/workflow/RunStatus.jsx"},{"name":"WorkflowNode","sourcePath":"components/workflow/WorkflowNode.jsx"}],"sourceHashes":{"components/console/ActionChip.jsx":"0e8b2602b856","components/console/EntityCard.jsx":"b494ee961437","components/console/FitBar.jsx":"4b74be1402c9","components/console/MaturityMeter.jsx":"771c66a727f3","components/console/SeedChip.jsx":"be09d0b4dacd","components/console/WizardStepper.jsx":"14677dcab8d2","components/core/Badge.jsx":"49d54c0b04e5","components/core/Button.jsx":"4e787b0d25e3","components/core/IconButton.jsx":"f7888a1db7d8","components/core/Input.jsx":"62df883d0c93","components/core/Panel.jsx":"3ed1564799f0","components/core/Select.jsx":"1bfe429c33a1","components/core/StatusPip.jsx":"018a6cc5644c","components/core/Toggle.jsx":"a542e2a07204","components/dataviz/Sparkline.jsx":"7f55faaf7838","components/dataviz/TrendStat.jsx":"ec759fe16f1c","components/dataviz/UtilChart.jsx":"6947b0ffed57","components/workflow/MetricStat.jsx":"9a20174f0d6b","components/workflow/RoleChip.jsx":"ed4bbce17802","components/workflow/RunStatus.jsx":"e40fcbba4c4b","components/workflow/WorkflowNode.jsx":"730927771695","ui_kits/console-v2/CanvasMode.jsx":"d36dbc670c8a","ui_kits/console-v2/ChatHome.jsx":"54d437cdb5ac","ui_kits/console-v2/Library2.jsx":"3042fbe92cc9","ui_kits/console-v2/data2.js":"98821720e290","ui_kits/console-v2/parts2.jsx":"be195e96d878","ui_kits/console-v2/shell2.jsx":"aa6fdeaf44f0","ui_kits/console/Composer.jsx":"551c230e9cee","ui_kits/console/data.js":"101cb25520b5","ui_kits/console/primitives.jsx":"5b2a46544bb4","ui_kits/console/views.jsx":"b769f53e7d2f"},"inlinedExternals":[],"unexposedExports":[]} */
 
 (() => {
 
@@ -1615,14 +1615,69 @@ Object.assign(__ds_scope, { WorkflowNode });
 
 // ui_kits/console-v2/CanvasMode.jsx
 try { (() => {
-/* Enclave Console v2 — in-shell canvas pivot (the Composer, re-entered from a thread). */
+/* Enclave Console v2 — in-shell canvas pivot (the Composer, re-entered from a thread).
+   Two lenses on one canvas: Design (edit the structure) and Run (inspect a
+   recorded run — scrub timeline, metadata plates, recorded-step inspector). */
 
+const NODE_W = 188,
+  NODE_H = 78;
+
+/* Deterministic per-run, per-node metrics (mock — stands in for checkpoint data). */
+function runMeta(runId, nodes) {
+  const h = s => {
+    let x = 7;
+    for (const c of s) x = (x * 31 + c.charCodeAt(0)) % 997;
+    return x;
+  };
+  const BASE = {
+    reasoning: 14,
+    coding: 8,
+    fast: 3,
+    general: 9,
+    uncensored: 7
+  };
+  return nodes.map(n => {
+    const jit = h(runId + n.id) % 60 / 10 - 3;
+    const dur = Math.max(1.8, (BASE[n.role] || 8) + jit);
+    const m = window.ENCLAVE.MODELS.find(x => x.id === n.model) || {
+      tps: 30
+    };
+    const tps = Math.max(4, m.tps + h(n.id + runId) % 9 - 4);
+    return {
+      dur: +dur.toFixed(1),
+      tps
+    };
+  });
+}
+function fmtClock(s) {
+  const m = Math.floor(s / 60);
+  return `${m}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+}
 function CanvasMode({
   thread,
   updateThread
 }) {
   const D = window.ENCLAVE;
-  const [selId, setSelId] = React.useState((thread.nodes && thread.nodes[0] || {}).id || null);
+  const nodes = thread.nodes || [];
+  const edges = thread.edges || [];
+
+  /* Recent runs of this workflow (mock; failIdx pins the error to a step). */
+  const RUNS = React.useMemo(() => [{
+    id: 'run-7f3a',
+    when: '2m ago',
+    state: 'success'
+  }, {
+    id: 'run-7e91',
+    when: '18m ago',
+    state: 'success'
+  }, {
+    id: 'run-7e44',
+    when: '1h ago',
+    state: 'error',
+    failIdx: Math.min(2, Math.max(0, nodes.length - 2)),
+    err: 'contract violated — missing required key `_time`'
+  }], [nodes.length]);
+  const [selId, setSelId] = React.useState((nodes[0] || {}).id || null);
   const [tab, setTab] = React.useState('roles');
   const [zoom, setZoom] = React.useState(1);
   const [run, setRun] = React.useState({
@@ -1632,14 +1687,29 @@ function CanvasMode({
   });
   const [tests, setTests] = React.useState({});
   const [input, setInput] = React.useState('');
+  const [lens, setLens] = React.useState(thread.lensRun ? 'run' : 'design');
+  const [runId, setRunId] = React.useState(thread.lensRun || RUNS[0].id);
+  const [scrub, setScrub] = React.useState(null); // null = derive default
   const timers = React.useRef([]);
   React.useEffect(() => {
     window.refreshIcons();
   });
   React.useEffect(() => () => timers.current.forEach(clearTimeout), []);
-  const nodes = thread.nodes || [];
-  const edges = thread.edges || [];
+
+  /* Arriving from the Runs view ("inspect on canvas") while already mounted. */
+  React.useEffect(() => {
+    if (thread.lensRun) {
+      setLens('run');
+      setRunId(thread.lensRun);
+      setScrub(null);
+      updateThread(thread.id, t => ({
+        ...t,
+        lensRun: null
+      }));
+    }
+  }, [thread.lensRun]);
   const sel = nodes.find(n => n.id === selId);
+  const selIdx = nodes.findIndex(n => n.id === selId);
   const paletteItems = {
     roles: D.ROLES,
     agents: D.AGENTS,
@@ -1648,6 +1718,25 @@ function CanvasMode({
     mcps: D.MCPS
   }[tab] || D.ROLES;
   const prevNode = sel ? edges.filter(e => e[1] === sel.id).map(e => nodes.find(n => n.id === e[0]))[0] || null : null;
+
+  /* ── Run lens derivations ── */
+  const curRun = RUNS.find(r => r.id === runId) || RUNS[0];
+  const meta = React.useMemo(() => runMeta(curRun.id, nodes), [curRun.id, nodes]);
+  const isErr = curRun.state === 'error';
+  const lastIdx = isErr ? curRun.failIdx : nodes.length; // n = complete
+  const pos = scrub == null ? lastIdx : Math.min(scrub, lastIdx);
+  const wall = meta.slice(0, isErr ? curRun.failIdx + 1 : meta.length).reduce((a, m) => a + m.dur, 0);
+  const runStatus = {};
+  if (lens === 'run') nodes.forEach((n, i) => {
+    runStatus[n.id] = i < pos ? 'success' : i === pos && pos < nodes.length ? isErr && i === curRun.failIdx ? 'error' : 'running' : undefined;
+  });
+  const liveStatus = lens === 'run' ? runStatus : run.status;
+  function playRun() {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setScrub(0);
+    for (let k = 1; k <= lastIdx; k++) timers.current.push(setTimeout(() => setScrub(k), k * 650));
+  }
   function patchNodes(fn) {
     updateThread(thread.id, t => ({
       ...t,
@@ -1700,6 +1789,7 @@ function CanvasMode({
     }, 900));
   }
   function startRun() {
+    setLens('design');
     timers.current.forEach(clearTimeout);
     timers.current = [];
     setRun({
@@ -1750,7 +1840,7 @@ function CanvasMode({
         ...t,
         msgs: [...t.msgs, {
           who: 'bot',
-          text: '✓ Workflow complete — checkpointed as run-' + Math.floor(Math.random() * 8999 + 1000) + '.'
+          text: '✓ Workflow complete — checkpointed as run-7f3a.'
         }]
       }));
     }, acc += 300));
@@ -1801,8 +1891,26 @@ function CanvasMode({
     tone: "success",
     sq: true
   }, "workflow"), /*#__PURE__*/React.createElement("div", {
+    className: "pivot",
+    style: {
+      marginLeft: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: lens === 'design' ? 'on' : '',
+    onClick: () => setLens('design')
+  }, /*#__PURE__*/React.createElement(Ico, {
+    n: "pen-line"
+  }), "Design"), /*#__PURE__*/React.createElement("button", {
+    className: lens === 'run' ? 'on' : '',
+    onClick: () => {
+      setLens('run');
+      setScrub(null);
+    }
+  }, /*#__PURE__*/React.createElement(Ico, {
+    n: "activity"
+  }), "Run lens")), /*#__PURE__*/React.createElement("div", {
     className: "wf-header-spacer"
-  }), run.active || run.done ? /*#__PURE__*/React.createElement("div", {
+  }), lens === 'design' && (run.active || run.done) ? /*#__PURE__*/React.createElement("div", {
     className: "wf-runchip",
     style: {
       '--rc': run.active ? 'var(--info)' : 'var(--success)'
@@ -1820,16 +1928,31 @@ function CanvasMode({
     }
   })), /*#__PURE__*/React.createElement("span", {
     className: "cnt"
-  }, doneCount, "/", nodes.length)) : null, /*#__PURE__*/React.createElement(Btn, {
+  }, doneCount, "/", nodes.length)) : null, lens === 'design' && run.done ? /*#__PURE__*/React.createElement(ActChip, {
+    icon: "activity",
+    acc: true,
+    onClick: () => {
+      setLens('run');
+      setRunId('run-7f3a');
+      setScrub(null);
+    }
+  }, "inspect this run \u2192") : null, lens === 'run' ? /*#__PURE__*/React.createElement("span", {
+    className: "runlens-meta"
+  }, curRun.id, " \xB7 ", isErr ? `failed at ${nodes[curRun.failIdx] ? nodes[curRun.failIdx].title : 'step'}` : 'complete', " \xB7 ", fmtClock(wall)) : null, /*#__PURE__*/React.createElement(Btn, {
     icon: "file-down",
     sm: true
-  }, "Export YAML"), /*#__PURE__*/React.createElement(Btn, {
+  }, "Export YAML"), lens === 'design' ? /*#__PURE__*/React.createElement(Btn, {
     variant: "primary",
     icon: "play",
     onClick: startRun
-  }, "Run")), /*#__PURE__*/React.createElement("div", {
+  }, "Run") : /*#__PURE__*/React.createElement(Btn, {
+    variant: "primary",
+    icon: "rotate-ccw",
+    sm: true,
+    onClick: startRun
+  }, "Re-run")), /*#__PURE__*/React.createElement("div", {
     className: "composer-body"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, lens === 'design' ? /*#__PURE__*/React.createElement("div", {
     className: "palette"
   }, /*#__PURE__*/React.createElement("div", {
     className: "palette-tabs"
@@ -1845,7 +1968,46 @@ function CanvasMode({
     key: i,
     item: it,
     onAdd: addNode
-  })))), /*#__PURE__*/React.createElement("div", {
+  })))) : /*#__PURE__*/React.createElement("div", {
+    className: "runrail"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "runrail-head"
+  }, /*#__PURE__*/React.createElement(MLabel, {
+    bare: true
+  }, "Recent runs")), /*#__PURE__*/React.createElement("div", {
+    className: "runrail-hint"
+  }, "Pick a run to paint it onto the canvas. Segments are sized by wall-clock share."), /*#__PURE__*/React.createElement("div", {
+    className: "runrail-list"
+  }, RUNS.map(r => {
+    const m = runMeta(r.id, nodes);
+    const tot = m.reduce((a, x) => a + x.dur, 0) || 1;
+    return /*#__PURE__*/React.createElement("div", {
+      key: r.id,
+      className: `runcard ${r.id === runId ? 'on' : ''}`,
+      onClick: () => {
+        setRunId(r.id);
+        setScrub(null);
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "top"
+    }, /*#__PURE__*/React.createElement(Pip, {
+      status: r.state
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "rid"
+    }, r.id), /*#__PURE__*/React.createElement("span", {
+      className: "rwhen"
+    }, r.when)), /*#__PURE__*/React.createElement("div", {
+      className: "segbar"
+    }, nodes.map((n, i) => /*#__PURE__*/React.createElement("i", {
+      key: n.id,
+      style: {
+        width: m[i].dur / tot * 100 + '%',
+        background: r.state === 'error' && i === r.failIdx ? 'var(--danger)' : r.state === 'error' && i > r.failIdx ? 'var(--ink-700)' : 'var(--accent-2)'
+      }
+    }))));
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "runrail-foot"
+  }, "Inspecting is non-destructive \u2014 the structure stays editable in the Design lens.")), /*#__PURE__*/React.createElement("div", {
     className: "canvas-wrap",
     onClick: () => setSelId(null)
   }, /*#__PURE__*/React.createElement("div", {
@@ -1876,8 +2038,10 @@ function CanvasMode({
     const na = nodes.find(n => n.id === a),
       nb = nodes.find(n => n.id === b);
     if (!na || !nb) return null;
-    const flowing = run.active && run.status[a] === 'success' && run.status[b] === 'running';
-    const done = run.status[a] === 'success' && run.status[b] === 'success';
+    const sa = liveStatus[a],
+      sb = liveStatus[b];
+    const flowing = (lens === 'run' || run.active) && sa === 'success' && (sb === 'running' || sb === 'error');
+    const done = sa === 'success' && sb === 'success';
     return /*#__PURE__*/React.createElement("path", {
       key: i,
       d: edgePath(na, nb),
@@ -1887,14 +2051,134 @@ function CanvasMode({
     key: n.id,
     node: n,
     selected: n.id === selId,
-    status: run.status[n.id],
+    status: liveStatus[n.id],
     inLinked: edges.some(e => e[1] === n.id),
     outLinked: edges.some(e => e[0] === n.id),
     onSelect: setSelId
-  })))), /*#__PURE__*/React.createElement("div", {
+  })), lens === 'run' ? nodes.map((n, i) => {
+    const executed = i < pos || isErr && i === curRun.failIdx && pos >= curRun.failIdx;
+    if (!executed) return null;
+    const bad = isErr && i === curRun.failIdx;
+    return /*#__PURE__*/React.createElement("div", {
+      key: 'p' + n.id,
+      className: `nodeplate ${bad ? 'err' : ''}`,
+      style: {
+        left: n.x,
+        top: n.y + NODE_H + 6
+      }
+    }, /*#__PURE__*/React.createElement("span", null, meta[i].dur, "s"), /*#__PURE__*/React.createElement("span", null, meta[i].tps, " tok/s"), bad ? /*#__PURE__*/React.createElement("span", null, "\u2715 contract") : null);
+  }) : null), lens === 'run' ? /*#__PURE__*/React.createElement("div", {
+    className: "scrubber",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "scrub-head"
+  }, /*#__PURE__*/React.createElement(IconBtn, {
+    icon: "play",
+    label: "Replay run",
+    onClick: playRun
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "scrub-lab"
+  }, pos >= nodes.length ? 'complete' : `step ${pos + 1}/${nodes.length} — ${nodes[pos] ? nodes[pos].title : ''}`), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), isErr ? /*#__PURE__*/React.createElement(ActChip, {
+    icon: "zap",
+    acc: true,
+    onClick: () => {
+      setScrub(curRun.failIdx);
+      setSelId(nodes[curRun.failIdx] && nodes[curRun.failIdx].id);
+    }
+  }, "jump to failure") : null, /*#__PURE__*/React.createElement("span", {
+    className: "scrub-lab"
+  }, fmtClock(wall), " wall")), /*#__PURE__*/React.createElement("div", {
+    className: "scrub-bar"
+  }, nodes.map((n, i) => {
+    const w = meta[i].dur / (meta.reduce((a, m) => a + m.dur, 0) || 1) * 100;
+    const cls = isErr && i === curRun.failIdx ? 'err' : i < pos ? 'done' : i === pos ? 'cur' : '';
+    const reach = !isErr || i <= curRun.failIdx;
+    return /*#__PURE__*/React.createElement("div", {
+      key: n.id,
+      className: `scrub-seg ${cls} ${reach ? '' : 'dead'}`,
+      style: {
+        width: w + '%'
+      },
+      onClick: () => {
+        if (reach) {
+          setScrub(i);
+          setSelId(n.id);
+        }
+      },
+      title: `${n.title} · ${meta[i].dur}s`
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "lb"
+    }, n.title, " \xB7 ", meta[i].dur, "s"));
+  }))) : null), /*#__PURE__*/React.createElement("div", {
     className: "inspector",
     onClick: e => e.stopPropagation()
-  }, sel ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, lens === 'run' && sel ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "insp-sec"
+  }, /*#__PURE__*/React.createElement(MLabel, null, "Recorded \u2014 ", sel.title), /*#__PURE__*/React.createElement("div", {
+    className: "runkv"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "k"
+  }, "run"), /*#__PURE__*/React.createElement("span", {
+    className: "v"
+  }, curRun.id), /*#__PURE__*/React.createElement("span", {
+    className: "k"
+  }, "status"), /*#__PURE__*/React.createElement("span", {
+    className: "v",
+    style: {
+      color: isErr && selIdx === curRun.failIdx ? 'var(--danger)' : selIdx < pos ? 'var(--success)' : 'var(--text-dim)'
+    }
+  }, isErr && selIdx === curRun.failIdx ? 'error' : selIdx < pos ? 'success' : selIdx === pos ? 'running' : 'not reached'), /*#__PURE__*/React.createElement("span", {
+    className: "k"
+  }, "duration"), /*#__PURE__*/React.createElement("span", {
+    className: "v"
+  }, meta[selIdx] ? meta[selIdx].dur + 's' : '—'), /*#__PURE__*/React.createElement("span", {
+    className: "k"
+  }, "throughput"), /*#__PURE__*/React.createElement("span", {
+    className: "v"
+  }, meta[selIdx] ? meta[selIdx].tps + ' tok/s' : '—'), /*#__PURE__*/React.createElement("span", {
+    className: "k"
+  }, "model"), /*#__PURE__*/React.createElement("span", {
+    className: "v"
+  }, sel.model))), /*#__PURE__*/React.createElement("div", {
+    className: "insp-sec"
+  }, /*#__PURE__*/React.createElement(MLabel, null, "As executed"), /*#__PURE__*/React.createElement("div", {
+    className: "asexec"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "px"
+  }, sel.prompt), /*#__PURE__*/React.createElement("div", {
+    className: "inj"
+  }, "+ injected: ", thread.seed.ctx ? `ctx ${thread.seed.ctx} · ` : '', "skill json-strict")), isErr && selIdx === curRun.failIdx ? /*#__PURE__*/React.createElement("div", {
+    className: "runerr"
+  }, curRun.err, /*#__PURE__*/React.createElement("br", null), "Violated on edge ", nodes[selIdx - 1] ? nodes[selIdx - 1].title : 'input', " \u2192 ", sel.title, ".") : selIdx < pos ? /*#__PURE__*/React.createElement("div", {
+    className: "testresult",
+    style: {
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "meta"
+  }, "output"), /*#__PURE__*/React.createElement("span", {
+    className: "out"
+  }, RUN_LINES2[sel.title] || 'step complete — output archived in the checkpoint.')) : null, /*#__PURE__*/React.createElement("div", {
+    className: "attach-row",
+    style: {
+      marginTop: 10
+    }
+  }, /*#__PURE__*/React.createElement(ActChip, {
+    icon: "pin",
+    acc: true
+  }, "pin output as fixture"), /*#__PURE__*/React.createElement(ActChip, {
+    icon: "message-square",
+    onClick: () => updateThread(thread.id, t => ({
+      ...t,
+      mode: 'chat'
+    }))
+  }, "open thread here"), /*#__PURE__*/React.createElement(ActChip, {
+    icon: "rotate-ccw"
+  }, "re-run from this step")))) : sel ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "insp-sec"
   }, /*#__PURE__*/React.createElement(MLabel, null, "Step \u2014 ", sel.title), /*#__PURE__*/React.createElement("div", {
     className: "field"
@@ -1975,7 +2259,7 @@ function CanvasMode({
     n: "mouse-pointer-click"
   }), /*#__PURE__*/React.createElement("div", {
     className: "t"
-  }, "Select a step to edit and test it.")))), /*#__PURE__*/React.createElement("div", {
+  }, lens === 'run' ? 'Select a step — or a timeline segment — to read the recorded execution.' : 'Select a step to edit and test it.')))), /*#__PURE__*/React.createElement("div", {
     className: "dock"
   }, /*#__PURE__*/React.createElement("div", {
     className: "dock-head"
@@ -3797,6 +4081,7 @@ function WorkflowsView({
 }
 function RunsView2({
   onOpenThread,
+  onInspect,
   threads
 }) {
   const D = window.ENCLAVE;
@@ -3929,8 +4214,11 @@ function RunsView2({
       paddingTop: 2
     }
   }, /*#__PURE__*/React.createElement(ActChip, {
-    icon: "message-square",
+    icon: "activity",
     acc: true,
+    onClick: () => onInspect(r)
+  }, "inspect on canvas"), /*#__PURE__*/React.createElement(ActChip, {
+    icon: "message-square",
     onClick: () => onOpenThread((threads.find(t => t.kind === 'wf') || threads[0]).id, 'chat')
   }, "open source thread"), /*#__PURE__*/React.createElement(ActChip, {
     icon: "rotate-ccw"
@@ -4080,6 +4368,16 @@ function App2() {
     setActiveId(id);
     setView('chats');
   }
+  function inspectRun(r) {
+    const t = threads.find(x => x.kind === 'wf') || threads[0];
+    updateThread(t.id, x => ({
+      ...x,
+      mode: 'canvas',
+      lensRun: ['run-7f3a', 'run-7e91', 'run-7e44'].includes(r.id) ? r.id : 'run-7e44'
+    }));
+    setActiveId(t.id);
+    setView('chats');
+  }
   const activeThread = threads.find(t => t.id === activeId) || threads[0];
   const pathDone = D2.PATH.filter(p => p.done).length;
   return /*#__PURE__*/React.createElement("div", {
@@ -4168,7 +4466,8 @@ function App2() {
     onResearch: research
   }) : null, view === 'runs' ? /*#__PURE__*/React.createElement(RunsView2, {
     threads: threads,
-    onOpenThread: openThread
+    onOpenThread: openThread,
+    onInspect: inspectRun
   }) : null), pathOpen ? /*#__PURE__*/React.createElement(PathPop, {
     onClose: () => setPathOpen(false),
     onGo: () => {

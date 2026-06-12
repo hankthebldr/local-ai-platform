@@ -35,7 +35,7 @@ function WorkflowsView({ threads, onOpenThread }) {
   </div>;
 }
 
-function RunsView2({ onOpenThread, threads }) {
+function RunsView2({ onOpenThread, onInspect, threads }) {
   const D = window.ENCLAVE;
   const [open, setOpen] = React.useState(null);
   React.useEffect(() => { window.refreshIcons(); });
@@ -79,7 +79,8 @@ function RunsView2({ onOpenThread, threads }) {
             </div>;
           })}
           <div style={{ display: 'flex', gap: 8, paddingTop: 2 }}>
-            <ActChip icon="message-square" acc onClick={() => onOpenThread((threads.find(t => t.kind === 'wf') || threads[0]).id, 'chat')}>open source thread</ActChip>
+            <ActChip icon="activity" acc onClick={() => onInspect(r)}>inspect on canvas</ActChip>
+            <ActChip icon="message-square" onClick={() => onOpenThread((threads.find(t => t.kind === 'wf') || threads[0]).id, 'chat')}>open source thread</ActChip>
             <ActChip icon="rotate-ccw">resume from checkpoint</ActChip>
           </div>
         </div> : null}
@@ -150,6 +151,11 @@ function App2() {
     updateThread(id, t => ({ ...t, mode: mode || t.mode }));
     setActiveId(id); setView('chats');
   }
+  function inspectRun(r) {
+    const t = threads.find(x => x.kind === 'wf') || threads[0];
+    updateThread(t.id, x => ({ ...x, mode: 'canvas', lensRun: ['run-7f3a', 'run-7e91', 'run-7e44'].includes(r.id) ? r.id : 'run-7e44' }));
+    setActiveId(t.id); setView('chats');
+  }
 
   const activeThread = threads.find(t => t.id === activeId) || threads[0];
   const pathDone = D2.PATH.filter(p => p.done).length;
@@ -185,7 +191,7 @@ function App2() {
         <ChatHome threads={threads} activeId={activeId} setActiveId={setActiveId} updateThread={updateThread} createThread={createThread} />) : null}
       {view === 'workflows' ? <WorkflowsView threads={threads} onOpenThread={openThread} /> : null}
       {view === 'library' ? <Library2 onSeedChat={seedChatWith} onResearch={research} /> : null}
-      {view === 'runs' ? <RunsView2 threads={threads} onOpenThread={openThread} /> : null}
+      {view === 'runs' ? <RunsView2 threads={threads} onOpenThread={openThread} onInspect={inspectRun} /> : null}
     </div>
 
     {pathOpen ? <PathPop onClose={() => setPathOpen(false)} onGo={() => { setPathOpen(false); openThread('t1', 'chat'); }} /> : null}
