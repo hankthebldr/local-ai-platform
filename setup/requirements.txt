@@ -69,7 +69,7 @@ jupyter==1.0.0
 pywebview==5.1
 
 # RAG
-pypdf==4.3.1
+pypdf==6.12.0
 
 # Prompt framework
 jinja2>=3.1
