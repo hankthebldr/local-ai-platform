@@ -433,3 +433,33 @@ def test_promote_over_existing_canvas_asks_first(signed_in_page, no_console_erro
         "() => { try { return Object.keys(dfNodeData || {}).length >= 2; } catch (e) { return false; } }",
         timeout=10_000,
     )
+
+
+def test_boot_confirm_pivots_to_canvas_mode(signed_in_page, no_console_errors):
+    """The in-shell pivot (design-system console-v2): confirming a plan
+    switches the split to canvas mode — workflow leads, chat docks as the
+    test surface — and the segmented control reflects it. Switching back
+    to Chat restores the chat-led fraction."""
+    page = signed_in_page
+    _stub_planner(page)
+    page.wait_for_selector("#composer-split", timeout=10_000)
+
+    # Starts chat-led.
+    assert page.locator("#composer-mode-chat").get_attribute("aria-pressed") == "true"
+
+    _promote_once(page)
+
+    split_class = page.locator("#composer-split").get_attribute("class") or ""
+    assert "mode-canvas" in split_class
+    assert page.locator("#composer-mode-canvas").get_attribute("aria-pressed") == "true"
+    frac = page.evaluate(
+        "() => parseFloat(document.getElementById('composer-split').style.getPropertyValue('--chat-frac'))"
+    )
+    assert frac < 40, f"canvas mode should dock the chat (~30%), got {frac}"
+
+    # Pivot back to chat.
+    page.locator("#composer-mode-chat").click()
+    frac = page.evaluate(
+        "() => parseFloat(document.getElementById('composer-split').style.getPropertyValue('--chat-frac'))"
+    )
+    assert frac > 50, f"chat mode should lead (~62%), got {frac}"
