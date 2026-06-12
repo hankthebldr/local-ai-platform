@@ -8290,28 +8290,30 @@ async function loadStatus() {
   try {
     const r = await fetch('/health');
     const d = await r.json();
-    const o = d.ollama || {};
     const s = d.system || {};
-    const isHealthy = d.status === 'healthy';
 
-    document.getElementById('status-content').innerHTML = `
-      <div class="metric-row">
-        <span class="metric-key">API</span>
-        <span class="metric-val"><span class="status-pip online"></span>Running</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-key">Ollama</span>
-        <span class="metric-val"><span class="status-pip ${isHealthy ? 'online' : 'offline'}"></span>${o.status || 'unknown'}</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-key">Models</span>
-        <span class="metric-val highlight">${o.models_loaded || 0} loaded</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-key">Version</span>
-        <span class="metric-val">v${d.version || '?'}</span>
-      </div>
-    `;
+    // #status-content lives inside the horizontal chat-system-strip, so it
+    // MUST be written in the strip grammar (.strip-stat > .stat-key +
+    // .metric-val) — the old .metric-row panel markup has no styling here
+    // and renders as one jammed run of text. One stat per runner: the
+    // backend's runners array distinguishes Ollama from vLLM (GPU path)
+    // instead of folding everything into "Ollama".
+    const runners = d.runners || [{
+      name: 'ollama',
+      status: (d.ollama || {}).status || 'unknown',
+      models_loaded: (d.ollama || {}).models_loaded || 0,
+    }];
+    const apiStat =
+      '<span class="strip-stat"><span class="stat-key">API</span>' +
+      `<span class="metric-val"><span class="status-pip online"></span>v${esc(d.version || '?')}</span></span>`;
+    const runnerStats = runners.map(rn => {
+      const up = rn.status === 'healthy';
+      const pip = `<span class="status-pip ${up ? 'online' : 'offline'}"></span>`;
+      const count = up ? `${rn.models_loaded || 0} <span class="stat-key">model${rn.models_loaded === 1 ? '' : 's'}</span>` : esc(rn.status || 'down');
+      return `<span class="strip-stat"><span class="stat-key">${esc(rn.name)}</span>` +
+             `<span class="metric-val">${pip}${count}</span></span>`;
+    }).join('');
+    document.getElementById('status-content').innerHTML = apiStat + runnerStats;
 
     setGauge('cpu-arc', 'cpu-value', s.cpu_percent || 0);
     setGauge('mem-arc', 'mem-value', s.memory_percent || 0);
@@ -8329,12 +8331,9 @@ async function loadStatus() {
     else if (s.memory_percent > 65) memArc.style.stroke = 'var(--amber)';
     else memArc.style.stroke = 'var(--green)';
   } catch(e) {
-    document.getElementById('status-content').innerHTML = `
-      <div class="metric-row">
-        <span class="metric-key">API</span>
-        <span class="metric-val"><span class="status-pip offline"></span>Unreachable</span>
-      </div>
-    `;
+    document.getElementById('status-content').innerHTML =
+      '<span class="strip-stat"><span class="stat-key">API</span>' +
+      '<span class="metric-val"><span class="status-pip offline"></span>unreachable</span></span>';
   }
 }
 
@@ -8402,10 +8401,16 @@ async function loadModels() {
     // avoids a re-fetch on every node click and keeps the picker in
     // sync with what's actually loaded in Ollama.
     window._chatModels = chatModels.map(m => m.id);
+    // Backend attribution per model id (/v1/models carries the serving
+    // runner in owned_by: "ollama" | "vllm"). Read by the per-message
+    // model chip so each reply names the backend that produced it.
+    window._modelBackends = {};
+    for (const m of chatModels) window._modelBackends[m.id] = m.owned_by || 'ollama';
     if (window.dfSelectedNodeId != null && typeof dfRenderConfigPanel === 'function') {
       try { dfRenderConfigPanel(window.dfSelectedNodeId); } catch (e) {}
     }
     const sel = document.getElementById('model-select');
+    const prevValue = sel.value;
     sel.replaceChildren();
     if (chatModels.length === 0) {
       const opt = document.createElement('option');
@@ -8414,12 +8419,32 @@ async function loadModels() {
       opt.textContent = 'No chat models — pull one (e.g. llama3.2:3b)';
       sel.appendChild(opt);
     } else {
+      // Group the picker by serving backend so the GPU path (vLLM) is
+      // visibly distinct from the Ollama fallback instead of one
+      // undifferentiated list.
+      const byBackend = new Map();
       for (const m of chatModels) {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.id;
-        sel.appendChild(opt);
+        const k = m.owned_by === 'vllm' ? 'vllm' : 'ollama';
+        if (!byBackend.has(k)) byBackend.set(k, []);
+        byBackend.get(k).push(m);
       }
+      const groupLabel = { vllm: 'vLLM · GPU', ollama: 'Ollama' };
+      for (const k of ['vllm', 'ollama']) {
+        const group = byBackend.get(k);
+        if (!group || !group.length) continue;
+        const og = document.createElement('optgroup');
+        og.label = groupLabel[k];
+        for (const m of group) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.id;
+          og.appendChild(opt);
+        }
+        sel.appendChild(og);
+      }
+      // The 10s poll re-renders the picker — don't yank the operator's
+      // current selection out from under them.
+      if (prevValue && window._chatModels.includes(prevValue)) sel.value = prevValue;
     }
     // Surface any composition-pinned models the operator is using so
     // they can talk to the same model from the chat dock.
@@ -8838,8 +8863,16 @@ async function sendMessage() {
 
       const citedContent = renderCitations(content, sources);
       const sourcesHtml = renderSources(sources);
+      // Name the model AND the backend that served it (vLLM GPU path vs
+      // Ollama) — without this every reply is backend-anonymous and the
+      // operator can't tell which runner is doing the work.
+      const ranModel = (agentShape && d.model) ? d.model : model;
+      const backend = (window._modelBackends || {})[ranModel];
+      const runChip = ranModel
+        ? `<span style="color:var(--text-muted);font-size:0.55rem;margin-left:6px;font-family:var(--mono)">${esc(ranModel)}${backend ? ' · ' + esc(backend) : ''}</span>`
+        : '';
       const mid = ChatRating.nextId();
-      messages.innerHTML += `<div class="msg assistant" id="${mid}">${citedContent}${sourcesHtml}${ChatRating.toolbarHtml(mid, {model, web_search: webSearchEnabled})}</div>`;
+      messages.innerHTML += `<div class="msg assistant" id="${mid}">${citedContent}${sourcesHtml}${runChip}${ChatRating.toolbarHtml(mid, {model: ranModel, backend, web_search: webSearchEnabled})}</div>`;
     }
   } catch(e) {
     const ti = document.getElementById(typingId);
@@ -16264,6 +16297,18 @@ window.Skeleton = (function () {
   const apiPath = /^\/(api|v1)\//;
   let _reauthInFlight = false;
 
+  // Boot gate — the panel loaders all fire on DOMContentLoaded, racing
+  // bootSignIn()'s key fetch. Anything that lost the race went out with no
+  // Authorization header and 401'd (console noise + panels rendering from a
+  // failed first fetch). Hold every pre-sign-in API request until the boot
+  // sign-in attempt settles; the wrapper re-enters itself so the deferred
+  // request picks up the key. If sign-in failed (remote install, no local
+  // license) the gate still opens and requests proceed unauthenticated —
+  // same behavior as before, minus the race.
+  let _bootSettled = false;
+  let _openBootGate;
+  const _bootGate = new Promise((res) => { _openBootGate = res; });
+
   function pathOf(input) {
     let url = typeof input === 'string' ? input : (input && input.url) || '';
     if (/^https?:\/\//.test(url)) {
@@ -16278,6 +16323,9 @@ window.Skeleton = (function () {
 
   window.fetch = function (input, init) {
     const path = pathOf(input);
+    if (path && apiPath.test(path) && !_bootSettled && !Auth.isSignedIn()) {
+      return _bootGate.then(() => window.fetch(input, init));
+    }
     let wasAuthed = false;
     if (path && apiPath.test(path) && Auth.isSignedIn()) {
       init = init || {};
@@ -16339,10 +16387,16 @@ window.Skeleton = (function () {
     } catch (_) { /* fall through to manual modal */ }
     Auth.signIn(null);
   }
+  function runBootSignIn() {
+    Promise.resolve()
+      .then(bootSignIn)
+      .catch(() => {})
+      .finally(() => { _bootSettled = true; _openBootGate(); });
+  }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bootSignIn);
+    document.addEventListener('DOMContentLoaded', runBootSignIn);
   } else {
-    bootSignIn();
+    runBootSignIn();
   }
 })();
 
@@ -18580,6 +18634,10 @@ window.BootSequence = (function () {
     if (document.getElementById('bs-plan-card')) return; // one plan at a time
     const split = document.getElementById('composer-split');
     if (!split) return;
+    // Fresh dispatch → fresh plan. Without this, a failed capture-spec
+    // leaves the PREVIOUS dispatch's spec/scaffold in _plan, and recompile/
+    // confirm would silently operate on the stale plan.
+    _plan = { spec: null, scaffold: null };
     const messages = _thread();
     if (!messages.length) {
       if (window.Toast) Toast.warn('Nothing to plan yet', 'Chat first, then hand it to your agents.');
@@ -18771,6 +18829,17 @@ window.BootSequence = (function () {
     const split = document.getElementById('composer-split');
     if (!card || !split || !_plan.scaffold) return;
 
+    // Don't clobber a live workflow silently — composerLoadDefinition wipes
+    // the canvas. Start/End anchors live only in the drawflow editor, never
+    // in dfNodeData, so every entry here is a real step.
+    const existing = (typeof dfNodeData !== 'undefined')
+      ? Object.values(dfNodeData).filter(Boolean).length : 0;
+    if (existing > 0 && !window.confirm(
+        'The canvas already holds a workflow (' + existing + ' step' +
+        (existing === 1 ? '' : 's') + '). Replace it with this plan?')) {
+      return;
+    }
+
     // If the operator edited the spec (goal / inputs / checks) since the last
     // scaffold, re-scaffold so the edits actually shape the DAG — not just the
     // goal, and not silently dropped.
@@ -18801,6 +18870,21 @@ window.BootSequence = (function () {
       composerLoadDefinition(defn);
       if (typeof ComposerSplit !== 'undefined') ComposerSplit.setSpinePrimed(true);
       window._bsPriming = false;
+      // Mark the handoff in the transcript — the chat is the operator's
+      // timeline, and without this the promotion never appears in it.
+      try {
+        const msgEl = document.getElementById('messages');
+        if (msgEl) {
+          const stepCount = (defn.steps || []).length;
+          const note = document.createElement('div');
+          note.className = 'msg system-msg';
+          note.textContent = '⚙ Conversation promoted — workflow "' +
+            (defn.name || defn.id || 'untitled') + '" (' + stepCount +
+            ' step' + (stepCount === 1 ? '' : 's') + ') is live on the canvas.';
+          msgEl.appendChild(note);
+          msgEl.scrollTop = msgEl.scrollHeight;
+        }
+      } catch (_) {}
       // Re-layout once more now the canvas is definitely visible + sized.
       setTimeout(() => { try { if (typeof dfAutoLayout === 'function') dfAutoLayout(); } catch (_) {} }, 70);
       _igniteAndStream(split);
@@ -19002,6 +19086,11 @@ function composerNewWorkflow() {
       try { dfEditor.removeNodeId('node-' + id); } catch (e) {}
     });
   }
+  // Drop the chat's step-engage pointer with the nodes it pointed into.
+  // dfNextId resets below, so a NEW workflow reuses the same numeric node
+  // ids — a stale engaged id would silently re-match a different step and
+  // route the next chat message to it.
+  try { composerExitStepEngage(); } catch (_) {}
   dfNodeData = {}; dfNextId = 0; dfSelectedNodeId = null;
   dfSeedSchema = [];  // fresh workflow → empty input contract
   ['df-wf-id', 'df-wf-name', 'df-wf-desc'].forEach(id => {
