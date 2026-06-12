@@ -339,27 +339,60 @@ async def health_check():
     import psutil
 
     ollama_healthy = ollama_service.health_check()
-    model_count = 0
-    model_names = []
+    # list_models() merges vLLM-served weights into the Ollama list (so every
+    # picker sees one catalog); split them back out here so /health attributes
+    # each model to the runner that actually serves it. The vLLM entries carry
+    # a `runner: "vllm"` marker; an empty vLLM list while the runner is
+    # registered means the server is down (it always serves its pinned model).
+    ollama_names = []
+    vllm_names = []
     if ollama_healthy:
         try:
-            models = ollama_service.list_models()
-            model_count = len(models)
-            model_names = [m["name"] for m in models]
+            for m in ollama_service.list_models():
+                (vllm_names if m.get("runner") == "vllm" else ollama_names).append(
+                    m["name"]
+                )
         except Exception:
             pass
+
+    runners = [
+        {
+            "name": "ollama",
+            "status": "healthy" if ollama_healthy else "unhealthy",
+            "models_loaded": len(ollama_names),
+            "models": ollama_names,
+        }
+    ]
+    try:
+        from .services.runner_registry import get_current_registry
+
+        registered = {k.value for k in get_current_registry().kinds()}
+    except Exception:
+        registered = {"ollama"}
+    if "vllm" in registered:
+        runners.append(
+            {
+                "name": "vllm",
+                "status": "healthy" if vllm_names else "unreachable",
+                "models_loaded": len(vllm_names),
+                "models": vllm_names,
+            }
+        )
 
     mem = psutil.virtual_memory()
 
     return {
         "status": "healthy" if ollama_healthy else "degraded",
         "version": __version__,
+        # Back-compat: this key now carries ONLY true Ollama models; vLLM
+        # weights moved to the runners array (they were never Ollama's).
         "ollama": {
             "host": OLLAMA_HOST,
             "status": "healthy" if ollama_healthy else "unhealthy",
-            "models_loaded": model_count,
-            "models": model_names,
+            "models_loaded": len(ollama_names),
+            "models": ollama_names,
         },
+        "runners": runners,
         "system": {
             "cpu_percent": psutil.cpu_percent(interval=0.1),
             "cpu_count": psutil.cpu_count(),
