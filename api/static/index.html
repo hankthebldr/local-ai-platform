@@ -4068,6 +4068,95 @@ textarea.composer-desc-area {
 
 /* Floating progress chip — pinned over the canvas while a run is live. */
 /* ── Runs tab — dedicated workflow run monitor ─────────────────── */
+
+/* ── Calm analytics (design-system dataviz) — the Runs performance band.
+   Sparklines first; charts are instruments, not decoration. Fixed series
+   colors (accent → accent-2 → info), amber for thresholds only, zero-based
+   axes, data-ink only. */
+.runs-perf-band {
+  display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px 20px; margin-bottom: 12px;
+}
+.runs-perf-band .band-divider { width: 1px; align-self: stretch; background: var(--border); }
+.runs-perf-trends { display: flex; gap: 28px; flex-wrap: wrap; padding-top: 4px; }
+.encl-trend { display: flex; flex-direction: column; gap: 4px; }
+.encl-trend-k {
+  font-family: var(--mono); font-size: 0.625rem; font-weight: 500;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted);
+}
+.encl-trend-row { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.encl-trend-v { font-family: var(--mono); font-size: 1.25rem; font-weight: 600; color: var(--text); line-height: 1.1; }
+.encl-trend-d { font-family: var(--mono); font-size: 0.625rem; font-weight: 600; }
+.encl-trend-d.up { color: var(--success); }
+.encl-trend-d.down { color: var(--panw-orange); }
+.encl-trend-d.flat { color: var(--text-faint); }
+.encl-util { display: flex; flex-direction: column; gap: 8px; }
+.encl-util-legend { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.encl-util-key {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 0.625rem; color: var(--text-dim);
+}
+.encl-util-key .d { width: 7px; height: 7px; border-radius: 50%; background: var(--kc); }
+.encl-util-key .v { color: var(--text); font-weight: 600; }
+.encl-util-key .u { color: var(--text-faint); }
+.encl-util svg text { font-family: var(--mono); font-size: 9px; fill: var(--text-faint); }
+
+/* ── AssetPeek — the unified deep-dive slide-over (design-system
+   EntityCard → peek pattern). One panel for every asset kind: models,
+   agents, plugins/skills. Identity head + specs + benchmarks (FitBar
+   rows) + kind-specific actions. */
+#asset-peek {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 92vw);
+  background: var(--bg-elev); border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-3); z-index: 900;
+  transform: translateX(102%); transition: transform var(--t-med) var(--ease-out);
+  display: flex; flex-direction: column;
+}
+#asset-peek.open { transform: translateX(0); }
+.peek-head { display: flex; align-items: flex-start; gap: 10px; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+.peek-kind {
+  font-family: var(--mono); font-size: 0.56rem; letter-spacing: var(--tracking-caps);
+  text-transform: uppercase; padding: 3px 8px; border-radius: 3px;
+  border: 1px solid var(--accent-dim); color: var(--accent); background: var(--accent-ghost);
+  flex-shrink: 0; margin-top: 2px;
+}
+.peek-title { font-size: 0.95rem; font-weight: 600; color: var(--text); line-height: 1.25; }
+.peek-id { font-family: var(--mono); font-size: 0.62rem; color: var(--text-muted); margin-top: 2px; }
+.peek-close { margin-left: auto; }
+.peek-body { flex: 1; overflow-y: auto; padding: 14px 18px 20px; }
+.peek-section { margin-bottom: 16px; }
+.peek-section-label {
+  font-family: var(--mono); font-size: 0.58rem; letter-spacing: var(--tracking-caps);
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.peek-section-label::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.peek-about { font-size: 0.74rem; line-height: 1.55; color: var(--text-dim); white-space: pre-line; }
+.peek-kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 16px; }
+.peek-kv .k { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); align-self: baseline; }
+.peek-kv .v { font-family: var(--mono); font-size: 0.7rem; color: var(--text); word-break: break-word; }
+.peek-fit-row { display: grid; grid-template-columns: 86px 1fr 34px; gap: 10px; align-items: center; margin-bottom: 6px; }
+.peek-fit-k { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+.peek-fit-bar { height: 6px; border-radius: 3px; background: var(--bg-deep); overflow: hidden; }
+.peek-fit-bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.peek-fit-bar.warm i { background: var(--accent-2-bright); }
+.peek-fit-v { font-family: var(--mono); font-size: 0.62rem; color: var(--text); text-align: right; }
+.peek-foot-note { font-size: 0.58rem; color: var(--text-faint); margin-top: 8px; line-height: 1.5; }
+.peek-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--border); }
+.peek-starter {
+  display: block; width: 100%; text-align: left; background: var(--bg-deep);
+  border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px;
+  font-size: 0.68rem; color: var(--text-dim); cursor: pointer; margin-bottom: 6px;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+}
+.peek-starter:hover { border-color: var(--accent-dim); color: var(--text); }
+.peek-list-item { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+.peek-list-item .n { font-family: var(--mono); font-size: 0.68rem; color: var(--text); flex-shrink: 0; }
+.peek-list-item .d { font-size: 0.64rem; color: var(--text-muted); }
+#asset-peek-backdrop { position: fixed; inset: 0; z-index: 899; background: rgba(0,0,0,0.35); opacity: 0; pointer-events: none; transition: opacity var(--t-med) var(--ease-out); }
+#asset-peek-backdrop.open { opacity: 1; pointer-events: auto; }
+
 .runs-tab-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
@@ -4304,7 +4393,37 @@ textarea.composer-desc-area {
   color: var(--text); background: var(--bg-deep);
   white-space: pre-wrap; word-break: break-word;
   border-top: 1px solid var(--border);
+  /* Not rigid: the operator drags the block to the height the content
+     deserves (native resize handle, bottom-right corner). */
+  resize: vertical; min-height: 60px;
 }
+
+/* ── Step "decisions" panel — the agentic record: what was invoked, what
+   it cost, what the platform decided. Surfaces the per-step telemetry the
+   engine already persists (skills/MCP/tools, timing anatomy, pressure). */
+.run-decisions { border: 1px solid var(--border); border-radius: 6px; background: var(--bg-deep); padding: 10px 12px; margin-bottom: 10px; }
+.run-decisions-kv { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 4px 14px; margin-bottom: 8px; }
+.run-decisions-kv .k {
+  font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-faint); align-self: baseline;
+}
+.run-decisions-kv .v { font-family: var(--mono); font-size: 0.7rem; color: var(--text); }
+.run-timing-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; gap: 1px; margin: 6px 0 2px; }
+.run-timing-bar i { display: block; min-width: 2px; }
+.run-timing-bar .seg-load { background: var(--warn-dim); }
+.run-timing-bar .seg-prompt { background: var(--info-dim); }
+.run-timing-bar .seg-eval { background: var(--accent-dim); }
+.run-timing-legend { display: flex; gap: 14px; font-family: var(--mono); font-size: 0.58rem; color: var(--text-muted); }
+.run-timing-legend i { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.run-decision-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.run-decision-chip {
+  font-family: var(--mono); font-size: 0.6rem; padding: 2px 8px;
+  border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim);
+}
+.run-decision-chip.skill { border-color: var(--accent-dim); color: var(--accent); }
+.run-decision-chip.mcp { border-color: var(--info-dim); color: var(--info); }
+.run-decision-chip.tool { border-color: var(--accent-2-dim); color: var(--accent-2-bright); }
+.run-decision-chip.none { opacity: 0.55; }
 /* Workflow-progress chip — lives in the .runs-tab-detail-head panel
    header now (above the DAG canvas), inline-flex next to the run-
    management buttons. Previous attempts placed it ABSOLUTELY inside
@@ -4809,13 +4928,49 @@ textarea.composer-desc-area {
   align-items: stretch;
   width: 100%;
   box-sizing: border-box;
-  min-height: clamp(520px, calc(100vh - 200px), 1600px);
+  /* Viewport-fit: the composer fills exactly the space below the chrome —
+     no page scroll, no panels lost under the fold. Children scroll
+     internally (chat-messages, canvas, workstream). 225px ≈ header + tab
+     bar + breadcrumb; the clamp keeps short windows usable. */
+  height: clamp(480px, calc(100vh - 225px), 1600px);
 }
-.composer-split > .agent-chat-dock      { grid-column: 1; grid-row: 1 / 3; margin-top: 0; min-height: 0; max-height: clamp(520px, calc(100vh - 200px), 1600px); }
+.composer-split > .agent-chat-dock      { grid-column: 1; grid-row: 1 / 3; margin-top: 0; min-height: 0; max-height: none; height: 100%; }
 .composer-split > #composer-divider     { grid-column: 2; grid-row: 1 / 3; }
-.composer-split > .composer-grid        { grid-column: 3; grid-row: 1; min-height: 0; }
-.composer-split > .composer-workstream  { grid-column: 3; grid-row: 2; }
+.composer-split > .composer-grid        { grid-column: 3; grid-row: 1; min-height: 0; min-width: 0; }
+.composer-split > .composer-workstream  { grid-column: 3; grid-row: 2; min-width: 0; max-height: 36vh; overflow-y: auto; }
 .composer-split > #composer-spine-dormant { grid-column: 3; grid-row: 1 / 3; }
+
+/* Inside the split, the transcript flexes to the dock's full height —
+   the standalone .chat-messages 400px clamp is for other surfaces. The
+   chat genuinely reaches the bottom of the screen. */
+.composer-split .agent-chat-dock .chat-messages {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: none;
+}
+
+/* Canvas mode — workflow leads. The workstream row collapses (step config
+   lives in the floating popup on the canvas), so the DAG gets the full
+   column height. */
+.composer-split.mode-canvas > .composer-grid { grid-row: 1 / 3; }
+.composer-split.mode-canvas > .composer-workstream { display: none; }
+
+/* Focus mode — the canvas slides over the full width and the chat docks
+   UNDERNEATH as a full-width strip (the v1 bottom agent-dock pattern).
+   One column, two rows: canvas dominant, chat docked at the foot. */
+.composer-split.mode-focus {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr) clamp(180px, 26vh, 320px);
+  row-gap: 12px;
+}
+.composer-split.mode-focus > .agent-chat-dock      { grid-column: 1; grid-row: 2; }
+.composer-split.mode-focus > #composer-divider     { display: none; }
+.composer-split.mode-focus > .composer-grid        { grid-column: 1; grid-row: 1; }
+.composer-split.mode-focus > .composer-workstream  { display: none; }
+.composer-split.mode-focus > #composer-spine-dormant { grid-column: 1; grid-row: 1; }
+/* In the bottom dock, the system strip + header give way to the transcript. */
+.composer-split.mode-focus .chat-system-strip { display: none; }
+.composer-split.mode-focus .system-prompt-row { display: none !important; }
 
 .composer-divider {
   cursor: col-resize;
@@ -6421,6 +6576,9 @@ body.bs-show-hint .bs-dispatch:hover::after {
                   onclick="ComposerSplit.setMode('chat')">Chat</button>
           <button type="button" id="composer-mode-canvas" class="mode-btn" aria-pressed="false"
                   onclick="ComposerSplit.setMode('canvas')">Canvas</button>
+          <button type="button" id="composer-mode-focus" class="mode-btn" aria-pressed="false"
+                  title="Canvas takes the full width; chat docks underneath"
+                  onclick="ComposerSplit.setMode('focus')">⛶ Focus</button>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Agent</label>
@@ -7031,6 +7189,14 @@ body.bs-show-hint .bs-dispatch:hover::after {
        with the same status overlays the composer uses. Selecting a
        row in-flight starts live polling. -->
   <div class="tab-content" id="tab-runs" style="display:none">
+    <!-- Performance band — calm analytics where the operating decisions
+         happen: host utilization over the last ~15 min (live /health
+         samples) + run-cadence trends from the run history. -->
+    <div class="runs-perf-band" id="runs-perf-band" hidden>
+      <div class="encl-util" id="runs-util-chart"></div>
+      <div class="band-divider"></div>
+      <div class="runs-perf-trends" id="runs-perf-trends"></div>
+    </div>
     <div class="runs-tab-layout">
       <!-- LEFT: filterable list of recent runs -->
       <div class="runs-tab-list panel">
@@ -7167,6 +7333,22 @@ body.bs-show-hint .bs-dispatch:hover::after {
        Shows the full step record (metadata, the prompt that ran, the output)
        and PIVOTS that turn this step's context into the next action: research
        it, view it in the context graph, or seed a new agent from it. -->
+  <!-- AssetPeek — unified deep-dive slide-over for every asset kind -->
+  <div id="asset-peek-backdrop" onclick="AssetPeek.close()"></div>
+  <aside id="asset-peek" role="dialog" aria-modal="false" aria-labelledby="peek-title">
+    <span class="corner-tr"></span><span class="corner-bl"></span>
+    <div class="peek-head">
+      <span class="peek-kind" id="peek-kind">asset</span>
+      <div>
+        <div class="peek-title" id="peek-title">—</div>
+        <div class="peek-id" id="peek-id">—</div>
+      </div>
+      <button class="action-btn xs ghost peek-close" onclick="AssetPeek.close()" aria-label="Close">×</button>
+    </div>
+    <div class="peek-body" id="peek-body"></div>
+    <div class="peek-actions" id="peek-actions"></div>
+  </aside>
+
   <div id="runs-step-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="runs-step-modal-title">
     <div class="admin-modal-card" style="width:min(820px,94vw);max-height:88vh;display:flex;flex-direction:column">
       <div class="runs-step-modal-head">
@@ -8235,7 +8417,10 @@ function switchTab(name, el) {
     }
     _refreshProjectsCount();
   }
-  if (name === 'runs' && window.RunsTab) RunsTab.init();
+  if (name === 'runs' && window.RunsTab) {
+    RunsTab.init();
+    try { renderRunsPerfBand(); } catch (_) {}
+  }
   if (name === 'inventory') {
     // Move the shared inventory DOM back from the Catalog mount so
     // the Models tab actually renders. Idempotent if it's already home.
@@ -8367,6 +8552,14 @@ async function loadStatus() {
     }).join('');
     document.getElementById('status-content').innerHTML = apiStat + runnerStats;
 
+    // Host-utilization ring buffer — feeds the Runs tab's performance band
+    // (UtilChart over the last ~15 min). 90 samples × 10s poll = 15 min.
+    if (s.cpu_percent != null) {
+      window._sysHistory = window._sysHistory || [];
+      window._sysHistory.push({ t: Date.now(), cpu: s.cpu_percent, mem: s.memory_percent || 0 });
+      if (window._sysHistory.length > 90) window._sysHistory.shift();
+    }
+
     setGauge('cpu-arc', 'cpu-value', s.cpu_percent || 0);
     setGauge('mem-arc', 'mem-value', s.memory_percent || 0);
     document.getElementById('cpu-cores').textContent = (s.cpu_count || '--') + ' threads';
@@ -8388,6 +8581,298 @@ async function loadStatus() {
       '<span class="metric-val"><span class="status-pip offline"></span>unreachable</span></span>';
   }
 }
+
+/* ── CALM ANALYTICS — dataviz atoms (design-system port) ─────────
+   Pure functions of data → SVG/HTML strings. No interaction, no
+   animation, no tooltips: sparklines first, fixed series colors
+   (accent → accent-2 → info), amber for thresholds only, zero-based
+   axes, data-ink only. */
+function enclSparkline(data, opts) {
+  opts = opts || {};
+  const w = opts.width || 110, h = opts.height || 24, color = opts.color || 'var(--accent)';
+  if (!Array.isArray(data) || data.length < 2) return '';
+  const hi = opts.max != null ? opts.max : Math.max(...data, 1);
+  const lo = opts.min != null ? opts.min : Math.min(...data, 0);
+  const span = (hi - lo) || 1;
+  const px = i => (2 + (i / (data.length - 1)) * (w - 4)).toFixed(1);
+  const py = v => (2 + (h - 4) * (1 - (v - lo) / span)).toFixed(1);
+  const line = data.map((v, i) => `${px(i)},${py(v)}`).join(' ');
+  const lastX = px(data.length - 1), lastY = py(data[data.length - 1]);
+  return `<svg width="${w}" height="${h}" aria-hidden="true">
+    <polygon points="${px(0)},${h - 2} ${line} ${lastX},${h - 2}" fill="${color}" opacity="0.10"></polygon>
+    <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+    <circle cx="${lastX}" cy="${lastY}" r="2" fill="${color}"></circle>
+  </svg>`;
+}
+
+function enclTrendStat(opts) {
+  // delta is caller-preformatted ("+12%", "-9s"). 'up' class is ALWAYS the
+  // good color and 'down' always ember — deltaGood=false flips which arrow
+  // direction counts as good (latency, memory: up is bad).
+  const { label, value, delta, deltaGood = true, spark, color = 'var(--accent)' } = opts;
+  let deltaHtml = '';
+  if (delta) {
+    const neg = String(delta).startsWith('-');
+    const cls = neg ? (deltaGood ? 'down' : 'up') : (deltaGood ? 'up' : 'down');
+    const glyph = neg ? '▾' : '▴';
+    deltaHtml = `<span class="encl-trend-d ${cls}">${glyph} ${esc(String(delta).replace(/^-/, ''))}</span>`;
+  }
+  return `<div class="encl-trend">
+    <span class="encl-trend-k">${esc(label)}</span>
+    <div class="encl-trend-row"><span class="encl-trend-v">${esc(value)}</span>${deltaHtml}</div>
+    ${Array.isArray(spark) && spark.length > 1 ? enclSparkline(spark, { color }) : ''}
+  </div>`;
+}
+
+function enclUtilChart(series, opts) {
+  opts = opts || {};
+  const w = opts.width || 460, h = opts.height || 130, max = opts.max || 100;
+  const unit = opts.unit || '%', warn = opts.warn, xlabels = opts.xlabels || [];
+  const m = { t: 8, r: 36, b: 16, l: 6 };
+  const pw = w - m.l - m.r, ph = h - m.t - m.b;
+  const COLORS = ['var(--accent)', 'var(--accent-2)', 'var(--info)'];
+  const y = v => (m.t + ph * (1 - Math.min(v, max) / max)).toFixed(1);
+  let svg = '';
+  for (const g of [0, 50, 100]) {
+    const gv = g * max / 100;
+    if (gv > max) continue;
+    svg += `<line x1="${m.l}" y1="${y(gv)}" x2="${m.l + pw}" y2="${y(gv)}" stroke="var(--border)" stroke-width="1"></line>
+            <text x="${m.l + pw + 5}" y="${(+y(gv) + 3).toFixed(1)}">${Math.round(gv)}${unit}</text>`;
+  }
+  if (warn != null) {
+    svg += `<line x1="${m.l}" y1="${y(warn)}" x2="${m.l + pw}" y2="${y(warn)}" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 4" opacity="0.8"></line>
+            <text x="${m.l + pw + 5}" y="${(+y(warn) + 3).toFixed(1)}" fill="var(--warn)">${warn}${unit}</text>`;
+  }
+  let legend = '';
+  series.slice(0, 3).forEach((s, si) => {
+    const c = s.color || COLORS[si % 3];
+    const n = s.data.length;
+    if (n >= 2) {
+      const x = i => (m.l + (i / Math.max(1, n - 1)) * pw).toFixed(1);
+      const line = s.data.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+      svg += `<polygon points="${m.l},${m.t + ph} ${line} ${m.l + pw},${m.t + ph}" fill="${c}" opacity="0.08"></polygon>
+              <polyline points="${line}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"></polyline>`;
+    }
+    const latest = s.data[n - 1];
+    legend += `<span class="encl-util-key" style="--kc:${c}"><span class="d"></span>${esc(s.label)}
+      <span class="v">${latest != null ? Math.round(latest) : '—'}</span><span class="u">${unit}</span></span>`;
+  });
+  xlabels.forEach((lb, i) => {
+    const anchor = i === 0 ? 'start' : (i === xlabels.length - 1 ? 'end' : 'middle');
+    const xx = m.l + (i / Math.max(1, xlabels.length - 1)) * pw;
+    svg += `<text x="${xx.toFixed(1)}" y="${h - 3}" text-anchor="${anchor}">${esc(lb)}</text>`;
+  });
+  return `<div class="encl-util-legend">${legend}</div>
+    <svg width="${w}" height="${h}" role="img" aria-label="${esc(series.map(s => s.label).join(', '))} over time">${svg}</svg>`;
+}
+
+/* The Runs performance band — host utilization (live ring buffer) +
+   cadence trends computed from the run history. Numbers live where the
+   operating decisions happen; no dashboard page. */
+async function renderRunsPerfBand() {
+  const band = document.getElementById('runs-perf-band');
+  if (!band) return;
+  try {
+    const hist = window._sysHistory || [];
+    const utilEl = document.getElementById('runs-util-chart');
+    if (utilEl && hist.length >= 2) {
+      const spanMin = Math.max(1, Math.round((hist[hist.length - 1].t - hist[0].t) / 60000));
+      utilEl.innerHTML = enclUtilChart(
+        [{ label: 'cpu', data: hist.map(s => s.cpu) }, { label: 'mem', data: hist.map(s => s.mem) }],
+        { warn: 85, max: 100, unit: '%', xlabels: [`-${spanMin}m`, `-${Math.round(spanMin / 2)}m`, 'now'] });
+    } else if (utilEl) {
+      utilEl.innerHTML = '<div class="model-empty" style="padding:20px 30px">Collecting host samples… (10s poll)</div>';
+    }
+
+    const r = await fetch('/api/workflows/runs?limit=60');
+    const runs = (await r.json()) || [];
+    const done = runs.filter(x => x.started_at && x.completed_at);
+    const durs = done.map(x => (new Date(x.completed_at) - new Date(x.started_at)) / 1000).filter(d => d > 0);
+    const fmtClock = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+    // Compare the recent half against the previous half — equal windows.
+    const half = Math.floor(durs.length / 2);
+    const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+    const avgRecent = avg(durs.slice(0, half || durs.length));
+    const avgPrev = avg(durs.slice(half));
+    const avgDelta = (half && avgPrev) ? Math.round(avgRecent - avgPrev) : null;
+    const byDay = {};
+    runs.forEach(x => { if (x.started_at) { const d = x.started_at.slice(0, 10); byDay[d] = (byDay[d] || 0) + 1; } });
+    const days = Object.keys(byDay).sort();
+    const perDay = days.map(d => byDay[d]);
+    const ok = runs.filter(x => x.status === 'completed').length;
+    const okPct = runs.length ? Math.round(100 * ok / runs.length) : 0;
+
+    const trends = document.getElementById('runs-perf-trends');
+    if (trends) {
+      trends.innerHTML =
+        enclTrendStat({ label: 'avg run', value: durs.length ? fmtClock(avgRecent) : '—',
+          delta: avgDelta != null && avgDelta !== 0 ? `${avgDelta > 0 ? '+' : ''}${avgDelta}s` : '',
+          deltaGood: false, spark: durs.slice(0, 16).reverse(), color: 'var(--accent-2)' }) +
+        enclTrendStat({ label: 'runs / day', value: perDay.length ? String(perDay[perDay.length - 1]) : '0',
+          spark: perDay.slice(-14), color: 'var(--info)' }) +
+        enclTrendStat({ label: 'success', value: `${okPct}%`, spark: [], color: 'var(--accent)' });
+    }
+    band.hidden = false;
+  } catch (e) { band.hidden = true; }
+}
+
+/* ── ASSET PEEK — unified deep-dive (design-system EntityCard→peek) ──
+   One slide-over for models / agents / plugins. The model dive carries
+   curated benchmark + role-fit enrichment (served from
+   /api/inventory/enrichment, shipped as repo data — no phone-home) so
+   pull decisions are educated ones: "this model, because HumanEval 88."
+   Every figure is approximate published data; absence means no credible
+   figure exists. */
+window.AssetPeek = (function () {
+  let _enrichment = null;   // lazy, cached for the session
+  let _catalog = null;
+
+  async function _getEnrichment() {
+    if (_enrichment) return _enrichment;
+    try { _enrichment = await (await fetch('/api/inventory/enrichment')).json(); }
+    catch (_) { _enrichment = {}; }
+    return _enrichment;
+  }
+  async function _getCatalog() {
+    if (_catalog) return _catalog;
+    try {
+      const d = await (await fetch('/api/inventory/catalog')).json();
+      _catalog = d.models || d || [];
+    } catch (_) { _catalog = []; }
+    return _catalog;
+  }
+
+  function _fitRow(label, val, warm) {
+    return `<div class="peek-fit-row">
+      <span class="peek-fit-k">${esc(label)}</span>
+      <span class="peek-fit-bar${warm ? ' warm' : ''}"><i style="width:${Math.max(2, Math.min(100, val))}%"></i></span>
+      <span class="peek-fit-v">${val}</span>
+    </div>`;
+  }
+
+  function _kv(pairs) {
+    return `<div class="peek-kv">` + pairs
+      .filter(([, v]) => v != null && v !== '')
+      .map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(String(v))}</span>`)
+      .join('') + `</div>`;
+  }
+
+  function _section(label, html) {
+    return html ? `<div class="peek-section"><div class="peek-section-label">${esc(label)}</div>${html}</div>` : '';
+  }
+
+  function _show(kind, title, id, bodyHtml, actionsHtml) {
+    document.getElementById('peek-kind').textContent = kind;
+    document.getElementById('peek-title').textContent = title;
+    document.getElementById('peek-id').textContent = id;
+    document.getElementById('peek-body').innerHTML = bodyHtml;
+    document.getElementById('peek-actions').innerHTML = actionsHtml || '';
+    document.getElementById('asset-peek').classList.add('open');
+    document.getElementById('asset-peek-backdrop').classList.add('open');
+  }
+
+  function close() {
+    document.getElementById('asset-peek').classList.remove('open');
+    document.getElementById('asset-peek-backdrop').classList.remove('open');
+  }
+
+  // "Seed a chat" — the design's terminal action: every deep dive can end
+  // in a conversation. Switches to the Composer, scopes the picker, and
+  // focuses the prompt (optionally pre-filled).
+  function seedChat(modelId, agentId, starter) {
+    close();
+    const tabBtn = document.querySelector('[data-tab="dashboard"]');
+    if (typeof switchTab === 'function') switchTab('dashboard', tabBtn);
+    if (agentId) {
+      const sel = document.getElementById('agent-select');
+      if (sel) { sel.value = agentId; try { onAgentSelectionChanged(); } catch (_) {} }
+    } else if (modelId) {
+      const sel = document.getElementById('model-select');
+      if (sel && [...sel.options].some(o => o.value === modelId)) sel.value = modelId;
+    }
+    const p = document.getElementById('prompt');
+    if (p) { if (starter) p.value = starter; p.focus(); }
+  }
+
+  async function openModel(id) {
+    const [cat, enr] = await Promise.all([_getCatalog(), _getEnrichment()]);
+    const m = cat.find(x => x.id === id || x.ollama === id);
+    if (!m) return;
+    const e = enr[m.id] || enr[m.ollama] || {};
+    const b = e.benchmarks || {};
+    const benchHtml = Object.keys(b).length
+      ? Object.entries(b).map(([k, v]) => _fitRow(k, v)).join('') +
+        `<div class="peek-foot-note">${esc(e.basis || '')} · approximate published evals — see data/discovery/model_benchmarks.json</div>`
+      : `<div class="peek-foot-note">No credible published benchmarks for this variant — absence is honest, not an oversight.${e.notes ? '' : ''}</div>`;
+    const fit = e.role_fit || {};
+    const fitHtml = Object.keys(fit).length
+      ? Object.entries(fit).map(([k, v]) => _fitRow(k, v, true)).join('')
+      : '';
+    const body =
+      _section('about', `<div class="peek-about">${esc(m.description || '')}${e.notes ? '\n\n' + esc(e.notes) : ''}</div>`) +
+      _section('specs', _kv([
+        ['params', e.params], ['size', m.size], ['speed', m.speed], ['context', m.context],
+        ['family', e.family], ['license', e.license],
+        ['source', m.ollama ? 'ollama: ' + m.ollama : (m.gguf ? 'hf.co/' + m.gguf : '—')],
+        ['fits this host', m.fits_ram === false ? 'NO — exceeds RAM budget' : 'yes'],
+      ])) +
+      _section('benchmarks', benchHtml) +
+      (fitHtml ? _section('role fit', fitHtml) : '');
+    const pullTarget = m.ollama || (m.gguf ? 'hf.co/' + m.gguf : '');
+    const actions = (m.installed
+        ? `<button class="action-btn accent" onclick="AssetPeek.seedChat('${esc(m.ollama || m.id)}')">Seed a chat →</button>`
+        : (pullTarget ? `<button class="action-btn accent pull" onclick="AssetPeek.close();pullModel('${esc(pullTarget)}', '${esc(m.id)}')">Pull model</button>` : '')) +
+      ((m.huggingface || m.gguf) ? `<button class="action-btn ghost" onclick="reviewModel('${esc(m.huggingface || m.gguf)}')">Review source</button>` : '');
+    _show('model', m.name, m.id, body, actions);
+  }
+
+  async function openAgent(id) {
+    let agents = [];
+    try { agents = await (await fetch('/api/agents')).json(); } catch (_) {}
+    const a = (agents || []).find(x => x.id === id);
+    if (!a) return;
+    const starters = (a.starters || []).map(s =>
+      `<button class="peek-starter" onclick="AssetPeek.seedChat(null, '${esc(a.id)}', '${esc(String(s).replace(/'/g, "\\'"))}')">${esc(s)}</button>`).join('');
+    const body =
+      _section('about', `<div class="peek-about">${esc(a.description || '')}</div>`) +
+      _section('binding', _kv([
+        ['model', a.model], ['role', a.role], ['tags', (a.tags || []).join(' · ')], ['file', a.file],
+      ])) +
+      _section('conversation starters', starters || '<div class="peek-foot-note">none declared</div>');
+    const actions = `<button class="action-btn accent" onclick="AssetPeek.seedChat(null, '${esc(a.id)}')">Chat with agent →</button>` +
+      `<button class="action-btn ghost" onclick="AssetPeek.close();showEditAgentModal('${esc(a.id)}')">Edit</button>`;
+    _show('agent', a.name, a.id + (a.model ? ' · ' + a.model : ''), body, actions);
+  }
+
+  async function openPlugin(id) {
+    let plugins = [];
+    try { plugins = await (await fetch('/api/plugins')).json(); } catch (_) {}
+    const p = (plugins || []).find(x => x.id === id);
+    if (!p) return;
+    const tools = (p.tools || []).map(t =>
+      `<div class="peek-list-item"><span class="n">⚙ ${esc(t.id || t.name || '')}</span><span class="d">${esc(t.description || '')}</span></div>`).join('');
+    const skills = (p.skills || []).map(s =>
+      `<div class="peek-list-item"><span class="n">⚡ ${esc(s.id || s.name || '')}</span><span class="d">${esc(s.description || (s.triggers || []).join(', '))}</span></div>`).join('');
+    const body =
+      _section('about', `<div class="peek-about">${esc(p.description || '')}</div>`) +
+      _section('identity', _kv([['version', p.version], ['author', p.author], ['path', p.path]])) +
+      _section('tools', tools || '<div class="peek-foot-note">no tools</div>') +
+      _section('skills', skills || '<div class="peek-foot-note">no skills</div>');
+    _show('plugin', p.name, p.id, body, '');
+  }
+
+  function open(kind, id) {
+    if (kind === 'model') return openModel(id);
+    if (kind === 'agent') return openAgent(id);
+    if (kind === 'plugin') return openPlugin(id);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('asset-peek')?.classList.contains('open')) close();
+  });
+
+  return { open, close, seedChat };
+})();
 
 /* ── MODELS LOADER (dashboard panel) ───────────────────────────── */
 // Embedding-only model families that don't implement Ollama's /api/chat.
@@ -9889,7 +10374,7 @@ function renderCatalog() {
 
     return `
       <div class="inv-card ${badgeClass}${fitClass}">
-        <div class="inv-card-header">
+        <div class="inv-card-header" onclick="AssetPeek.open('model','${esc(m.id)}')" style="cursor:pointer" title="Deep dive — specs, benchmarks, role fit">
           <div>
             <div class="inv-card-name">${esc(m.name)}</div>
             <div class="inv-card-id">${esc(m.id)}</div>
@@ -14332,6 +14817,8 @@ async function loadAgentsTab() {
           <div class="agent-tile-subtitle">${esc(subtitle || (a.role ? 'Role · ' + a.role : ''))}</div>
         </div>
         <div class="agent-tile-actions">
+          <button onclick="event.stopPropagation();AssetPeek.open('agent','${esc(a.id)}')"
+                  class="agent-tile-action" title="Deep dive — binding, starters, persona">⌕</button>
           <button onclick="event.stopPropagation();showEditAgentModal('${esc(a.id)}')"
                   class="agent-tile-action" title="Edit agent">✎</button>
           <button onclick="event.stopPropagation();deleteAgent('${esc(a.id)}')"
@@ -16748,6 +17235,9 @@ window.PluginsPanel = (function () {
             <div class="plugin-card-meta">
               ${(p.skills || []).length} skill${(p.skills || []).length === 1 ? '' : 's'}
               · ${(p.tools || []).length} tool${(p.tools || []).length === 1 ? '' : 's'}
+              <button class="agent-tile-action" style="margin-left:6px"
+                      onclick="event.stopPropagation();AssetPeek.open('plugin','${esc(p.id)}')"
+                      title="Deep dive — tools, skills, identity">⌕</button>
             </div>
           </div>
         </div>
@@ -18635,14 +19125,19 @@ const ComposerSplit = (function () {
   // stage exactly when there is a workflow to stage.
   function setMode(mode) {
     const el = _el(); if (!el) return;
-    _mode = mode === 'canvas' ? 'canvas' : 'chat';
+    _mode = (mode === 'canvas' || mode === 'focus') ? mode : 'chat';
     el.classList.remove('spine-collapsed');
     el.classList.toggle('mode-canvas', _mode === 'canvas');
-    _applyFrac(_mode === 'canvas' ? CANVAS_FRAC : CHAT_FRAC);
-    const chatBtn = document.getElementById('composer-mode-chat');
-    const canvasBtn = document.getElementById('composer-mode-canvas');
-    if (chatBtn) chatBtn.setAttribute('aria-pressed', String(_mode === 'chat'));
-    if (canvasBtn) canvasBtn.setAttribute('aria-pressed', String(_mode === 'canvas'));
+    el.classList.toggle('mode-focus', _mode === 'focus');
+    if (_mode !== 'focus') _applyFrac(_mode === 'canvas' ? CANVAS_FRAC : CHAT_FRAC);
+    for (const m of ['chat', 'canvas', 'focus']) {
+      const btn = document.getElementById('composer-mode-' + m);
+      if (btn) btn.setAttribute('aria-pressed', String(_mode === m));
+    }
+    // The canvas just resized — let drawflow + anchors settle into it.
+    setTimeout(() => {
+      try { if (typeof dfScheduleAnchorRefresh === 'function') dfScheduleAnchorRefresh(); } catch (_) {}
+    }, 60);
   }
 
   function getMode() { return _mode; }
@@ -19337,6 +19832,14 @@ function composerLoadDefinition(defn) {
       );
     }
     ComposerView.updateCanvasEmptyState();
+    // Parity with the pre-split composer: loading a definition is a
+    // canvas-intent action, so the canvas takes the stage. Focus mode is
+    // respected if the operator already chose it; chat mode pivots.
+    try {
+      if (typeof ComposerSplit !== 'undefined' && ComposerSplit.getMode() === 'chat') {
+        ComposerSplit.setMode('canvas');
+      }
+    } catch (_) {}
   } catch (e) { console.warn('composerLoadDefinition failed:', e); }
 }
 
@@ -20763,6 +21266,60 @@ const RunsTab = (function () {
     return out || s.rendered_prompt || '';
   }
 
+  // The agentic record: what the platform decided and invoked for this
+  // step — model + arch placement, the timing anatomy (load vs prompt-eval
+  // vs eval), token economics, memory-pressure delta, and every skill /
+  // MCP call / plugin tool that fired. This is the context-tuning view:
+  // see WHY a step behaved the way it did, then tune.
+  function _renderStepDecisions(s) {
+    const tk = s.token_count || {};
+    const kv = [];
+    kv.push(['model', s.model_used || '—']);
+    if (s.arch_name) kv.push(['arch', s.arch_name]);
+    if (tk.prompt_tokens != null) kv.push(['tokens', `${tk.prompt_tokens} in · ${tk.completion_tokens || 0} out`]);
+    if (s.duration_seconds != null && tk.completion_tokens) {
+      kv.push(['throughput', `${Math.round(tk.completion_tokens / Math.max(0.1, s.duration_seconds))} tok/s`]);
+    }
+    if (s.keep_alive_used != null) kv.push(['keep-alive', String(s.keep_alive_used)]);
+    if (s.retries) kv.push(['retries', `${s.retries}×`]);
+    const pb = s.pressure_before, pa = s.pressure_after;
+    if (pb && pa && pb.level) kv.push(['pressure', `${pb.level} → ${pa.level}`]);
+    const kvHtml = kv.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(String(v))}</span>`).join('');
+
+    // Timing anatomy — proportional bar: where the wall-clock actually went.
+    let timing = '';
+    const load = s.load_duration_ms || 0, pe = s.prompt_eval_duration_ms || 0, ev = s.eval_duration_ms || 0;
+    const total = load + pe + ev;
+    if (total > 0) {
+      const pct = x => Math.max(1, Math.round(100 * x / total));
+      timing = `<div class="run-timing-bar">
+          <i class="seg-load" style="width:${pct(load)}%" title="model load ${Math.round(load)}ms"></i>
+          <i class="seg-prompt" style="width:${pct(pe)}%" title="prompt eval ${Math.round(pe)}ms"></i>
+          <i class="seg-eval" style="width:${pct(ev)}%" title="generation ${Math.round(ev)}ms"></i>
+        </div>
+        <div class="run-timing-legend">
+          <span><i class="seg-load" style="background:var(--warn-dim)"></i>load ${(load / 1000).toFixed(1)}s</span>
+          <span><i style="background:var(--info-dim)"></i>prompt eval ${(pe / 1000).toFixed(1)}s</span>
+          <span><i style="background:var(--accent-dim)"></i>generation ${(ev / 1000).toFixed(1)}s</span>
+        </div>`;
+    }
+
+    // Invocation chips — the decisions: which skills auto-activated, which
+    // MCP servers were called, which plugin tools ran.
+    const chips = [];
+    (s.skills_activated || []).forEach(x => chips.push(`<span class="run-decision-chip skill" title="skill auto-activated">⚡ ${esc(typeof x === 'string' ? x : x.name || JSON.stringify(x))}</span>`));
+    (s.mcp_calls || []).forEach(x => chips.push(`<span class="run-decision-chip mcp" title="MCP call">⇄ ${esc(typeof x === 'string' ? x : (x.server || x.tool || JSON.stringify(x).slice(0, 40)))}</span>`));
+    (s.plugin_tools_called || []).forEach(x => chips.push(`<span class="run-decision-chip tool" title="plugin tool">⚙ ${esc(typeof x === 'string' ? x : x.name || JSON.stringify(x).slice(0, 40))}</span>`));
+    const chipsHtml = chips.length
+      ? `<div class="run-decision-chips">${chips.join('')}</div>`
+      : '<div class="run-decision-chips"><span class="run-decision-chip none">no skills / MCP / tools invoked — pure LLM turn</span></div>';
+
+    return `<div class="run-decisions">
+      <div class="run-decisions-kv">${kvHtml}</div>
+      ${timing}${chipsHtml}
+    </div>`;
+  }
+
   function _renderStepDetailFull(s) {
     // Everything fully expanded (no click-to-expand) for the popup: the
     // prompt that ran + every output the step wrote, as scrollable blocks.
@@ -20801,6 +21358,7 @@ const RunsTab = (function () {
     if (body) {
       body.innerHTML =
         (s.error ? `<div class="run-step-row-kv error"><span class="run-step-row-k">error</span><pre class="run-step-error-text">${esc(s.error)}</pre></div>` : '') +
+        _renderStepDecisions(s) +
         _renderStepDetailFull(s);
     }
     const modal = document.getElementById('runs-step-modal');
