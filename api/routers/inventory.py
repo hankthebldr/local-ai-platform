@@ -838,6 +838,26 @@ async def discover(force: bool = False):
     }
 
 
+@router.get("/enrichment")
+async def model_enrichment():
+    """Curated model enrichment — benchmark figures, role-fit profiles, and
+    operator notes for the deep-dive cards. Shipped as repo data
+    (data/discovery/model_benchmarks.json): privacy-first, no runtime
+    phone-home; absence of a benchmark block means no credible published
+    figure exists for that variant."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    path = _Path("data/discovery/model_benchmarks.json")
+    if not path.exists():
+        return {}
+    try:
+        return _json.loads(path.read_text())
+    except Exception as e:
+        logger.warning(f"enrichment file unreadable: {e}")
+        return {}
+
+
 @router.post("/discover/refresh")
 async def discover_refresh(background_tasks: BackgroundTasks):
     """Trigger a background discovery refresh."""

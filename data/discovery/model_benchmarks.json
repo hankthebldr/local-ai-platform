@@ -1,0 +1,178 @@
+{
+  "_meta": {
+    "source": "Curated from published instruct-model evaluations (2025–2026). Abliterated / uncensored finetunes inherit their base model's figures — treat as approximate. Models with no credible published evals carry no benchmark block; absence is honest, not an oversight.",
+    "updated": "2026-06-12",
+    "scales": { "mmlu": "0-100 · general knowledge", "humaneval": "0-100 · code synthesis", "gsm8k": "0-100 · math reasoning" }
+  },
+  "llama3.3-8b-abliterated": {
+    "family": "Llama 3.x 8B", "params": "8B", "license": "Llama Community",
+    "basis": "Llama 3.1 8B Instruct (abliterated finetune — base figures, approx.)",
+    "benchmarks": { "mmlu": 69, "humaneval": 72, "gsm8k": 84 },
+    "role_fit": { "reasoning": 72, "coding": 62, "fast": 70, "general": 75, "uncensored": 95 },
+    "notes": "Refusal-direction ablation preserves base capability better than DPO uncensoring; strong all-rounder at 5 GB."
+  },
+  "qwen2.5-7b-abliterated": {
+    "family": "Qwen 2.5 7B", "params": "7.6B", "license": "Apache-2.0",
+    "basis": "Qwen2.5 7B Instruct (abliterated — base figures, approx.)",
+    "benchmarks": { "mmlu": 74, "humaneval": 85, "gsm8k": 85 },
+    "role_fit": { "reasoning": 76, "coding": 80, "fast": 70, "general": 78, "uncensored": 92 },
+    "notes": "Best benchmark-per-GB in the 7B class; the default recommendation when one small model must do everything."
+  },
+  "qwen2.5-14b-abliterated": {
+    "family": "Qwen 2.5 14B", "params": "14.7B", "license": "Apache-2.0",
+    "basis": "Qwen2.5 14B Instruct (abliterated — base figures, approx.)",
+    "benchmarks": { "mmlu": 80, "humaneval": 84, "gsm8k": 90 },
+    "role_fit": { "reasoning": 84, "coding": 82, "fast": 50, "general": 84, "uncensored": 92 },
+    "notes": "The midpoint: near-30B quality at 9 GB. Good flagship for 32–64 GB hosts."
+  },
+  "gemma3-27b-abliterated": {
+    "family": "Gemma 3 27B", "params": "27B", "license": "Gemma Terms",
+    "basis": "Gemma 3 27B IT (abliterated — base figures, approx.)",
+    "benchmarks": { "mmlu": 78, "humaneval": 86, "gsm8k": 91 },
+    "role_fit": { "reasoning": 85, "coding": 80, "fast": 30, "general": 86, "uncensored": 90 },
+    "notes": "Vision-capable. 17 GB — needs the BD790i class; too big for 16 GB hosts."
+  },
+  "qwen3-8b-hivemind": {
+    "family": "Qwen 3 8B", "params": "8.2B", "license": "Apache-2.0",
+    "basis": "Qwen3 8B (community finetune — base figures, approx.)",
+    "benchmarks": { "mmlu": 75, "humaneval": 86, "gsm8k": 89 },
+    "role_fit": { "reasoning": 80, "coding": 78, "fast": 65, "general": 80, "uncensored": 88 },
+    "notes": "256K context is the headline — the long-context pick for document-heavy workflows."
+  },
+  "dolphin3-abliterated": {
+    "family": "Llama 3.1 8B (Dolphin)", "params": "8B", "license": "Llama Community",
+    "basis": "Dolphin 3.0 on Llama 3.1 8B (base figures, approx.)",
+    "benchmarks": { "mmlu": 68, "humaneval": 71, "gsm8k": 82 },
+    "role_fit": { "reasoning": 68, "coding": 65, "fast": 72, "general": 74, "uncensored": 96 },
+    "notes": "The classic instruction-following uncensored line; very reliable persona adherence."
+  },
+  "qwen2.5-coder-7b-abliterated": {
+    "family": "Qwen 2.5 Coder 7B", "params": "7.6B", "license": "Apache-2.0",
+    "basis": "Qwen2.5-Coder 7B Instruct (abliterated — base figures, approx.)",
+    "benchmarks": { "mmlu": 68, "humaneval": 88, "gsm8k": 83 },
+    "role_fit": { "reasoning": 65, "coding": 95, "fast": 70, "general": 60, "uncensored": 90 },
+    "notes": "Highest HumanEval of any 7B here — the coding-step default. Pin it to `coding` role steps."
+  },
+  "llama3.2-moe-18b": {
+    "family": "Llama 3.2 MoE (community)", "params": "18B (MoE)", "license": "Llama Community",
+    "notes": "Experimental community mixture-of-experts merge — no published evals; benchmark block omitted on purpose. Try it on a non-critical workflow first."
+  },
+  "qwen3.5-uncensored-9b": {
+    "family": "Qwen 3.5 9B", "params": "9B", "license": "Apache-2.0",
+    "notes": "Recent finetune — no stable published evals yet for this variant; benchmark block omitted. Strong multilingual reports anecdotally.",
+    "role_fit": { "reasoning": 78, "coding": 72, "fast": 62, "general": 78, "uncensored": 92 }
+  },
+  "qwen3.5-uncensored-35b": {
+    "family": "Qwen 3.5 35B", "params": "35B", "license": "Apache-2.0",
+    "notes": "Flagship-class uncensored. No published evals for the finetune yet; expect Qwen-3.5-class results. 22 GB — BD790i territory.",
+    "role_fit": { "reasoning": 88, "coding": 82, "fast": 25, "general": 86, "uncensored": 92 }
+  },
+  "dolphin3": {
+    "family": "Llama 3.1 8B (Dolphin)", "params": "8B", "license": "Llama Community",
+    "basis": "Dolphin 3.0 on Llama 3.1 8B (base figures, approx.)",
+    "benchmarks": { "mmlu": 68, "humaneval": 71, "gsm8k": 82 },
+    "role_fit": { "reasoning": 68, "coding": 65, "fast": 72, "general": 74, "uncensored": 94 },
+    "notes": "Default uncensored daily driver."
+  },
+  "dolphin-mixtral": {
+    "family": "Mixtral 8x7B (Dolphin)", "params": "46.7B (12.9B active)", "license": "Apache-2.0",
+    "basis": "Mixtral 8x7B Instruct (approx.)",
+    "benchmarks": { "mmlu": 70, "humaneval": 45, "gsm8k": 65 },
+    "role_fit": { "reasoning": 75, "coding": 55, "fast": 35, "general": 80, "uncensored": 92 },
+    "notes": "MoE: 26 GB on disk but only ~13B active per token — faster than its size suggests."
+  },
+  "deepseek-r1-32b": {
+    "family": "DeepSeek R1 Distill 32B", "params": "32B", "license": "MIT",
+    "basis": "R1-Distill-Qwen-32B (published, approx.)",
+    "benchmarks": { "mmlu": 88, "humaneval": 86, "gsm8k": 95 },
+    "role_fit": { "reasoning": 96, "coding": 84, "fast": 15, "general": 82, "uncensored": 40 },
+    "notes": "The strongest reasoner in the catalog — chain-of-thought native. Slow on CPU; budget 3-5 tok/s. Use for the one step that genuinely needs depth."
+  },
+  "dolphin-mistral": {
+    "family": "Mistral 7B (Dolphin)", "params": "7.2B", "license": "Apache-2.0",
+    "basis": "Mistral 7B Instruct (approx.)",
+    "benchmarks": { "mmlu": 60, "humaneval": 30, "gsm8k": 40 },
+    "role_fit": { "reasoning": 55, "coding": 50, "fast": 85, "general": 65, "uncensored": 92 },
+    "notes": "Aging but quick; pick qwen2.5-7b-abliterated instead unless RAM is very tight."
+  },
+  "nous-hermes2-mixtral": {
+    "family": "Mixtral 8x7B (Hermes 2)", "params": "46.7B (12.9B active)", "license": "Apache-2.0",
+    "basis": "Mixtral 8x7B (approx.)",
+    "benchmarks": { "mmlu": 70, "humaneval": 43, "gsm8k": 67 },
+    "role_fit": { "reasoning": 76, "coding": 52, "fast": 35, "general": 82, "uncensored": 85 },
+    "notes": "Strong instruction adherence; the structured-output pick among the big MoEs."
+  },
+  "wizardlm-uncensored-13b": {
+    "family": "WizardLM 13B (Llama-2 era)", "params": "13B", "license": "Llama Community",
+    "benchmarks": { "mmlu": 55, "humaneval": 32, "gsm8k": 43 },
+    "role_fit": { "reasoning": 50, "coding": 35, "fast": 45, "general": 60, "uncensored": 90 },
+    "notes": "A classic, kept for nostalgia and style — outclassed on every benchmark by the 7B Qwens."
+  },
+  "dolphin-phi": {
+    "family": "Phi-2 (Dolphin)", "params": "2.7B", "license": "MIT",
+    "basis": "Phi-2 (approx.)",
+    "benchmarks": { "mmlu": 56, "humaneval": 47, "gsm8k": 55 },
+    "role_fit": { "reasoning": 45, "coding": 50, "fast": 95, "general": 50, "uncensored": 85 },
+    "notes": "1.6 GB. Surprisingly capable for routing, tagging, and quick-classification steps."
+  },
+  "deepseek-coder-33b": {
+    "family": "DeepSeek Coder 33B", "params": "33B", "license": "DeepSeek License",
+    "basis": "DeepSeek-Coder 33B Instruct (published, approx.)",
+    "benchmarks": { "mmlu": 60, "humaneval": 79, "gsm8k": 60 },
+    "role_fit": { "reasoning": 60, "coding": 92, "fast": 15, "general": 50, "uncensored": 55 },
+    "notes": "Repo-scale code understanding; prefer qwen2.5-coder-7b for speed unless the task spans many files."
+  },
+  "mythomax": {
+    "family": "MythoMax L2 13B", "params": "13B", "license": "Llama Community",
+    "notes": "Tuned for narrative quality, not benchmarks — no meaningful eval figures exist and none are invented here. The storytelling / roleplay pick.",
+    "role_fit": { "reasoning": 40, "coding": 20, "fast": 45, "general": 55, "uncensored": 88 }
+  },
+  "hermes3:8b": {
+    "family": "Hermes 3 (Llama 3.1 8B)", "params": "8B", "license": "Llama Community",
+    "basis": "Hermes 3 8B (published, approx.)",
+    "benchmarks": { "mmlu": 70, "humaneval": 71, "gsm8k": 81 },
+    "role_fit": { "reasoning": 74, "coding": 64, "fast": 70, "general": 80, "uncensored": 70 },
+    "notes": "Excellent steerability and function-calling; the agent-persona default on this box."
+  },
+  "qwen2.5:0.5b": {
+    "family": "Qwen 2.5 0.5B", "params": "0.5B", "license": "Apache-2.0",
+    "benchmarks": { "mmlu": 45, "humaneval": 30, "gsm8k": 34 },
+    "role_fit": { "reasoning": 15, "coding": 20, "fast": 100, "general": 30, "uncensored": 20 },
+    "notes": "0.4 GB; instant. For smoke tests, echo steps, and UI development — not for real work."
+  },
+  "yi:34b": {
+    "family": "Yi 34B", "params": "34B", "license": "Yi License",
+    "basis": "Yi-34B-Chat (approx.)",
+    "benchmarks": { "mmlu": 76, "humaneval": 38, "gsm8k": 67 },
+    "role_fit": { "reasoning": 80, "coding": 40, "fast": 15, "general": 82, "uncensored": 75 },
+    "notes": "Deep general knowledge and long-form quality; weak at code. The essayist of the fleet."
+  },
+  "qwen2.5-coder:7b": {
+    "family": "Qwen 2.5 Coder 7B", "params": "7.6B", "license": "Apache-2.0",
+    "basis": "Qwen2.5-Coder 7B Instruct (published, approx.)",
+    "benchmarks": { "mmlu": 68, "humaneval": 88, "gsm8k": 83 },
+    "role_fit": { "reasoning": 65, "coding": 95, "fast": 70, "general": 60, "uncensored": 25 },
+    "notes": "Highest HumanEval per GB in the catalog — the default `coding` role binding."
+  },
+  "mistral-nemo:12b": {
+    "family": "Mistral NeMo 12B", "params": "12.2B", "license": "Apache-2.0",
+    "basis": "Mistral NeMo Instruct (approx.)",
+    "benchmarks": { "mmlu": 68, "humaneval": 62, "gsm8k": 74 },
+    "role_fit": { "reasoning": 72, "coding": 60, "fast": 55, "general": 78, "uncensored": 45 },
+    "notes": "128K context + tiktoken-class tokenizer; strong multilingual middle-weight."
+  },
+  "qwen2.5:7b": {
+    "family": "Qwen 2.5 7B", "params": "7.6B", "license": "Apache-2.0",
+    "basis": "Qwen2.5 7B Instruct (published, approx.)",
+    "benchmarks": { "mmlu": 74, "humaneval": 85, "gsm8k": 85 },
+    "role_fit": { "reasoning": 76, "coding": 80, "fast": 70, "general": 78, "uncensored": 20 },
+    "notes": "The censored twin of the abliterated 7B — same capability, stock guardrails."
+  },
+  "nvidia/Qwen3-8B-NVFP4": {
+    "family": "Qwen 3 8B (NVFP4)", "params": "8.2B", "license": "Apache-2.0",
+    "basis": "Qwen3 8B (base figures, approx.) — NVFP4 4-bit float, Blackwell-native",
+    "benchmarks": { "mmlu": 75, "humaneval": 86, "gsm8k": 89 },
+    "role_fit": { "reasoning": 80, "coding": 78, "fast": 90, "general": 80, "uncensored": 20 },
+    "notes": "The GPU performance path: served by vLLM with continuous batching + fp8 KV cache. Fastest real model on this box by an order of magnitude."
+  }
+}
