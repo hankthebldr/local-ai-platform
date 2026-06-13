@@ -167,3 +167,51 @@ def test_template_match_path():
     _assert_loadable(out["definition"])
     if out["source"] == "template":
         assert out["matched_workflow_id"]
+
+
+# ── ccc-01: _normalize_references must not drop forward-reference edges ──────
+
+
+def test_normalize_preserves_forward_reference_edge():
+    """ccc-01 reproducer: a step referencing a producer that appears LATER in
+    the list must keep the real edge, not get clobbered to a seed fallback.
+    The old `in seen` gate dropped it because the producer wasn't seen yet."""
+    steps = [
+        {"id": "a", "inputs": ["b.rb"], "outputs": ["ra"], "depends_on": []},
+        {"id": "b", "inputs": [], "outputs": ["rb"], "depends_on": []},
+    ]
+    out = sp._normalize_references(steps, seed_keys=["x"])
+    a = next(s for s in out if s["id"] == "a")
+    assert a["inputs"] == ["b.rb"], "real forward edge was clobbered"
+    assert "b" in a["depends_on"], "dependency on the producer was dropped"
+
+
+def test_normalize_resolves_bare_output_from_later_step():
+    """A bare output name whose producer appears later must resolve to
+    `<producer>.<output>`, not fall back to a seed."""
+    steps = [
+        {
+            "id": "consumer",
+            "inputs": ["payload"],
+            "outputs": ["done"],
+            "depends_on": [],
+        },
+        {"id": "producer", "inputs": [], "outputs": ["payload"], "depends_on": []},
+    ]
+    out = sp._normalize_references(steps, seed_keys=["seedk"])
+    c = next(s for s in out if s["id"] == "consumer")
+    assert "producer.payload" in c["inputs"]
+    assert "producer" in c["depends_on"]
+
+
+def test_normalize_breaks_mutual_reference_cycle():
+    """A pathological mutual reference must NOT yield a 2-cycle the engine
+    can't schedule — exactly one direction survives."""
+    steps = [
+        {"id": "a", "inputs": ["b.rb"], "outputs": ["ra"], "depends_on": []},
+        {"id": "b", "inputs": ["a.ra"], "outputs": ["rb"], "depends_on": []},
+    ]
+    out = sp._normalize_references(steps, seed_keys=["x"])
+    a = next(s for s in out if s["id"] == "a")
+    b = next(s for s in out if s["id"] == "b")
+    assert not ("b" in a["depends_on"] and "a" in b["depends_on"]), "cycle survived"

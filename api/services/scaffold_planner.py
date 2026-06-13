@@ -314,52 +314,93 @@ def _normalize_references(
     references in topological (list) order and keep depends_on consistent.
     """
     seed_set = set(seed_keys)
-    seen = {f"seed.{k}" for k in seed_keys}
-    # output-name -> first step that produces it (for bare-output rewrites)
-    out_owner: Dict[str, str] = {}
+    seed_qualified = {f"seed.{k}" for k in seed_keys}
+    # Build FULL producer knowledge up front (two-pass). Resolving against an
+    # incrementally-built `seen` set was bug ccc-01: a reference to a producer
+    # that appears LATER in the list (or a bare output name whose producer is
+    # later) never satisfied the `in seen` gate, so it was silently clobbered
+    # to a seed fallback — dropping the real edge and orphaning the producer.
+    # The engine schedules by depends_on, not list order, so a forward edge is
+    # legal; we just have to wire it and keep the graph acyclic.
+    out_owner: Dict[str, str] = {}  # output-name -> first step that produces it
+    all_qualified: set = set()  # every real "<step>.<output>" producer
     for s in steps:
         for o in s.get("outputs") or []:
             out_owner.setdefault(o, s["id"])
+            all_qualified.add(f"{s['id']}.{o}")
+
+    # Incrementally-built dependency graph + a reachability check so we never
+    # accept an edge that would close a cycle (the old single-pass was
+    # implicitly acyclic; this preserves that guarantee explicitly).
+    dep_graph: Dict[str, set] = {}
+
+    def _reaches(start: str, target: str) -> bool:
+        stack, walked = [start], set()
+        while stack:
+            node = stack.pop()
+            if node == target:
+                return True
+            if node in walked:
+                continue
+            walked.add(node)
+            stack.extend(dep_graph.get(node, ()))
+        return False
 
     prev_first = None  # "<step>.<output>" of the previous step
     for idx, s in enumerate(steps):
-        deps = set(s.get("depends_on") or [])
+        sid = s["id"]
+        deps = {d for d in (s.get("depends_on") or []) if d != sid}
+        dep_graph.setdefault(sid, set()).update(deps)
         fixed: List[str] = []
         for inp in s.get("inputs") or []:
             cand = inp
-            if cand in seen:
-                pass
+            producer = None
+            if cand in seed_qualified:
+                pass  # already a valid seed ref
+            elif cand in all_qualified and not cand.startswith(f"{sid}."):
+                producer = cand.split(".", 1)[0]  # already a valid step ref
             elif cand in seed_set:
                 cand = f"seed.{cand}"
-            elif cand in out_owner and f"{out_owner[cand]}.{cand}" in seen:
-                cand = f"{out_owner[cand]}.{cand}"
-            elif cand not in seen:
-                # Unresolved — fall back to a real producer.
+            elif cand in out_owner and out_owner[cand] != sid:
+                producer = out_owner[cand]  # bare output name -> its producer
+                cand = f"{producer}.{cand}"
+            else:
+                cand = None  # unresolved (or self-reference)
+            # Cycle guard: refuse an edge the producer can already reach back
+            # through. The closing edge of a mutual reference falls back instead.
+            if producer and (producer == sid or _reaches(producer, sid)):
+                cand, producer = None, None
+            if cand is None:
+                # Fall back to a real producer (a prior step or a seed).
                 if idx == 0 and seed_keys:
                     cand = f"seed.{seed_keys[0]}"
                 elif prev_first:
                     cand = prev_first
+                    p = prev_first.split(".", 1)[0]
+                    producer = p if (p != sid and not _reaches(p, sid)) else None
                 elif seed_keys:
                     cand = f"seed.{seed_keys[0]}"
                 else:
                     cand = None
             if cand and cand not in fixed:
                 fixed.append(cand)
-                if "." in cand and not cand.startswith("seed."):
-                    deps.add(cand.split(".", 1)[0])
+                if producer:
+                    deps.add(producer)
+                    dep_graph[sid].add(producer)
         # Every non-trivial step needs at least one valid input.
         if not fixed:
             if idx == 0 and seed_keys:
                 fixed = [f"seed.{seed_keys[0]}"]
             elif prev_first:
                 fixed = [prev_first]
-                deps.add(prev_first.split(".", 1)[0])
+                p = prev_first.split(".", 1)[0]
+                if p != sid and not _reaches(p, sid):
+                    deps.add(p)
+                    dep_graph[sid].add(p)
         s["inputs"] = fixed
-        s["depends_on"] = [d for d in deps if d != s["id"]]
-        for o in s.get("outputs") or []:
-            seen.add(f"{s['id']}.{o}")
+        s["depends_on"] = [d for d in deps if d != sid]
         outs = s.get("outputs") or ["output"]
-        prev_first = f"{s['id']}.{outs[0]}"
+        prev_first = f"{sid}.{outs[0]}"
     return steps
 
 
