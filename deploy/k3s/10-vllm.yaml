@@ -1,0 +1,125 @@
+# vLLM — primary GPU inference backend (the k3s port of the compose `vllm` svc).
+#
+# Holds the cluster's ONE schedulable GPU unit (limits.nvidia.com/gpu: 1) and
+# serves nvidia/Qwen3-8B-NVFP4 over the OpenAI API on :8000. The Blackwell GPU
+# was made schedulable by config/k3s/gpu in the dot-files repo (RuntimeClass
+# `nvidia` + device plugin); this Deployment consumes that.
+#
+# MODEL REUSE: mounts the existing docker volume dir
+#   /var/lib/docker/volumes/enclave-vllm-models/_data → /models (HF_HOME)
+# so the ~6.4 GB NVFP4 weights already downloaded under compose are reused —
+# no re-download, no HF token needed for the cached model. This pins the pod to
+# bd790i (where that data lives), which is also the only GPU node — so it's
+# free, and matches `nodeSelector: nvidia.com/gpu.present`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: enclave-vllm
+  namespace: enclave
+  labels:
+    app: enclave-vllm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # single GPU — never run two pods contending for it
+  selector:
+    matchLabels:
+      app: enclave-vllm
+  template:
+    metadata:
+      labels:
+        app: enclave-vllm
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu        # bd790i is tainted by the GPU join toolchain
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - --model
+            - nvidia/Qwen3-8B-NVFP4
+            - --quantization
+            - modelopt
+            - --kv-cache-dtype
+            - fp8
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --gpu-memory-utilization
+            - "0.85"
+            - --max-model-len
+            - "8192"
+            - --max-num-seqs
+            - "16"
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: HF_HOME
+              value: /models
+            # If you ever switch to a gated/un-cached model, supply a token:
+            #   kubectl -n enclave create secret generic hf-token \
+            #     --from-literal=token=hf_xxx
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: dshm
+              mountPath: /dev/shm   # vLLM workers need a large shared-memory seg
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 60    # up to 10 min for first model load
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30
+            failureThreshold: 5
+      volumes:
+        - name: models
+          hostPath:
+            path: /var/lib/docker/volumes/enclave-vllm-models/_data
+            type: Directory
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: enclave-vllm
+  namespace: enclave
+  labels:
+    app: enclave-vllm
+spec:
+  selector:
+    app: enclave-vllm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
