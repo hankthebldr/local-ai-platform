@@ -6180,6 +6180,24 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .sm-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
 .sm-actions .action-btn.accent { background:var(--accent); color:var(--on-accent,#06201B); border-color:var(--accent); }
 </style>
+<style id="enclave-threads-styles">
+/* ── Thread switcher (multi-conversation, session-scoped) ─────────── */
+.thread-bar { display:flex; align-items:center; gap:8px; padding:6px 10px; border-bottom:1px solid var(--border); position:relative; }
+.thread-switch { display:inline-flex; align-items:center; gap:7px; padding:3px 9px; border:1px solid var(--border); border-radius:var(--radius-sm,4px); background:var(--surface-card); color:var(--text); font-family:var(--mono); font-size:var(--text-xs,0.7rem); cursor:pointer; }
+.thread-switch:hover { border-color:var(--accent-dim,rgba(43,212,180,.42)); }
+.thread-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; }
+.thread-caret { color:var(--text-dim); font-size:0.6rem; }
+.thread-new { font-family:var(--mono); font-size:0.6rem; padding:3px 8px; border:1px solid var(--border); border-radius:var(--radius-sm,4px); background:transparent; color:var(--text-dim); cursor:pointer; }
+.thread-new:hover { border-color:var(--accent-dim,rgba(43,212,180,.42)); color:var(--accent); }
+.thread-menu { position:absolute; top:calc(100% + 4px); left:10px; z-index:160; min-width:240px; background:var(--surface-overlay,var(--surface-card)); border:1px solid var(--border-strong,var(--border)); border-radius:var(--radius-md,8px); box-shadow:var(--elev-3,0 12px 34px rgba(0,0,0,.45)); padding:5px; display:none; flex-direction:column; gap:2px; }
+.thread-menu.open { display:flex; }
+.thread-item { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:var(--radius-sm,4px); cursor:pointer; }
+.thread-item:hover { background:var(--surface-card); }
+.thread-item.active { background:var(--accent-ghost,rgba(43,212,180,.12)); }
+.thread-item .ti-name { flex:1; font-family:var(--mono); font-size:var(--text-sm,0.78rem); color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.thread-item .ti-rename { border:none; background:none; color:var(--text-faint,var(--text-dim)); font-family:var(--mono); font-size:var(--text-2xs,0.58rem); cursor:pointer; }
+.thread-item .ti-rename:hover { color:var(--accent); }
+</style>
 </head>
 <body>
 
@@ -6582,6 +6600,15 @@ body.bs-show-hint .bs-dispatch:hover::after {
            (cpu-value, mem-value, cpu-cores, mem-detail, models-content,
            cpu-arc, mem-arc, status-content) are preserved verbatim so
            the existing poller keeps writing to the right targets. -->
+      <div class="thread-bar" id="thread-bar">
+        <button type="button" class="thread-switch" id="thread-switch" onclick="Threads.toggleMenu()" title="Switch conversation thread">
+          <span class="thread-dot"></span>
+          <span class="thread-name" id="thread-active-name">Thread 1</span>
+          <span class="thread-caret">▾</span>
+        </button>
+        <button type="button" class="thread-new" onclick="Threads.create()" title="Start a new conversation thread">+ New</button>
+        <div class="thread-menu" id="thread-menu"></div>
+      </div>
       <div class="chat-system-strip" id="chat-system-strip">
         <div class="strip-group health">
           <div id="status-content" class="strip-row">
@@ -22899,6 +22926,95 @@ const Projects = (function () {
   });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render);
   else render();
+})();
+</script>
+<script id="enclave-threads-js">
+/* Session-scoped thread switcher: juggle multiple conversations by
+   snapshotting/restoring chat history + rendered messages + pins. Additive —
+   never modifies sendMessage or the renderer; snapshots are taken lazily at
+   switch time. Not persisted across reload (continuity is a future add). */
+(function () {
+  var threads = [], activeId = null;
+
+  function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function _msgEl() { return document.getElementById('messages'); }
+  function _histGet() { try { return (typeof chatHistory !== 'undefined' && chatHistory) ? chatHistory.slice() : []; } catch (e) { return []; } }
+  function _histSet(arr) { try { if (typeof chatHistory !== 'undefined' && chatHistory) { chatHistory.length = 0; Array.prototype.push.apply(chatHistory, arr || []); } } catch (e) {} }
+  function _pinsGet() { try { return (window._enclavePins || []).slice(); } catch (e) { return []; } }
+  function _pinsSet(arr) { try { var p = window._enclavePins = window._enclavePins || []; p.length = 0; Array.prototype.push.apply(p, arr || []); if (window.Pins) window.Pins.render(); } catch (e) {} }
+
+  function _snapshot() {
+    var t = threads.find(function (x) { return x.id === activeId; });
+    if (!t) return;
+    t.history = _histGet();
+    var m = _msgEl(); t.messagesHtml = m ? m.innerHTML : '';
+    t.pins = _pinsGet();
+  }
+  function _restore(t) {
+    _histSet(t.history);
+    var m = _msgEl(); if (m) m.innerHTML = t.messagesHtml || '';
+    _pinsSet(t.pins);
+    if (window.OpPath) window.OpPath.refresh();
+  }
+
+  function create() {
+    _snapshot();
+    var t = { id: 't' + Date.now(), name: 'Thread ' + (threads.length + 1), history: [], messagesHtml: '', pins: [] };
+    threads.unshift(t);
+    activeId = t.id;
+    _restore(t); // clear the live chat to the empty new thread
+    closeMenu(); renderName();
+  }
+  function pick(id) {
+    if (id === activeId) { closeMenu(); return; }
+    _snapshot();
+    var t = threads.find(function (x) { return x.id === id; });
+    if (!t) return;
+    activeId = t.id;
+    _restore(t);
+    closeMenu(); renderName();
+  }
+  function rename(id) {
+    var t = threads.find(function (x) { return x.id === id; });
+    if (!t) return;
+    var v = window.prompt('Rename thread', t.name);
+    if (v != null && v.trim()) { t.name = v.trim().slice(0, 48); renderName(); renderMenu(); }
+  }
+
+  function renderName() {
+    var el = document.getElementById('thread-active-name');
+    var t = threads.find(function (x) { return x.id === activeId; });
+    if (el && t) el.textContent = t.name;
+  }
+  function renderMenu() {
+    var menu = document.getElementById('thread-menu');
+    if (!menu) return;
+    menu.innerHTML = threads.map(function (t) {
+      return '<div class="thread-item' + (t.id === activeId ? ' active' : '') + '" onclick="Threads.pick(\'' + t.id + '\')">' +
+        '<span class="ti-name">' + _esc(t.name) + '</span>' +
+        '<button type="button" class="ti-rename" title="Rename" onclick="event.stopPropagation();Threads.rename(\'' + t.id + '\')">rename</button></div>';
+    }).join('');
+  }
+  function toggleMenu() {
+    var menu = document.getElementById('thread-menu');
+    if (!menu) return;
+    var open = !menu.classList.contains('open');
+    if (open) renderMenu();
+    menu.classList.toggle('open', open);
+  }
+  function closeMenu() { var m = document.getElementById('thread-menu'); if (m) m.classList.remove('open'); }
+
+  function init() {
+    // Thread 1 represents the live chat; its snapshot is taken on first switch.
+    threads = [{ id: 't' + Date.now(), name: 'Thread 1', history: [], messagesHtml: '', pins: [] }];
+    activeId = threads[0].id;
+    renderName();
+    document.addEventListener('click', function (e) { if (!e.target.closest('#thread-bar')) closeMenu(); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
+  window.Threads = { create: create, pick: pick, rename: rename, toggleMenu: toggleMenu };
 })();
 </script>
 </body>
