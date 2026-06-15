@@ -6198,6 +6198,44 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .thread-item .ti-rename { border:none; background:none; color:var(--text-faint,var(--text-dim)); font-family:var(--mono); font-size:var(--text-2xs,0.58rem); cursor:pointer; }
 .thread-item .ti-rename:hover { color:var(--accent); }
 </style>
+<style id="enclave-library-styles">
+/* ── Model-compare tray + grid ────────────────────────────────────── */
+.cmp-tray { position:fixed; right:18px; bottom:18px; z-index:300; display:none; align-items:center; gap:10px; padding:9px 12px; background:var(--surface-overlay,var(--surface-card)); border:1px solid var(--border-strong,var(--border)); border-radius:var(--radius-pill,999px); box-shadow:var(--elev-3,0 12px 34px rgba(0,0,0,.45)); }
+.cmp-tray.show { display:flex; }
+.cmp-tray .cmp-lead { font-family:var(--mono); font-size:var(--text-2xs,0.6rem); color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; }
+.cmp-tray .cmp-chips { display:flex; gap:6px; }
+.cmp-chip { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:var(--text-2xs,0.6rem); padding:3px 8px; border:1px solid var(--border); border-radius:var(--radius-pill,999px); color:var(--text-dim); }
+.cmp-chip .x { cursor:pointer; opacity:.6; }
+.cmp-chip .x:hover { opacity:1; }
+.cmp-go { font-family:var(--mono); font-size:0.65rem; padding:5px 12px; border:1px solid var(--accent); border-radius:var(--radius-pill,999px); background:var(--accent); color:var(--on-accent,#06201B); cursor:pointer; }
+.cmp-go[disabled] { opacity:.4; cursor:not-allowed; background:transparent; color:var(--text-dim); border-color:var(--border); }
+/* generic library modal (compare + install wizard) */
+.lib-modal-backdrop { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
+.lib-modal-backdrop.open { display:flex; }
+.lib-modal { width:min(720px,94vw); max-height:84vh; overflow:auto; background:var(--surface-overlay,var(--surface-card)); border:1px solid var(--border-strong,var(--border)); border-radius:var(--radius-lg,12px); box-shadow:var(--elev-4,0 20px 60px rgba(0,0,0,.5)); padding:20px 22px; }
+.lib-modal h3 { margin:0 0 12px; font-family:var(--mono); font-size:1rem; color:var(--text); }
+.lib-modal .lib-close { float:right; border:none; background:none; color:var(--text-dim); font-size:1.1rem; cursor:pointer; line-height:1; }
+.cmp-grid { width:100%; border-collapse:collapse; font-size:var(--text-sm,0.8rem); }
+.cmp-grid th, .cmp-grid td { padding:8px 10px; border-bottom:1px solid var(--border); text-align:left; }
+.cmp-grid th { font-family:var(--mono); font-size:var(--text-xs,0.7rem); color:var(--text); }
+.cmp-grid td.k { font-family:var(--mono); font-size:var(--text-2xs,0.62rem); color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; }
+.cmp-grid td.win { color:var(--accent); font-weight:600; }
+.cmp-grid td.win::after { content:' ◆'; font-size:0.6rem; }
+.cmp-seed-row td { border-bottom:none; padding-top:12px; }
+.cmp-seed { font-family:var(--mono); font-size:0.65rem; padding:5px 10px; border:1px solid var(--accent); border-radius:var(--radius-sm,4px); background:transparent; color:var(--accent); cursor:pointer; }
+/* ── 4-phase install wizard ───────────────────────────────────────── */
+.iw-phases { display:flex; gap:0; margin-bottom:16px; }
+.iw-phase { flex:1; text-align:center; font-family:var(--mono); font-size:var(--text-2xs,0.6rem); color:var(--text-faint,var(--text-dim)); text-transform:uppercase; letter-spacing:0.08em; padding-bottom:7px; border-bottom:2px solid var(--border); }
+.iw-phase.active { color:var(--accent); border-bottom-color:var(--accent); }
+.iw-phase.done { color:var(--text-dim); border-bottom-color:var(--accent-dim,rgba(43,212,180,.42)); }
+.iw-body { min-height:118px; }
+.iw-body input[type=text] { width:100%; box-sizing:border-box; padding:8px 10px; background:var(--surface-card); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:var(--text-sm,0.8rem); }
+.iw-prog { height:6px; background:var(--border); border-radius:3px; overflow:hidden; margin:14px 0 8px; }
+.iw-prog-fill { height:100%; width:0%; background:var(--accent); transition:width .3s var(--ease-out,ease); }
+.iw-prog-label { font-family:var(--mono); font-size:var(--text-2xs,0.6rem); color:var(--text-dim); }
+.iw-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
+.iw-actions .action-btn.accent, .cmp-seed-row .action-btn.accent { background:var(--accent); color:var(--on-accent,#06201B); border-color:var(--accent); }
+</style>
 </head>
 <body>
 
@@ -8921,7 +8959,9 @@ window.AssetPeek = (function () {
     const pullTarget = m.ollama || (m.gguf ? 'hf.co/' + m.gguf : '');
     const actions = (m.installed
         ? `<button class="action-btn accent" onclick="AssetPeek.seedChat('${esc(m.ollama || m.id)}')">Seed a chat →</button>`
-        : (pullTarget ? `<button class="action-btn accent pull" onclick="AssetPeek.close();pullModel('${esc(pullTarget)}', '${esc(m.id)}')">Pull model</button>` : '')) +
+        : (pullTarget ? `<button class="action-btn accent pull" onclick="AssetPeek.close();pullModel('${esc(pullTarget)}', '${esc(m.id)}')">Pull model</button>` +
+            `<button class="action-btn ghost" onclick="AssetPeek.close();InstallWizard.open('${esc(pullTarget)}')">Guided install</button>` : '')) +
+      `<button class="action-btn ghost" onclick="Compare.add('${esc(m.id)}')">+ Compare</button>` +
       ((m.huggingface || m.gguf) ? `<button class="action-btn ghost" onclick="reviewModel('${esc(m.huggingface || m.gguf)}')">Review source</button>` : '');
     _show('model', m.name, m.id, body, actions);
   }
@@ -23015,6 +23055,144 @@ const Projects = (function () {
   else init();
 
   window.Threads = { create: create, pick: pick, rename: rename, toggleMenu: toggleMenu };
+})();
+</script>
+<div class="cmp-tray" id="cmp-tray">
+  <span class="cmp-lead">Compare</span>
+  <div class="cmp-chips" id="cmp-chips"></div>
+  <button type="button" class="cmp-go" id="cmp-go" onclick="Compare.open()" disabled>Compare →</button>
+</div>
+<div class="lib-modal-backdrop" id="cmp-modal-backdrop">
+  <div class="lib-modal" role="dialog" aria-modal="true" aria-label="Model comparison">
+    <button type="button" class="lib-close" onclick="Compare.closeModal()" aria-label="Close">×</button>
+    <h3>Model comparison</h3>
+    <div id="cmp-grid-mount"></div>
+  </div>
+</div>
+<div class="lib-modal-backdrop" id="iw-backdrop">
+  <div class="lib-modal" style="max-width:520px" role="dialog" aria-modal="true" aria-labelledby="iw-title">
+    <button type="button" class="lib-close" onclick="InstallWizard.close()" aria-label="Close">×</button>
+    <h3 id="iw-title">Install a model</h3>
+    <div class="iw-phases" id="iw-phases"></div>
+    <div class="iw-body" id="iw-body"></div>
+    <div class="iw-actions" id="iw-actions"></div>
+  </div>
+</div>
+<script id="enclave-library-js">
+/* Model-compare grid + 4-phase install wizard. Both self-contained over the
+   real catalog/enrichment/pull endpoints; compare ends in "seed a chat", the
+   wizard's land phase verifies-by-conversation. */
+(function () {
+  function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function _num(v) { if (v == null) return null; var m = String(v).match(/-?\d+(\.\d+)?/); return m ? parseFloat(m[0]) : null; }
+
+  // ── Compare ────────────────────────────────────────────────────────
+  var sel = [], _cat = null, _enr = null;
+  async function _catalog() { if (_cat) return _cat; try { var d = await (await fetch('/api/inventory/catalog')).json(); _cat = d.models || d || []; } catch (e) { _cat = []; } return _cat; }
+  async function _enrich() { if (_enr) return _enr; try { _enr = await (await fetch('/api/inventory/enrichment')).json(); } catch (e) { _enr = {}; } return _enr; }
+  function add(id) { if (sel.indexOf(id) < 0) { if (sel.length >= 3) sel.shift(); sel.push(id); } renderTray(); }
+  function remove(id) { sel = sel.filter(function (x) { return x !== id; }); renderTray(); }
+  function renderTray() {
+    var tray = document.getElementById('cmp-tray'); if (!tray) return;
+    tray.classList.toggle('show', sel.length > 0);
+    var chips = document.getElementById('cmp-chips');
+    if (chips) chips.innerHTML = sel.map(function (id) { return '<span class="cmp-chip">' + _esc(id) + '<span class="x" onclick="Compare.remove(\'' + id + '\')">×</span></span>'; }).join('');
+    var go = document.getElementById('cmp-go'); if (go) { go.disabled = sel.length < 2; go.textContent = 'Compare ' + sel.length + ' →'; }
+  }
+  async function openCompare() {
+    if (sel.length < 2) return;
+    var cat = await _catalog(), enr = await _enrich();
+    var ms = sel.map(function (id) { var m = cat.find(function (x) { return x.id === id || x.ollama === id; }) || { id: id, name: id }; var e = enr[m.id] || enr[m.ollama] || {}; return { m: m, e: e }; });
+    var rows = [];
+    function push(k, get, numeric) { rows.push({ k: k, vals: ms.map(get), numeric: numeric }); }
+    push('params', function (o) { return o.e.params || ''; }, true);
+    push('size', function (o) { return o.m.size || ''; }, true);
+    push('speed', function (o) { return o.m.speed || ''; }, true);
+    push('context', function (o) { return o.m.context || ''; }, true);
+    push('license', function (o) { return o.e.license || ''; }, false);
+    var bk = {}; ms.forEach(function (o) { Object.keys(o.e.benchmarks || {}).forEach(function (k) { bk[k] = 1; }); });
+    Object.keys(bk).forEach(function (k) { push(k, function (o) { return (o.e.benchmarks || {})[k]; }, true); });
+    var html = '<table class="cmp-grid"><thead><tr><th></th>' + ms.map(function (o) { return '<th>' + _esc(o.m.name || o.m.id) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var nums = r.numeric ? r.vals.map(_num) : [];
+      var max = r.numeric ? Math.max.apply(null, nums.filter(function (x) { return x != null; }).concat([-Infinity])) : null;
+      var uniqueMax = r.numeric && isFinite(max) && nums.filter(function (x) { return x === max; }).length === 1;
+      html += '<tr><td class="k">' + _esc(r.k) + '</td>' + r.vals.map(function (v, i) {
+        var win = uniqueMax && nums[i] === max;
+        return '<td class="' + (win ? 'win' : '') + '">' + (v == null || v === '' ? '—' : _esc(String(v))) + '</td>';
+      }).join('') + '</tr>';
+    });
+    html += '<tr class="cmp-seed-row"><td></td>' + ms.map(function (o) { var mid = o.m.ollama || o.m.id; return '<td><button class="cmp-seed" onclick="Compare.closeModal();AssetPeek.seedChat(\'' + _esc(mid) + '\')">Seed a chat →</button></td>'; }).join('') + '</tr>';
+    html += '</tbody></table>';
+    document.getElementById('cmp-grid-mount').innerHTML = html;
+    document.getElementById('cmp-modal-backdrop').classList.add('open');
+  }
+  function closeCompare() { var b = document.getElementById('cmp-modal-backdrop'); if (b) b.classList.remove('open'); }
+  window.Compare = { add: add, remove: remove, open: openCompare, closeModal: closeCompare };
+
+  // ── Install wizard (4-phase: source → configure → verify → land) ────
+  var PHASES = ['Source', 'Configure', 'Verify', 'Land'];
+  var st = { model: '', phase: 0, poll: null };
+  function iwOpen(prefill) { st = { model: prefill || '', phase: 0, poll: null }; var b = document.getElementById('iw-backdrop'); if (b) b.classList.add('open'); iwRender(); }
+  function iwClose() { if (st.poll) { clearInterval(st.poll); st.poll = null; } var b = document.getElementById('iw-backdrop'); if (b) b.classList.remove('open'); }
+  function iwRender() {
+    var ph = document.getElementById('iw-phases'), body = document.getElementById('iw-body'), acts = document.getElementById('iw-actions');
+    if (!ph) return;
+    ph.innerHTML = PHASES.map(function (p, i) { var c = i === st.phase ? 'active' : (i < st.phase ? 'done' : ''); return '<div class="iw-phase ' + c + '">' + p + '</div>'; }).join('');
+    if (st.phase === 0) {
+      body.innerHTML = '<p style="color:var(--text-dim);font-size:var(--text-sm,0.8rem);margin:0 0 10px">Name the model to pull locally (Ollama tag or hf.co path). Only the model download leaves your machine.</p><input type="text" id="iw-model" placeholder="e.g. qwen2.5:7b" value="' + _esc(st.model) + '">';
+      acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="InstallWizard.close()">Cancel</button><button type="button" class="action-btn accent" onclick="InstallWizard.next()">Next →</button>';
+    } else if (st.phase === 1) {
+      body.innerHTML = '<div style="font-family:var(--mono);font-size:var(--text-sm,0.8rem);color:var(--text)">Source<br><span style="color:var(--accent)">' + _esc(st.model) + '</span></div><p style="color:var(--text-dim);font-size:var(--text-xs,0.7rem);margin-top:10px">Quantization and context are encoded in the tag. The pull runs against your local Ollama daemon.</p>';
+      acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="InstallWizard.back()">← Back</button><button type="button" class="action-btn accent" onclick="InstallWizard.next()">Pull →</button>';
+    } else if (st.phase === 2) {
+      body.innerHTML = '<div class="iw-prog"><div class="iw-prog-fill" id="iw-fill"></div></div><div class="iw-prog-label" id="iw-label">starting…</div>';
+      acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="InstallWizard.close()">Cancel</button>';
+      iwPull();
+    } else {
+      body.innerHTML = '<div style="font-family:var(--mono);color:var(--accent);font-size:var(--text-sm,0.8rem)">✓ ' + _esc(st.model) + ' installed</div><p style="color:var(--text-dim);font-size:var(--text-xs,0.7rem);margin-top:8px">Verify it the honest way — start a conversation.</p>';
+      acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="InstallWizard.close()">Done</button><button type="button" class="action-btn accent" onclick="InstallWizard.land()">Seed a chat →</button>';
+    }
+  }
+  function iwNext() {
+    if (st.phase === 0) { var inp = document.getElementById('iw-model'); st.model = inp ? inp.value.trim() : st.model; if (!st.model) return; }
+    st.phase = Math.min(3, st.phase + 1); iwRender();
+  }
+  function iwBack() { st.phase = Math.max(0, st.phase - 1); iwRender(); }
+  function iwPull() {
+    fetch('/api/inventory/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: st.model }) }).catch(function () {});
+    st.poll = setInterval(async function () {
+      var fill = document.getElementById('iw-fill'), label = document.getElementById('iw-label');
+      try {
+        var d = await (await fetch('/api/inventory/pull-progress/' + encodeURIComponent(st.model))).json();
+        var phase = d.status_message || d.status || 'pulling';
+        if (d.total > 0 && fill) { var pct = Math.round(d.progress / d.total * 100); fill.style.width = pct + '%'; if (label) label.textContent = phase + ' — ' + pct + '%'; }
+        else if (label) label.textContent = phase + '…';
+        if (d.status === 'complete' || d.status === 'error') {
+          clearInterval(st.poll); st.poll = null;
+          if (d.status === 'complete') {
+            if (fill) fill.style.width = '100%';
+            st.phase = 3; iwRender();
+            try { if (typeof catalogLoaded !== 'undefined') catalogLoaded = false; if (typeof loadCatalog === 'function') loadCatalog(); } catch (e) {}
+          } else {
+            if (label) { label.textContent = '✗ ' + (d.error || 'pull failed'); label.style.color = 'var(--danger,#ff5252)'; }
+            var acts = document.getElementById('iw-actions');
+            if (acts) acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="InstallWizard.close()">Close</button><button type="button" class="action-btn accent" onclick="InstallWizard.retry()">Retry</button>';
+          }
+        }
+      } catch (e) { clearInterval(st.poll); st.poll = null; }
+    }, 800);
+  }
+  function iwRetry() { st.phase = 2; iwRender(); }
+  function iwLand() { var m = st.model; iwClose(); if (window.AssetPeek) AssetPeek.seedChat(m); }
+  window.InstallWizard = { open: iwOpen, close: iwClose, next: iwNext, back: iwBack, retry: iwRetry, land: iwLand };
+
+  document.addEventListener('click', function (e) {
+    ['cmp-modal-backdrop', 'iw-backdrop'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b && e.target === b) { b.classList.remove('open'); if (id === 'iw-backdrop' && st.poll) { clearInterval(st.poll); st.poll = null; } }
+    });
+  });
 })();
 </script>
 </body>
