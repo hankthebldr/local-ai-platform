@@ -6149,6 +6149,37 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .nba-nudge .x { border:none; background:none; color:inherit; cursor:pointer; font-size:1rem; line-height:1; opacity:.65; padding:0 2px; }
 .nba-nudge .x:hover { opacity:1; }
 </style>
+<style id="enclave-pins-styles">
+/* ── Pin-as-step (chat reply → workflow step) ─────────────────────── */
+.msg-pin-btn { font-family:var(--mono); font-size:0.6rem; padding:2px 8px; border:1px solid var(--border); border-radius:var(--radius-sm,4px); background:transparent; color:var(--text-dim); cursor:pointer; transition:all var(--t-fast,140ms) var(--ease-out,ease); }
+.msg-pin-btn:hover { border-color:var(--accent-dim,rgba(43,212,180,.42)); color:var(--accent); }
+.msg-pin-btn.pinned { border-color:var(--accent); color:var(--accent); background:var(--accent-ghost,rgba(43,212,180,.12)); }
+/* ── Maturity meter (pin count → convert readiness) ───────────────── */
+.pins-meter { display:none; align-items:center; gap:10px; padding:7px 12px; margin:0 0 8px; border:1px solid var(--border); border-radius:var(--radius-md,8px); background:var(--surface-card); }
+.pins-meter.show { display:flex; }
+.pins-meter .pm-label { font-family:var(--mono); font-size:var(--text-2xs,0.6rem); color:var(--text-dim); text-transform:uppercase; letter-spacing:0.12em; }
+.pins-meter .pm-bar { display:flex; gap:3px; flex:1; }
+.pins-meter .pm-seg { height:5px; flex:1; max-width:34px; border-radius:2px; background:var(--border); transition:background var(--t-fast,140ms) var(--ease-out,ease); }
+.pins-meter .pm-seg.on { background:var(--accent); }
+.pins-meter .pm-count { font-family:var(--mono); font-size:var(--text-2xs,0.6rem); color:var(--text-faint,var(--text-dim)); }
+.pins-meter .pm-convert { font-family:var(--mono); font-size:0.65rem; padding:4px 11px; border:1px solid var(--accent); border-radius:var(--radius-sm,4px); background:var(--accent); color:var(--on-accent,#06201B); cursor:pointer; }
+.pins-meter .pm-convert[disabled] { opacity:.4; cursor:not-allowed; background:transparent; color:var(--text-dim); border-color:var(--border); }
+/* ── Scaffold preview modal (pins → DAG, with traceability) ───────── */
+.scaffold-modal-backdrop { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
+.scaffold-modal-backdrop.open { display:flex; }
+.scaffold-modal { width:min(560px,92vw); max-height:82vh; overflow:auto; background:var(--surface-overlay,var(--surface-card)); border:1px solid var(--border-strong,var(--border)); border-radius:var(--radius-lg,12px); box-shadow:var(--elev-4,0 20px 60px rgba(0,0,0,.5)); padding:20px 22px; }
+.scaffold-modal h3 { margin:0 0 4px; font-family:var(--mono); font-size:1rem; color:var(--text); }
+.scaffold-modal .sm-sub { font-size:var(--text-sm,0.8rem); color:var(--text-dim); margin:0 0 14px; }
+.sm-step { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm,4px); margin-bottom:8px; background:var(--surface-card); }
+.sm-step .sm-n { width:18px; height:18px; border-radius:50%; border:1.5px solid var(--accent); color:var(--accent); font-family:var(--mono); font-size:9px; display:inline-flex; align-items:center; justify-content:center; flex:none; margin-top:1px; }
+.sm-step .sm-body { flex:1; min-width:0; }
+.sm-step .sm-title { font-family:var(--mono); font-size:var(--text-sm,0.8rem); color:var(--text); }
+.sm-step .sm-role { font-family:var(--mono); font-size:var(--text-2xs,0.58rem); color:var(--accent); margin-left:8px; }
+.sm-step .sm-src { display:block; font-family:var(--mono); font-size:var(--text-2xs,0.58rem); color:var(--text-faint,var(--text-dim)); margin-top:3px; }
+.sm-step .sm-text { display:block; font-size:var(--text-xs,0.7rem); color:var(--text-dim); margin-top:4px; line-height:1.4; max-height:42px; overflow:hidden; }
+.sm-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+.sm-actions .action-btn.accent { background:var(--accent); color:var(--on-accent,#06201B); border-color:var(--accent); }
+</style>
 </head>
 <body>
 
@@ -6683,6 +6714,12 @@ body.bs-show-hint .bs-dispatch:hover::after {
         <button type="button" class="action-btn" style="margin-left:auto;font-size:0.55rem;padding:1px 6px" onclick="composerExitStepEngage()" title="Exit step engagement and return to general chat">exit</button>
       </div>
       <div class="nba-container" id="nba-container"></div>
+      <div class="pins-meter" id="pins-meter">
+        <span class="pm-label">Pins</span>
+        <div class="pm-bar" id="pm-bar"></div>
+        <span class="pm-count" id="pm-count">0</span>
+        <button type="button" class="pm-convert" id="pm-convert" onclick="Pins.openScaffold()" disabled>Pin 2+ to convert</button>
+      </div>
       <div class="chat-input-row">
         <button class="search-toggle" id="search-toggle" onclick="toggleSearch()" title="Toggle web search">
           <span class="toggle-label" id="search-label">Search: OFF</span>
@@ -16743,6 +16780,11 @@ window.ChatRating = (function () {
           '<span class="bs-dispatch-label">run this with my agents</span>' +
           '<span class="bs-dispatch-caret" aria-hidden="true"></span>' +
         '</button>' +
+        // Pin-as-step — mark this reply as a workflow step; 2+ pins convert
+        // the conversation into a scaffolded DAG (Pins module).
+        '<button type="button" class="msg-pin-btn" data-pin="' + msgId + '"' +
+                ' title="Pin this reply as a workflow step"' +
+                ' onclick="Pins.toggle(\'' + msgId + '\', this)">◇ pin as step</button>' +
         '<button type="button" class="msg-rating-btn up" title="Rate this response good"' +
                 ' onclick="ChatRating.rate(\'' + msgId + '\', \'up\', this)">' +
           '<span aria-hidden="true">▲</span>' +
@@ -22734,6 +22776,129 @@ const Projects = (function () {
   else init();
 
   window.OpPath = { refresh: render, togglePop: togglePop, _dismissNudge: dismiss };
+})();
+</script>
+<div class="scaffold-modal-backdrop" id="scaffold-modal-backdrop">
+  <div class="scaffold-modal" role="dialog" aria-modal="true" aria-labelledby="sm-title">
+    <h3 id="sm-title">Scaffold from conversation</h3>
+    <p class="sm-sub">Each pinned reply becomes a step. Steps chain in pin order — edit freely on the canvas.</p>
+    <div id="sm-steps"></div>
+    <div class="sm-actions">
+      <button type="button" class="action-btn ghost" onclick="ScaffoldModal.close()">Cancel</button>
+      <button type="button" class="action-btn accent" onclick="Pins.convert()">Scaffold &amp; open canvas →</button>
+    </div>
+  </div>
+</div>
+<script id="enclave-pins-js">
+/* Pin-as-step: mark chat replies, watch a maturity meter, and convert 2+ pins
+   into a runnable DAG via the same composerLoadDefinition path BootSequence
+   uses. Each pin → one step; steps chain in pin order; full source
+   traceability shown in the scaffold preview. Additive — never touches the
+   existing single-thread chat or BootSequence. */
+(function () {
+  var pins = window._enclavePins = window._enclavePins || [];
+
+  function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function _text(msgId) {
+    var el = document.getElementById(msgId);
+    if (!el) return '';
+    return (el.innerText || '')
+      .replace(/\s+▲\s+▼\s+copy.*$/s, '')
+      .replace(/◇\s*pin as step|◆\s*pinned/g, '')
+      .replace(/run this with my agents/g, '')
+      .trim();
+  }
+  function _title(text, i) {
+    var first = ((text || '').split('\n')[0] || '').trim();
+    if (!first) return 'Step ' + (i + 1);
+    return first.length > 48 ? first.slice(0, 46) + '…' : first;
+  }
+  function renumber() { pins.forEach(function (p, i) { p.title = _title(p.text, i); }); }
+
+  function syncButtons() {
+    document.querySelectorAll('.msg-pin-btn').forEach(function (b) {
+      var on = pins.some(function (p) { return p.msgId === b.getAttribute('data-pin'); });
+      b.classList.toggle('pinned', on);
+      b.innerHTML = on ? '◆ pinned' : '◇ pin as step';
+    });
+  }
+
+  function render() {
+    var meter = document.getElementById('pins-meter');
+    if (!meter) return;
+    meter.classList.toggle('show', pins.length > 0);
+    var bar = document.getElementById('pm-bar');
+    if (bar) {
+      var html = '';
+      for (var i = 0; i < 5; i++) html += '<span class="pm-seg' + (i < pins.length ? ' on' : '') + '"></span>';
+      bar.innerHTML = html;
+    }
+    var cnt = document.getElementById('pm-count'); if (cnt) cnt.textContent = pins.length;
+    var conv = document.getElementById('pm-convert');
+    if (conv) {
+      conv.disabled = pins.length < 2;
+      conv.textContent = pins.length < 2 ? 'Pin 2+ to convert' : ('Convert ' + pins.length + ' → workflow →');
+    }
+    syncButtons();
+  }
+
+  function toggle(msgId, btn) {
+    var idx = pins.findIndex(function (p) { return p.msgId === msgId; });
+    if (idx >= 0) pins.splice(idx, 1);
+    else pins.push({ id: 'pin-' + msgId, msgId: msgId, role: 'reasoning', text: _text(msgId) });
+    renumber();
+    render();
+    if (window.OpPath) window.OpPath.refresh();
+  }
+
+  function openScaffold() {
+    if (pins.length < 2) return;
+    var box = document.getElementById('sm-steps');
+    if (box) {
+      box.innerHTML = pins.map(function (p, i) {
+        return '<div class="sm-step"><span class="sm-n">' + (i + 1) + '</span><div class="sm-body">' +
+          '<span class="sm-title">' + _esc(p.title) + '</span><span class="sm-role">' + _esc(p.role) + '</span>' +
+          '<span class="sm-src">← pinned from this reply</span>' +
+          '<span class="sm-text">' + _esc((p.text || '').slice(0, 180)) + '</span></div></div>';
+      }).join('');
+    }
+    var b = document.getElementById('scaffold-modal-backdrop');
+    if (b) b.classList.add('open');
+  }
+
+  function convert() {
+    var defn = {
+      id: 'thread-' + Date.now(),
+      name: 'From conversation',
+      description: 'Scaffolded from ' + pins.length + ' pinned replies',
+      steps: pins.map(function (p, i) {
+        return {
+          id: 'step-' + (i + 1),
+          name: p.title || ('Step ' + (i + 1)),
+          role: p.role || 'reasoning',
+          system_prompt: p.text || '',
+          depends_on: i > 0 ? ['step-' + i] : [],
+        };
+      }),
+    };
+    if (window.ScaffoldModal) window.ScaffoldModal.close();
+    try {
+      if (typeof composerLoadDefinition === 'function') composerLoadDefinition(defn);
+      if (typeof ComposerSplit !== 'undefined' && ComposerSplit.setMode) ComposerSplit.setMode('canvas');
+    } catch (e) { console.warn('pin-convert failed:', e); }
+    if (window.OpPath) window.OpPath.refresh();
+  }
+
+  window.Pins = { toggle: toggle, render: render, openScaffold: openScaffold, convert: convert };
+  window.ScaffoldModal = {
+    close: function () { var b = document.getElementById('scaffold-modal-backdrop'); if (b) b.classList.remove('open'); },
+  };
+  document.addEventListener('click', function (e) {
+    var b = document.getElementById('scaffold-modal-backdrop');
+    if (b && e.target === b) b.classList.remove('open');
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render);
+  else render();
 })();
 </script>
 </body>
