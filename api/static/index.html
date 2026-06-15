@@ -6371,6 +6371,13 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .encl-seedchip.ghost:hover { color:var(--text-dim); border-color:var(--border-strong); }
 .encl-seedchip .x { cursor:pointer; color:var(--text-faint,var(--text-dim)); margin-left:1px; }
 .encl-seedchip .x:hover { color:var(--danger); }
+/* Research → Context → Agent flow (flow 5) */
+.rc-preview { max-height:160px; overflow:auto; padding:10px 12px; background:var(--surface-inset,var(--bg-deep)); border:1px solid var(--border); border-radius:var(--radius-sm,4px); font-size:var(--text-xs,0.7rem); color:var(--text-dim); white-space:pre-wrap; line-height:1.5; }
+.rc-field { margin-bottom:12px; display:flex; flex-direction:column; gap:5px; }
+.rc-field label { font-family:var(--mono); font-size:var(--text-2xs,0.6rem); text-transform:uppercase; letter-spacing:0.1em; color:var(--text-muted); }
+.rc-field input, .rc-field select, .rc-field textarea { width:100%; box-sizing:border-box; padding:8px 10px; background:var(--surface-card); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:var(--text-sm,0.8rem); }
+.rc-field textarea { resize:vertical; line-height:1.5; }
+.rc-loading { padding:24px; text-align:center; font-family:var(--mono); font-size:var(--text-sm,0.8rem); color:var(--text-dim); }
 .iw-phase.active { color:var(--accent); border-bottom-color:var(--accent); }
 .iw-phase.done { color:var(--text-dim); border-bottom-color:var(--accent-dim,rgba(43,212,180,.42)); }
 .iw-body { min-height:118px; }
@@ -7795,7 +7802,9 @@ body.bs-show-hint .bs-dispatch:hover::after {
 
         <div class="research-results-panel panel">
           <span class="corner-tr"></span><span class="corner-bl"></span>
-          <div class="panel-label">Research Results</div>
+          <div class="panel-label" style="display:flex;align-items:center;gap:8px">Research Results
+            <button type="button" class="action-btn xs ghost" style="margin-left:auto" onclick="ResearchFlow.open()" title="Turn this research into a reusable agent: context → agent → verify by chat">⊕ Build an agent from this</button>
+          </div>
           <div id="research-output">
             <div class="research-empty">Enter a topic above and click Research to start a deep investigation.<br><br>The model will decompose your topic, search each angle, then synthesize a structured report.</div>
           </div>
@@ -23552,6 +23561,139 @@ const Projects = (function () {
         '</span>';
     },
   };
+})();
+</script>
+<div class="lib-modal-backdrop" id="rc-backdrop">
+  <div class="lib-modal" style="max-width:600px" role="dialog" aria-modal="true" aria-labelledby="rc-title">
+    <button type="button" class="lib-close" onclick="ResearchFlow.close()" aria-label="Close">×</button>
+    <h3 id="rc-title">Build an agent from research</h3>
+    <div class="iw-phases" id="rc-phases"></div>
+    <div class="iw-body" id="rc-body"></div>
+    <div class="iw-actions" id="rc-actions"></div>
+  </div>
+</div>
+<script id="enclave-flow5-js">
+/* Flow 5 — research → context → agent. A 4-phase wizard that turns the
+   existing deep-research output into a reusable agent: the research IS the
+   context bundle (carried into the agent via /api/agents/generate
+   include_source_as_context), and the agent is verified by seeding a chat —
+   "every object is born in a conversation". Reuses WizardStepper + SeedChip +
+   AssetPeek.seedChat + the real agent-generate/save endpoints. Defensive. */
+(function () {
+  var PHASES = ['Research', 'Context', 'Agent', 'Verify'];
+  var st = { phase: 0, topic: '', text: '', name: '', role: 'reasoning', draft: null, agentId: null };
+  function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  function _researchText() {
+    var out = document.getElementById('research-output');
+    var t = out ? (out.innerText || '').trim() : '';
+    return t.slice(0, 8000);
+  }
+  function _topic() {
+    var lr = window._lastResearch;
+    if (lr && (lr.topic || lr.query)) return lr.topic || lr.query;
+    var inp = document.getElementById('research-topic');
+    return inp ? inp.value.trim() : '';
+  }
+  function _slug(s) { return (s || 'researched').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32); }
+
+  function open() {
+    var text = _researchText();
+    if (!text || text.length < 40 || /Enter a topic above/.test(text)) {
+      if (window.Toast) Toast.info('No research yet', 'Run a deep dive first, then build an agent from it.');
+      return;
+    }
+    var topic = _topic();
+    st = { phase: 0, topic: topic, text: text, name: _slug(topic) + '-agent', role: 'reasoning', draft: null, agentId: null };
+    var b = document.getElementById('rc-backdrop'); if (b) b.classList.add('open');
+    render();
+  }
+  function close() { var b = document.getElementById('rc-backdrop'); if (b) b.classList.remove('open'); }
+
+  function _phasesHtml() {
+    return PHASES.map(function (p, i) {
+      var conn = i > 0 ? '<span class="encl-wconn" aria-hidden="true"></span>' : '';
+      var c = i < st.phase ? 'done' : (i === st.phase ? 'on' : '');
+      return conn + '<span class="encl-wstep ' + c + '"><span class="n">' + (i < st.phase ? '✓' : (i + 1)) + '</span>' + p + '</span>';
+    }).join('');
+  }
+  function _chips() {
+    var sc = window.SeedChip; if (!sc) return '';
+    return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">' +
+      sc.html({ k: 'topic', v: st.topic || '—', tone: 'accent' }) +
+      sc.html({ k: 'role', v: st.role, tone: 'emerald' }) +
+      sc.html({ k: 'context', v: Math.round(st.text.length / 1000) + 'k chars', tone: 'info' }) +
+      '</div>';
+  }
+
+  function render() {
+    var ph = document.getElementById('rc-phases'); if (!ph) return;
+    ph.innerHTML = _phasesHtml();
+    var body = document.getElementById('rc-body'), acts = document.getElementById('rc-actions');
+    if (st.phase === 0) {
+      body.innerHTML = '<p style="color:var(--text-dim);font-size:var(--text-sm,0.8rem);margin:0 0 8px">This research becomes the agent’s pinned context — every object is born in a conversation.</p>' +
+        _chips() + '<div class="rc-preview">' + _esc(st.text.slice(0, 600)) + '…</div>';
+      acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="ResearchFlow.close()">Cancel</button><button type="button" class="action-btn accent" onclick="ResearchFlow.next()">Name the context →</button>';
+    } else if (st.phase === 1) {
+      body.innerHTML = '<div class="rc-field"><label>Context bundle name</label><input type="text" id="rc-name" value="' + _esc(st.name) + '"></div>' +
+        '<div class="rc-field"><label>Agent role</label><select id="rc-role">' +
+        ['reasoning', 'coding', 'fast', 'general', 'uncensored'].map(function (r) { return '<option' + (r === st.role ? ' selected' : '') + '>' + r + '</option>'; }).join('') +
+        '</select></div>' + _chips();
+      acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="ResearchFlow.back()">← Back</button><button type="button" class="action-btn accent" onclick="ResearchFlow.next()">Generate agent →</button>';
+    } else if (st.phase === 2) {
+      if (!st.draft) {
+        body.innerHTML = '<div class="rc-loading">Distilling the research into an agent…</div>';
+        acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="ResearchFlow.close()">Cancel</button>';
+        _generate();
+      } else {
+        body.innerHTML = '<div class="rc-field"><label>Agent name</label><input type="text" id="rc-agent-name" value="' + _esc(st.draft.name || st.name) + '"></div>' +
+          '<div class="rc-field"><label>System prompt — distilled from the research, edit freely</label><textarea id="rc-prompt" rows="8">' + _esc(st.draft.system_prompt || st.draft.prompt || '') + '</textarea></div>' +
+          '<div style="font-family:var(--mono);font-size:var(--text-2xs,0.6rem);color:var(--text-faint)">model ' + _esc(st.draft.model || 'auto') + ' · role ' + _esc(st.draft.role || st.role) + ' · research pinned as context</div>';
+        acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="ResearchFlow.back()">← Back</button><button type="button" class="action-btn accent" onclick="ResearchFlow.save()">Save agent →</button>';
+      }
+    } else {
+      body.innerHTML = '<div style="font-family:var(--mono);color:var(--accent);font-size:var(--text-sm,0.8rem)">✓ ' + _esc((st.draft && st.draft.name) || st.name) + ' created from research</div>' +
+        '<p style="color:var(--text-dim);font-size:var(--text-xs,0.7rem);margin-top:8px">Verify it the honest way — start a conversation.</p>';
+      acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="ResearchFlow.close()">Done</button><button type="button" class="action-btn accent" onclick="ResearchFlow.verify()">Seed a chat with it →</button>';
+    }
+  }
+
+  function next() {
+    if (st.phase === 1) {
+      var n = document.getElementById('rc-name'); if (n && n.value.trim()) st.name = n.value.trim();
+      var r = document.getElementById('rc-role'); if (r) st.role = r.value;
+    }
+    st.phase = Math.min(3, st.phase + 1); render();
+  }
+  function back() { if (st.phase === 2) st.draft = null; st.phase = Math.max(0, st.phase - 1); render(); }
+
+  function _generate() {
+    fetch('/api/agents/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: st.text, name_hint: st.name, role_hint: st.role, include_source_as_context: true }),
+    }).then(function (r) { return r.json(); })
+      .then(function (d) { st.draft = d || {}; render(); })
+      .catch(function (e) { var body = document.getElementById('rc-body'); if (body) body.innerHTML = '<div class="rc-loading" style="color:var(--danger)">Generation failed: ' + _esc(String(e)) + '</div>'; });
+  }
+  function save() {
+    if (!st.draft) return;
+    var n = document.getElementById('rc-agent-name'); if (n && n.value.trim()) st.draft.name = n.value.trim();
+    var p = document.getElementById('rc-prompt'); if (p) { st.draft.system_prompt = p.value; st.draft.prompt = p.value; }
+    fetch('/api/agents/generate/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ draft: st.draft, overwrite: false }),
+    }).then(function (r) { return r.json(); })
+      .then(function (d) { st.agentId = (d && d.agent_id) || (st.draft && st.draft.id); st.phase = 3; render(); if (window.Toast) Toast.success('Agent saved', st.draft.name || st.name); })
+      .catch(function (e) { if (window.Toast) Toast.danger('Save failed', String(e)); });
+  }
+  function verify() {
+    var id = st.agentId; close();
+    if (id && window.AssetPeek) AssetPeek.seedChat(null, id);
+    else if (window.Toast) Toast.info('Saved', 'Find the agent in the Agents library.');
+  }
+
+  document.addEventListener('click', function (e) { var b = document.getElementById('rc-backdrop'); if (b && e.target === b) b.classList.remove('open'); });
+  window.ResearchFlow = { open: open, close: close, next: next, back: back, save: save, verify: verify };
 })();
 </script>
 </body>
