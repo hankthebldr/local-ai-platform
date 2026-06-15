@@ -4205,6 +4205,32 @@ textarea.composer-desc-area {
 .encl-util-key .v { color: var(--text); font-weight: 600; }
 .encl-util-key .u { color: var(--text-faint); }
 .encl-util svg text { font-family: var(--mono); font-size: 9px; fill: var(--text-faint); }
+/* GaugeStat — calm linear meter */
+.encl-gauge { display:flex; flex-direction:column; gap:7px; min-width:140px; }
+.encl-gauge-top { display:flex; align-items:baseline; gap:8px; }
+.encl-gauge-k { font-family:var(--mono); font-size:0.625rem; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted); flex:1; }
+.encl-gauge-sub { font-family:var(--mono); font-size:0.625rem; color:var(--text-faint); white-space:nowrap; }
+.encl-gauge-v { font-family:var(--mono); font-size:1.25rem; font-weight:600; color:var(--text-strong,var(--text)); line-height:1; }
+.encl-gauge-v .u { font-size:0.875rem; color:var(--text-dim); margin-left:2px; }
+.encl-gauge-track { position:relative; height:8px; border-radius:var(--radius-pill,999px); background:var(--surface-raised,var(--border)); overflow:hidden; }
+.encl-gauge-fill { position:absolute; inset:0 auto 0 0; border-radius:var(--radius-pill,999px); background:var(--gc,var(--accent)); transition:width var(--t-med,220ms) var(--ease-out,ease); }
+.encl-gauge-warn { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--warn); border-radius:1px; }
+.encl-gauge-scale { display:flex; justify-content:space-between; font-family:var(--mono); font-size:9px; color:var(--text-faint); }
+/* StatRange — min/avg/max distribution bar */
+.encl-range { display:flex; flex-direction:column; gap:8px; min-width:190px; --rc:var(--accent); }
+.encl-range-k { font-family:var(--mono); font-size:0.625rem; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted); }
+.encl-range-stats { display:flex; gap:18px; }
+.encl-range-stat { display:flex; flex-direction:column; gap:1px; }
+.encl-range-stat .l { font-family:var(--mono); font-size:9px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-faint); }
+.encl-range-stat .n { font-family:var(--mono); font-size:0.875rem; font-weight:600; color:var(--text); line-height:1.1; }
+.encl-range-stat.avg .n { color:var(--rc); }
+.encl-range-track { position:relative; height:8px; }
+.encl-range-span { position:absolute; top:3px; height:2px; border-radius:1px; background:var(--rc); opacity:0.35; }
+.encl-range-avg { position:absolute; top:-1px; width:2px; height:10px; border-radius:1px; background:var(--rc); }
+.encl-range-cur { position:absolute; top:1px; width:6px; height:6px; border-radius:50%; background:var(--rc); box-shadow:0 0 0 2px var(--bg); transform:translateX(-3px); }
+.encl-range-ends { display:flex; justify-content:space-between; font-family:var(--mono); font-size:9px; color:var(--text-faint); }
+.runs-perf-gauges { display:flex; gap:22px; flex-wrap:wrap; padding:2px 0; }
+.rl-ranges { display:flex; gap:22px; flex-wrap:wrap; margin:4px 0 14px; }
 
 /* ── AssetPeek — the unified deep-dive slide-over (design-system
    EntityCard → peek pattern). One panel for every asset kind: models,
@@ -7458,6 +7484,7 @@ body.bs-show-hint .bs-dispatch:hover::after {
          samples) + run-cadence trends from the run history. -->
     <div class="runs-perf-band" id="runs-perf-band" hidden>
       <div class="encl-util" id="runs-util-chart"></div>
+      <div class="runs-perf-gauges" id="runs-perf-gauges"></div>
       <div class="band-divider"></div>
       <div class="runs-perf-trends" id="runs-perf-trends"></div>
     </div>
@@ -8933,6 +8960,57 @@ function enclUtilChart(series, opts) {
     <svg width="${w}" height="${h}" role="img" aria-label="${esc(series.map(s => s.label).join(', '))} over time">${svg}</svg>`;
 }
 
+/* GaugeStat — a single utilization reading as a calm linear meter (design-system
+   dataviz). value/max → fill; optional warn tick. Returns an HTML string. */
+function enclGaugeStat(opts) {
+  opts = opts || {};
+  var max = opts.max || 100, unit = opts.unit == null ? '%' : opts.unit;
+  var pct = Math.max(0, Math.min(1, (opts.value || 0) / max)) * 100;
+  var over = opts.warn != null && opts.value >= opts.warn;
+  var fill = opts.color || (over ? 'var(--warn)' : 'var(--accent)');
+  var scale = opts.scale === false ? '' :
+    '<div class="encl-gauge-scale"><span>0</span>' +
+    (opts.warn != null ? '<span style="color:var(--warn)">' + opts.warn + esc(unit) + '</span>' : '<span>' + Math.round(max / 2) + '</span>') +
+    '<span>' + max + esc(unit) + '</span></div>';
+  return '<div class="encl-gauge">' +
+    '<div class="encl-gauge-top"><span class="encl-gauge-k">' + esc(opts.label || '') + '</span>' +
+    (opts.sub ? '<span class="encl-gauge-sub">' + esc(opts.sub) + '</span>' : '') + '</div>' +
+    '<span class="encl-gauge-v">' + esc(String(opts.value == null ? '—' : opts.value)) + '<span class="u">' + esc(unit) + '</span></span>' +
+    '<div class="encl-gauge-track" role="meter" aria-valuenow="' + (opts.value || 0) + '" aria-valuemin="0" aria-valuemax="' + max + '" aria-label="' + esc(opts.label || '') + '">' +
+    '<span class="encl-gauge-fill" style="width:' + pct.toFixed(1) + '%;--gc:' + fill + '"></span>' +
+    (opts.warn != null ? '<span class="encl-gauge-warn" style="left:' + (Math.min(opts.warn, max) / max * 100).toFixed(1) + '%"></span>' : '') +
+    '</div>' + scale + '</div>';
+}
+
+/* StatRange — min/avg/max for a series with a range bar + latest-reading dot
+   (design-system dataviz; the distribution companion to TrendStat). */
+function enclStatRange(opts) {
+  opts = opts || {};
+  var data = opts.data || [];
+  var lo = opts.min != null ? opts.min : (data.length ? Math.min.apply(null, data) : 0);
+  var hi = opts.max != null ? opts.max : (data.length ? Math.max.apply(null, data) : 0);
+  var av = opts.avg != null ? opts.avg : (data.length ? data.reduce(function (a, b) { return a + b; }, 0) / data.length : 0);
+  var cur = opts.current != null ? opts.current : (data.length ? data[data.length - 1] : av);
+  var f = opts.floor != null ? opts.floor : lo, c = opts.ceil != null ? opts.ceil : hi;
+  var span = (c - f) || 1;
+  var pos = function (v) { return Math.max(0, Math.min(1, (v - f) / span)) * 100; };
+  var fmt = function (n, d) { return Number.isFinite(n) ? (+n.toFixed(d || 0)).toString() : '—'; };
+  var u = esc(opts.unit || '');
+  return '<div class="encl-range" style="--rc:' + (opts.color || 'var(--accent)') + '">' +
+    '<span class="encl-range-k">' + esc(opts.label || '') + '</span>' +
+    '<div class="encl-range-stats">' +
+    '<span class="encl-range-stat"><span class="l">min</span><span class="n">' + fmt(lo) + u + '</span></span>' +
+    '<span class="encl-range-stat avg"><span class="l">avg</span><span class="n">' + fmt(av, 1) + u + '</span></span>' +
+    '<span class="encl-range-stat"><span class="l">max</span><span class="n">' + fmt(hi) + u + '</span></span>' +
+    '</div>' +
+    '<div class="encl-range-track">' +
+    '<span class="encl-range-span" style="left:' + pos(lo).toFixed(1) + '%;width:' + (pos(hi) - pos(lo)).toFixed(1) + '%"></span>' +
+    '<span class="encl-range-avg" style="left:' + pos(av).toFixed(1) + '%"></span>' +
+    '<span class="encl-range-cur" style="left:' + pos(cur).toFixed(1) + '%"></span>' +
+    '</div>' +
+    '<div class="encl-range-ends"><span>' + fmt(f) + u + '</span><span>' + fmt(c) + u + '</span></div></div>';
+}
+
 /* The Runs performance band — host utilization (live ring buffer) +
    cadence trends computed from the run history. Numbers live where the
    operating decisions happen; no dashboard page. */
@@ -8979,6 +9057,15 @@ async function renderRunsPerfBand() {
           spark: perDay.slice(-14), color: 'var(--info)' }) +
         enclTrendStat({ label: 'success', value: `${okPct}%`, spark: [], color: 'var(--accent)' });
     }
+    // Live CPU / MEM gauges (GaugeStat) from the host ring buffer.
+    const _h = window._sysHistory || [];
+    const gaugesEl = document.getElementById('runs-perf-gauges');
+    if (gaugesEl && _h.length) {
+      const latest = _h[_h.length - 1];
+      gaugesEl.innerHTML =
+        enclGaugeStat({ label: 'CPU', value: Math.round(latest.cpu || 0), unit: '%', warn: 85 }) +
+        enclGaugeStat({ label: 'MEM', value: Math.round(latest.mem || 0), unit: '%', warn: 85 });
+    } else if (gaugesEl) { gaugesEl.innerHTML = ''; }
     band.hidden = false;
   } catch (e) { band.hidden = true; }
 }
@@ -23329,6 +23416,7 @@ const Projects = (function () {
     <button type="button" class="lib-close" onclick="RunLens.close()" aria-label="Close">×</button>
     <h3 id="rl-title">Run lens</h3>
     <div class="rl-i-kv" id="rl-run-meta"></div>
+    <div class="rl-ranges" id="rl-ranges"></div>
     <div class="rl-scrub" id="rl-scrub"></div>
     <div class="rl-plates" id="rl-plates"></div>
     <div class="rl-inspect" id="rl-inspect"></div>
@@ -23363,6 +23451,16 @@ const Projects = (function () {
       '<span>status ' + _esc(run.status || '—') + '</span>' +
       '<span>' + steps.length + ' steps</span>' +
       '<span>' + total.toFixed(1) + 's total</span>';
+    // Distribution across steps — duration + token ranges (StatRange).
+    var rangesEl = document.getElementById('rl-ranges');
+    if (rangesEl) {
+      var durs = steps.map(_dur).filter(function (d) { return d > 0; });
+      var toks = steps.map(function (s) { var t = s.token_count || {}; return t.total_tokens || t.total || 0; }).filter(function (t) { return t > 0; });
+      var html = '';
+      if (durs.length >= 2) html += enclStatRange({ label: 'step duration', data: durs, unit: 's', floor: 0, color: 'var(--accent)' });
+      if (toks.length >= 2) html += enclStatRange({ label: 'tokens / step', data: toks, floor: 0, color: 'var(--accent-2)' });
+      rangesEl.innerHTML = html;
+    }
   }
   function renderScrub() {
     var el = document.getElementById('rl-scrub'); if (!el) return;
