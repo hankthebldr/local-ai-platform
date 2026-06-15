@@ -6236,6 +6236,28 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .iw-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
 .iw-actions .action-btn.accent, .cmp-seed-row .action-btn.accent { background:var(--accent); color:var(--on-accent,#06201B); border-color:var(--accent); }
 </style>
+<style id="enclave-runlens-styles">
+/* ── Run lens: scrub timeline + node-timing plates + as-executed inspector ── */
+.rl-scrub { display:flex; gap:2px; margin:6px 0 18px; height:30px; }
+.rl-seg { flex-grow:1; min-width:14px; border-radius:3px; background:var(--border); cursor:pointer; position:relative; transition:filter var(--t-fast,140ms) var(--ease-out,ease); }
+.rl-seg:hover { filter:brightness(1.25); }
+.rl-seg.completed { background:var(--accent); }
+.rl-seg.failed { background:var(--danger,#ff5252); }
+.rl-seg.running { background:var(--warn,#E0A44C); }
+.rl-seg.skipped { background:var(--border-strong,var(--border)); }
+.rl-seg.sel { outline:2px solid var(--text); outline-offset:1px; }
+.rl-seg .rl-seg-lbl { position:absolute; bottom:-15px; left:0; font-family:var(--mono); font-size:8px; color:var(--text-faint,var(--text-dim)); white-space:nowrap; }
+.rl-plates { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.rl-plate { border:1px solid var(--border); border-radius:var(--radius-sm,4px); padding:6px 9px; min-width:84px; cursor:pointer; }
+.rl-plate.sel { border-color:var(--accent); }
+.rl-plate .rl-p-name { font-family:var(--mono); font-size:var(--text-2xs,0.58rem); color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px; }
+.rl-plate .rl-p-meta { font-family:var(--mono); font-size:var(--text-2xs,0.55rem); color:var(--text-dim); margin-top:3px; }
+.rl-i-kv { display:flex; gap:14px; flex-wrap:wrap; font-family:var(--mono); font-size:var(--text-2xs,0.6rem); color:var(--text-dim); margin-bottom:10px; }
+.rl-i-kv b { color:var(--accent); font-weight:600; }
+.rl-block { margin-bottom:12px; }
+.rl-block .rl-b-label { font-family:var(--mono); font-size:var(--text-2xs,0.58rem); text-transform:uppercase; letter-spacing:0.1em; color:var(--text-faint,var(--text-dim)); margin-bottom:4px; }
+.rl-block pre { margin:0; padding:9px 11px; background:var(--surface-card); border:1px solid var(--border); border-radius:var(--radius-sm,4px); font-family:var(--mono); font-size:var(--text-xs,0.7rem); color:var(--text); white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto; }
+</style>
 </head>
 <body>
 
@@ -7383,6 +7405,9 @@ body.bs-show-hint .bs-dispatch:hover::after {
             <button class="action-btn xs ghost" id="runs-tab-detail-btn"
                     onclick="RunsTab.toggleBottomDrawer()" hidden
                     title="Open the bottom detail drawer for this run">⌃ Detail</button>
+            <button class="action-btn xs ghost" id="runs-tab-lens-btn"
+                    onclick="RunLens.open()"
+                    title="Run lens — scrub the timeline and inspect each step exactly as it executed">⟲ Run lens</button>
           </div>
           <!-- Progress chip lives in the header now, not over the
                canvas — same visual treatment (spinner + current step
@@ -23193,6 +23218,90 @@ const Projects = (function () {
       if (b && e.target === b) { b.classList.remove('open'); if (id === 'iw-backdrop' && st.poll) { clearInterval(st.poll); st.poll = null; } }
     });
   });
+})();
+</script>
+<div class="lib-modal-backdrop" id="rl-backdrop">
+  <div class="lib-modal" role="dialog" aria-modal="true" aria-labelledby="rl-title">
+    <button type="button" class="lib-close" onclick="RunLens.close()" aria-label="Close">×</button>
+    <h3 id="rl-title">Run lens</h3>
+    <div class="rl-i-kv" id="rl-run-meta"></div>
+    <div class="rl-scrub" id="rl-scrub"></div>
+    <div class="rl-plates" id="rl-plates"></div>
+    <div class="rl-inspect" id="rl-inspect"></div>
+  </div>
+</div>
+<script id="enclave-runlens-js">
+/* Run lens: a scrub timeline + per-step timing plates + an as-executed
+   inspector (rendered system prompt / prompt / output, as they actually ran).
+   A new view over EXISTING run telemetry (window._lastRunSummary or a fetched
+   run) — no new backend. Defensive about which telemetry fields exist. */
+(function () {
+  var run = null, steps = [], seli = 0;
+  function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function _dur(s) { return Math.max(0, +(s.duration_seconds || 0)); }
+
+  async function open(runOrId) {
+    var src = runOrId || window._lastRunSummary;
+    if (typeof src === 'string') { try { src = await (await fetch('/api/workflows/runs/' + encodeURIComponent(src))).json(); } catch (e) { src = null; } }
+    if (!src) { if (window.Toast) Toast.info('No run', 'Pick or start a run first.'); return; }
+    run = src; steps = run.step_results || []; seli = 0;
+    if (!steps.length) { if (window.Toast) Toast.info('No steps', 'This run has no recorded steps yet.'); return; }
+    renderMeta(); renderScrub(); renderPlates(); renderInspect();
+    var b = document.getElementById('rl-backdrop'); if (b) b.classList.add('open');
+  }
+  function close() { var b = document.getElementById('rl-backdrop'); if (b) b.classList.remove('open'); }
+  function select(i) { seli = i; renderScrub(); renderPlates(); renderInspect(); }
+
+  function renderMeta() {
+    var el = document.getElementById('rl-run-meta'); if (!el) return;
+    var total = steps.reduce(function (a, s) { return a + _dur(s); }, 0);
+    el.innerHTML = '<span><b>' + _esc(run.workflow_id || run.name || run.run_id || 'run') + '</b></span>' +
+      '<span>status ' + _esc(run.status || '—') + '</span>' +
+      '<span>' + steps.length + ' steps</span>' +
+      '<span>' + total.toFixed(1) + 's total</span>';
+  }
+  function renderScrub() {
+    var el = document.getElementById('rl-scrub'); if (!el) return;
+    var max = Math.max.apply(null, steps.map(_dur).concat([0.001]));
+    el.innerHTML = steps.map(function (s, i) {
+      var w = Math.max(6, (_dur(s) / max) * 100);
+      return '<div class="rl-seg ' + _esc(s.status || '') + (i === seli ? ' sel' : '') + '" style="flex-grow:' + w.toFixed(1) +
+        '" title="' + _esc(s.step_id) + ' · ' + _dur(s).toFixed(1) + 's" onclick="RunLens.select(' + i + ')">' +
+        '<span class="rl-seg-lbl">' + _esc(s.step_id) + '</span></div>';
+    }).join('');
+  }
+  function renderPlates() {
+    var el = document.getElementById('rl-plates'); if (!el) return;
+    el.innerHTML = steps.map(function (s, i) {
+      var tc = s.token_count || {};
+      var tok = tc.total_tokens || tc.total || '';
+      var pr = (s.pressure_after && s.pressure_after.level) || '';
+      return '<div class="rl-plate' + (i === seli ? ' sel' : '') + '" onclick="RunLens.select(' + i + ')">' +
+        '<div class="rl-p-name">' + _esc(s.step_id) + '</div>' +
+        '<div class="rl-p-meta">' + _dur(s).toFixed(1) + 's' + (tok ? (' · ' + tok + 'tok') : '') + (pr ? (' · ' + _esc(pr)) : '') + '</div></div>';
+    }).join('');
+  }
+  function _block(label, text) { return text ? '<div class="rl-block"><div class="rl-b-label">' + _esc(label) + '</div><pre>' + _esc(text) + '</pre></div>' : ''; }
+  function renderInspect() {
+    var el = document.getElementById('rl-inspect'); if (!el) return;
+    var s = steps[seli]; if (!s) { el.innerHTML = ''; return; }
+    var tc = s.token_count || {};
+    var output = (run.context && run.context.workspace && run.context.workspace[s.step_id]) || s.output || s.result || '';
+    if (output && typeof output === 'object') { try { output = JSON.stringify(output, null, 2); } catch (e) { output = String(output); } }
+    el.innerHTML = '<div class="rl-i-kv">' +
+      '<span>step <b>' + _esc(s.step_id) + '</b></span>' +
+      '<span>' + _esc(s.status || '—') + '</span>' +
+      (s.model_used ? '<span>model <b>' + _esc(s.model_used) + '</b></span>' : '') +
+      '<span>' + _dur(s).toFixed(1) + 's</span>' +
+      ((tc.prompt_tokens != null || tc.total_tokens != null) ? '<span>tok ' + _esc((tc.prompt_tokens || 0) + '+' + (tc.completion_tokens || 0) + '=' + (tc.total_tokens || 0)) + '</span>' : '') +
+      '</div>' +
+      _block('rendered system prompt', s.rendered_system_prompt) +
+      _block('rendered prompt', s.rendered_prompt) +
+      _block('output (as executed)', typeof output === 'string' ? output : '') +
+      (s.error ? _block('error', s.error) : '');
+  }
+  document.addEventListener('click', function (e) { var b = document.getElementById('rl-backdrop'); if (b && e.target === b) b.classList.remove('open'); });
+  window.RunLens = { open: open, close: close, select: select };
 })();
 </script>
 </body>
