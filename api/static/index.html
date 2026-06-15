@@ -6121,6 +6121,34 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .mcp-tool-name { color: var(--accent); font-family: var(--mono); font-size: 0.66rem; }
 .mcp-tool-desc { color: var(--text-dim); font-size: 0.58rem; margin-top: 2px; line-height: 1.3; }
 </style>
+<style id="enclave-journey-styles">
+/* ── Operator's Path adoption ladder (topbar) ─────────────────────── */
+.op-path-bar { display:flex; align-items:center; gap:7px; position:relative; cursor:pointer; }
+.op-path-label { font-family:var(--mono); font-size:var(--text-2xs,0.6rem); color:var(--text-dim); text-transform:uppercase; letter-spacing:0.16em; white-space:nowrap; }
+.op-path-stages { display:flex; gap:5px; align-items:center; }
+.op-stage { width:15px; height:15px; border-radius:50%; border:1.5px solid var(--border-strong,var(--border)); display:inline-flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:8px; color:var(--text-dim); transition:all var(--t-fast,140ms) var(--ease-out,ease); }
+.op-stage.done { background:var(--accent); border-color:var(--accent); color:var(--on-accent,#06201B); }
+.op-stage.hot { border-color:var(--accent); color:var(--accent); box-shadow:0 0 0 1px var(--accent-dim,rgba(43,212,180,.42)); }
+.op-stage.locked { opacity:.45; }
+.op-path-count { font-family:var(--mono); font-size:var(--text-2xs,0.6rem); color:var(--text-faint,var(--text-dim)); }
+.op-path-pop { position:absolute; top:calc(100% + 9px); right:0; z-index:140; width:288px; background:var(--surface-overlay,var(--surface-card)); border:1px solid var(--border-strong,var(--border)); border-radius:var(--radius-md,8px); box-shadow:var(--elev-3,0 12px 34px rgba(0,0,0,.45)); padding:12px 14px; display:none; flex-direction:column; gap:7px; cursor:default; }
+.op-path-pop.open { display:flex; }
+.op-path-pop h4 { margin:0 0 3px; font-family:var(--mono); font-size:var(--text-sm,0.78rem); font-weight:600; color:var(--text); letter-spacing:0.02em; }
+.op-path-row { display:flex; align-items:flex-start; gap:9px; }
+.op-path-row .n { width:16px; height:16px; border-radius:50%; border:1.5px solid var(--border-strong,var(--border)); display:inline-flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:8px; color:var(--text-dim); flex:none; margin-top:1px; }
+.op-path-row.done .n { background:var(--accent); border-color:var(--accent); color:var(--on-accent,#06201B); }
+.op-path-row.hot .n { border-color:var(--accent); color:var(--accent); }
+.op-path-row .lbl { font-size:var(--text-sm,0.8rem); color:var(--text); line-height:1.3; }
+.op-path-row.locked .lbl { color:var(--text-faint,var(--text-dim)); }
+.op-path-row .hint { display:block; font-family:var(--mono); font-size:var(--text-2xs,0.58rem); color:var(--text-faint,var(--text-dim)); margin-top:1px; }
+/* ── Next-best-action nudges (chat pane) ──────────────────────────── */
+.nba-container { display:flex; flex-wrap:wrap; gap:6px; padding:0 0 8px; }
+.nba-container:empty { display:none; }
+.nba-nudge { display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:var(--text-xs,0.7rem); padding:5px 8px 5px 12px; border:1px solid var(--accent-dim,rgba(43,212,180,.42)); border-radius:var(--radius-pill,999px); background:var(--accent-ghost,rgba(43,212,180,.12)); color:var(--accent); cursor:pointer; transition:border-color var(--t-fast,140ms) var(--ease-out,ease); }
+.nba-nudge:hover { border-color:var(--accent); }
+.nba-nudge .x { border:none; background:none; color:inherit; cursor:pointer; font-size:1rem; line-height:1; opacity:.65; padding:0 2px; }
+.nba-nudge .x:hover { opacity:1; }
+</style>
 </head>
 <body>
 
@@ -6157,6 +6185,13 @@ body.bs-show-hint .bs-dispatch:hover::after {
       </div>
     </div>
     <div class="header-status">
+      <div class="op-path-bar" id="op-path-bar" title="Your operator's path — click for detail">
+        <span class="op-path-label">Path</span>
+        <div class="op-path-stages" id="op-path-stages"></div>
+        <span class="op-path-count" id="op-path-count">0/5</span>
+        <div class="op-path-pop" id="op-path-pop"></div>
+      </div>
+      <span class="vsep" aria-hidden="true"></span>
       <span class="env-chip" id="env-chip" title="Deployment environment">
         <span id="env-chip-label">LOCAL</span>
       </span>
@@ -6647,6 +6682,7 @@ body.bs-show-hint .bs-dispatch:hover::after {
         <span>Engaging step <code id="step-engage-id" style="color:var(--accent)">—</code> · the chat below runs this step against your message</span>
         <button type="button" class="action-btn" style="margin-left:auto;font-size:0.55rem;padding:1px 6px" onclick="composerExitStepEngage()" title="Exit step engagement and return to general chat">exit</button>
       </div>
+      <div class="nba-container" id="nba-container"></div>
       <div class="chat-input-row">
         <button class="search-toggle" id="search-toggle" onclick="toggleSearch()" title="Toggle web search">
           <span class="toggle-label" id="search-label">Search: OFF</span>
@@ -22577,6 +22613,128 @@ const Projects = (function () {
   };
 })();
 
+</script>
+<script id="enclave-journey-js">
+/* Operator-journey: adoption ladder + next-best-action nudges.
+   Reads only real, derivable signals (chat history, canvas node count, and
+   cached run/workflow existence) — honest about state, defensive about
+   missing globals. Future stages (pins, fleet) light up as those land. */
+(function () {
+  var STAGES = [
+    { id: 'seed',     label: 'Seed a chat',           hint: 'start a conversation' },
+    { id: 'scaffold', label: 'Scaffold a plan',       hint: 'hand it to your agents' },
+    { id: 'run',      label: 'Run it',                hint: 'execute the workflow' },
+    { id: 'save',     label: 'Save the workflow',     hint: 'keep it for reuse' },
+    { id: 'fleet',    label: 'Schedule on the fleet', hint: 'coming in 1.4', future: true },
+  ];
+  var _async = { runs: false, wfs: false, at: 0, inflight: false };
+
+  function _n(fn, d) { try { return fn(); } catch (e) { return d; } }
+  function chatLen()   { return _n(function () { return (typeof chatHistory !== 'undefined' && chatHistory) ? chatHistory.length : 0; }, 0); }
+  function nodeCount() { return _n(function () { return (typeof dfNodeData !== 'undefined' && dfNodeData) ? Object.keys(dfNodeData).length : 0; }, 0); }
+  function pinCount()  { return _n(function () { return (window._enclavePins && window._enclavePins.length) || 0; }, 0); }
+
+  function refreshAsync() {
+    var now = Date.now();
+    if (_async.inflight || now - _async.at < 30000) return;
+    _async.inflight = true; _async.at = now;
+    fetch('/api/workflows/runs?limit=1').then(function (r) { return r.json(); })
+      .then(function (d) { _async.runs = Array.isArray(d) ? d.length > 0 : !!(d && d.length); }).catch(function () {})
+      .finally(function () {
+        fetch('/api/workflows').then(function (r) { return r.json(); })
+          .then(function (d) { var a = Array.isArray(d) ? d : (d && d.workflows) || []; _async.wfs = a.length > 0; }).catch(function () {})
+          .finally(function () { _async.inflight = false; render(); });
+      });
+  }
+
+  function computeState() {
+    var seed = chatLen() > 0 || pinCount() > 0;
+    var scaf = nodeCount() > 0;
+    var st = [
+      { done: seed,        locked: false },
+      { done: scaf,        locked: !seed },
+      { done: _async.runs, locked: !scaf },
+      { done: _async.wfs,  locked: !scaf },
+      { done: false,       locked: true, future: true },
+    ];
+    for (var i = 0; i < st.length; i++) { if (!st[i].done && !st[i].locked && !st[i].future) { st[i].hot = true; break; } }
+    return st;
+  }
+  function cls(s) { return s.done ? 'done' : s.hot ? 'hot' : s.locked ? 'locked' : ''; }
+
+  function render() {
+    var stagesEl = document.getElementById('op-path-stages');
+    var countEl = document.getElementById('op-path-count');
+    var popEl = document.getElementById('op-path-pop');
+    if (!stagesEl) return;
+    var st = computeState();
+    var done = st.filter(function (s) { return s.done; }).length;
+    stagesEl.innerHTML = st.map(function (s, i) {
+      return '<span class="op-stage ' + cls(s) + '" title="' + STAGES[i].label + '">' + (s.done ? '✓' : (i + 1)) + '</span>';
+    }).join('');
+    if (countEl) countEl.textContent = done + '/' + st.length;
+    if (popEl) {
+      popEl.innerHTML = '<h4>Operator’s path</h4>' + st.map(function (s, i) {
+        return '<div class="op-path-row ' + cls(s) + '"><span class="n">' + (s.done ? '✓' : (i + 1)) +
+          '</span><span class="lbl">' + STAGES[i].label + '<span class="hint">' + STAGES[i].hint + '</span></span></div>';
+      }).join('');
+    }
+    renderNudges();
+  }
+
+  /* next-best-action nudges — calm: at most one shown at a time */
+  var NUDGES = [
+    { key: 'scaffold', text: 'This conversation is taking shape — hand it to your agents.',
+      when: function () { return chatLen() >= 4 && nodeCount() === 0; },
+      act: function () { var b = document.querySelector('.bs-dispatch'); if (b) b.scrollIntoView({ block: 'center', behavior: 'smooth' }); } },
+    { key: 'run', text: 'Your plan is built — run it.',
+      when: function () { return nodeCount() > 0 && !_async.runs; },
+      act: function () { if (typeof dfRunWorkflowFromComposer === 'function') dfRunWorkflowFromComposer(); } },
+    { key: 'save', text: 'Run it to save this workflow for reuse.',
+      when: function () { return nodeCount() > 0 && _async.runs && !_async.wfs; },
+      act: function () { if (typeof dfRunWorkflowFromComposer === 'function') dfRunWorkflowFromComposer(); } },
+  ];
+  var _dismissed = (function () { try { return JSON.parse(localStorage.getItem('enclave.nba.dismissed') || '{}'); } catch (e) { return {}; } })();
+  function dismiss(key) {
+    _dismissed[key] = 1;
+    try { localStorage.setItem('enclave.nba.dismissed', JSON.stringify(_dismissed)); } catch (e) {}
+    render();
+  }
+  function renderNudges() {
+    var box = document.getElementById('nba-container');
+    if (!box) return;
+    var n = null;
+    for (var i = 0; i < NUDGES.length; i++) { if (!_dismissed[NUDGES[i].key] && _n(NUDGES[i].when, false)) { n = NUDGES[i]; break; } }
+    if (!n) { box.innerHTML = ''; box.removeAttribute('data-nba'); return; }
+    if (box.getAttribute('data-nba') === n.key) return; // avoid churn if unchanged
+    box.setAttribute('data-nba', n.key);
+    box.innerHTML = '<span class="nba-nudge"><span class="nba-go">' + n.text +
+      '</span><button class="x" title="Dismiss" aria-label="Dismiss">×</button></span>';
+    var go = box.querySelector('.nba-go');
+    if (go) go.onclick = function () { _n(n.act, null); };
+    var x = box.querySelector('.x');
+    if (x) x.onclick = function (e) { e.stopPropagation(); dismiss(n.key); };
+  }
+
+  function togglePop(force) {
+    var pop = document.getElementById('op-path-pop');
+    if (!pop) return;
+    pop.classList.toggle('open', force != null ? force : !pop.classList.contains('open'));
+  }
+
+  function init() {
+    var bar = document.getElementById('op-path-bar');
+    if (bar) bar.addEventListener('click', function (e) { if (e.target.closest('.op-path-pop')) return; togglePop(); });
+    document.addEventListener('click', function (e) { if (!e.target.closest('#op-path-bar')) togglePop(false); });
+    render();
+    refreshAsync();
+    setInterval(function () { render(); refreshAsync(); }, 4000);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
+  window.OpPath = { refresh: render, togglePop: togglePop, _dismissNudge: dismiss };
+})();
 </script>
 </body>
 </html>
