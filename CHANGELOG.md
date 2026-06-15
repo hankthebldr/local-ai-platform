@@ -5,6 +5,68 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer: [sem
 
 ## [Unreleased]
 
+Two independent workstreams in flight; either can cut first. **Chat-led
+Composer + the Enclave design-system rebrand** (branch `feat/chat-led-composer`)
+— a candidate `1.2.0` UX cut — and **Architecture-aware orchestration**
+earmarked for `1.3.0`.
+
+### Added — Chat-led Composer & Enclave design-system rebrand (`feat/chat-led-composer`)
+
+> "A workflow is crystallized conversation." The Composer becomes chat-primary:
+> converse to solve a problem, then promote the thread into a local agentic
+> workflow. Plus a full rebrand off the PANW-Cortex skin to Enclave's own
+> warm-charcoal + teal identity (design system vendored at `docs/design/`).
+
+- **Chat-led "Boot Sequence" (composer).** An in-message affordance
+  (`▸ run this with my agents`) distills the thread into an editable spec and
+  scaffolds a runnable DAG on the dormant spine. New
+  `POST /api/composer/capture-spec` + `POST /api/composer/scaffold`
+  (`api/routers/composer.py`) backed by `spec_capture.py` + `scaffold_planner.py`
+  (hybrid: curated-template match, else local LLM plan); reuses `OllamaService`
+  + `ModelResolver`, never touches the engine. Scaffolded step inputs are
+  normalized to real producers so plans actually run.
+- **Enclave design-system rebrand.** Cortex green / blue-slate → warm-charcoal
+  `#101413` + teal `#2BD4B4` primary + deep emerald + sparing ember; dark +
+  light scopes; role palette (reasoning=teal, coding=sky, fast=amber,
+  general=emerald, uncensored=ember). Full handoff bundle (tokens, brand assets,
+  React component specs, canonical console-v2 prototype) vendored at
+  `docs/design/`.
+- **In-shell Chat↔Canvas pivot + fluid layout.** `Chat | Canvas | Focus`
+  segmented control (`ComposerSplit.setMode`); viewport-fit split; Boot Sequence
+  confirm auto-pivots to canvas. Per-step `▶ test in chat` bench in the node
+  inspector.
+- **Unified asset deep-dives (AssetPeek).** One slide-over drill-down for
+  models / agents / plugins — every dive ends in "seed a chat". Models pull
+  curated benchmarks from `data/discovery/model_benchmarks.json` via the new
+  `GET /api/inventory/enrichment` catalog-enrichment endpoint.
+- **Runs reasoning drill-down + calm analytics.** Per-step decisions panel
+  (timing anatomy, tokens, pressure, skills/MCP/tools chips) over the telemetry
+  the engine already persists; a calm-analytics perf band
+  (`enclSparkline` / `enclTrendStat` / `enclUtilChart`) fed by a `_sysHistory`
+  ring buffer.
+- **Eval harness (`api/services/eval_harness.py`).** Agent/workflow regression
+  suites reusing the gate grammar; sample suites under `evals/`.
+- **Skills marketplace + installable skills.** GitHub-backed skills.sh discovery
+  provider (`api/services/discovery_providers/skills_marketplace.py`);
+  installable skills in external discover; Skills tab unified with the Catalog.
+- **Composer UX.** Native auto-wire (dropped role/agent pieces chain onto the
+  flow), always-present editable Start/End, toolbar Stop control, New-Workflow
+  creation wizard, brainstorm→decision starter workflow.
+- **Runner attribution.** `/health` and `/v1/models` attribute each model to
+  its serving runner (Ollama / vLLM).
+- **Tier-3 OpenShell sandbox backend (opt-in).** Extends the code-exec sandbox
+  (below) with an OpenShell agent-runtime backend prototype (ADR:
+  `docs/plans/2026-06-07-openshell-agent-runtime-decision.md`).
+
+> **Pending console-v2 (not yet implemented):** thread rail + multi-thread
+> management; message-level pin-as-step + scaffold-preview modal + maturity
+> meter; operator's-path adoption ladder + next-best-action nudges; model
+> compare grid; the 4-phase install wizard (source → configure → verify → land);
+> and the full Run lens (scrub timeline + node-timing plates + as-executed
+> inspector). Frontend test coverage for AssetPeek, the Runs decisions panel,
+> the calm-analytics atoms, the Cmd/Ctrl-K palette, and `focus` mode is still
+> outstanding.
+
 Earmarked for `1.3.0` — Architecture-aware orchestration. The workflow engine
 went from "execute steps in YAML order, blind to the hardware" to "schedule a
 DAG tick-by-tick on the detected arch, pre-warm next-step models during the
