@@ -6354,8 +6354,23 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .cmp-seed-row td { border-bottom:none; padding-top:12px; }
 .cmp-seed { font-family:var(--mono); font-size:0.65rem; padding:5px 10px; border:1px solid var(--accent); border-radius:var(--radius-sm,4px); background:transparent; color:var(--accent); cursor:pointer; }
 /* ── 4-phase install wizard ───────────────────────────────────────── */
-.iw-phases { display:flex; gap:0; margin-bottom:16px; }
-.iw-phase { flex:1; text-align:center; font-family:var(--mono); font-size:var(--text-2xs,0.6rem); color:var(--text-faint,var(--text-dim)); text-transform:uppercase; letter-spacing:0.08em; padding-bottom:7px; border-bottom:2px solid var(--border); }
+.iw-phases { display:flex; align-items:center; gap:8px; margin-bottom:16px; }
+/* Canonical WizardStepper — numbered circles + connectors (design-system) */
+.encl-wstep { display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:var(--text-2xs,0.6rem); letter-spacing:0.1em; text-transform:uppercase; color:var(--text-faint,var(--text-dim)); white-space:nowrap; }
+.encl-wstep .n { width:20px; height:20px; border-radius:50%; border:1.5px solid var(--border-strong,var(--border)); display:inline-flex; align-items:center; justify-content:center; font-size:10px; flex:none; }
+.encl-wstep.done { color:var(--text-dim); }
+.encl-wstep.done .n { background:var(--accent); border-color:var(--accent); color:var(--on-accent,#06201B); }
+.encl-wstep.on { color:var(--accent); }
+.encl-wstep.on .n { border-color:var(--accent); color:var(--accent); box-shadow:var(--glow-accent); }
+.encl-wconn { flex:1; height:1px; background:var(--border); min-width:14px; }
+/* Canonical SeedChip — key:value thread-seed chip (role/model/context/plugin) */
+.encl-seedchip { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:var(--text-2xs,0.6rem); padding:3px 9px; border:1px solid var(--border); border-radius:var(--radius-pill,999px); background:var(--surface-card); color:var(--text-dim); white-space:nowrap; }
+.encl-seedchip .k { color:var(--text-faint,var(--text-dim)); letter-spacing:0.08em; text-transform:uppercase; }
+.encl-seedchip.accent { border-color:var(--st-dim,var(--accent-dim)); color:var(--st,var(--accent)); background:var(--st-ghost,var(--accent-ghost)); }
+.encl-seedchip.ghost { border-style:dashed; background:transparent; color:var(--text-faint,var(--text-dim)); cursor:pointer; }
+.encl-seedchip.ghost:hover { color:var(--text-dim); border-color:var(--border-strong); }
+.encl-seedchip .x { cursor:pointer; color:var(--text-faint,var(--text-dim)); margin-left:1px; }
+.encl-seedchip .x:hover { color:var(--danger); }
 .iw-phase.active { color:var(--accent); border-bottom-color:var(--accent); }
 .iw-phase.done { color:var(--text-dim); border-bottom-color:var(--accent-dim,rgba(43,212,180,.42)); }
 .iw-body { min-height:118px; }
@@ -23354,7 +23369,11 @@ const Projects = (function () {
   function iwRender() {
     var ph = document.getElementById('iw-phases'), body = document.getElementById('iw-body'), acts = document.getElementById('iw-actions');
     if (!ph) return;
-    ph.innerHTML = PHASES.map(function (p, i) { var c = i === st.phase ? 'active' : (i < st.phase ? 'done' : ''); return '<div class="iw-phase ' + c + '">' + p + '</div>'; }).join('');
+    ph.innerHTML = PHASES.map(function (p, i) {
+      var conn = i > 0 ? '<span class="encl-wconn" aria-hidden="true"></span>' : '';
+      var c = i < st.phase ? 'done' : (i === st.phase ? 'on' : '');
+      return conn + '<span class="encl-wstep ' + c + '"><span class="n">' + (i < st.phase ? '✓' : (i + 1)) + '</span>' + p + '</span>';
+    }).join('');
     if (st.phase === 0) {
       body.innerHTML = '<p style="color:var(--text-dim);font-size:var(--text-sm,0.8rem);margin:0 0 10px">Name the model to pull locally (Ollama tag or hf.co path). Only the model download leaves your machine.</p><input type="text" id="iw-model" placeholder="e.g. qwen2.5:7b" value="' + _esc(st.model) + '">';
       acts.innerHTML = '<button type="button" class="action-btn ghost" onclick="InstallWizard.close()">Cancel</button><button type="button" class="action-btn accent" onclick="InstallWizard.next()">Next →</button>';
@@ -23504,6 +23523,35 @@ const Projects = (function () {
   }
   document.addEventListener('click', function (e) { var b = document.getElementById('rl-backdrop'); if (b && e.target === b) b.classList.remove('open'); });
   window.RunLens = { open: open, close: close, select: select };
+})();
+</script>
+<script id="enclave-components-js">
+/* Canonical SeedChip helper — returns the design-system key:value seed chip as
+   an HTML string (vanilla idiom). Tones: accent / emerald / warm / info /
+   neutral; optional ghost (dashed, clickable) + dismiss. Used by the
+   research→context→agent flow and any thread-seed header. */
+(function () {
+  function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  var TONE = {
+    accent:  '--st:var(--accent);--st-dim:var(--accent-dim);--st-ghost:var(--accent-ghost)',
+    emerald: '--st:var(--accent-2-bright);--st-dim:var(--accent-2-dim);--st-ghost:var(--accent-2-ghost)',
+    warm:    '--st:var(--accent-warm);--st-dim:var(--accent-warm-dim);--st-ghost:var(--accent-warm-ghost)',
+    info:    '--st:var(--info);--st-dim:var(--info-dim);--st-ghost:var(--info-ghost)',
+  };
+  window.SeedChip = {
+    html: function (o) {
+      o = o || {};
+      var toned = o.tone && o.tone !== 'neutral';
+      var style = toned ? (TONE[o.tone] || TONE.accent) : '';
+      var cls = 'encl-seedchip' + (toned ? ' accent' : '') + (o.ghost ? ' ghost' : '');
+      return '<span class="' + cls + '"' + (style ? ' style="' + style + '"' : '') +
+        (o.onclick ? ' onclick="' + o.onclick + '"' : '') + '>' +
+        (o.k ? '<span class="k">' + _esc(o.k) + '</span>' : '') +
+        '<span>' + _esc(o.v) + '</span>' +
+        (o.onRemove ? '<span class="x" onclick="' + o.onRemove + '" aria-label="Remove">×</span>' : '') +
+        '</span>';
+    },
+  };
 })();
 </script>
 </body>

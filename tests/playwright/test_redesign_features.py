@@ -51,8 +51,9 @@ def test_install_wizard_opens_four_phases(signed_in_page):
     page = signed_in_page
     page.wait_for_timeout(500)
     page.evaluate("() => window.InstallWizard.open('qwen2.5:0.5b')")
+    # Canonical WizardStepper renders numbered .encl-wstep circles (+ connectors).
     phases = page.evaluate(
-        "() => document.getElementById('iw-phases').childElementCount"
+        "() => document.querySelectorAll('#iw-phases .encl-wstep').length"
     )
     assert phases == 4, f"expected 4 wizard phases, got {phases}"
     page.evaluate("() => window.InstallWizard.close()")
