@@ -7002,8 +7002,9 @@ body.bs-show-hint .bs-dispatch:hover::after {
         <span class="se-pip" aria-hidden="true" style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;box-shadow:0 0 0 3px var(--accent-trace)"></span>
         <span>Chatting with <code id="step-engage-id" style="color:var(--accent)">—</code></span>
         <span id="step-engage-meta" style="color:var(--text-faint)"></span>
+        <span id="step-engage-tuning" style="color:var(--accent);font-size:0.58rem"></span>
         <span style="flex:1"></span>
-        <span class="hide-narrow" style="color:var(--text-faint);font-size:0.58rem">messages configure + test this agent</span>
+        <button type="button" class="action-btn" style="font-size:0.55rem;padding:1px 7px" onclick="composerSeedAgent()" title="Seed this agent with context (appended to its system prompt)">+ seed</button>
         <button type="button" class="action-btn" style="font-size:0.55rem;padding:1px 7px" onclick="composerExitStepEngage()" title="Detach — return to general chat across the whole workflow">general chat ✕</button>
       </div>
       <div class="nba-container" id="nba-container"></div>
@@ -9741,7 +9742,8 @@ async function _sendStepMessage(text, stepData) {
           name: stepData.name,
           model: stepData.model || null,
           role: stepData.role || null,
-          system_prompt: stepData.system_prompt || '',
+          system_prompt: (stepData.system_prompt || '') +
+            (window.AgentTuning ? AgentTuning.guidance(window._composerEngagedNodeId) : ''),
         },
         user_message: text,
       }),
@@ -9785,6 +9787,7 @@ function composerEnterStepEngage(nodeId) {
     // Show the agent you're now talking to: its role @ model.
     if (metaEl) metaEl.textContent = '· ' + (d.role || 'general') + (d.model ? ' @ ' + d.model : ' @ auto');
     badge.hidden = false;
+    if (window.AgentTuning) AgentTuning.refreshBadge(nodeId);
   }
   // Reflect the bound node's model in the chat model selector so the
   // operator sees — and can change (→ writes back via onChatModelChanged) —
@@ -9826,6 +9829,24 @@ function onChatModelChanged() {
   const metaEl = document.getElementById('step-engage-meta');
   if (metaEl) metaEl.textContent = '· ' + (d.role || 'general') + ' @ ' + model;
   if (window.Toast) Toast.info('Agent updated', (d.id || 'step') + ' now runs on ' + model);
+}
+
+// Seed the bound agent with context — appended to its system prompt. The
+// in-chat "seed the agent with a particular context/output" affordance.
+function composerSeedAgent() {
+  const nid = window._composerEngagedNodeId;
+  if (nid == null || typeof dfNodeData === 'undefined' || !dfNodeData[nid]) {
+    if (window.Toast) Toast.info('No agent bound', 'Select a node first, then seed it.');
+    return;
+  }
+  const ctx = window.prompt('Seed this agent with context (appended to its system prompt):', '');
+  if (ctx == null || !ctx.trim()) return;
+  const d = dfNodeData[nid];
+  const sp = (d.system_prompt || '') + '\n\n[Seed context]\n' + ctx.trim();
+  if (typeof dfUpdateNodeData === 'function') {
+    try { dfUpdateNodeData(nid, 'system_prompt', sp); } catch (_) { d.system_prompt = sp; }
+  } else { d.system_prompt = sp; }
+  if (window.Toast) Toast.success('Agent seeded', (d.id || 'step') + ' got new context');
 }
 
 async function sendMessage() {
@@ -17209,6 +17230,47 @@ window.ComposerWorkstream = (function () {
 // so the rating UI still works in older builds). The rating becomes
 // per-conversation training data: which outputs the operator marked good
 // vs bad with optional context.
+/* ── AGENT TUNING ─────────────────────────────────────────────────────
+   Up/down votes in a node-bound chat become persisted, per-agent behavior
+   tuning. Keyed by the step's semantic id (e.g. 'researcher') so the same
+   agent in another workflow inherits the feedback — "the centerpoint for
+   other workflows". The tuning is applied as a system-prompt guidance block
+   when that agent runs (preferred / avoided exemplars). */
+window.AgentTuning = (function () {
+  const KEY = 'enclave.agentTuning.v1';
+  function _load() { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } }
+  function _save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} }
+  function _key(nodeId) {
+    try { const d = (typeof dfNodeData !== 'undefined') && dfNodeData[nodeId]; return d ? (d.id || ('role:' + (d.role || 'general'))) : null; } catch (e) { return null; }
+  }
+  function record(nodeId, kind, text) {
+    const k = _key(nodeId); if (!k) return;
+    const s = _load();
+    const t = s[k] || { up: 0, down: 0, prefer: [], avoid: [] };
+    if (kind === 'up') { t.up++; if (text) { t.prefer.unshift(text.slice(0, 600)); t.prefer = t.prefer.slice(0, 3); } }
+    else if (kind === 'down') { t.down++; if (text) { t.avoid.unshift(text.slice(0, 600)); t.avoid = t.avoid.slice(0, 3); } }
+    s[k] = t; _save(s);
+    refreshBadge(nodeId);
+    if (window.Toast) Toast.info('Agent tuned', k + ' · ▲' + t.up + ' ▼' + t.down + ' (applies on next run, here + other workflows)');
+  }
+  function get(nodeId) { const k = _key(nodeId); return k ? (_load()[k] || null) : null; }
+  function guidance(nodeId) {
+    const t = get(nodeId); if (!t || (!t.prefer.length && !t.avoid.length)) return '';
+    const one = x => x.replace(/\s+/g, ' ').slice(0, 200);
+    let g = '\n\n[Operator tuning — learned from up/down feedback]';
+    if (t.prefer.length) g += '\nPrefer responses in the style/substance of:\n- ' + t.prefer.map(one).join('\n- ');
+    if (t.avoid.length) g += '\nAvoid responses like:\n- ' + t.avoid.map(one).join('\n- ');
+    return g;
+  }
+  function refreshBadge(nodeId) {
+    if (window._composerEngagedNodeId !== nodeId) return;
+    const el = document.getElementById('step-engage-tuning');
+    const t = get(nodeId);
+    if (el) el.textContent = (t && (t.up || t.down)) ? ('▲' + t.up + ' ▼' + t.down + ' tuned') : '';
+  }
+  return { record, get, guidance, refreshBadge };
+})();
+
 window.ChatRating = (function () {
   const STORE_KEY = 'enclave.chatRatings.v1';
   let _seq = 0;
@@ -17289,6 +17351,11 @@ window.ChatRating = (function () {
     all[msgId] = record;
     _save(all);
     _paintRowState(msgId, kind);
+    // Node-bound tuning: a vote while bound to a node tunes THAT agent.
+    try {
+      const bn = window._composerEngagedNodeId;
+      if (bn != null && window.AgentTuning) AgentTuning.record(bn, kind, record.text);
+    } catch (_) {}
 
     // Best-effort send to backend. Endpoint may not exist yet; that's fine.
     try {
