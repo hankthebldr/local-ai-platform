@@ -21244,6 +21244,38 @@ const RunsTab = (function () {
       if (el) { el.style.left = left + 'px'; el.style.top = top + 'px'; }
     });
     ids.forEach(id => { try { _editor.updateConnectionNodes(`node-${id}`); } catch (_) {} });
+
+    // Fit-to-screen: zoom the whole precanvas so EVERY node is visible (the
+    // run-detail graph should always fit). Measure the ACTUAL rendered node
+    // bounds (offset*) — dagre's NODE_H estimate is smaller than the real node
+    // cards. Deferred a frame so node cards have reached their final height
+    // (their content/fonts grow them taller after addNode).
+    requestAnimationFrame(() => { try {
+      const cvEl = document.getElementById('runs-tab-canvas');
+      const pre = _editor && _editor.precanvas;
+      if (cvEl && pre) {
+        let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+        ids.forEach(id => {
+          const el = document.querySelector(`#runs-tab-canvas #node-${id}`);
+          if (!el) return;
+          const x = parseFloat(el.style.left) || 0, y = parseFloat(el.style.top) || 0;
+          bx0 = Math.min(bx0, x); by0 = Math.min(by0, y);
+          bx1 = Math.max(bx1, x + el.offsetWidth); by1 = Math.max(by1, y + el.offsetHeight);
+        });
+        const gw = bx1 - bx0, gh = by1 - by0;
+        const cw = cvEl.clientWidth, ch = cvEl.clientHeight, pad = 80;
+        if (gw > 0 && gh > 0 && cw > 0 && ch > 0) {
+          // 0.94 safety factor — connection curves bow ~15-20px beyond the
+          // node bounding box, so leave headroom or a sliver clips.
+          const z = Math.min(1, ((cw - pad) / gw) * 0.94, ((ch - pad) / gh) * 0.94);
+          const cx = (cw - gw * z) / 2 - bx0 * z;
+          const cy = (ch - gh * z) / 2 - by0 * z;
+          _editor.zoom = z; _editor.zoom_last_value = z;
+          _editor.canvas_x = cx; _editor.canvas_y = cy;
+          pre.style.transform = 'translate(' + cx + 'px, ' + cy + 'px) scale(' + z + ')';
+        }
+      }
+    } catch (_) { /* fit is best-effort */ } });
   }
 
   // A run is "zombie" if its status says running/queued but it
