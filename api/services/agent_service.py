@@ -20,7 +20,6 @@ from ..logging_config import logger
 from ..models.agent_models import AgentDefinition, ContextSource
 from .workflow_engine import DATA_DIR as WORKFLOW_DATA_DIR
 
-
 AGENTS_DIR = os.getenv("AGENTS_DIR", "./agents")
 
 # Maximum characters to read from a file context source
@@ -67,19 +66,21 @@ class AgentService:
                     raw = yaml.safe_load(fh)
                 if raw is None:
                     continue
-                results.append({
-                    "id": raw.get("id", f.stem),
-                    "name": raw.get("name", f.stem),
-                    "description": raw.get("description"),
-                    "icon": raw.get("icon"),
-                    "model": raw.get("model"),
-                    "role": raw.get("role"),
-                    "tags": raw.get("tags", []),
-                    "file": str(f),
-                    "starters": raw.get("starters", []),
-                    "created_at": raw.get("created_at"),
-                    "updated_at": raw.get("updated_at"),
-                })
+                results.append(
+                    {
+                        "id": raw.get("id", f.stem),
+                        "name": raw.get("name", f.stem),
+                        "description": raw.get("description"),
+                        "icon": raw.get("icon"),
+                        "model": raw.get("model"),
+                        "role": raw.get("role"),
+                        "tags": raw.get("tags", []),
+                        "file": str(f),
+                        "starters": raw.get("starters", []),
+                        "created_at": raw.get("created_at"),
+                        "updated_at": raw.get("updated_at"),
+                    }
+                )
             except Exception as e:
                 logger.warning(f"Skipping invalid agent {f}: {e}")
 
@@ -105,6 +106,8 @@ class AgentService:
     def create_agent(self, defn: AgentDefinition) -> str:
         """Write agent definition to YAML file, returns the file path"""
         _validate_agent_id(defn.id)
+        for w in self._validate_tools(defn):
+            logger.warning(f"agent '{defn.id}': {w}")
         now = datetime.utcnow()
         defn.created_at = now
         defn.updated_at = now
@@ -113,7 +116,9 @@ class AgentService:
         data = defn.model_dump(mode="json")
 
         with open(yaml_path, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            yaml.dump(
+                data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+            )
 
         logger.info(f"Created agent '{defn.id}' at {yaml_path}")
         return str(yaml_path)
@@ -126,6 +131,9 @@ class AgentService:
         if not yaml_path.exists():
             return False
 
+        for w in self._validate_tools(defn):
+            logger.warning(f"agent '{defn.id}': {w}")
+
         defn.updated_at = datetime.utcnow()
 
         # Preserve original created_at if not provided
@@ -137,7 +145,9 @@ class AgentService:
         data = defn.model_dump(mode="json")
 
         with open(yaml_path, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            yaml.dump(
+                data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+            )
 
         logger.info(f"Updated agent '{agent_id}'")
         return True
@@ -152,6 +162,68 @@ class AgentService:
         yaml_path.unlink()
         logger.info(f"Deleted agent '{agent_id}'")
         return True
+
+    # ── Tool reachability validation ─────────────────────────────────────
+
+    def _validate_tools(self, defn: AgentDefinition) -> List[str]:
+        """Verify each declared plugin/MCP tool actually resolves.
+
+        Reuses the workflow extension-preflight helpers so agents and
+        workflow steps validate their tool surface identically. Raises
+        ``ValueError`` on definite-missing refs (plugin absent, plugin
+        tool not found, MCP server not registered). Returns a list of
+        non-fatal warnings (e.g. a registered-but-unreachable MCP server,
+        where we can't refute the tool's existence) for the caller to
+        surface. Built-in tools (``type``) need no registry lookup.
+        """
+        from .extension_preflight import (
+            _default_mcp_service,
+            _default_plugin_service,
+            _mcp_has_tool,
+            _mcp_reachable,
+            _mcp_registered,
+            _plugin_has_tool,
+            _plugin_present,
+        )
+
+        plugin_service = _default_plugin_service()
+        mcp_service = _default_mcp_service()
+        errors: List[str] = []
+        warnings: List[str] = []
+
+        for tool in defn.tools:
+            if tool.type is not None:
+                continue  # built-in; nothing to resolve
+            if tool.plugin_id:
+                if not _plugin_present(plugin_service, tool.plugin_id):
+                    errors.append(f"plugin not installed: {tool.plugin_id}")
+                elif tool.tool_id and not _plugin_has_tool(
+                    plugin_service, tool.plugin_id, tool.tool_id
+                ):
+                    errors.append(
+                        f"plugin '{tool.plugin_id}' has no tool '{tool.tool_id}'"
+                    )
+            elif tool.mcp_server:
+                if not _mcp_registered(mcp_service, tool.mcp_server):
+                    errors.append(f"MCP server not registered: {tool.mcp_server}")
+                elif not _mcp_reachable(mcp_service, tool.mcp_server):
+                    warnings.append(
+                        f"MCP server '{tool.mcp_server}' is registered but "
+                        f"unreachable; tool '{tool.tool_id}' cannot be verified"
+                    )
+                elif (
+                    tool.tool_id
+                    and tool.tool_id != "*"
+                    and not _mcp_has_tool(mcp_service, tool.mcp_server, tool.tool_id)
+                ):
+                    errors.append(
+                        f"MCP server '{tool.mcp_server}' exposes no tool "
+                        f"'{tool.tool_id}'"
+                    )
+
+        if errors:
+            raise ValueError("agent tool validation failed: " + "; ".join(errors))
+        return warnings
 
     # ── Context Resolution ───────────────────────────────────────────────
 
@@ -203,7 +275,10 @@ class AgentService:
         try:
             content = path.read_text(encoding="utf-8")
             if len(content) > FILE_CONTEXT_MAX_CHARS:
-                content = content[:FILE_CONTEXT_MAX_CHARS] + "\n\n... [truncated at 50k chars]"
+                content = (
+                    content[:FILE_CONTEXT_MAX_CHARS]
+                    + "\n\n... [truncated at 50k chars]"
+                )
             return content
         except Exception as e:
             logger.error(f"Failed to read context file '{file_path}': {e}")
@@ -262,10 +337,12 @@ class AgentService:
         messages: List[Dict[str, Any]] = []
 
         # Primary system prompt
-        messages.append({
-            "role": "system",
-            "content": agent.system_prompt,
-        })
+        messages.append(
+            {
+                "role": "system",
+                "content": agent.system_prompt,
+            }
+        )
 
         # Resolved context as second system message
         resolved = self.resolve_context(agent)
@@ -280,10 +357,12 @@ class AgentService:
                 "The following context has been loaded for this conversation:\n\n"
                 + "\n\n---\n\n".join(context_parts)
             )
-            messages.append({
-                "role": "system",
-                "content": context_message,
-            })
+            messages.append(
+                {
+                    "role": "system",
+                    "content": context_message,
+                }
+            )
 
         # User conversation messages
         messages.extend(user_messages)

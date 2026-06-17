@@ -6359,6 +6359,11 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .op-path-row.locked .lbl { color:var(--text-faint,var(--text-dim)); }
 .op-path-row .hint { display:block; font-family:var(--mono); font-size:var(--text-2xs,0.58rem); color:var(--text-faint,var(--text-dim)); margin-top:1px; }
 /* ── Next-best-action nudges (chat pane) ──────────────────────────── */
+/* Ollama-down banner — local planning/Promote/Pin need the daemon. */
+.ollama-down-banner { display:flex; align-items:center; gap:10px; padding:7px 12px; margin:0 0 8px; border:1px solid var(--danger-dim,var(--danger)); border-radius:6px; background:var(--danger-ghost,rgba(229,104,90,0.12)); color:var(--text); font-size:0.66rem; font-family:var(--mono); }
+.ollama-down-banner[hidden] { display:none; }
+.composer-split.ollama-down .bs-dispatch,
+.composer-split.ollama-down .msg-pin-btn { opacity:0.4; pointer-events:none; }
 .nba-container { display:flex; flex-wrap:wrap; gap:6px; padding:0 0 8px; }
 .nba-container:empty { display:none; }
 .nba-nudge { display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:var(--text-xs,0.7rem); padding:5px 8px 5px 12px; border:1px solid var(--accent-dim,rgba(43,212,180,.42)); border-radius:var(--radius-pill,999px); background:var(--accent-ghost,rgba(43,212,180,.12)); color:var(--accent); cursor:pointer; transition:border-color var(--t-fast,140ms) var(--ease-out,ease); }
@@ -6907,6 +6912,12 @@ body.bs-show-hint .bs-dispatch:hover::after {
            (cpu-value, mem-value, cpu-cores, mem-detail, models-content,
            cpu-arc, mem-arc, status-content) are preserved verbatim so
            the existing poller keeps writing to the right targets. -->
+      <div id="ollama-down-banner" class="ollama-down-banner" hidden>
+        <span class="status-pip offline" aria-hidden="true"></span>
+        <span><strong>Ollama isn't reachable</strong> — local planning, Promote &amp; Pin are paused. Start it with <code>ollama serve</code>.</span>
+        <span style="flex:1"></span>
+        <button type="button" class="action-btn xs" onclick="loadStatus()">Retry</button>
+      </div>
       <div class="thread-bar" id="thread-bar">
         <button type="button" class="thread-switch" id="thread-switch" onclick="Threads.toggleMenu()" title="Switch conversation thread">
           <span class="thread-dot"></span>
@@ -9007,6 +9018,16 @@ async function loadStatus() {
              `<span class="metric-val">${pip}${count}</span></span>`;
     }).join('');
     document.getElementById('status-content').innerHTML = apiStat + runnerStats;
+
+    // Ollama-down fallback: pause local planning (Promote/Pin) + show a banner
+    // when the Ollama runner is unreachable, so the composer never silently
+    // fails into a dead chat.
+    const _ollamaRunner = runners.find(rn => rn.name === 'ollama');
+    const _ollamaDown = _ollamaRunner ? _ollamaRunner.status !== 'healthy' : false;
+    const _odb = document.getElementById('ollama-down-banner');
+    if (_odb) _odb.hidden = !_ollamaDown;
+    const _split = document.getElementById('composer-split');
+    if (_split) _split.classList.toggle('ollama-down', _ollamaDown);
 
     // Host-utilization ring buffer — feeds the Runs tab's performance band
     // (UtilChart over the last ~15 min). 90 samples × 10s poll = 15 min.
@@ -14710,6 +14731,16 @@ function dfRenderConfigPanel(nodeId) {
         <div style="display:flex;gap:4px"><input type="text" id="df-new-output-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="output_key" onkeydown="if(event.key==='Enter'){dfAddOutput(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddOutput(${nodeId})">Add</button></div>
         <div style="margin-top:6px"><label class="df-config-label">Output format</label><select class="model-select" style="font-size:0.64rem;padding:2px 4px" onchange="dfUpdateNodeData(${nodeId},'output_format',this.value)">${fmtOptions}</select></div>
       </div>
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Tools &amp; Skills</div>
+        <label class="df-config-label">Tools (plugin / MCP)</label>
+        <div id="df-tools-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px">${(data.tools||[]).map((t,i)=>`<span class="df-tag">${esc(typeof t==='string'?t:(t.mcp?('mcp:'+t.mcp):(t.plugin||t.tool_id||t.name||t.id||JSON.stringify(t))))}<span class="df-tag-remove" onclick="dfRemoveTool(${nodeId},${i})">✕</span></span>`).join('') || '<span style="font-size:0.56rem;color:var(--text-faint)">none</span>'}</div>
+        <div style="display:flex;gap:4px;margin-bottom:8px"><input type="text" id="df-new-tool-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="plugin.tool or mcp:server.tool" onkeydown="if(event.key==='Enter'){dfAddTool(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddTool(${nodeId})">Add</button></div>
+        <label class="df-config-label">Skills</label>
+        <div id="df-skills-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px">${(data.skills||[]).map((s,i)=>`<span class="df-tag">${esc(typeof s==='string'?s:(s.id||s.name||JSON.stringify(s)))}<span class="df-tag-remove" onclick="dfRemoveSkill(${nodeId},${i})">✕</span></span>`).join('') || '<span style="font-size:0.56rem;color:var(--text-faint)">none</span>'}</div>
+        <div style="display:flex;gap:4px"><input type="text" id="df-new-skill-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="skill-id" onkeydown="if(event.key==='Enter'){dfAddSkill(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddSkill(${nodeId})">Add</button></div>
+        <div id="df-companions-${nodeId}" style="margin-top:8px"></div>
+      </div>
       <div style="padding:8px 0">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Quality Gates</div>
         <div id="df-gates-${nodeId}">${gatesHtml}</div>
@@ -14726,6 +14757,64 @@ function dfRenderConfigPanel(nodeId) {
   if (popupBody) popupBody.innerHTML = html;
   // Auto-open the popup unless the operator has docked it.
   if (!window._stepConfigDocked) openStepConfigPopup();
+  // Phase 4 — ask the archetype service what companion MCPs/skills this step
+  // is missing, then render one-click "add" chips. Best-effort; the panel
+  // stays usable if the call fails or the backend is older.
+  dfFetchCompanions(nodeId);
+}
+
+// Phase 4 — composer↔capabilities: surface archetype companion suggestions.
+async function dfFetchCompanions(nodeId) {
+  const data = dfNodeData[nodeId];
+  if (!data) return;
+  const tools = (data.tools || []).map(t => (typeof t === 'string'
+    ? (t.startsWith('mcp:') ? { mcp: t.slice(4).trim() } : { plugin: t.replace(/^plugin:/, '').trim() })
+    : t));
+  const stepPayload = { role: data.role, tools, skills: data.skills || [] };
+  if (data.archetype) stepPayload.archetype = data.archetype;
+  let res;
+  try {
+    const resp = await fetch('/api/workflows/composer/assist', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: stepPayload }),
+    });
+    if (!resp.ok) return;
+    res = await resp.json();
+  } catch (e) { return; }
+  // The panel may have been re-rendered for another node since we fired.
+  const boxes = [document.getElementById(`df-companions-${nodeId}`)].filter(Boolean);
+  // Both the popup and the docked tab carry an element with this id; querySelectorAll
+  // catches the second copy.
+  document.querySelectorAll(`#df-companions-${nodeId}`).forEach(el => { if (!boxes.includes(el)) boxes.push(el); });
+  if (!boxes.length) return;
+  const mcps = (res.suggested_mcps || []);
+  const skills = (res.suggested_skills || []);
+  const arch = res.inferred_archetype;
+  let html = '';
+  if (arch) html += `<div style="font-size:0.54rem;color:var(--text-faint);margin-bottom:4px">archetype: <span style="color:var(--cyan)">${esc(arch)}</span></div>`;
+  if (mcps.length || skills.length) {
+    html += `<div style="font-size:0.56rem;color:var(--accent);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;font-weight:600">Suggested companions</div>`;
+    html += `<div style="display:flex;flex-wrap:wrap;gap:4px">`;
+    mcps.forEach(m => { const ref = (typeof m === 'string' ? m : (m.mcp || m.id || m.name || '')); if (ref) html += `<span class="df-tag" style="cursor:pointer;border-style:dashed" title="add MCP tool" onclick="dfAddCompanionTool(${nodeId},'mcp:${esc(ref)}')">+ ${esc(ref)}</span>`; });
+    skills.forEach(s => { const ref = (typeof s === 'string' ? s : (s.id || s.name || '')); if (ref) html += `<span class="df-tag" style="cursor:pointer;border-style:dashed" title="add skill" onclick="dfAddCompanionSkill(${nodeId},'${esc(ref)}')">+ ${esc(ref)}</span>`; });
+    html += `</div>`;
+  }
+  (res.warnings || []).forEach(w => { html += `<div style="font-size:0.54rem;color:var(--amber,#e0b341);margin-top:4px">⚠ ${esc(typeof w === 'string' ? w : JSON.stringify(w))}</div>`; });
+  boxes.forEach(b => { b.innerHTML = html; });
+}
+function dfAddCompanionTool(nodeId, ref) {
+  if (!dfNodeData[nodeId]) return;
+  dfNodeData[nodeId].tools = dfNodeData[nodeId].tools || [];
+  if (!dfNodeData[nodeId].tools.includes(ref)) dfNodeData[nodeId].tools.push(ref);
+  dfUpdateNodeData(nodeId, 'tools', dfNodeData[nodeId].tools);
+  dfRenderConfigPanel(nodeId);
+}
+function dfAddCompanionSkill(nodeId, ref) {
+  if (!dfNodeData[nodeId]) return;
+  dfNodeData[nodeId].skills = dfNodeData[nodeId].skills || [];
+  if (!dfNodeData[nodeId].skills.includes(ref)) dfNodeData[nodeId].skills.push(ref);
+  dfUpdateNodeData(nodeId, 'skills', dfNodeData[nodeId].skills);
+  dfRenderConfigPanel(nodeId);
 }
 
 // ── Step Config popup controls ─────────────────────────────────────
@@ -14919,6 +15008,38 @@ function dfRemoveOutput(nodeId, idx) {
   dfUpdateNodeData(nodeId, 'outputs', dfNodeData[nodeId].outputs);
 }
 
+// Node tools/skills editing — expose + edit a step's capabilities on the canvas.
+function dfAddTool(nodeId) {
+  const inp = document.getElementById(`df-new-tool-${nodeId}`);
+  if (!inp || !inp.value.trim() || !dfNodeData[nodeId]) return;
+  dfNodeData[nodeId].tools = dfNodeData[nodeId].tools || [];
+  dfNodeData[nodeId].tools.push(inp.value.trim());
+  inp.value = '';
+  dfUpdateNodeData(nodeId, 'tools', dfNodeData[nodeId].tools);
+  dfRenderConfigPanel(nodeId);
+}
+function dfRemoveTool(nodeId, idx) {
+  if (!dfNodeData[nodeId] || !dfNodeData[nodeId].tools) return;
+  dfNodeData[nodeId].tools.splice(idx, 1);
+  dfUpdateNodeData(nodeId, 'tools', dfNodeData[nodeId].tools);
+  dfRenderConfigPanel(nodeId);
+}
+function dfAddSkill(nodeId) {
+  const inp = document.getElementById(`df-new-skill-${nodeId}`);
+  if (!inp || !inp.value.trim() || !dfNodeData[nodeId]) return;
+  dfNodeData[nodeId].skills = dfNodeData[nodeId].skills || [];
+  dfNodeData[nodeId].skills.push(inp.value.trim());
+  inp.value = '';
+  dfUpdateNodeData(nodeId, 'skills', dfNodeData[nodeId].skills);
+  dfRenderConfigPanel(nodeId);
+}
+function dfRemoveSkill(nodeId, idx) {
+  if (!dfNodeData[nodeId] || !dfNodeData[nodeId].skills) return;
+  dfNodeData[nodeId].skills.splice(idx, 1);
+  dfUpdateNodeData(nodeId, 'skills', dfNodeData[nodeId].skills);
+  dfRenderConfigPanel(nodeId);
+}
+
 function dfAddGate(nodeId) {
   if (!dfNodeData[nodeId]) return;
   if (!dfNodeData[nodeId].quality_gates) dfNodeData[nodeId].quality_gates = [];
@@ -15086,6 +15207,23 @@ function dfExportYaml() {
     if (data.inputs.length) { yaml += `    inputs:\n`; data.inputs.forEach(i => { yaml += `      - ${i}\n`; }); }
     yaml += `    outputs:\n`; data.outputs.forEach(o => { yaml += `      - ${o}\n`; });
     if (deps.length) { yaml += `    depends_on:\n`; deps.forEach(d => { yaml += `      - ${d}\n`; }); }
+    if (data.tools && data.tools.length) {
+      yaml += `    tools:\n`;
+      data.tools.forEach(t => {
+        if (t && typeof t === 'object') {
+          if (t.mcp) yaml += `      - mcp: "${t.mcp}"\n`;
+          else if (t.plugin) yaml += `      - plugin: "${t.plugin}"\n`;
+          return;
+        }
+        const ref = String(t).trim();
+        if (ref.startsWith('mcp:')) yaml += `      - mcp: "${ref.slice(4).trim()}"\n`;
+        else yaml += `      - plugin: "${ref.replace(/^plugin:/, '').trim()}"\n`;
+      });
+    }
+    if (data.skills && data.skills.length) {
+      yaml += `    skills:\n`;
+      data.skills.forEach(s => { yaml += `      - ${typeof s === 'string' ? s : (s.id || s.name || '')}\n`; });
+    }
     if (data.output_format !== 'raw') yaml += `    output_parser:\n      format: ${data.output_format}\n`;
     if (data.quality_gates && data.quality_gates.length) {
       yaml += `    quality_gates:\n`;
