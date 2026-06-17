@@ -22291,9 +22291,44 @@ const RunsTab = (function () {
   // vs eval), token economics, memory-pressure delta, and every skill /
   // MCP call / plugin tool that fired. This is the context-tuning view:
   // see WHY a step behaved the way it did, then tune.
+  // Composite kinds keep their children in the run workspace (loop/ralph →
+  // `iterations`, parallel → `branches`), not as nested StepResults. Read that
+  // structure back so the run detail can summarize a fan-out / loop / ralph
+  // step instead of showing it as one opaque box.
+  const _COMPOSITE_KINDS = { parallel: 1, loop: 1, ralph: 1, orchestrator: 1 };
+  function _compositeSummary(s) {
+    if (!s || !_COMPOSITE_KINDS[s.kind]) return '';
+    const ws = _stepWorkspace(s) || {};
+    const parts = [];
+    const iters = ws.iterations || ws.iteration_results;
+    if (iters != null) {
+      const n = Array.isArray(iters) ? iters.length : Object.keys(iters).length;
+      parts.push(`${n} iteration${n === 1 ? '' : 's'}`);
+    }
+    const branches = ws.branches || ws.branch_results;
+    if (branches != null) {
+      const n = Array.isArray(branches) ? branches.length : Object.keys(branches).length;
+      parts.push(`${n} branch${n === 1 ? '' : 'es'}`);
+    }
+    const workers = ws.workers || ws.worker_results;
+    if (workers != null) {
+      const n = Array.isArray(workers) ? workers.length : Object.keys(workers).length;
+      parts.push(`${n} worker${n === 1 ? '' : 's'}`);
+    }
+    // Ralph / loop halt signals, when the executor recorded them.
+    const halt = ws.halt_reason || (ws.halt && ws.halt.reason);
+    if (halt) parts.push(`halt: ${halt}`);
+    if (ws.consecutive_failures) parts.push(`${ws.consecutive_failures} consecutive fails`);
+    if (ws.goal_reached != null) parts.push(ws.goal_reached ? 'goal reached' : 'goal not reached');
+    if (!parts.length) return '';
+    const tone = s.kind === 'ralph' ? 'var(--amber)' : 'var(--accent)';
+    return `<div class="run-decision-chips" style="margin-top:4px"><span class="run-decision-chip" style="border-color:${tone};color:${tone}">▦ ${esc(s.kind)} · ${esc(parts.join(' · '))}</span></div>`;
+  }
+
   function _renderStepDecisions(s) {
     const tk = s.token_count || {};
     const kv = [];
+    if (s.kind && s.kind !== 'llm') kv.push(['kind', s.kind]);
     kv.push(['model', s.model_used || '—']);
     if (s.arch_name) kv.push(['arch', s.arch_name]);
     if (tk.prompt_tokens != null) kv.push(['tokens', `${tk.prompt_tokens} in · ${tk.completion_tokens || 0} out`]);
@@ -22302,6 +22337,7 @@ const RunsTab = (function () {
     }
     if (s.keep_alive_used != null) kv.push(['keep-alive', String(s.keep_alive_used)]);
     if (s.retries) kv.push(['retries', `${s.retries}×`]);
+    if (s.extension_overhead_ms) kv.push(['ext overhead', `${Math.round(s.extension_overhead_ms)}ms`]);
     const pb = s.pressure_before, pa = s.pressure_after;
     if (pb && pa && pb.level) kv.push(['pressure', `${pb.level} → ${pa.level}`]);
     const kvHtml = kv.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(String(v))}</span>`).join('');
@@ -22336,7 +22372,7 @@ const RunsTab = (function () {
 
     return `<div class="run-decisions">
       <div class="run-decisions-kv">${kvHtml}</div>
-      ${timing}${chipsHtml}
+      ${timing}${chipsHtml}${_compositeSummary(s)}
     </div>`;
   }
 
