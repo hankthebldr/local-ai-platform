@@ -30,6 +30,10 @@ router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 _FEEDBACK_DIR = Path(os.getenv("DATA_FEEDBACK_DIR", "data/feedback"))
 _MESSAGES_LOG = _FEEDBACK_DIR / "messages.jsonl"
 _ARTIFACTS_LOG = _FEEDBACK_DIR / "artifacts.jsonl"
+# Per-agent tuning is an aggregate (counters + prefer/avoid examples), so it's
+# a keyed JSON map rather than an append-only log: read-modify-write per agent.
+_TUNING_FILE = _FEEDBACK_DIR / "agent_tuning.json"
+_MAX_TUNING_EXAMPLES = 3
 
 
 def _ensure_dir() -> None:
@@ -160,3 +164,75 @@ async def capture_artifact(body: ArtifactCapture) -> Dict[str, Any]:
 async def list_artifacts(limit: int = 100) -> List[Dict[str, Any]]:
     """Tail the artifact log, newest first."""
     return _tail_jsonl(_ARTIFACTS_LOG, max(1, min(limit, 1000)))
+
+
+# ── Per-agent tuning (durable mirror of the client's AgentTuning) ───────────
+
+
+class AgentTuningUpdate(BaseModel):
+    """One up/down tuning event for an agent (or 'role:<role>') key.
+
+    Mirrors the client's ``AgentTuning.record`` so ratings survive reload and
+    aggregate across sessions: increment the up/down counter and, when a text
+    excerpt is supplied, append it to the prefer (up) or avoid (down) list,
+    capped to the most recent few examples.
+    """
+
+    agent_key: str = Field(..., min_length=1, max_length=200)
+    kind: str = Field(..., pattern="^(up|down)$")
+    text: Optional[str] = Field(None, description="Excerpt to learn prefer/avoid from")
+
+
+def _load_tuning() -> Dict[str, Any]:
+    if not _TUNING_FILE.exists():
+        return {}
+    try:
+        return json.loads(_TUNING_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_tuning(data: Dict[str, Any]) -> None:
+    _ensure_dir()
+    tmp = _TUNING_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    os.replace(tmp, _TUNING_FILE)
+
+
+@router.post("/agent-tuning")
+async def record_agent_tuning(body: AgentTuningUpdate) -> Dict[str, Any]:
+    """Record an up/down tuning signal for one agent key; returns the
+    updated aggregate so the client can reconcile its local copy."""
+    data = _load_tuning()
+    rec = data.get(body.agent_key) or {"up": 0, "down": 0, "prefer": [], "avoid": []}
+    if body.kind == "up":
+        rec["up"] = int(rec.get("up", 0)) + 1
+        bucket = "prefer"
+    else:
+        rec["down"] = int(rec.get("down", 0)) + 1
+        bucket = "avoid"
+    if body.text:
+        examples = list(rec.get(bucket, []))
+        examples.append(body.text[:800])
+        rec[bucket] = examples[-_MAX_TUNING_EXAMPLES:]
+    rec["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    data[body.agent_key] = rec
+    try:
+        _save_tuning(data)
+    except OSError as e:
+        logger.warning("Failed to persist agent tuning: %s", e)
+        raise HTTPException(status_code=500, detail="Could not persist tuning")
+    return {"ok": True, "agent_key": body.agent_key, "tuning": rec}
+
+
+@router.get("/agent-tuning")
+async def list_agent_tuning() -> Dict[str, Any]:
+    """Return the full per-agent tuning map (keyed by agent id / role)."""
+    return _load_tuning()
+
+
+@router.get("/agent-tuning/{agent_key}")
+async def get_agent_tuning(agent_key: str) -> Dict[str, Any]:
+    """Return one agent's tuning aggregate (empty record if none yet)."""
+    data = _load_tuning()
+    return data.get(agent_key) or {"up": 0, "down": 0, "prefer": [], "avoid": []}

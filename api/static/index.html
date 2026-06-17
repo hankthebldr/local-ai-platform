@@ -17596,7 +17596,32 @@ window.AgentTuning = (function () {
     else if (kind === 'down') { t.down++; if (text) { t.avoid.unshift(text.slice(0, 600)); t.avoid = t.avoid.slice(0, 3); } }
     s[k] = t; _save(s);
     refreshBadge(nodeId);
+    // Mirror to the server so tuning survives reload + aggregates across
+    // sessions. Best-effort; the localStorage copy is the offline fallback.
+    try {
+      fetch('/api/feedback/agent-tuning', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_key: k, kind: kind, text: text || null }),
+      }).catch(function () {});
+    } catch (e) {}
     if (window.Toast) Toast.info('Agent tuned', k + ' · ▲' + t.up + ' ▼' + t.down + ' (applies on next run, here + other workflows)');
+  }
+  // Pull the durable server-side map on load and adopt it as the source of
+  // truth (it has accumulated every synced up/down across sessions).
+  function _syncFromServer() {
+    try {
+      fetch('/api/feedback/agent-tuning').then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (map) {
+          if (!map || typeof map !== 'object') return;
+          const local = _load();
+          Object.keys(map).forEach(function (k) {
+            const sv = map[k] || {};
+            local[k] = { up: sv.up || 0, down: sv.down || 0, prefer: sv.prefer || [], avoid: sv.avoid || [] };
+          });
+          _save(local);
+          if (window._composerEngagedNodeId != null) refreshBadge(window._composerEngagedNodeId);
+        }).catch(function () {});
+    } catch (e) {}
   }
   function get(nodeId) { const k = _key(nodeId); return k ? (_load()[k] || null) : null; }
   function guidance(nodeId) {
@@ -17613,6 +17638,7 @@ window.AgentTuning = (function () {
     const t = get(nodeId);
     if (el) el.textContent = (t && (t.up || t.down)) ? ('▲' + t.up + ' ▼' + t.down + ' tuned') : '';
   }
+  _syncFromServer();
   return { record, get, guidance, refreshBadge };
 })();
 
@@ -23818,12 +23844,13 @@ const Projects = (function () {
 })();
 </script>
 <script id="enclave-threads-js">
-/* Session-scoped thread switcher: juggle multiple conversations by
-   snapshotting/restoring chat history + rendered messages + pins. Additive —
-   never modifies sendMessage or the renderer; snapshots are taken lazily at
-   switch time. Not persisted across reload (continuity is a future add). */
+/* Thread switcher: juggle multiple conversations by snapshotting/restoring
+   chat history + rendered messages + pins. Additive — never modifies
+   sendMessage or the renderer; snapshots are taken lazily at switch time.
+   Now persisted server-side (POST/GET /api/conversations) so threads survive
+   reload; best-effort — falls back to in-memory if the server is unreachable. */
 (function () {
-  var threads = [], activeId = null;
+  var threads = [], activeId = null, _lastSavedLen = -1, _autosave = null;
 
   function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function _msgEl() { return document.getElementById('messages'); }
@@ -23831,6 +23858,7 @@ const Projects = (function () {
   function _histSet(arr) { try { if (typeof chatHistory !== 'undefined' && chatHistory) { chatHistory.length = 0; Array.prototype.push.apply(chatHistory, arr || []); } } catch (e) {} }
   function _pinsGet() { try { return (window._enclavePins || []).slice(); } catch (e) { return []; } }
   function _pinsSet(arr) { try { var p = window._enclavePins = window._enclavePins || []; p.length = 0; Array.prototype.push.apply(p, arr || []); if (window.Pins) window.Pins.render(); } catch (e) {} }
+  function _model() { try { return (document.getElementById('model-select') || {}).value || null; } catch (e) { return null; } }
 
   function _snapshot() {
     var t = threads.find(function (x) { return x.id === activeId; });
@@ -23844,30 +23872,79 @@ const Projects = (function () {
     var m = _msgEl(); if (m) m.innerHTML = t.messagesHtml || '';
     _pinsSet(t.pins);
     if (window.OpPath) window.OpPath.refresh();
+    if (typeof ChatRating !== 'undefined' && ChatRating.rehydrate) { try { ChatRating.rehydrate(); } catch (e) {} }
+  }
+
+  // ── Server persistence (best-effort) ───────────────────────────────────
+  function _persist(t) {
+    if (!t || (!(t.history && t.history.length) && !(t.messagesHtml))) return;
+    try {
+      fetch('/api/conversations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: t.id, title: t.name, model: _model(),
+          messages: t.history || [], html: (t.messagesHtml || '').slice(0, 400000),
+          pins: t.pins || [],
+        }),
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  function save() { _snapshot(); var t = threads.find(function (x) { return x.id === activeId; }); _persist(t); }
+  function _autosaveTick() {
+    var len = _histGet().length;
+    if (len !== _lastSavedLen) { _lastSavedLen = len; if (len > 0) save(); }
+  }
+  function _remove(id) {
+    try { fetch('/api/conversations/' + encodeURIComponent(id), { method: 'DELETE' }).catch(function () {}); } catch (e) {}
   }
 
   function create() {
-    _snapshot();
+    save();
     var t = { id: 't' + Date.now(), name: 'Thread ' + (threads.length + 1), history: [], messagesHtml: '', pins: [] };
     threads.unshift(t);
     activeId = t.id;
+    _lastSavedLen = 0;
     _restore(t); // clear the live chat to the empty new thread
     closeMenu(); renderName();
   }
   function pick(id) {
     if (id === activeId) { closeMenu(); return; }
-    _snapshot();
+    save();
     var t = threads.find(function (x) { return x.id === id; });
     if (!t) return;
     activeId = t.id;
-    _restore(t);
     closeMenu(); renderName();
+    // Lazily hydrate the full transcript from the server if we only hold a summary.
+    if (t._loaded === false) {
+      fetch('/api/conversations/' + encodeURIComponent(id)).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (full) {
+          if (full) { t.history = full.messages || []; t.messagesHtml = full.html || ''; t.pins = full.pins || []; t._loaded = true; }
+          _lastSavedLen = (t.history || []).length;
+          _restore(t);
+        }).catch(function () { _restore(t); });
+    } else {
+      _lastSavedLen = (t.history || []).length;
+      _restore(t);
+    }
+  }
+  function del(id) {
+    var idx = threads.findIndex(function (x) { return x.id === id; });
+    if (idx < 0) return;
+    if (!window.confirm('Delete this thread? This cannot be undone.')) return;
+    _remove(id);
+    threads.splice(idx, 1);
+    if (id === activeId) {
+      if (threads.length === 0) { create(); return; }
+      activeId = threads[0].id; threads[0]._loaded = threads[0]._loaded === undefined ? true : threads[0]._loaded;
+      _restore(threads[0]); renderName();
+    }
+    renderMenu();
   }
   function rename(id) {
     var t = threads.find(function (x) { return x.id === id; });
     if (!t) return;
     var v = window.prompt('Rename thread', t.name);
-    if (v != null && v.trim()) { t.name = v.trim().slice(0, 48); renderName(); renderMenu(); }
+    if (v != null && v.trim()) { t.name = v.trim().slice(0, 48); renderName(); renderMenu(); _persist(t); }
   }
 
   function renderName() {
@@ -23881,7 +23958,8 @@ const Projects = (function () {
     menu.innerHTML = threads.map(function (t) {
       return '<div class="thread-item' + (t.id === activeId ? ' active' : '') + '" onclick="Threads.pick(\'' + t.id + '\')">' +
         '<span class="ti-name">' + _esc(t.name) + '</span>' +
-        '<button type="button" class="ti-rename" title="Rename" onclick="event.stopPropagation();Threads.rename(\'' + t.id + '\')">rename</button></div>';
+        '<button type="button" class="ti-rename" title="Rename" onclick="event.stopPropagation();Threads.rename(\'' + t.id + '\')">rename</button>' +
+        '<button type="button" class="ti-rename" title="Delete" onclick="event.stopPropagation();Threads.del(\'' + t.id + '\')">del</button></div>';
     }).join('');
   }
   function toggleMenu() {
@@ -23895,15 +23973,29 @@ const Projects = (function () {
 
   function init() {
     // Thread 1 represents the live chat; its snapshot is taken on first switch.
-    threads = [{ id: 't' + Date.now(), name: 'Thread 1', history: [], messagesHtml: '', pins: [] }];
-    activeId = threads[0].id;
+    var live = { id: 't' + Date.now(), name: 'Thread 1', history: [], messagesHtml: '', pins: [], _loaded: true };
+    threads = [live];
+    activeId = live.id;
     renderName();
     document.addEventListener('click', function (e) { if (!e.target.closest('#thread-bar')) closeMenu(); });
+    // Pull any persisted threads in behind the live one (summaries only;
+    // transcripts hydrate lazily on pick).
+    fetch('/api/conversations').then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.conversations) return;
+        data.conversations.forEach(function (s) {
+          if (s.id === activeId) return;
+          threads.push({ id: s.id, name: s.title || 'Thread', history: [], messagesHtml: '', pins: [], _loaded: false });
+        });
+      }).catch(function () {});
+    // Autosave the live thread so an unswitched conversation still survives reload.
+    _autosave = setInterval(_autosaveTick, 15000);
+    window.addEventListener('beforeunload', function () { try { save(); } catch (e) {} });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
-  window.Threads = { create: create, pick: pick, rename: rename, toggleMenu: toggleMenu };
+  window.Threads = { create: create, pick: pick, rename: rename, del: del, save: save, toggleMenu: toggleMenu };
 })();
 </script>
 <div class="cmp-tray" id="cmp-tray">
