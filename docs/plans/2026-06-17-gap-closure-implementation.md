@@ -6,6 +6,20 @@ gaps + the cheap doc fixes; **document** the deliberate later-cuts rather than
 build them now (the audit said so). Each phase is verified live on `:8001`
 (the container bind-mounts `api/`) + tests, and committed.
 
+> **Delivered (2026-06-17).** Phases 1–5 shipped on `feat/chat-led-composer`.
+> New backend tests: `tests/test_provenance.py` (13),
+> `tests/test_conversation_persistence.py` (10); full suite `1731 passed, 1
+> skipped`. Two scoping corrections found during build, documented inline
+> below: (a) `composer/assist` + `MCPService.invoke_tool(scope=)` + the ralph
+> hard-cap safety rails were **already wired** in the engine — Phase 4/5 surface
+> them rather than build them; (b) composite step-kind **authoring on the flat
+> canvas** is deferred — the engine's container validators (parallel needs ≥2
+> `branches` + a separate `gather` with matching outputs and no prompt, etc.)
+> can't be satisfied from a single flat node, so a half-correct emitter would
+> 422 on every save. Phase 5 therefore ships composite-run **rendering** (the
+> honest reading of "UI renderers") + the run-observability + ralph-signal work;
+> canvas authoring of composites stays in the YAML editor, tracked as follow-up.
+
 ## Phase 1 — Quick critical + doc sweep (low risk, high value)
 - **`runner` field on `MODEL_REGISTRY`** — add `runner: "ollama"|"vllm"` to every model in `models/download.py`; surface it in `/api/inventory/catalog` + `MODELS.md`; confirm `model_resolver` can read it. *(critical-2)*
 - **Doc refresh** — CLAUDE.md release line (1.1.1→1.2.0-candidate framing, API-key UI no longer "pending"); CHANGELOG loop-namespacing + PR-#97 consistency + a tracked console-v2 `[Unreleased]` backlog subsection; archive-note the stale `GAP_ANALYSIS.md` (2025-01) + `ENTERPRISE_DEPLOYMENT_GAPS.md` (2025-12). *(doc-hygiene cluster)*

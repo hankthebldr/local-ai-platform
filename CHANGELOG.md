@@ -10,6 +10,52 @@ Composer + the Enclave design-system rebrand** (branch `feat/chat-led-composer`)
 — a candidate `1.2.0` UX cut — and **Architecture-aware orchestration**
 earmarked for `1.3.0`.
 
+### Added — Gap-closure: provenance, persistence & capabilities (`feat/chat-led-composer`)
+
+> Closes the highest-priority findings from the 88-gap flow audit
+> (`docs/research/2026-06-17-flow-gap-audit.md`). Plan:
+> `docs/plans/2026-06-17-gap-closure-implementation.md`.
+
+- **Provenance & citation rail (the #1 gap).** Every grounded chat answer now
+  records *what* it was grounded on. New `ProvenanceEdge` / `ResponseProvenance`
+  models (`api/models/provenance_models.py`), a durable
+  `provenance_store.py` (atomic header JSON + append-only edge JSONL under
+  `data/provenance/`), emission at the chat response site for RAG chunks /
+  web sources / activated skills / plugin tools (`api/routers/chat.py` — each
+  response now carries a unique `chatcmpl-…` id + a `provenance` summary, and
+  streamed replies emit a `provenance` SSE event), `GET /api/provenance/
+  response/{id}` + `/responses` (`api/routers/provenance.py`), a chip-rail UI
+  under each chat message (`renderProvenanceRail`), and response→source
+  grounding edges (`grounded_on` / `activated_skill` / `invoked_tool`) in the
+  knowledge graph (`graph_service._build_provenance_nodes`).
+- **Durable chat threads.** The Threads switcher persists server-side and
+  survives reload: `SavedConversation` model + `conversation_store.py`
+  (one JSON per thread under `data/conversations/`) + `POST/GET/DELETE
+  /api/conversations` (`api/routers/conversations.py`). The UI Threads module
+  autosaves the live thread, hydrates transcripts lazily on switch, and adds
+  thread delete — localStorage stays as the offline fallback.
+- **Server-side agent tuning.** Up/down message ratings that tune a composer
+  agent now persist + aggregate across sessions via `POST/GET
+  /api/feedback/agent-tuning` (keyed `data/feedback/agent_tuning.json`); the
+  client `AgentTuning` mirrors to the server and adopts the server map on load.
+- **Composer ↔ capabilities.** Node config gains a Tools & Skills section
+  (plugin/MCP tool + skill chips that round-trip through the YAML export),
+  inline archetype **companion suggestions** (`/api/workflows/composer/assist`)
+  with one-click add, agent tool-reachability validation
+  (`AgentService._validate_tools` reusing the workflow extension-preflight, 422
+  on missing plugin/MCP), and an Ollama-down banner that disables dispatch.
+- **Run observability.** Composite runs (parallel / loop / ralph / orchestrator)
+  now render a kind badge + a workspace-derived summary (iteration / branch /
+  worker counts, ralph halt reason + consecutive-failure + goal signals) and
+  an `ext overhead` chip in the run-step detail. (MCP `invoke_tool(scope=)` and
+  the ralph hard-cap safety rails were already wired in the engine — this
+  surfaces them; composite **authoring** on the canvas remains in the YAML
+  editor, deferred because the strict container validators can't be satisfied
+  from a single flat node.)
+- **Runner field on the model registry.** `MODEL_REGISTRY` entries may declare
+  an optional `runner` (`ollama` default; `vllm` for the GPU path), surfaced on
+  the inventory catalog so the resolver can route per-model.
+
 ### Added — Chat-led Composer & Enclave design-system rebrand (`feat/chat-led-composer`)
 
 > "A workflow is crystallized conversation." The Composer becomes chat-primary:
