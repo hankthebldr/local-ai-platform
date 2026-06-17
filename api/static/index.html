@@ -5219,6 +5219,20 @@ textarea.composer-desc-area {
 .composer-mgmt-drawer > .composer-project-bar { margin: 12px; }
 .composer-mgmt-drawer > .composer-toolbar { margin: 12px; }
 
+/* Project/admin pane sits BELOW the chat/composer (flex order — no DOM move). */
+#tab-dashboard.active { display: flex; flex-direction: column; }
+#tab-dashboard > .composer-split { order: 1; }
+#tab-dashboard > .composer-mgmt-drawer { order: 2; margin-top: 12px; margin-bottom: 0; }
+#tab-dashboard > #step-config-panel { order: 3; }
+
+/* Floating view toggle — always reachable, including Focus mode (where the
+   docked chat header + its toggle are hidden, so this is the only way back). */
+.composer-float-toggle {
+  position: absolute; top: 10px; right: 12px; z-index: 60; display: none;
+  box-shadow: var(--shadow-2);
+}
+.composer-split.mode-focus .composer-float-toggle { display: inline-flex; }
+
 /* Responsive: stack chat over spine */
 @media (max-width: 900px) {
   .composer-split {
@@ -6741,6 +6755,14 @@ body.bs-show-hint .bs-dispatch:hover::after {
          and the composer grid + workstream in column 3, so the large
          chat-dock block does not move in the DOM — only wrappers are added. -->
     <div class="composer-split" id="composer-split">
+
+      <!-- Floating view toggle — always reachable, esp. in Focus where the
+           docked toggle is hidden (the "no way back" fix). -->
+      <div class="composer-mode-toggle composer-float-toggle" role="group" aria-label="Composer view mode (floating)">
+        <button type="button" id="composer-fmode-chat" class="mode-btn" aria-pressed="false" onclick="ComposerSplit.setMode('chat')" title="Chat leads"><span aria-hidden="true">▭</span> Chat</button>
+        <button type="button" id="composer-fmode-canvas" class="mode-btn" aria-pressed="false" onclick="ComposerSplit.setMode('canvas')" title="Canvas leads"><span aria-hidden="true">⬓</span> Canvas</button>
+        <button type="button" id="composer-fmode-focus" class="mode-btn" aria-pressed="true" onclick="ComposerSplit.setMode('focus')" title="Full-screen canvas"><span aria-hidden="true">⛶</span> Focus</button>
+      </div>
 
       <!-- Draggable divider between chat and spine. -->
       <div class="composer-divider" id="composer-divider" role="separator"
@@ -19845,8 +19867,10 @@ const ComposerSplit = (function () {
     el.classList.toggle('mode-focus', _mode === 'focus');
     if (_mode !== 'focus') _applyFrac(_mode === 'canvas' ? CANVAS_FRAC : CHAT_FRAC);
     for (const m of ['chat', 'canvas', 'focus']) {
-      const btn = document.getElementById('composer-mode-' + m);
-      if (btn) btn.setAttribute('aria-pressed', String(_mode === m));
+      ['composer-mode-' + m, 'composer-fmode-' + m].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.setAttribute('aria-pressed', String(_mode === m));
+      });
     }
     // The canvas just resized — let drawflow + anchors settle into it.
     setTimeout(() => {
