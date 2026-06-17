@@ -6942,7 +6942,7 @@ body.bs-show-hint .bs-dispatch:hover::after {
             <option value="">— none (use model directly) —</option>
           </select>
           <label style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Model</label>
-          <select class="model-select" id="model-select"><option>loading…</option></select>
+          <select class="model-select" id="model-select" onchange="onChatModelChanged()"><option>loading…</option></select>
           <button class="action-btn ghost" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)">System</button>
           <button class="action-btn ghost" onclick="toggleAgentDock()" title="Collapse / expand the agent chat dock">▾</button>
           <button class="action-btn ghost" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" hidden>EXPORT</button>
@@ -6998,10 +6998,13 @@ body.bs-show-hint .bs-dispatch:hover::after {
       </div>
 
       <div id="step-engage-badge" hidden
-           style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:rgba(43, 212, 180,0.08);border:1px solid var(--accent-dim);border-radius:4px 4px 0 0;border-bottom:0;font-size:0.65rem;color:var(--text-muted);font-family:var(--mono);">
-        <span style="color:var(--accent);font-size:0.85rem;line-height:1">⚡</span>
-        <span>Engaging step <code id="step-engage-id" style="color:var(--accent)">—</code> · the chat below runs this step against your message</span>
-        <button type="button" class="action-btn" style="margin-left:auto;font-size:0.55rem;padding:1px 6px" onclick="composerExitStepEngage()" title="Exit step engagement and return to general chat">exit</button>
+           style="display:flex;align-items:center;gap:8px;padding:6px 11px;background:var(--accent-ghost);border:1px solid var(--accent-dim);border-radius:6px 6px 0 0;border-bottom:0;font-size:0.66rem;color:var(--text-dim);font-family:var(--mono);">
+        <span class="se-pip" aria-hidden="true" style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;box-shadow:0 0 0 3px var(--accent-trace)"></span>
+        <span>Chatting with <code id="step-engage-id" style="color:var(--accent)">—</code></span>
+        <span id="step-engage-meta" style="color:var(--text-faint)"></span>
+        <span style="flex:1"></span>
+        <span class="hide-narrow" style="color:var(--text-faint);font-size:0.58rem">messages configure + test this agent</span>
+        <button type="button" class="action-btn" style="font-size:0.55rem;padding:1px 7px" onclick="composerExitStepEngage()" title="Detach — return to general chat across the whole workflow">general chat ✕</button>
       </div>
       <div class="nba-container" id="nba-container"></div>
       <div class="pins-meter" id="pins-meter">
@@ -9775,10 +9778,21 @@ function composerEnterStepEngage(nodeId) {
   window._composerEngagedNodeId = nodeId;
   const badge = document.getElementById('step-engage-badge');
   const idEl  = document.getElementById('step-engage-id');
+  const metaEl = document.getElementById('step-engage-meta');
+  const d = dfNodeData[nodeId];
   if (badge && idEl) {
-    idEl.textContent = dfNodeData[nodeId].id || ('node ' + nodeId);
+    idEl.textContent = d.id || ('node ' + nodeId);
+    // Show the agent you're now talking to: its role @ model.
+    if (metaEl) metaEl.textContent = '· ' + (d.role || 'general') + (d.model ? ' @ ' + d.model : ' @ auto');
     badge.hidden = false;
   }
+  // Reflect the bound node's model in the chat model selector so the
+  // operator sees — and can change (→ writes back via onChatModelChanged) —
+  // which model this specific agent runs on.
+  try {
+    const sel = document.getElementById('model-select');
+    if (sel && d.model && [...sel.options].some(o => o.value === d.model)) sel.value = d.model;
+  } catch (_) {}
 }
 
 // Explicit "test in chat" — engage the selected step AND focus the chat input
@@ -9794,6 +9808,24 @@ function composerTestStepInChat() {
     p.focus();
     p.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
+}
+
+// Chat-settings-as-node-config: when the chat is bound to a node, the chat's
+// model selector configures THAT agent (writes back to the node). With no node
+// bound it's the general-chat model as before.
+function onChatModelChanged() {
+  const sel = document.getElementById('model-select');
+  if (!sel) return;
+  const model = sel.value;
+  const nodeId = window._composerEngagedNodeId;
+  if (nodeId == null || typeof dfNodeData === 'undefined' || !dfNodeData[nodeId]) return;
+  if (typeof dfUpdateNodeData === 'function') {
+    try { dfUpdateNodeData(nodeId, 'model', model); } catch (_) { dfNodeData[nodeId].model = model; }
+  } else { dfNodeData[nodeId].model = model; }
+  const d = dfNodeData[nodeId];
+  const metaEl = document.getElementById('step-engage-meta');
+  if (metaEl) metaEl.textContent = '· ' + (d.role || 'general') + ' @ ' + model;
+  if (window.Toast) Toast.info('Agent updated', (d.id || 'step') + ' now runs on ' + model);
 }
 
 async function sendMessage() {
@@ -20340,6 +20372,14 @@ function composerLoadDefinition(defn) {
       );
     }
     ComposerView.updateCanvasEmptyState();
+    // Node-bound chat: the agent always starts on the workflow's starting
+    // point — auto-engage the first/root step so the chat opens already
+    // "talking to" the seed agent (the user can click any node to switch).
+    try {
+      const firstStep = (defn.steps || [])[0];
+      const firstNodeId = firstStep ? idMap[firstStep.id] : null;
+      if (firstNodeId != null && typeof composerEnterStepEngage === 'function') composerEnterStepEngage(firstNodeId);
+    } catch (_) {}
     // Parity with the pre-split composer: loading a definition is a
     // canvas-intent action, so the canvas takes the stage. Focus mode is
     // respected if the operator already chose it; chat mode pivots.
