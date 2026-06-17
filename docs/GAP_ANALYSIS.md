@@ -1,5 +1,10 @@
 # Local AI Platform - Gap Analysis & Implementation Roadmap
 
+> ⚠️ **SUPERSEDED (2026-06-17).** This is from **2025-01-10 against v0.1.0** and
+> predates almost everything shipped since. Kept for history. Current gap
+> picture: **[docs/research/2026-06-17-flow-gap-audit.md](./research/2026-06-17-flow-gap-audit.md)**;
+> closure plan: **[docs/plans/2026-06-17-gap-closure-implementation.md](./plans/2026-06-17-gap-closure-implementation.md)**.
+
 **Document Version**: 1.1
 **Analysis Date**: 2025-01-10
 **Current Release**: `0.1.0` — Foundation (60% complete at time of analysis; ~85% now)

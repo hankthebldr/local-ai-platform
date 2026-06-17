@@ -462,6 +462,11 @@ async def catalog(tag: Optional[str] = None):
             "installed": is_inst,
             "installed_info": inst_info if is_inst else None,
             "fits_ram": fits,
+            # Which inference engine serves this model. GGUF catalog models
+            # default to Ollama; a vLLM-served entry declares runner="vllm".
+            # Surfaced so the UI (AssetPeek) can show the serving runner and so
+            # ModelResolver.resolve_with_runner() dispatches correctly.
+            "runner": info.get("runner", "ollama"),
         }
         entry["score"] = score_model(entry)
         models.append(entry)

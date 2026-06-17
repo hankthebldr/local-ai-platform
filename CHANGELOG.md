@@ -58,14 +58,20 @@ earmarked for `1.3.0`.
   (below) with an OpenShell agent-runtime backend prototype (ADR:
   `docs/plans/2026-06-07-openshell-agent-runtime-decision.md`).
 
-> **Pending console-v2 (not yet implemented):** thread rail + multi-thread
-> management; message-level pin-as-step + scaffold-preview modal + maturity
-> meter; operator's-path adoption ladder + next-best-action nudges; model
-> compare grid; the 4-phase install wizard (source → configure → verify → land);
-> and the full Run lens (scrub timeline + node-timing plates + as-executed
-> inspector). Frontend test coverage for AssetPeek, the Runs decisions panel,
-> the calm-analytics atoms, the Cmd/Ctrl-K palette, and `focus` mode is still
-> outstanding.
+> **Console-v2 backlog — now SHIPPED:** thread switcher, message-level
+> pin-as-step + scaffold-preview modal + maturity meter, operator's-path ladder
+> + nudges, model-compare grid, 4-phase install wizard, Run lens (scrub +
+> node plates + as-executed inspector), node-bound chat (select a node → chat
+> with/configure that agent; ratings → per-agent tuning), interactive workflow
+> drill-down, vertical chat-top/canvas-bottom layout. Frontend test coverage
+> added (tests/ui/, 160 markup tests).
+>
+> **Remaining gap-closure (in progress, see docs/plans/2026-06-17-gap-closure-implementation.md):**
+> provenance edges + citation rail (the #1 gap), server-side persistence
+> (conversations + agent tuning), composite-step-kind UI renderers
+> (parallel/loop/orchestrator/ralph) + ralph safety signals, node tools/skills
+> editing, `runner` field on MODEL_REGISTRY. Deliberate later-cuts: fleet /
+> HostRegistration (1.4.x), license entitlement, RBAC/audit-persistence (2.x).
 
 Earmarked for `1.3.0` — Architecture-aware orchestration. The workflow engine
 went from "execute steps in YAML order, blind to the hardware" to "schedule a
