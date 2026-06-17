@@ -2973,7 +2973,14 @@ textarea.composer-desc-area {
 
 /* Graph panel */
 .graph-panel {
-  background: var(--bg-panel);
+  /* Same canvas surface as the composer + runs graph — accent-glow over a
+     dot grid — so every graph view in the app reads as one. */
+  background-color: var(--bg-deep);
+  background-image:
+    radial-gradient(ellipse 85% 55% at 50% -8%, var(--accent-ghost) 0%, transparent 58%),
+    radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 100% 100%, 22px 22px;
+  background-repeat: no-repeat, repeat;
   border: 1px solid var(--border);
   position: relative;
   flex: 1;
@@ -5088,7 +5095,7 @@ textarea.composer-desc-area {
 .composer-split > .agent-chat-dock      { grid-row: 1; grid-column: 1; margin-top: 0; min-height: 0; max-height: none; height: 100%; }
 .composer-split > #composer-divider     { grid-row: 2; grid-column: 1; }
 .composer-split > .composer-grid        { grid-row: 3; grid-column: 1; min-height: 0; min-width: 0; }
-.composer-split > .composer-workstream  { grid-row: 4; grid-column: 1; min-width: 0; max-height: 30vh; overflow-y: auto; }
+.composer-split > .composer-workstream  { grid-row: 4; grid-column: 1; min-width: 0; max-height: 150px; overflow-y: auto; }
 .composer-split > #composer-spine-dormant { grid-row: 3 / 5; grid-column: 1; }
 
 /* Inside the split, the transcript flexes to the dock's full height —
@@ -5142,6 +5149,18 @@ textarea.composer-desc-area {
 .composer-split:not(.is-primed) > .composer-grid,
 .composer-split:not(.is-primed) > .composer-workstream { display: none; }
 .composer-split.is-primed > #composer-spine-dormant { display: none; }
+
+/* CRITICAL for the vertical split: .composer-grid + .composer-canvas-panel
+   carry 520px+ min-height floors from when the canvas was a whole tab. Inside
+   a split ROW (~30–50% of the viewport) those floors overflow the row and
+   break the chat↔canvas proportion across every mode. Collapse them so the
+   grid ROWS drive the split and the canvas fills exactly its row. */
+.composer-split > .composer-grid { min-height: 0 !important; height: 100%; }
+.composer-split .composer-canvas-panel { min-height: 0 !important; height: 100%; }
+.composer-split .composer-left,
+.composer-split .composer-center,
+.composer-split .composer-right,
+.composer-split .composer-left-panel { min-height: 0; }
 
 .composer-spine-dormant {
   display: flex; align-items: center; justify-content: center;
@@ -11651,6 +11670,7 @@ function _renderGraphLegendToggles(data) {
     ['importance', 'Importance', 'Size by reference count / citations / tag count'],
     ['content',    'Content',    'Size by artifact byte budget (description + prompt + outputs)'],
     ['hybrid',     'Hybrid',     'Mix of importance + content, capped'],
+    ['tokens',     'Tokens',     'Size by token usage — LLM tokens consumed at that node'],
   ];
   picker.innerHTML = '<span class="legend-row-label">Size by</span>' + modes.map(([k, label, help]) =>
     `<button type="button" class="link-kind-chip ${graphConfig.sizingMode === k ? 'on' : 'off'}"
@@ -11875,6 +11895,10 @@ function renderGraph(data) {
     const desc = d.description || d.preview || '';
     const name = d.name || d.label || '';
     content = (desc.length + name.length) / 80;
+    // Token usage → node size: log-scaled so a 100k-token run reads as
+    // clearly-bigger (not 100x) than a 1k-token one. Nodes with no token
+    // usage stay at base radius — honest, not zero-width.
+    if (mode === 'tokens')    return d.tokens ? Math.log10(d.tokens + 1) * 3 : 0;
     if (mode === 'content')   return content;
     if (mode === 'hybrid')    return Math.min(importance + content * 0.4, 30);
     return importance;
