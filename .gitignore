@@ -118,6 +118,10 @@ data/workflows/*/
 # A2A task state (persisted locally — same pattern as workflows)
 data/a2a/
 
+# Provenance grounding chains + persisted conversations (gap-closure track)
+data/provenance/
+data/conversations/
+
 # Brainstorm session files
 .superpowers/
 

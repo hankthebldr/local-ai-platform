@@ -27,7 +27,10 @@ async def list_models():
                 "id": model["name"],
                 "object": "model",
                 "created": 0,
-                "owned_by": "local",
+                # Backend attribution rides the OpenAI-spec field: "ollama"
+                # or "vllm" (the merged list marks vLLM entries with a
+                # `runner` key). Clients that don't care still see a string.
+                "owned_by": model.get("runner", "ollama"),
                 "permission": [],
                 "root": model["name"],
                 "parent": None,

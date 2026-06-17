@@ -1,0 +1,42 @@
+<!-- @dsCard group="Colors" viewport="700x250" name="Surfaces & card states" subtitle="Rest · hover · selected · focus · disabled · success · danger · dragging" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg-deep); padding: 18px 20px; font-family: var(--font-mono); }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .card { position: relative; height: 78px; background: var(--surface-card); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 11px 12px; display: flex; flex-direction: column; justify-content: space-between; }
+  .card .st { font-size: 10px; color: var(--text); letter-spacing: .04em; }
+  .card .nt { font-size: 7.5px; color: var(--text-muted); letter-spacing: .04em; }
+
+  .rest { box-shadow: var(--shadow-1); }
+  .hover { background: var(--surface-raised); border-color: var(--accent-dim); box-shadow: var(--elev-2); transform: translateY(-3px); }
+  .selected { border-color: transparent; box-shadow: var(--glow-accent); }
+  .focus { border-color: var(--accent-dim); box-shadow: 0 0 0 3px var(--accent-ghost); }
+  .disabled { opacity: .45; }
+  .disabled .st { color: var(--text-muted); }
+  .success { border-color: var(--success-dim); box-shadow: inset 3px 0 0 var(--success); }
+  .danger { border-color: var(--danger-dim); box-shadow: inset 3px 0 0 var(--danger); }
+  .dragging { border: 1px dashed var(--accent-dim); background: var(--accent-trace); opacity: .8; transform: rotate(-1.5deg) scale(1.02); box-shadow: var(--shadow-3); }
+
+  .corner { position: absolute; width: 8px; height: 8px; }
+  .tr { top: -1px; right: -1px; border-top: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); }
+  .pip { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="card rest"><span class="st">Rest</span><span class="nt">default surface</span></div>
+    <div class="card hover"><span class="st">Hover</span><span class="nt">lift · border warms</span></div>
+    <div class="card selected"><span class="corner tr"></span><span class="st" style="color:var(--accent)">Selected</span><span class="nt">teal glow ring</span></div>
+    <div class="card focus"><span class="st">Focus</span><span class="nt">3px accent ghost ring</span></div>
+    <div class="card disabled"><span class="st">Disabled</span><span class="nt">0.45 opacity</span></div>
+    <div class="card success"><span class="st"><span class="pip" style="background:var(--success)"></span> Success</span><span class="nt">emerald inset edge</span></div>
+    <div class="card danger"><span class="st"><span class="pip" style="background:var(--danger)"></span> Danger</span><span class="nt">coral inset edge</span></div>
+    <div class="card dragging"><span class="st">Dragging</span><span class="nt">dashed · tilted ghost</span></div>
+  </div>
+</body>
+</html>

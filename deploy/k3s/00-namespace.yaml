@@ -1,0 +1,7 @@
+# Enclave / Cortex Console — dedicated namespace in the k3s homelab cluster.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: enclave
+  labels:
+    app.kubernetes.io/part-of: enclave

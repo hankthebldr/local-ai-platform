@@ -1,0 +1,27 @@
+<!-- @dsCard group="Spacing" viewport="700x150" name="Radii" subtitle="Restrained — panels crisp, controls softly rounded" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg); padding: 22px 24px; font-family: var(--font-mono); }
+  .row { display: flex; gap: 18px; align-items: flex-end; }
+  .item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .box { width: 64px; height: 56px; background: var(--surface-raised); border: 1px solid var(--border-strong); border-top: 2px solid var(--accent); }
+  .lab { font-size: 9px; color: var(--text); }
+  .px { font-size: 8px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="item"><div class="box" style="border-radius:var(--radius-none)"></div><div class="lab">none</div><div class="px">0 · panels</div></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-xs)"></div><div class="lab">xs</div><div class="px">3px · chips</div></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-sm)"></div><div class="lab">sm</div><div class="px">5px · controls</div></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-md)"></div><div class="lab">md</div><div class="px">8px · cards</div></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-lg)"></div><div class="lab">lg</div><div class="px">12px · modals</div></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-xl)"></div><div class="lab">xl</div><div class="px">18px</div></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-pill);width:56px"></div><div class="lab">pill</div><div class="px">999 · pips</div></div>
+  </div>
+</body>
+</html>

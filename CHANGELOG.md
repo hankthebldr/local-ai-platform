@@ -5,6 +5,120 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer: [sem
 
 ## [Unreleased]
 
+Two independent workstreams in flight; either can cut first. **Chat-led
+Composer + the Enclave design-system rebrand** (branch `feat/chat-led-composer`)
+— a candidate `1.2.0` UX cut — and **Architecture-aware orchestration**
+earmarked for `1.3.0`.
+
+### Added — Gap-closure: provenance, persistence & capabilities (`feat/chat-led-composer`)
+
+> Closes the highest-priority findings from the 88-gap flow audit
+> (`docs/research/2026-06-17-flow-gap-audit.md`). Plan:
+> `docs/plans/2026-06-17-gap-closure-implementation.md`.
+
+- **Provenance & citation rail (the #1 gap).** Every grounded chat answer now
+  records *what* it was grounded on. New `ProvenanceEdge` / `ResponseProvenance`
+  models (`api/models/provenance_models.py`), a durable
+  `provenance_store.py` (atomic header JSON + append-only edge JSONL under
+  `data/provenance/`), emission at the chat response site for RAG chunks /
+  web sources / activated skills / plugin tools (`api/routers/chat.py` — each
+  response now carries a unique `chatcmpl-…` id + a `provenance` summary, and
+  streamed replies emit a `provenance` SSE event), `GET /api/provenance/
+  response/{id}` + `/responses` (`api/routers/provenance.py`), a chip-rail UI
+  under each chat message (`renderProvenanceRail`), and response→source
+  grounding edges (`grounded_on` / `activated_skill` / `invoked_tool`) in the
+  knowledge graph (`graph_service._build_provenance_nodes`).
+- **Durable chat threads.** The Threads switcher persists server-side and
+  survives reload: `SavedConversation` model + `conversation_store.py`
+  (one JSON per thread under `data/conversations/`) + `POST/GET/DELETE
+  /api/conversations` (`api/routers/conversations.py`). The UI Threads module
+  autosaves the live thread, hydrates transcripts lazily on switch, and adds
+  thread delete — localStorage stays as the offline fallback.
+- **Server-side agent tuning.** Up/down message ratings that tune a composer
+  agent now persist + aggregate across sessions via `POST/GET
+  /api/feedback/agent-tuning` (keyed `data/feedback/agent_tuning.json`); the
+  client `AgentTuning` mirrors to the server and adopts the server map on load.
+- **Composer ↔ capabilities.** Node config gains a Tools & Skills section
+  (plugin/MCP tool + skill chips that round-trip through the YAML export),
+  inline archetype **companion suggestions** (`/api/workflows/composer/assist`)
+  with one-click add, agent tool-reachability validation
+  (`AgentService._validate_tools` reusing the workflow extension-preflight, 422
+  on missing plugin/MCP), and an Ollama-down banner that disables dispatch.
+- **Run observability.** Composite runs (parallel / loop / ralph / orchestrator)
+  now render a kind badge + a workspace-derived summary (iteration / branch /
+  worker counts, ralph halt reason + consecutive-failure + goal signals) and
+  an `ext overhead` chip in the run-step detail. (MCP `invoke_tool(scope=)` and
+  the ralph hard-cap safety rails were already wired in the engine — this
+  surfaces them; composite **authoring** on the canvas remains in the YAML
+  editor, deferred because the strict container validators can't be satisfied
+  from a single flat node.)
+- **Runner field on the model registry.** `MODEL_REGISTRY` entries may declare
+  an optional `runner` (`ollama` default; `vllm` for the GPU path), surfaced on
+  the inventory catalog so the resolver can route per-model.
+
+### Added — Chat-led Composer & Enclave design-system rebrand (`feat/chat-led-composer`)
+
+> "A workflow is crystallized conversation." The Composer becomes chat-primary:
+> converse to solve a problem, then promote the thread into a local agentic
+> workflow. Plus a full rebrand off the PANW-Cortex skin to Enclave's own
+> warm-charcoal + teal identity (design system vendored at `docs/design/`).
+
+- **Chat-led "Boot Sequence" (composer).** An in-message affordance
+  (`▸ run this with my agents`) distills the thread into an editable spec and
+  scaffolds a runnable DAG on the dormant spine. New
+  `POST /api/composer/capture-spec` + `POST /api/composer/scaffold`
+  (`api/routers/composer.py`) backed by `spec_capture.py` + `scaffold_planner.py`
+  (hybrid: curated-template match, else local LLM plan); reuses `OllamaService`
+  + `ModelResolver`, never touches the engine. Scaffolded step inputs are
+  normalized to real producers so plans actually run.
+- **Enclave design-system rebrand.** Cortex green / blue-slate → warm-charcoal
+  `#101413` + teal `#2BD4B4` primary + deep emerald + sparing ember; dark +
+  light scopes; role palette (reasoning=teal, coding=sky, fast=amber,
+  general=emerald, uncensored=ember). Full handoff bundle (tokens, brand assets,
+  React component specs, canonical console-v2 prototype) vendored at
+  `docs/design/`.
+- **In-shell Chat↔Canvas pivot + fluid layout.** `Chat | Canvas | Focus`
+  segmented control (`ComposerSplit.setMode`); viewport-fit split; Boot Sequence
+  confirm auto-pivots to canvas. Per-step `▶ test in chat` bench in the node
+  inspector.
+- **Unified asset deep-dives (AssetPeek).** One slide-over drill-down for
+  models / agents / plugins — every dive ends in "seed a chat". Models pull
+  curated benchmarks from `data/discovery/model_benchmarks.json` via the new
+  `GET /api/inventory/enrichment` catalog-enrichment endpoint.
+- **Runs reasoning drill-down + calm analytics.** Per-step decisions panel
+  (timing anatomy, tokens, pressure, skills/MCP/tools chips) over the telemetry
+  the engine already persists; a calm-analytics perf band
+  (`enclSparkline` / `enclTrendStat` / `enclUtilChart`) fed by a `_sysHistory`
+  ring buffer.
+- **Eval harness (`api/services/eval_harness.py`).** Agent/workflow regression
+  suites reusing the gate grammar; sample suites under `evals/`.
+- **Skills marketplace + installable skills.** GitHub-backed skills.sh discovery
+  provider (`api/services/discovery_providers/skills_marketplace.py`);
+  installable skills in external discover; Skills tab unified with the Catalog.
+- **Composer UX.** Native auto-wire (dropped role/agent pieces chain onto the
+  flow), always-present editable Start/End, toolbar Stop control, New-Workflow
+  creation wizard, brainstorm→decision starter workflow.
+- **Runner attribution.** `/health` and `/v1/models` attribute each model to
+  its serving runner (Ollama / vLLM).
+- **Tier-3 OpenShell sandbox backend (opt-in).** Extends the code-exec sandbox
+  (below) with an OpenShell agent-runtime backend prototype (ADR:
+  `docs/plans/2026-06-07-openshell-agent-runtime-decision.md`).
+
+> **Console-v2 backlog — now SHIPPED:** thread switcher, message-level
+> pin-as-step + scaffold-preview modal + maturity meter, operator's-path ladder
+> + nudges, model-compare grid, 4-phase install wizard, Run lens (scrub +
+> node plates + as-executed inspector), node-bound chat (select a node → chat
+> with/configure that agent; ratings → per-agent tuning), interactive workflow
+> drill-down, vertical chat-top/canvas-bottom layout. Frontend test coverage
+> added (tests/ui/, 160 markup tests).
+>
+> **Remaining gap-closure (in progress, see docs/plans/2026-06-17-gap-closure-implementation.md):**
+> provenance edges + citation rail (the #1 gap), server-side persistence
+> (conversations + agent tuning), composite-step-kind UI renderers
+> (parallel/loop/orchestrator/ralph) + ralph safety signals, node tools/skills
+> editing, `runner` field on MODEL_REGISTRY. Deliberate later-cuts: fleet /
+> HostRegistration (1.4.x), license entitlement, RBAC/audit-persistence (2.x).
+
 Earmarked for `1.3.0` — Architecture-aware orchestration. The workflow engine
 went from "execute steps in YAML order, blind to the hardware" to "schedule a
 DAG tick-by-tick on the detected arch, pre-warm next-step models during the

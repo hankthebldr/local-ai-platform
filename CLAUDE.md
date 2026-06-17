@@ -55,7 +55,9 @@ Key files by responsibility:
 
 ## Release track
 
-Current: **`1.1.1`** — Cortex Console refresh (shipped 2026-05-15). Builds on `1.0.0` (first public release, 2026-04-18). Positioned as a **single-operator sovereign appliance**; multi-tenant / enterprise hardening is a deferred 2.x concern.
+Current shipped: **`1.1.1`** — Cortex Console refresh (shipped 2026-05-15). Builds on `1.0.0` (first public release, 2026-04-18). Positioned as a **single-operator sovereign appliance**; multi-tenant / enterprise hardening is a deferred 2.x concern.
+
+> **Note:** the console has since been **rebranded off PANW-Cortex to Enclave's own warm-charcoal + teal identity** on the in-flight `feat/chat-led-composer` branch (candidate `1.2.0`). References to a "Cortex Console" describe what `1.1.1` shipped, not the current branch — see *In flight* below.
 
 What's shipped today (1.0.0 + 1.1.1):
 - Core infra (Ollama + systemd + macOS DMG)
@@ -67,11 +69,13 @@ What's shipped today (1.0.0 + 1.1.1):
 - CI on Python 3.12/3.13 · DMG release · Pages
 - 46 test files (unit/integration/e2e/hooks/ui)
 
-In flight for **`1.3.0`** (see [CHANGELOG.md](./CHANGELOG.md) `[Unreleased]` for the full inventory):
-- **Architecture-aware orchestration** — `Architecture` + `Deployment` protocols (Apple unified / NVIDIA single / NVIDIA multi / x86 CPU), per-arch keep_alive defaults, parallel DAG dispatch driven by `arch.schedule_ready()`, pre-warm of next-step models during current step's inference, per-run telemetry summary (load duration, pressure delta, pre-warm hit/miss). PRs #88, #90, #91, #92, #93, #95 merged; UI summary (#97) draft.
-- **Composite workflow step kinds** — `kind: parallel` (fan-out → gather) + `kind: loop` (body → until predicate). Four parallelism modes including `single_model_pseudo_parallel` for prompt-cache reuse. PRs #94, #96, #98.
+In flight (two independent workstreams; see [CHANGELOG.md](./CHANGELOG.md) `[Unreleased]` for the full inventory):
+- **`1.2.0` candidate — Chat-led Composer + Enclave rebrand** (branch `feat/chat-led-composer`). The Composer goes chat-primary — "a workflow is crystallized conversation": a **"Boot Sequence"** affordance distills a conversation into an editable spec and scaffolds a local agentic DAG (`POST /api/composer/capture-spec` + `/scaffold`, backed by `spec_capture.py` + `scaffold_planner.py`; engine untouched). Full **design-system rebrand** off PANW-Cortex to Enclave's warm-charcoal + teal identity (vendored at `docs/design/`), in-shell **Chat↔Canvas pivot** + fluid layout, unified **asset deep-dives** (AssetPeek), **Runs reasoning drill-down** + calm analytics, **eval harness**, GitHub-backed **skills marketplace**, **model enrichment** endpoint. Now also **node-bound chat** (select a node → chat with/configure that agent; ratings → per-agent tuning), interactive **workflow drill-down**, and a vertical chat-top/canvas-bottom layout. The console-v2 backlog (thread switcher, pin-as-step, operator's-path ladder, compare grid, install wizard, Run lens) has **shipped**. Remaining gap-closure (provenance/citation, server-side persistence, composite-step-kind UI) is tracked in [docs/plans/2026-06-17-gap-closure-implementation.md](./docs/plans/2026-06-17-gap-closure-implementation.md) (audit: [docs/research/2026-06-17-flow-gap-audit.md](./docs/research/2026-06-17-flow-gap-audit.md)).
+- **`1.3.0` — Architecture-aware orchestration** — `Architecture` + `Deployment` protocols (Apple unified / NVIDIA single / NVIDIA multi / x86 CPU), per-arch keep_alive defaults, parallel DAG dispatch driven by `arch.schedule_ready()`, pre-warm of next-step models during current step's inference, per-run telemetry summary (load duration, pressure delta, pre-warm hit/miss). PRs #88, #90, #91, #92, #93, #95 merged; UI summary (#97) draft.
+- **`1.3.0` — Composite workflow step kinds** — `kind: parallel` (fan-out → gather) + `kind: loop` (body → until predicate). Four parallelism modes including `single_model_pseudo_parallel` for prompt-cache reuse. PRs #94, #96, #98.
 
 Roadmap (single-operator-appliance track):
+- **`1.2.0`** — chat-led Composer + the Enclave design-system rebrand (the frontend redesign). Cuts when the console-v2 backlog (thread rail, pin-as-step + scaffold modal, operator's-path ladder, model-compare grid, install wizard, Run lens) reaches the agreed MVP bar and the new UI surfaces (AssetPeek, Runs decisions panel, calm-analytics atoms, Cmd/Ctrl-K palette, `focus` mode) gain test coverage.
 - **`1.3.0`** — ship the arch-aware + composite-step-kinds work above. Cuts when PR #97 (UI summary) lands and the Memory tab + Runs view reflect the full pipeline end-to-end.
 - **`1.4.x`** — **fleet awareness.** Mac M4 (dev) + MS-01 (API) + BD790i (flagship) over Tailscale. One control plane, one operator, work routed to whichever box has the right RAM/VRAM. `HostRegistration` model, target-host selector on Composer, resume-on-other-host, opt-in Wake-on-LAN for the flagship.
 - **`1.5.x`** — **pluggable inference engines.** vLLM + llama.cpp parity with Ollama via the existing OpenAI-compatible surface. Per-host engine choice in the fleet registry.
@@ -89,6 +93,7 @@ Roadmap (single-operator-appliance track):
 - **Architecture-aware orchestration (1.3.0 WIP):** design at `docs/plans/2026-05-19-architecture-aware-orchestration-design.md`; impl plan at `docs/plans/2026-05-19-architecture-aware-orchestration-implementation.md`. Introduces `Architecture` + `Deployment` abstractions, freshness-by-default eviction, sequential execution model.
 - **MCP & Skills instrumentation (1.3.0 WIP):** design at `docs/plans/2026-05-19-mcp-skills-instrumentation-design.md`; impl plan at `docs/plans/2026-05-19-mcp-skills-instrumentation-implementation.md`. Step-scoped MCP runners, archetype registry, resource-maximization compiler.
 - **Ollama version pinning:** `docs/deployment/ollama-version.md` documents the 0.23.4 baseline + upgrade procedure.
+- **Enclave design system (Claude Design handoff, 2026-06-12):** `docs/design/` — tokens, brand assets, React component specs, and the canonical chat-led console prototype (`docs/design/project/ui_kits/console-v2/`). `docs/design/README.md` explains the bundle; `docs/design/chats/` holds the design-intent transcripts. The rebrand tokens + in-shell Chat↔Canvas pivot are implemented in `api/static/index.html`; the remaining console-v2 IA (thread rail, pin-as-step, EntityCard peeks, install wizard, dataviz band) is unimplemented roadmap — design from these files, don't reinvent.
 
 ## Conventions
 

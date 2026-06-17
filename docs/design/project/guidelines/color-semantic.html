@@ -1,0 +1,28 @@
+<!-- @dsCard group="Colors" viewport="700x160" name="Semantic status" subtitle="6 run-states: success · running · info · warn · danger · idle" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg); padding: 18px 20px; font-family: var(--font-mono); }
+  .row { display: flex; gap: 9px; }
+  .cell { flex: 1; min-width: 0; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-card); padding: 10px 9px; }
+  .top { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+  .dot { width: 11px; height: 11px; border-radius: var(--radius-pill); flex: none; }
+  .lab { font-size: 10px; color: var(--text); letter-spacing: .03em; }
+  .pill { display: inline-block; font-size: 8px; padding: 2px 7px; border-radius: var(--radius-pill); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+  .hex { font-size: 8px; color: var(--text-muted); margin-top: 7px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="cell"><div class="top"><span class="dot" style="background:var(--success)"></span><span class="lab">Success</span></div><span class="pill" style="background:var(--success-ghost);color:var(--success);border:1px solid var(--success-dim)">passed</span><div class="hex">#1FB983</div></div>
+    <div class="cell"><div class="top"><span class="dot" style="background:var(--accent)"></span><span class="lab">Running</span></div><span class="pill" style="background:var(--accent-ghost);color:var(--accent);border:1px solid var(--accent-dim)">active</span><div class="hex">#2BD4B4</div></div>
+    <div class="cell"><div class="top"><span class="dot" style="background:var(--info)"></span><span class="lab">Info</span></div><span class="pill" style="background:var(--info-ghost);color:var(--info);border:1px solid var(--info-dim)">queued</span><div class="hex">#57C4D2</div></div>
+    <div class="cell"><div class="top"><span class="dot" style="background:var(--warn)"></span><span class="lab">Warn</span></div><span class="pill" style="background:var(--warn-ghost);color:var(--warn);border:1px solid var(--warn-dim)">degraded</span><div class="hex">#E0A33C</div></div>
+    <div class="cell"><div class="top"><span class="dot" style="background:var(--danger)"></span><span class="lab">Danger</span></div><span class="pill" style="background:var(--danger-ghost);color:var(--danger);border:1px solid var(--danger-dim)">failed</span><div class="hex">#E5685A</div></div>
+    <div class="cell"><div class="top"><span class="dot" style="background:var(--text-muted)"></span><span class="lab">Idle</span></div><span class="pill" style="background:var(--surface-raised);color:var(--text-muted);border:1px solid var(--border-strong)">paused</span><div class="hex">#6B776F</div></div>
+  </div>
+</body>
+</html>

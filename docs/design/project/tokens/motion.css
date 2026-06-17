@@ -1,0 +1,55 @@
+/* ============================================================================
+   ENCLAVE · MOTION TOKENS
+   ----------------------------------------------------------------------------
+   Motion is calm and quick. The base UI is boxy and still; movement is a
+   thin polish layer — micro hover lifts, focus rings, tab fades, a single
+   living "pulse" on active status pips. No bounces, no decorative loops on
+   content. Everything degrades under prefers-reduced-motion.
+   ========================================================================== */
+
+:root {
+  /* Easing */
+  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);    /* @kind other */
+  --ease-in:   cubic-bezier(0.7, 0, 0.84, 0);     /* @kind other */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* @kind other */
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.25, 1.0); /* @kind other */
+
+  /* Durations */
+  --t-instant: 80ms;    /* @kind other */
+  --t-fast:    140ms;   /* @kind other */
+  --t-med:     220ms;   /* @kind other */
+  --t-slow:    340ms;   /* @kind other */
+  --t-pulse:   2400ms;  /* @kind other */
+}
+
+/* Living status pulse — a soft teal halo that breathes. */
+@keyframes ds-pip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-dim); }
+  50%      { box-shadow: 0 0 0 5px rgba(43,212,180,0); }
+}
+
+/* Tab / panel fade-in */
+@keyframes ds-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Run-progress shimmer for skeletons */
+@keyframes ds-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Connection-flow dash for live workflow edges */
+@keyframes ds-flow-dash {
+  to { stroke-dashoffset: -16; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

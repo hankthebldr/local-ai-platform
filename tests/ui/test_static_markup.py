@@ -197,6 +197,40 @@ def test_color_tokens_are_honest(index_html_text):
     assert dr > dg and dr > db, f"--danger #{danger.group(1)} is not red-dominant"
 
 
+def test_teal_accent_palette(index_html_text):
+    """Guard the Enclave rebrand: --accent must stay teal, not regress to the
+    old PANW-Cortex blue/green. The design-system handoff set the living primary
+    to #2BD4B4; a revert would otherwise pass every other test silently.
+    """
+    m = re.search(r":root\s*\{([^}]*)\}", index_html_text)
+    assert m is not None, ":root CSS variable block not found"
+    root = m.group(1)
+
+    accent = re.search(r"--accent:\s*#([0-9A-Fa-f]{6})\b", root)
+    assert accent is not None, "--accent token missing"
+    val = accent.group(1).upper()
+    assert val == "2BD4B4", (
+        f"--accent is #{val}, not the Enclave teal #2BD4B4 — the palette "
+        "regressed to a non-canonical primary (e.g. Cortex blue #0066CC / "
+        "green #00CC66). Restore #2BD4B4."
+    )
+
+    # Family sanity: teal is green-and-blue-rich, red-poor. Catches a revert
+    # even if the exact hex were nudged.
+    r, g, b = (int(val[i : i + 2], 16) for i in (0, 2, 4))
+    assert g > r and b > r and b >= 140, (
+        f"--accent #{val} is not teal-family (need green+blue rich, red poor); "
+        "looks like a Cortex blue/green regression"
+    )
+
+    # The brighter accent should also be a teal, not a cool blue.
+    bright = re.search(r"--accent-bright:\s*#([0-9A-Fa-f]{6})\b", root)
+    assert bright is not None, "--accent-bright token missing"
+    bhex = bright.group(1)
+    br, bg, bb = (int(bhex[i : i + 2], 16) for i in (0, 2, 4))
+    assert bg > br and bb > br, f"--accent-bright #{bhex} is not teal-family"
+
+
 def test_no_sci_fi_caps_verbs_in_button_text(index_html_text):
     """Button text should be sentence case; uppercase styling comes from CSS."""
     # We search for these as whole-word literals on lines that look like

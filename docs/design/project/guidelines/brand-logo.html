@@ -1,0 +1,81 @@
+<!-- @dsCard group="Brand" viewport="700x230" name="Logo — mark & lockup" subtitle="The enclave as connective tissue: a secure harness that wires + activates agentic workflows" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg-deep); padding: 0; }
+  .wrap { display: flex; align-items: stretch; height: 230px; }
+  .left { display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 22px 26px; border-right: 1px solid var(--border); min-width: 230px; }
+  .lockup { height: 44px; }
+  .meta { font-family: var(--font-mono); }
+  .meta .t { font-size: 11px; color: var(--text); letter-spacing: .04em; }
+  .meta .s { font-size: 9px; color: var(--text-muted); margin-top: 6px; line-height: 1.6; }
+  .right { flex: 1; position: relative; }
+  .right svg { width: 100%; height: 100%; display: block; }
+  @media (prefers-reduced-motion: no-preference) {
+    .flow { stroke-dasharray: 4 5; animation: ds-flow-dash .7s linear infinite; }
+    .ring { transform-box: fill-box; transform-origin: center; animation: pulse 2.4s var(--ease-out) infinite; }
+    @keyframes pulse { 0%,100% { opacity: .55; } 50% { opacity: .15; } }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="left">
+      <img class="lockup" src="../assets/logo/enclave-lockup-teal.svg" alt="Enclave lockup">
+      <div class="meta">
+        <div class="t">The enclave</div>
+        <div class="s">Concentric squares = layers of containment.<br>The mark is the <b style="color:var(--accent)">secure harness</b> — it wraps,<br>wires, and activates the agentic workflow.</div>
+      </div>
+    </div>
+    <div class="right">
+      <!-- Connective-tissue diagram: the enclave mark as the hub that runs + secures a workflow -->
+      <svg viewBox="0 0 440 230" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="h" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#2BD4B4" stop-opacity="0.14"></stop><stop offset="100%" stop-color="#2BD4B4" stop-opacity="0"></stop></radialGradient>
+        </defs>
+        <ellipse cx="120" cy="115" rx="120" ry="90" fill="url(#h)"></ellipse>
+
+        <!-- enclave mark glyph (nested squares) as the hub -->
+        <g transform="translate(70,79)">
+          <rect class="ring" x="-4" y="-4" width="80" height="80" rx="8" fill="none" stroke="#2BD4B4" stroke-width="1" opacity="0.4"></rect>
+          <rect x="6" y="6" width="60" height="60" rx="6" fill="none" stroke="#2BD4B4" stroke-width="2.2"></rect>
+          <rect x="16" y="16" width="40" height="40" rx="4" fill="none" stroke="#2BD4B4" stroke-width="1.4" opacity="0.5"></rect>
+          <rect x="24" y="24" width="24" height="24" rx="3" fill="#2BD4B4" opacity="0.16"></rect>
+          <rect x="30" y="30" width="12" height="12" rx="2" fill="#2BD4B4" opacity="0.6"></rect>
+        </g>
+
+        <!-- connectors from hub to workflow nodes -->
+        <path class="flow" d="M 146 100 C 200 80, 230 60, 286 56" fill="none" stroke="#2BD4B4" stroke-width="1.4" opacity="0.6"></path>
+        <path class="flow" d="M 150 119 C 210 119, 240 118, 286 118" fill="none" stroke="#1FB983" stroke-width="1.4" opacity="0.55"></path>
+        <path class="flow" d="M 146 138 C 200 158, 230 178, 286 182" fill="none" stroke="#57C4D2" stroke-width="1.4" opacity="0.5"></path>
+
+        <!-- workflow nodes -->
+        <g font-family="monospace" font-size="8" letter-spacing="1">
+          <g transform="translate(286,56)">
+            <circle r="13" fill="#101413" stroke="#2BD4B4" stroke-width="1.3"></circle>
+            <circle r="3.4" fill="#2BD4B4"></circle>
+            <text x="22" y="3" fill="#9CA8A1">activate</text>
+          </g>
+          <g transform="translate(286,118)">
+            <circle r="13" fill="#101413" stroke="#1FB983" stroke-width="1.3"></circle>
+            <path d="M -3 0 a 3 3 0 0 1 6 0 v 1 h -6 z M -1.5 -1 v -1.5 a 1.5 1.5 0 0 1 3 0 v 1.5" fill="none" stroke="#1FB983" stroke-width="1"></path>
+            <text x="22" y="3" fill="#9CA8A1">secure run</text>
+          </g>
+          <g transform="translate(286,182)">
+            <circle r="13" fill="#101413" stroke="#57C4D2" stroke-width="1.3"></circle>
+            <path d="M -3 -3.5 L 4 0 L -3 3.5 Z" fill="#57C4D2"></path>
+            <text x="22" y="3" fill="#9CA8A1">dispatch</text>
+          </g>
+        </g>
+
+        <!-- downstream wiring between nodes (the harness) -->
+        <path d="M 286 69 C 330 80, 330 104, 286 116" fill="none" stroke="#28302D" stroke-width="1" stroke-dasharray="3 3"></path>
+        <path d="M 286 131 C 330 142, 330 168, 286 180" fill="none" stroke="#28302D" stroke-width="1" stroke-dasharray="3 3"></path>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

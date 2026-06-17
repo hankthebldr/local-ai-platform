@@ -44,7 +44,15 @@ HARDWARE_PROFILES = {
 _hw_key = os.getenv("HARDWARE_PROFILE", "ms01")
 HARDWARE_PROFILE = HARDWARE_PROFILES.get(_hw_key, HARDWARE_PROFILES["ms01"])
 
-# Model registry with sources
+# Model registry with sources.
+#
+# Optional per-model field `runner: "ollama" | "vllm"` declares which inference
+# engine serves the model (default: "ollama" — all GGUF catalog models). It is
+# surfaced in GET /api/inventory/catalog and read by
+# ModelResolver.resolve_with_runner() / runner_for_registry_entry() for
+# runner-aware dispatch. Set `runner: "vllm"` on a model that is vLLM-served
+# (AWQ/safetensors on the GPU host). Full step_executor runner-aware dispatch
+# is gpu-runner-abstraction Phase 4 (see docs/plans/2026-05-23-gpu-runner-abstraction.md).
 MODEL_REGISTRY = {
     # ═══════════════════════════════════════════════════════════════
     # Tier 1: Daily Drivers (8B class — fast interactive chat)
@@ -163,7 +171,14 @@ MODEL_REGISTRY = {
         "speed": {"ms01": "4-7 tok/s", "bd790i": "8-14 tok/s"},
         "context": "128K",
         "description": "Google Gemma 3, vision-capable, abliterated",
-        "tags": ["uncensored", "abliterated", "vision", "multimodal", "2026", "ms01-fits"],
+        "tags": [
+            "uncensored",
+            "abliterated",
+            "vision",
+            "multimodal",
+            "2026",
+            "ms01-fits",
+        ],
     },
     "llama3.2-moe-18b": {
         "name": "Llama 3.2 8x3B MOE Dark Champion 18.4B",
@@ -265,7 +280,8 @@ def list_models(filter_tag=None):
     hw = HARDWARE_PROFILE
     table = Table(
         title=f"Available Models — {hw['name']}",
-        show_header=True, header_style="bold cyan"
+        show_header=True,
+        header_style="bold cyan",
     )
     table.add_column("ID", style="green")
     table.add_column("Name", style="cyan")
@@ -291,21 +307,29 @@ def list_models(filter_tag=None):
 
     console.print(table)
     console.print(f"\n[dim]Total models: {len(MODEL_REGISTRY)}[/dim]")
-    console.print(f"[dim]Hardware: {hw['cpu']} / {hw['ram_gb']}GB RAM "
-                  f"(max model: {hw['max_model_ram_gb']}GB)[/dim]")
-    console.print(f"[dim]Profile: {_hw_key} (set HARDWARE_PROFILE env or --hardware flag)[/dim]")
-    console.print("[yellow]Use: python models/download.py <model-id> to download[/yellow]")
+    console.print(
+        f"[dim]Hardware: {hw['cpu']} / {hw['ram_gb']}GB RAM "
+        f"(max model: {hw['max_model_ram_gb']}GB)[/dim]"
+    )
+    console.print(
+        f"[dim]Profile: {_hw_key} (set HARDWARE_PROFILE env or --hardware flag)[/dim]"
+    )
+    console.print(
+        "[yellow]Use: python models/download.py <model-id> to download[/yellow]"
+    )
 
 
 def download_ollama(model_id, info):
     """Download model via Ollama"""
-    console.print(Panel.fit(
-        f"[bold cyan]Downloading via Ollama[/bold cyan]\n"
-        f"Model: {info['name']}\n"
-        f"Size: {info['size']}\n"
-        f"This may take a while...",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]Downloading via Ollama[/bold cyan]\n"
+            f"Model: {info['name']}\n"
+            f"Size: {info['size']}\n"
+            f"This may take a while...",
+            border_style="cyan",
+        )
+    )
 
     try:
         # Run ollama pull
@@ -314,7 +338,7 @@ def download_ollama(model_id, info):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines=True
+            universal_newlines=True,
         )
 
         for line in process.stdout:
@@ -353,12 +377,14 @@ def download_huggingface(model_id, info, model_type="gguf"):
 
     hf_repo = info.get(model_type, info.get("huggingface"))
 
-    console.print(Panel.fit(
-        f"[bold cyan]Downloading from Hugging Face[/bold cyan]\n"
-        f"Repository: {hf_repo}\n"
-        f"This may take a while...",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]Downloading from Hugging Face[/bold cyan]\n"
+            f"Repository: {hf_repo}\n"
+            f"This may take a while...",
+            border_style="cyan",
+        )
+    )
 
     try:
         # Create models directory
@@ -373,7 +399,7 @@ def download_huggingface(model_id, info, model_type="gguf"):
             files = [
                 f"{model_id}.Q4_K_M.gguf",  # Try Q4 first
                 f"{model_id}.Q5_K_M.gguf",
-                f"{model_id}.gguf"
+                f"{model_id}.gguf",
             ]
 
             for filename in files:
@@ -382,7 +408,7 @@ def download_huggingface(model_id, info, model_type="gguf"):
                         repo_id=hf_repo,
                         filename=filename,
                         local_dir=models_dir,
-                        local_dir_use_symlinks=False
+                        local_dir_use_symlinks=False,
                     )
                     console.print(f"[green]✓ Downloaded {filename}[/green]")
                     console.print(f"[yellow]Location: {filepath}[/yellow]")
@@ -394,9 +420,7 @@ def download_huggingface(model_id, info, model_type="gguf"):
 
         # Download full repository
         snapshot_download(
-            repo_id=hf_repo,
-            local_dir=models_dir,
-            local_dir_use_symlinks=False
+            repo_id=hf_repo, local_dir=models_dir, local_dir_use_symlinks=False
         )
 
         console.print(f"[green]✓ Successfully downloaded to {models_dir}[/green]")
@@ -422,31 +446,36 @@ def show_model_info(model_id):
     else:
         speed_str = speed
 
-    console.print(Panel.fit(
-        f"[bold cyan]{info['name']}[/bold cyan]\n\n"
-        f"[bold]Size:[/bold] {info['size']}\n"
-        f"[bold]Speed:[/bold] {speed_str}\n"
-        f"[bold]Context:[/bold] {info.get('context', '—')}\n"
-        f"[bold]Description:[/bold] {info['description']}\n\n"
-        f"[bold]Tags:[/bold] {', '.join(info.get('tags', []))}\n\n"
-        f"[bold]Sources:[/bold]\n"
-        f"  • Ollama: {info.get('ollama', 'N/A')}\n"
-        f"  • Hugging Face: {info.get('huggingface', 'N/A')}\n"
-        f"  • GGUF: {info.get('gguf', 'N/A')}",
-        title=f"Model Info: {model_id}",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]{info['name']}[/bold cyan]\n\n"
+            f"[bold]Size:[/bold] {info['size']}\n"
+            f"[bold]Speed:[/bold] {speed_str}\n"
+            f"[bold]Context:[/bold] {info.get('context', '—')}\n"
+            f"[bold]Description:[/bold] {info['description']}\n\n"
+            f"[bold]Tags:[/bold] {', '.join(info.get('tags', []))}\n\n"
+            f"[bold]Sources:[/bold]\n"
+            f"  • Ollama: {info.get('ollama', 'N/A')}\n"
+            f"  • Hugging Face: {info.get('huggingface', 'N/A')}\n"
+            f"  • GGUF: {info.get('gguf', 'N/A')}",
+            title=f"Model Info: {model_id}",
+            border_style="cyan",
+        )
+    )
 
 
 def show_status():
     """Compare installed Ollama models against registry"""
-    console.print(Panel.fit(
-        "[bold bright_cyan]Model Status — Ollama vs Registry[/bold bright_cyan]",
-        border_style="bright_cyan"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold bright_cyan]Model Status — Ollama vs Registry[/bold bright_cyan]",
+            border_style="bright_cyan",
+        )
+    )
 
     # Get installed models from Ollama via API (doesn't depend on CLI path)
     import requests as req
+
     ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     installed = {}
     try:
@@ -476,36 +505,60 @@ def show_status():
             ollama_name in inst_name or inst_name.startswith(ollama_name)
             for inst_name in installed
         )
-        status = "[green]✓ Installed[/green]" if is_installed else "[dim]Available[/dim]"
+        status = (
+            "[green]✓ Installed[/green]" if is_installed else "[dim]Available[/dim]"
+        )
         tags = ", ".join(info.get("tags", [])[:3])
-        table.add_row(status, info["name"], ollama_name, info["size"], _get_speed(info), tags)
+        table.add_row(
+            status, info["name"], ollama_name, info["size"], _get_speed(info), tags
+        )
 
     # Show installed models NOT in registry
     registry_ollama_names = {info.get("ollama", "") for info in MODEL_REGISTRY.values()}
     for name, details in installed.items():
-        if not any(name.startswith(reg) or reg in name for reg in registry_ollama_names if reg):
+        if not any(
+            name.startswith(reg) or reg in name for reg in registry_ollama_names if reg
+        ):
             table.add_row(
-                "[yellow]⚬ Extra[/yellow]", name, name,
-                details.get("size", "?"), "—", "not in registry"
+                "[yellow]⚬ Extra[/yellow]",
+                name,
+                name,
+                details.get("size", "?"),
+                "—",
+                "not in registry",
             )
 
     console.print(table)
-    console.print(f"\n[dim]Installed: {len(installed)} | Registry: {len(MODEL_REGISTRY)} | "
-                  f"Hardware: {HARDWARE_PROFILE['cpu']} / {HARDWARE_PROFILE['ram_gb']}GB RAM[/dim]")
+    console.print(
+        f"\n[dim]Installed: {len(installed)} | Registry: {len(MODEL_REGISTRY)} | "
+        f"Hardware: {HARDWARE_PROFILE['cpu']} / {HARDWARE_PROFILE['ram_gb']}GB RAM[/dim]"
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Download and manage LLM models")
     parser.add_argument("model_id", nargs="?", help="Model ID to download")
-    parser.add_argument("--list", "-l", action="store_true", help="List available models")
-    parser.add_argument("--status", action="store_true", help="Compare installed vs registry models")
+    parser.add_argument(
+        "--list", "-l", action="store_true", help="List available models"
+    )
+    parser.add_argument(
+        "--status", action="store_true", help="Compare installed vs registry models"
+    )
     parser.add_argument("--info", "-i", metavar="MODEL", help="Show model information")
-    parser.add_argument("--source", "-s", choices=["ollama", "huggingface", "gguf"],
-                       default="ollama", help="Download source (default: ollama)")
+    parser.add_argument(
+        "--source",
+        "-s",
+        choices=["ollama", "huggingface", "gguf"],
+        default="ollama",
+        help="Download source (default: ollama)",
+    )
     parser.add_argument("--filter", "-f", metavar="TAG", help="Filter models by tag")
-    parser.add_argument("--hardware", metavar="PROFILE",
-                       choices=list(HARDWARE_PROFILES.keys()),
-                       help=f"Hardware profile ({', '.join(HARDWARE_PROFILES.keys())})")
+    parser.add_argument(
+        "--hardware",
+        metavar="PROFILE",
+        choices=list(HARDWARE_PROFILES.keys()),
+        help=f"Hardware profile ({', '.join(HARDWARE_PROFILES.keys())})",
+    )
 
     args = parser.parse_args()
 

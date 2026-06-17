@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enclave Console — Capability Roadmap</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body { background: var(--bg-deep); color: var(--text); }
+  .doc { max-width: 920px; margin: 0 auto; padding: 56px 36px 120px; display: flex; flex-direction: column; gap: 44px; }
+  .mlab { font-family: var(--font-mono); font-size: var(--text-2xs); font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--text-muted); }
+  .mlab::before { content: ""; display: inline-block; width: 14px; height: 1px; background: var(--accent); margin-right: 8px; vertical-align: middle; }
+  h1 { margin: 10px 0 0; font-size: 38px; font-weight: 600; letter-spacing: -.02em; color: var(--text-strong); text-wrap: balance; }
+  h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.015em; color: var(--text-strong); }
+  p { margin: 0; line-height: 1.6; }
+  .lede { font-size: var(--text-md); color: var(--text-dim); max-width: 720px; }
+  .rung { display: flex; flex-direction: column; gap: 16px; }
+  .rung-head { display: flex; align-items: center; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .rung-head img { width: 64px; height: 64px; border-radius: var(--radius-sm); border: 1px solid var(--border); object-fit: cover; flex: none; }
+  .rung-head .sub { font-size: var(--text-sm); color: var(--text-muted); margin-top: 4px; }
+  .rung-head .rn { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-bottom: 3px; }
+  .feats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .feat { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px 17px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .feat .nm { font-size: var(--text-md); font-weight: 600; color: var(--text-strong); letter-spacing: -.01em; display: flex; align-items: baseline; gap: 9px; }
+  .feat .story { font-size: var(--text-sm); color: var(--text-dim); line-height: 1.55; }
+  .feat .story b { color: var(--text); font-weight: 500; }
+  .feat .ux { font-size: var(--text-sm); color: var(--text-muted); line-height: 1.55; }
+  .feat .where { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 9px; border-top: 1px solid var(--border-faint); align-items: center; }
+  .feat .where .k { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin-right: 2px; }
+  .chip { font-family: var(--font-mono); font-size: var(--text-2xs); padding: 2px 8px; border-radius: var(--radius-pill); border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
+  .chip.c { border-color: var(--accent-dim); color: var(--accent); background: var(--accent-ghost); }
+  .tag { font-family: var(--font-mono); font-size: var(--text-2xs); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; padding: 3px 9px; border-radius: var(--radius-xs); white-space: nowrap; }
+  .tag.next { background: var(--accent); color: var(--on-accent); }
+  .tag.later { border: 1px solid var(--border-strong); color: var(--text-muted); }
+  .ladder { display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-dim); flex-wrap: wrap; }
+  .ladder b { color: var(--accent); font-weight: 600; }
+  .anti { background: var(--surface-card); border: 1px dashed var(--border-strong); border-radius: var(--radius-md); padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .anti li { margin: 0 0 6px; color: var(--text-dim); font-size: var(--text-sm); line-height: 1.5; }
+  .anti li b { color: var(--text); font-weight: 500; }
+  .legend { display: flex; gap: 14px; align-items: center; }
+  @media print { body { background: #fff; } }
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <header data-screen-label="Roadmap header" style="display:flex;flex-direction:column;gap:14px;">
+    <span class="mlab">Enclave · console — capability roadmap · v2 promoted</span>
+    <h1>What the chat-led console should learn next</h1>
+    <p class="lede">v2 ships the spine: seed → pin → convert → pivot → operate. This is the curated set of additions that deepen each rung — every one additive (no rework of the shell), every one stated as the user story it serves, every one placed in the surface it belongs to. One thousand no's came first; this is what survived.</p>
+    <div class="ladder"><span>seed</span>→<span>shape</span>→<span>chain</span>→<b>formalize</b>→<span>operate</span></div>
+    <div class="legend">
+      <span class="tag next">do next</span><span style="font-size:var(--text-sm);color:var(--text-muted);">high leverage, fits the existing shell</span>
+      <span class="tag later">later</span><span style="font-size:var(--text-sm);color:var(--text-muted);">real, but earns its place after the next five</span>
+    </div>
+  </header>
+
+  <!-- ════ RUNG 1 — SEED ════ -->
+  <section class="rung" data-screen-label="Rung 1 — Seed">
+    <div class="rung-head">
+      <img src="../../assets/illustrations/art-pulse.svg" alt="">
+      <div>
+        <div class="rn">Rung 1 · Seed</div>
+        <h2>Starting a conversation should cost one keystroke</h2>
+        <div class="sub">The on-ramp. Everything below exists to make the first seeded chat instant and informed.</div>
+      </div>
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <div class="nm">⌘K omnibox seeding <span class="tag next">do next</span></div>
+        <p class="story"><b>Start a seeded chat from anywhere, in one line.</b> Type "qwen + xsiam-docs: map these fields" — the palette parses model, context and first message; Enter lands you in a live thread.</p>
+        <p class="ux">Type-ahead spans every entity (models, agents, contexts, workflows, threads) — the same index that powers Library search. The omnibox is also the universal jump: <code>g runs</code>, <code>open pr review loop</code>.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">topbar · global</span><span class="chip c">EntityCard index</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Seed loadouts <span class="tag later">later</span></div>
+        <p class="story"><b>Reseed a proven combination in one tap.</b> Save role + model + context + skills as a named loadout ("triage kit"); the seed strip offers your top three.</p>
+        <p class="ux">A loadout is just a seed object — same SeedChips, same anatomy. Stored per project; shareable as YAML like everything else.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">seed strip</span><span class="chip c">SeedChip</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Resident-memory budget <span class="tag later">later</span></div>
+        <p class="story"><b>Know what a seed costs before sending.</b> As you attach a model and context, the composer shows projected resident memory on the target box — "26 GB on bd790i · 61 GB free".</p>
+        <p class="ux">A single quiet mono line under the composer, warning amber only when the fit is tight. Operator-grade honesty, zero dashboard.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">chat composer</span><span class="chip c">MetricStat</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">First-class reply blocks <span class="tag later">later</span></div>
+        <p class="story"><b>Treat model output as material, not text.</b> Code, YAML and tables in replies render as blocks with copy / save-as-file / pin actions on the block itself.</p>
+        <p class="ux">Pinning a YAML block as a step carries the block in as the prompt contract — tighter than pinning the whole reply.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">chat messages</span><span class="chip c">ActionChip</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ RUNG 2 — SHAPE ════ -->
+  <section class="rung" data-screen-label="Rung 2 — Shape">
+    <div class="rung-head">
+      <img src="../../assets/illustrations/art-models.svg" alt="">
+      <div>
+        <div class="rn">Rung 2 · Shape</div>
+        <h2>Turning a good conversation into a reusable object</h2>
+        <div class="sub">Where personas, prompts and context bundles get minted — and kept honest over time.</div>
+      </div>
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <div class="nm">Distill to object <span class="tag next">do next</span></div>
+        <p class="story"><b>Select messages → mint the object they imply.</b> Multi-select replies, choose "distill" — the console drafts a system prompt, skill markdown, or context note from them, shows the draft for edit, then files it.</p>
+        <p class="ux">The chat→object moment made explicit. Lands in the install wizard at the configure phase, source pre-set to "from a thread ★" — the ladder again.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">message multi-select</span><span class="chip c">WizardStepper</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Persona history <span class="tag later">later</span></div>
+        <p class="story"><b>Never lose the prompt that worked.</b> Every edit to an agent's system prompt is versioned; the peek panel's History tab shows a mono diff between any two versions, with one-tap revert.</p>
+        <p class="ux">Diffs render in the blueprint voice — JetBrains Mono, teal additions, ember removals. No separate review UI; it's a tab you already have.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">peek · history tab</span><span class="chip c">EntityCard</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Expectation pins <span class="tag later">later</span></div>
+        <p class="story"><b>Pin a question → answer pair as a standing check.</b> Any exchange can be pinned as an expectation on the agent; future model swaps and prompt edits re-run it and show pass/drift.</p>
+        <p class="ux">Evals without an eval product: expectations live on the agent's card, re-checked quietly, surfaced as a FitBar-style drift row.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">message hover · agent peek</span><span class="chip c">FitBar</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Research tray <span class="tag later">later</span></div>
+        <p class="story"><b>Collect findings into a context bundle while you read.</b> In a research-seeded chat, every retrieved source gets "+ bundle"; a right-rail tray counts the bundle up and saves it as a named context object.</p>
+        <p class="ux">Already wireframed (flow 5). The tray reuses the structure rail's skeleton — same place, different payload, zero new layout.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">structure rail</span><span class="chip c">SeedChip</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ RUNG 3 — CHAIN ════ -->
+  <section class="rung" data-screen-label="Rung 3 — Chain">
+    <div class="rung-head">
+      <img src="../../assets/illustrations/art-fanout.svg" alt="">
+      <div>
+        <div class="rn">Rung 3 · Chain</div>
+        <h2>Learning multi-agent before ever seeing a canvas</h2>
+        <div class="sub">Chaining should be discovered inside the conversation, not taught by a diagram.</div>
+      </div>
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <div class="nm">@agent handoff <span class="tag next">do next</span></div>
+        <p class="story"><b>Bring a second brain into the thread mid-sentence.</b> Type @red-teamer — the handoff renders as a visible baton-pass divider; replies after it carry that agent's identity.</p>
+        <p class="ux">This is the chain rung taught in place: a thread with two handoffs already <em>is</em> a 3-step pipeline, and convert scaffolds it as such. The divider is the future edge.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">composer · @-mention</span><span class="chip c">RoleChip</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Bake-off columns <span class="tag later">later</span></div>
+        <p class="story"><b>Same prompt, two or three models, side by side.</b> From compare (or a thread), fork a message into parallel columns; pick a winner and it becomes the thread's model — or the step's.</p>
+        <p class="ux">Formalizes the "model bake-off" thread pattern. Columns reuse the compare grid; the winner CTA reuses "seed a chat with…".</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">thread view · compare</span><span class="chip c">FitBar</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Fixture library <span class="tag later">later</span></div>
+        <p class="story"><b>Test every step against known-good data.</b> Any step output or chat reply can be saved as a named fixture; every test bench offers the fixture list, not just "last run".</p>
+        <p class="ux">Fixtures are entities — same card, same peek, same Usage tab answering "which steps test against this?".</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">inspector test bench</span><span class="chip c">EntityCard</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ RUNG 4 — FORMALIZE ════ -->
+  <section class="rung" data-screen-label="Rung 4 — Formalize">
+    <div class="rung-head">
+      <img src="../../assets/illustrations/art-workflows.svg" alt="">
+      <div>
+        <div class="rn">Rung 4 · Formalize</div>
+        <h2>Making the canvas worth graduating to</h2>
+        <div class="sub">The canvas survives from v1. These give it depth the chat can't offer.</div>
+      </div>
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <div class="nm">Two-way YAML rail <span class="tag later">later</span></div>
+        <p class="story"><b>The canvas and the file are the same thing.</b> A collapsible right rail shows the workflow YAML, live-synced both directions; edits diff before applying.</p>
+        <p class="ux">Code is first-class in this brand — the rail makes "export YAML" obsolete because the YAML was never hidden.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">canvas mode</span><span class="chip c">Panel</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Edge contracts <span class="tag later">later</span></div>
+        <p class="story"><b>Declare what flows between steps.</b> Click an edge → state the expected shape ("NDJSON, keys: _time, xdm.event.id"). Runs validate at the boundary; violations glow ember on the exact edge.</p>
+        <p class="ux">Failures stop being "step 3 broke" and become "the contract between normalize and validate broke" — which is what actually happened.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">canvas · edge click</span><span class="chip c">WorkflowNode</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Drop-to-run <span class="tag later">later</span></div>
+        <p class="story"><b>Drag a file onto the canvas → it becomes the run input.</b> The dry run starts against it immediately; the file is offered as a fixture afterwards.</p>
+        <p class="ux">The most direct possible answer to "how do I try this on my data". One gesture, no form.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">canvas drop zone</span><span class="chip c">RunStatus</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ RUNG 5 — OPERATE ════ -->
+  <section class="rung" data-screen-label="Rung 5 — Operate">
+    <div class="rung-head">
+      <img src="../../assets/illustrations/art-fleet.svg" alt="">
+      <div>
+        <div class="rn">Rung 5 · Operate</div>
+        <h2>Running a sovereign fleet without a dashboard farm</h2>
+        <div class="sub">Three boxes, many models, scheduled work — kept legible in the console's calm register.</div>
+      </div>
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <div class="nm">Fleet strip <span class="tag later">later</span></div>
+        <p class="story"><b>See the rack; place the models.</b> A flyout shows each box (m4-pro · ms-01 · bd790i) with resident models, memory headroom and a live tok/s sparkline. Drag a model onto a box to load it there.</p>
+        <p class="ux">The sysstrip's CPU/MEM metrics become a door, not a decoration. Same Metric atoms, one level deeper.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">topbar flyout</span><span class="chip c">MetricStat</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Run scrubber <span class="tag later">later</span></div>
+        <p class="story"><b>Replay any run like a recording.</b> A timeline scrubs through the run step by step — token streams, edge handoffs, the exact moment of failure — and "open source thread" is always one click away.</p>
+        <p class="ux">The step-trace drilldown v2 already has, given a time axis. Jump-to-failure is the headline gesture.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">runs · expanded row</span><span class="chip c">RunStatus</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Watchers <span class="tag later">later</span></div>
+        <p class="story"><b>Run it when something happens, not when I remember.</b> Attach a watcher to a workflow — "nightly", "on new file in /drop", "on webhook" — shown as a calm next-run chip on the workflow card.</p>
+        <p class="ux">Scheduling as a property of the workflow, not a separate scheduler app. The path's final rung ("schedule a run on the fleet") completes here.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">workflow card · canvas header</span><span class="chip c">ActionChip</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ CROSS-CUTTING ════ -->
+  <section class="rung" data-screen-label="Cross-cutting">
+    <div class="rung-head">
+      <img src="../../assets/illustrations/art-mesh.svg" alt="">
+      <div>
+        <div class="rn">Cross-cutting</div>
+        <h2>The connective tissue</h2>
+        <div class="sub">Features that make the whole console feel like one graph instead of four tabs.</div>
+      </div>
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <div class="nm">Hover-card peeks <span class="tag next">do next</span></div>
+        <p class="story"><b>Every entity id, everywhere, is a door.</b> Hover any mono id — in a chat reply, a run trace, a YAML rail, a wizard — and a mini EntityCard floats with status, fit and one action.</p>
+        <p class="ux">This is the unified card pattern paying compound interest: one component, one index, and suddenly the console has no dead text. The strongest single "connected experience" lever available.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">global</span><span class="chip c">EntityCard</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Keyboard spine <span class="tag next">do next</span></div>
+        <p class="story"><b>Operate it like a terminal.</b> j/k walks threads, ⌘Enter sends, g c / g l / g r jump tabs, p pins the focused reply, ? shows the map.</p>
+        <p class="ux">Cheap to add, defining to use — the audience lives in editors and shells. Pairs with the ⌘K omnibox as one input story.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">global</span><span class="chip c">shell</span></div>
+      </div>
+      <div class="feat">
+        <div class="nm">Quiet signals <span class="tag later">later</span></div>
+        <p class="story"><b>Know a background run finished without being shouted at.</b> The runs tab gets a pip, the favicon pulses once, the thread that owns the run shows a soft teal tick. No toasts, no notification center.</p>
+        <p class="ux">Motion stays a polish layer: one ds-pip-pulse, then stillness. Honest about limits — if it failed, the pip is ember and the run row says why.</p>
+        <div class="where"><span class="k">lives in</span><span class="chip">navtabs · favicon</span><span class="chip c">StatusPip</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ ANTI-FEATURES ════ -->
+  <section class="anti" data-screen-label="Not doing">
+    <span class="mlab">Deliberately not doing</span>
+    <ul style="margin:0;padding-left:18px;">
+      <li><b>Notification center / toast stacks.</b> Quiet signals cover it. An operator console interrupts for nothing.</li>
+      <li><b>Cloud-style usage dashboards.</b> Numbers appear where decisions happen (composer, fleet strip, run rows) — not on a vanity page.</li>
+      <li><b>Gamified streaks or badges.</b> The operator's path is the only progression surface, and it disappears when complete.</li>
+      <li><b>Auto-playing onboarding tours.</b> Next-best-action chips teach in context; nothing hijacks the pointer.</li>
+      <li><b>Emoji reactions, avatars, presence.</b> Single-operator sovereign appliance. The mono label is the personality.</li>
+    </ul>
+  </section>
+
+  <footer style="display:flex;gap:10px;align-items:baseline;border-top:1px solid var(--border);padding-top:16px;">
+    <span class="mlab">Sequence</span>
+    <p style="font-size:var(--text-sm);color:var(--text-dim);">Five "do next" items — ⌘K omnibox · distill to object · @agent handoff · hover-card peeks · keyboard spine — form one coherent release: the console becomes navigable and mintable from the keyboard. Say the word and I'll prototype any of them into the v2 kit.</p>
+  </footer>
+
+</div>
+</body>
+</html>

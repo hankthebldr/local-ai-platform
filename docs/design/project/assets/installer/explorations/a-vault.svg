@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 400" width="660" height="400">
+  <defs>
+    <linearGradient id="bgA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050505"></stop>
+      <stop offset="60%" stop-color="#0a0f18"></stop>
+      <stop offset="100%" stop-color="#10182a"></stop>
+    </linearGradient>
+    <radialGradient id="glowA" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00E87B" stop-opacity="0.18"></stop>
+      <stop offset="70%" stop-color="#00E87B" stop-opacity="0"></stop>
+    </radialGradient>
+  </defs>
+  <rect width="660" height="400" fill="url(#bgA)"></rect>
+  <g stroke="#1a2438" stroke-width="0.5" opacity="0.5">
+    <path d="M0 50 H660 M0 100 H660 M0 150 H660 M0 200 H660 M0 250 H660 M0 300 H660 M0 350 H660"></path>
+    <path d="M50 0 V400 M100 0 V400 M150 0 V400 M200 0 V400 M250 0 V400 M300 0 V400 M350 0 V400 M400 0 V400 M450 0 V400 M500 0 V400 M550 0 V400 M600 0 V400"></path>
+  </g>
+  <circle cx="180" cy="230" r="170" fill="url(#glowA)"></circle>
+  <rect x="120" y="170" width="120" height="120" rx="10" fill="none" stroke="#00E87B" stroke-width="2" opacity="0.55"></rect>
+  <rect x="140" y="190" width="80" height="80" rx="6" fill="none" stroke="#00E87B" stroke-width="1.5" opacity="0.35"></rect>
+  <rect x="158" y="208" width="44" height="44" rx="4" fill="#00E87B" opacity="0.12"></rect>
+  <text x="330" y="70" text-anchor="middle" font-family="&#39;JetBrains Mono&#39;,monospace" font-size="26" font-weight="700" fill="#00E87B" letter-spacing="4">ENCLAVE</text>
+  <line x1="260" y1="230" x2="430" y2="230" stroke="#00E87B" stroke-width="1.5" opacity="0.55" stroke-dasharray="4 4"></line>
+  <polygon points="430,224 445,230 430,236" fill="#00E87B" opacity="0.7"></polygon>
+  <text x="330" y="365" text-anchor="middle" font-family="&#39;JetBrains Mono&#39;,monospace" font-size="9" fill="#3a4560" letter-spacing="2">DRAG ENCLAVE INTO THE VAULT</text>
+</svg>

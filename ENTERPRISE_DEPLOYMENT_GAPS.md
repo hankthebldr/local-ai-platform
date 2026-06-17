@@ -1,5 +1,11 @@
 # Enterprise Deployment Gaps Analysis
 
+> ⚠️ **SUPERSEDED (2026-06-17) for current-state purposes.** Dated **2025-12-09**
+> against an early baseline; many items have since shipped or been re-scoped
+> (the product is a single-operator sovereign appliance; enterprise/RBAC/audit
+> are deliberate 2.x cuts). Current gap picture:
+> **[docs/research/2026-06-17-flow-gap-audit.md](./docs/research/2026-06-17-flow-gap-audit.md)**.
+
 **Document Version**: 1.0
 **Date**: 2025-12-09
 **Status**: Critical Review Required
