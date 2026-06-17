@@ -3368,6 +3368,30 @@ textarea.composer-desc-area {
   gap: 12px;
   flex-wrap: wrap;
 }
+/* Interactive workflow drill-down DAG — a composer-style graph view of the
+   selected workflow (clickable nodes → open that step in the Composer). Shares
+   the dot-grid/accent-glow canvas surface. */
+.wf-dag {
+  position: relative; height: 0; margin: 8px 0 10px; border: 1px solid var(--border);
+  border-radius: 8px; overflow: hidden; display: none;
+  background-color: var(--bg-deep);
+  background-image:
+    radial-gradient(ellipse 85% 55% at 50% -8%, var(--accent-ghost) 0%, transparent 58%),
+    radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 100% 100%, 22px 22px;
+  background-repeat: no-repeat, repeat;
+}
+.wf-dag-inner { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+.wf-dag-node {
+  position: absolute; box-sizing: border-box; background: var(--surface-card);
+  border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: 6px; padding: 7px 10px; cursor: pointer; display: flex;
+  flex-direction: column; gap: 3px; overflow: hidden;
+  transition: border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+}
+.wf-dag-node:hover { border-color: var(--accent); transform: translateY(-1px); }
+.wf-dag-node-name { font-family: var(--mono); font-size: 0.66rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-dag-node-meta { font-family: var(--mono); font-size: 0.55rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wf-pipeline {
   display: flex;
   align-items: center;
@@ -8139,7 +8163,7 @@ body.bs-show-hint .bs-dispatch:hover::after {
       <div id="a2a-panel"><div id="a2a-skill-count"></div><code id="a2a-card-url"></code><div id="a2a-skills-list"></div></div>
       <select id="wf-select"></select>
       <div id="wf-runner-controls"></div>
-      <div id="wf-detail"><div id="wf-detail-name"></div><div id="wf-detail-desc"></div><div id="wf-pipeline"></div><textarea id="wf-seed"></textarea><button id="wf-run-btn"></button></div>
+      <div id="wf-detail"><div id="wf-detail-name"></div><div id="wf-detail-desc"></div><div class="wf-dag" id="wf-dag"></div><div class="wf-dag-actions" id="wf-dag-actions" style="display:none;gap:8px;margin:0 0 10px"><button type="button" class="action-btn accent" onclick="openWorkflowInComposer(currentWorkflowDef &amp;&amp; currentWorkflowDef.id)" title="Load this workflow into the Composer canvas and chat with its agents">Open in Composer →</button></div><div id="wf-pipeline"></div><textarea id="wf-seed"></textarea><button id="wf-run-btn"></button></div>
       <div id="wf-results"><div id="wf-results-content"></div></div>
       <div id="wf-roles-list"></div>
       <div id="wf-role-preview"></div>
@@ -12929,6 +12953,9 @@ async function loadWorkflowDetail() {
       pipeline.innerHTML = `<div style="color:var(--text-dim);font-size:0.72rem">${wf.steps} step pipeline &mdash; execute to see detailed step visualization</div>`;
     }
 
+    // Interactive composer-style DAG view of this workflow (clickable nodes).
+    try { renderWorkflowDag(defn); } catch (e) { console.warn('renderWorkflowDag:', e); }
+
     // Update seed textarea placeholder from the workflow's context.description.
     // Parses "Required seed keys: vendor, product, raw_log." → skeleton JSON.
     updateSeedPlaceholder(defn);
@@ -13006,6 +13033,86 @@ function _renderPreWarmSummary(run) {
       <span class="pre-warm-stats">${hits} hit${hits !== 1 ? 's' : ''} / ${misses} miss${misses !== 1 ? 'es' : ''}${indet_text}${overlap_text}</span>
     </div>
   `;
+}
+
+// Interactive DAG for the workflow drill-down — a composer-style graph view.
+// dagre-laid-out compact node cards + SVG connectors, scaled to fit; clicking
+// a node opens that step in the Composer (with node-bound chat).
+function renderWorkflowDag(defn) {
+  const mount = document.getElementById('wf-dag');
+  const actions = document.getElementById('wf-dag-actions');
+  if (!mount) return;
+  const steps = (defn && Array.isArray(defn.steps)) ? defn.steps : [];
+  if (!steps.length || typeof dagre === 'undefined') {
+    mount.style.display = 'none'; mount.style.height = '0';
+    if (actions) actions.style.display = 'none';
+    return;
+  }
+  const NODE_W = 150, NODE_H = 52;
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'LR', nodesep: 26, ranksep: 58, marginx: 16, marginy: 16 });
+  g.setDefaultEdgeLabel(() => ({}));
+  const ids = new Set(steps.map(s => s.id));
+  steps.forEach(s => g.setNode(s.id, { width: NODE_W, height: NODE_H }));
+  const edges = [];
+  steps.forEach(s => {
+    const deps = Array.isArray(s.depends_on) ? s.depends_on : (s.depends_on ? [s.depends_on] : []);
+    deps.forEach(d => { if (ids.has(d)) { g.setEdge(d, s.id); edges.push([d, s.id]); } });
+  });
+  if (!edges.length && steps.length > 1) {
+    for (let i = 1; i < steps.length; i++) { g.setEdge(steps[i - 1].id, steps[i].id); edges.push([steps[i - 1].id, steps[i].id]); }
+  }
+  dagre.layout(g);
+  let maxX = 0, maxY = 0;
+  steps.forEach(s => { const p = g.node(s.id); if (p) { maxX = Math.max(maxX, p.x + NODE_W / 2); maxY = Math.max(maxY, p.y + NODE_H / 2); } });
+  const contentW = maxX + 16, contentH = maxY + 16;
+  const ch = 250;
+  mount.style.display = 'block'; mount.style.height = ch + 'px';
+  if (actions) actions.style.display = 'flex';
+  const cw = mount.clientWidth || 600;
+  const scale = Math.min(1, (cw - 12) / contentW, (ch - 12) / contentH);
+  const ROLE_TINT = { reasoning: '--node-reasoning', coding: '--node-coding', fast: '--node-fast', general: '--node-general', uncensored: '--node-uncensored' };
+  const wfId = (defn.id || (currentWorkflowDef && currentWorkflowDef.id) || '');
+  let svg = `<svg width="${contentW}" height="${contentH}" style="position:absolute;inset:0;pointer-events:none;overflow:visible">`;
+  edges.forEach(([a, c]) => {
+    const pa = g.node(a), pc = g.node(c); if (!pa || !pc) return;
+    const x1 = pa.x + NODE_W / 2, y1 = pa.y, x2 = pc.x - NODE_W / 2, y2 = pc.y, mx = (x1 + x2) / 2;
+    svg += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="var(--accent-dim)" stroke-width="1.5"/>`;
+  });
+  svg += '</svg>';
+  const nodes = steps.map(s => {
+    const p = g.node(s.id); if (!p) return '';
+    const left = p.x - NODE_W / 2, top = p.y - NODE_H / 2;
+    const tint = 'var(' + (ROLE_TINT[s.role] || '--accent') + ')';
+    const model = s.model || (s.prompt && s.prompt.model) || '';
+    return `<div class="wf-dag-node" style="left:${left}px;top:${top}px;width:${NODE_W}px;height:${NODE_H}px;border-left-color:${tint}"
+        onclick="openWorkflowInComposer('${esc(wfId)}','${esc(s.id)}')"
+        title="Open '${esc(s.id)}' in the Composer + chat with its agent">
+        <span class="wf-dag-node-name">${esc(s.name || s.id)}</span>
+        <span class="wf-dag-node-meta">${esc(s.role || 'general')}${model ? ' · ' + esc(model) : ''}</span>
+      </div>`;
+  }).join('');
+  mount.innerHTML = `<div class="wf-dag-inner" style="width:${contentW}px;height:${contentH}px;transform:scale(${scale})">${svg}${nodes}</div>`;
+}
+
+// Open the drilled-into workflow in the Composer canvas. If a step id is given
+// (clicked a DAG node), bind the chat to that node once it's loaded.
+async function openWorkflowInComposer(wfId, stepId) {
+  if (!wfId) { if (window.Toast) Toast.info('No workflow', 'Pick a workflow first.'); return; }
+  try {
+    await composerLoadById(wfId);
+    if (typeof switchTab === 'function') switchTab('dashboard');
+    if (typeof ComposerSplit !== 'undefined' && ComposerSplit.setMode) ComposerSplit.setMode('canvas');
+    if (stepId) {
+      setTimeout(() => {
+        try {
+          let nid = null;
+          for (const k in dfNodeData) { if (dfNodeData[k] && dfNodeData[k].id === stepId) { nid = k; break; } }
+          if (nid != null && typeof composerEnterStepEngage === 'function') composerEnterStepEngage(nid);
+        } catch (_) {}
+      }, 150);
+    }
+  } catch (e) { if (window.Toast) Toast.danger('Open failed', String(e)); }
 }
 
 function renderStepBox(step, status, result) {
