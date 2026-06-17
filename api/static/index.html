@@ -1061,6 +1061,13 @@ select.model-select,
 .ws-run-step-ok      { border-left-color: var(--accent); }
 .ws-run-step-fail    { border-left-color: var(--red); }
 .ws-run-step-pending { border-left-color: var(--amber); }
+/* The head has its own grid and the expanded detail is full-width content —
+   span both across all of .ws-run-step's columns so the expanded metadata
+   (tokens / model / started / input / output) gets the full row width instead
+   of being squeezed into a single ~120px grid cell (the "doesn't fit in the
+   box" bug). min-width:0 lets long values wrap/scroll instead of overflowing. */
+.ws-run-step > .ws-run-step-head,
+.ws-run-step > .run-step-expanded { grid-column: 1 / -1; min-width: 0; }
 .ws-run-step-id { color: var(--text); }
 .ws-run-step-model { color: var(--cyan); }
 .ws-run-step-dur, .ws-run-step-status {
