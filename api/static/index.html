@@ -1920,6 +1920,19 @@ body::after {
 }
 .md-ul, .md-ol { padding-left: 22px; margin: 6px 0; }
 .md-ul li, .md-ol li { margin-bottom: 2px; font-size: 0.78rem; line-height: 1.5; }
+/* Chat-mode rich code blocks (header bar + copy / → step), tables, quotes */
+.md-codewrap { margin: 8px 0; border: 1px solid var(--border); border-radius: var(--radius-sm,5px); overflow: hidden; background: var(--bg-deep,var(--bg)); }
+.md-codebar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--surface-raised,var(--bg-elev)); border-bottom: 1px solid var(--border); }
+.md-codelang { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint,var(--text-dim)); flex: 1; }
+.md-codeacts { display: flex; gap: 6px; }
+.md-codebtn { font-family: var(--mono); font-size: 0.58rem; padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm,4px); background: transparent; color: var(--text-dim); cursor: pointer; transition: all var(--t-fast,140ms) var(--ease-out,ease); }
+.md-codebtn:hover { border-color: var(--accent-dim,rgba(43,212,180,.42)); color: var(--accent); }
+.md-codebtn.accent { color: var(--accent); border-color: var(--accent-dim,rgba(43,212,180,.42)); }
+.md-codewrap .md-code { margin: 0; border: none; border-radius: 0; }
+.md-table { border-collapse: collapse; margin: 8px 0; font-size: 0.74rem; width: 100%; }
+.md-table th, .md-table td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; }
+.md-table th { background: var(--surface-raised,var(--bg-elev)); font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+.md-quote { border-left: 3px solid var(--border-strong,var(--border)); padding: 2px 0 2px 12px; margin: 8px 0; color: var(--text-dim); }
 
 /* === Plugins panel ============================================== */
 .plugins-layout {
@@ -8606,27 +8619,62 @@ body.bs-show-hint .bs-dispatch:hover::after {
 // so it cannot produce executable markup.
 //
 // Used by the Plugins panel (skill bodies) and the Exports panel (View modal).
-window.renderMarkdown = function renderMarkdown(text) {
+window.renderMarkdown = function renderMarkdown(text, opts) {
   if (text == null) return '';
+  opts = opts || {};
   const esc = s => String(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-  // Pull fenced code blocks out first so their contents aren't mangled.
+  // Pull fenced code blocks out first so their contents aren't mangled. In
+  // chat mode each block gets a header bar (language label + Copy + "→ step"
+  // hand-off to the composer); the raw body is parked in window._mdCode so the
+  // buttons can reach it by id without inlining multi-line code into onclick.
   const codeBlocks = [];
-  text = text.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, body) => {
-    codeBlocks.push(`<pre class="md-code"><code>${esc(body)}</code></pre>`);
-    return ` CODE${codeBlocks.length - 1} `;
+  text = text.replace(/```([\w+-]*)\n([\s\S]*?)```/g, (_, lang, body) => {
+    body = body.replace(/\n$/, '');
+    if (opts.chat) {
+      const reg = (window._mdCode = window._mdCode || []);
+      const gid = reg.length;
+      reg.push({ code: body, lang: lang || '' });
+      const bar = '<div class="md-codebar"><span class="md-codelang">' + esc(lang || 'text') + '</span>' +
+        '<span class="md-codeacts">' +
+        '<button type="button" class="md-codebtn" onclick="ChatCode.copy(' + gid + ')">copy</button>' +
+        '<button type="button" class="md-codebtn accent" onclick="ChatCode.toStep(' + gid + ')" title="Send this block to the composer as a workflow step">&rarr; step</button>' +
+        '</span></div>';
+      codeBlocks.push('<div class="md-codewrap">' + bar + '<pre class="md-code"><code>' + esc(body) + '</code></pre></div>');
+    } else {
+      codeBlocks.push('<pre class="md-code"><code>' + esc(body) + '</code></pre>');
+    }
+    return ` CODEBLOCK${codeBlocks.length - 1} `;
   });
 
   // Escape the rest, then apply inline + block patterns.
   let html = esc(text);
+
+  // GFM pipe tables — a header row, a |---|---| separator, then body rows.
+  html = html.replace(/(?:^|\n)(\|.+\|[ \t]*\n\|[ \t:|-]+\|[ \t]*\n(?:\|.+\|[ \t]*\n?)*)/g, (m, block) => {
+    const rows = block.trim().split('\n').map(r => r.trim());
+    if (rows.length < 2) return m;
+    const cells = r => r.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+    const head = cells(rows[0]);
+    const body = rows.slice(2).map(cells);
+    const th = head.map(c => `<th>${c}</th>`).join('');
+    const trs = body.map(r => '<tr>' + head.map((_, i) => `<td>${r[i] != null ? r[i] : ''}</td>`).join('') + '</tr>').join('');
+    return '\n<table class="md-table"><thead><tr>' + th + '</tr></thead><tbody>' + trs + '</tbody></table>\n';
+  });
 
   // Headings (H1..H6).
   for (let n = 6; n >= 1; n--) {
     const re = new RegExp('^#{' + n + '} +(.*)$', 'gm');
     html = html.replace(re, (_, t) => `<h${n} class="md-h${n}">${t}</h${n}>`);
   }
+
+  // Blockquotes — collapse consecutive "> " lines.
+  html = html.replace(/(?:^|\n)((?:&gt; .*(?:\n|$))+)/g, (_, block) => {
+    const inner = block.trim().split('\n').map(l => l.replace(/^&gt; ?/, '')).join('<br>');
+    return '\n<blockquote class="md-quote">' + inner + '</blockquote>';
+  });
 
   // Lists: collapse consecutive list lines into <ul>/<ol>.
   html = html.replace(/(?:^|\n)((?:[*-] .+\n?)+)/g, (_, block) => {
@@ -8651,12 +8699,14 @@ window.renderMarkdown = function renderMarkdown(text) {
   html = html.split(/\n{2,}/).map(chunk => {
     const t = chunk.trim();
     if (!t) return '';
-    if (/^<(h[1-6]|ul|ol|pre|div)/.test(t)) return t;
+    if (/^<(h[1-6]|ul|ol|pre|div|table|blockquote)/.test(t)) return t;
+    if (/^CODEBLOCK\d+$/.test(t)) return t;  // standalone code block — don't wrap in <p>
     return `<p>${t.replace(/\n/g, '<br>')}</p>`;
   }).join('\n');
 
-  // Restore code blocks.
-  html = html.replace(/ CODE(\d+) /g, (_, i) => codeBlocks[+i]);
+  // Restore code blocks (space-independent: the paragraph pass may trim the
+  // sentinel's surrounding whitespace when a block stands alone).
+  html = html.replace(/CODEBLOCK(\d+)/g, (_, i) => codeBlocks[+i]);
 
   return html;
 };
@@ -9452,18 +9502,21 @@ async function saveSearchSettings() {
 
 /* ── CITATION RENDERING ──────────────────────────────────────────── */
 function renderCitations(text, sources) {
-  // Escape HTML first
-  let html = esc(text);
+  // Render rich markdown (chat mode: code-block bars + → step hand-off), then
+  // linkify [n] citations in the prose only — never inside <pre> code blocks.
+  let html = (window.renderMarkdown ? window.renderMarkdown(text, { chat: true }) : esc(text));
 
   if (sources && sources.length > 0) {
-    // Replace [1], [2] etc. with clickable citation links
-    html = html.replace(/\[(\d+)\]/g, (match, num) => {
-      const idx = parseInt(num) - 1;
-      if (idx >= 0 && idx < sources.length) {
-        return `<a class="citation" href="${esc(sources[idx].url)}" target="_blank" rel="noopener" title="${esc(sources[idx].title)}">[${num}]</a>`;
-      }
-      return match;
-    });
+    html = html.split(/(<pre[\s\S]*?<\/pre>)/g).map(seg => {
+      if (seg.indexOf('<pre') === 0) return seg;
+      return seg.replace(/\[(\d+)\]/g, (match, num) => {
+        const idx = parseInt(num) - 1;
+        if (idx >= 0 && idx < sources.length) {
+          return `<a class="citation" href="${esc(sources[idx].url)}" target="_blank" rel="noopener" title="${esc(sources[idx].title)}">[${num}]</a>`;
+        }
+        return match;
+      });
+    }).join('');
   }
   return html;
 }
@@ -9483,6 +9536,32 @@ function renderSources(sources) {
     <div class="sources-list">${items}</div>
   </div>`;
 }
+
+/* ── CHAT CODE-BLOCK HAND-OFF ────────────────────────────────────────
+   Powers the copy / → step buttons on chat code blocks (rendered by
+   renderMarkdown in chat mode). "→ step" pins the code as a workflow step
+   (reuses the pin path) so a snippet flows straight into the composer. */
+window.ChatCode = {
+  copy: function (id) {
+    var c = (window._mdCode || [])[id];
+    if (!c) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(c.code).then(function () {
+        if (window.Toast) Toast.success('Copied', (c.lang || 'code') + ' block');
+      }).catch(function () {});
+    }
+  },
+  toStep: function (id) {
+    var c = (window._mdCode || [])[id];
+    if (!c) return;
+    var pins = window._enclavePins = window._enclavePins || [];
+    var coding = /^(py|python|js|ts|javascript|typescript|bash|sh|shell|go|rust|sql|jsx|tsx|c|cpp|java)$/i.test(c.lang);
+    pins.push({ id: 'code-' + id + '-' + pins.length, msgId: 'code', role: coding ? 'coding' : 'reasoning', text: c.code, title: (c.lang || 'code') + ' step' });
+    if (window.Pins) window.Pins.render();
+    if (window.OpPath) window.OpPath.refresh();
+    if (window.Toast) Toast.success('Sent to composer', 'Added as a step — see the Pins bar; 2+ pins convert to a workflow.');
+  },
+};
 
 /* ── CHAT ────────────────────────────────────────────────────────── */
 // Enriched chat history: each entry has { role, content, timestamp, sources?, usage?, model? }
@@ -9639,7 +9718,8 @@ async function _sendStepMessage(text, stepData) {
         banner = `<div style="background:rgba(255,200,0,0.07);border:1px solid rgba(255,200,0,0.35);border-radius:4px;padding:4px 8px;font-size:0.62rem;color:var(--text-muted);margin-bottom:4px">⚠ Pinned <strong>${esc(d.model_fallback.requested)}</strong> not installed — ran on <strong>${esc(d.model_fallback.resolved)}</strong>.</div>`;
       }
       const mid = ChatRating.nextId();
-      messages.innerHTML += `<div class="msg assistant" id="${mid}">${banner}${esc(content)}${modelLabel}${ChatRating.toolbarHtml(mid, {model: d.model, agent: window._chatAgent})}</div>`;
+      const stepBody = (window.renderMarkdown ? window.renderMarkdown(content, { chat: true }) : esc(content));
+      messages.innerHTML += `<div class="msg assistant" id="${mid}">${banner}${stepBody}${modelLabel}${ChatRating.toolbarHtml(mid, {model: d.model, agent: window._chatAgent})}</div>`;
     }
   } catch (e) {
     document.getElementById(typingId)?.remove();
