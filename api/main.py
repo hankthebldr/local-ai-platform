@@ -42,6 +42,7 @@ from .routers import (
     skills,  # noqa: F401 — used below via app.include_router
     discover,  # noqa: F401 — used below via app.include_router
     system,  # noqa: F401 — architecture-aware orchestration (Phase 1)
+    provenance,  # noqa: F401 — response→source grounding chains
 )
 from .services.ollama_service import OllamaService
 from .services.workflow_engine import WorkflowEngine
@@ -325,6 +326,7 @@ app.include_router(feedback.router)
 app.include_router(skills.router)
 app.include_router(discover.router)
 app.include_router(system.router)
+app.include_router(provenance.router)
 from .routers import projects as _projects_router  # noqa: E402
 
 app.include_router(_projects_router.router)

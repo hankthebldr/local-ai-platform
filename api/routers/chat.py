@@ -22,12 +22,99 @@ from ..services.sandbox_fs import SandboxedFS
 from . import profiles as _profiles_router
 from . import documents as _documents_router
 from ..services.tool_executor import ToolExecutor
+from ..services.provenance_store import get_provenance_store
+from ..models.provenance_models import ProvenanceEdge, ResponseProvenance
 from ..logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 ollama_service = OllamaService()
 _tool_executor = ToolExecutor(ollama_service, _plugin_service)
 _memory_service = MemoryService()
+
+
+def _record_chat_provenance(
+    response_id: str,
+    conversation_id: str,
+    model: str,
+    content: str,
+    rag_sources: list,
+    web_sources: list,
+    matched_skills: list,
+    tool_calls: list,
+) -> dict:
+    """Build + persist the grounding chain for one chat response.
+
+    Returns a compact summary dict for inlining in the API response
+    (``{"response_id", "edges": [...]}``) so clients can render the citation
+    rail without a second round-trip. Best-effort — the store swallows write
+    errors, and an empty chain is a valid (ungrounded) answer.
+    """
+    edges: list[ProvenanceEdge] = []
+    for r in rag_sources or []:
+        doc_id = r.get("doc_id", "")
+        idx = r.get("chunk_index", 0)
+        edges.append(
+            ProvenanceEdge(
+                response_id=response_id,
+                source_type="rag_chunk",
+                source_id=f"{doc_id}::chunk_{idx}",
+                source_label=r.get("filename") or doc_id or "document",
+                metadata={"score": r.get("score"), "chunk_index": idx},
+            )
+        )
+    for s in web_sources or []:
+        url = s.get("url", "")
+        edges.append(
+            ProvenanceEdge(
+                response_id=response_id,
+                source_type="web_source",
+                source_id=url or s.get("title", "web"),
+                source_label=s.get("title") or url or "web result",
+                metadata={"snippet": (s.get("snippet") or "")[:280], "url": url},
+            )
+        )
+    for sk in matched_skills or []:
+        sid = sk.get("id", "")
+        if not sid:
+            continue
+        edges.append(
+            ProvenanceEdge(
+                response_id=response_id,
+                source_type="skill",
+                source_id=sid,
+                source_label=sk.get("name") or sid,
+                metadata={"inject": sk.get("inject")},
+            )
+        )
+    for tc in tool_calls or []:
+        name = tc.get("tool", "")
+        if not name:
+            continue
+        # tool_name is "plugin_id__tool_id"; the plugin tool invoker uses dots,
+        # so normalize for a stable graph key.
+        edges.append(
+            ProvenanceEdge(
+                response_id=response_id,
+                source_type="plugin_tool",
+                source_id=name.replace("__", "."),
+                source_label=name.replace("__", " · "),
+                metadata={"iteration": tc.get("iteration")},
+            )
+        )
+
+    prov = ResponseProvenance(
+        response_id=response_id,
+        conversation_id=conversation_id,
+        model=model,
+        origin="chat",
+        content_preview=(content or "")[:500],
+        edges=edges,
+    )
+    get_provenance_store().record(prov)
+    return {
+        "response_id": response_id,
+        "edges": [e.model_dump(mode="json") for e in edges],
+    }
 
 
 class Message(BaseModel):
@@ -87,6 +174,11 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
     if not _context_store.get(conversation_id):
         _context_store.create(conversation_id, request.model)
     _context_store.update_activity(conversation_id)
+
+    # Stable, unique per-response id — the key every provenance edge hangs off
+    # of. (OpenAI returns unique "chatcmpl-…" ids too, so this is more
+    # spec-faithful than the old hardcoded "chatcmpl-local".)
+    response_id = f"chatcmpl-{uuid.uuid4().hex}"
 
     # ── Profile Resolution ────────────────────────────────────────────
     profile_header = req.headers.get("X-Profile-ID")
@@ -197,6 +289,7 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
             """Generate streaming response in OpenAI SSE format"""
             from ..exceptions import APIError
 
+            full_content = ""
             try:
                 async for chunk_text in ollama_service.chat_stream(
                     model=request.model,
@@ -204,8 +297,9 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
                     temperature=request.temperature,
                     max_tokens=request.max_tokens,
                 ):
+                    full_content += chunk_text
                     chunk = {
-                        "id": "chatcmpl-local",
+                        "id": response_id,
                         "object": "chat.completion.chunk",
                         "created": 0,
                         "model": request.model,
@@ -240,8 +334,23 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
             if sources:
                 yield f"data: {json.dumps({'sources': sources})}\n\n"
 
+            # Record + emit the grounding chain as a custom event so the
+            # client can render the citation rail on the streamed message.
+            prov_summary = _record_chat_provenance(
+                response_id,
+                conversation_id,
+                request.model,
+                full_content,
+                rag_sources,
+                sources,
+                matched_skills,
+                [],
+            )
+            if prov_summary["edges"]:
+                yield f"data: {json.dumps({'provenance': prov_summary})}\n\n"
+
             final_chunk = {
-                "id": "chatcmpl-local",
+                "id": response_id,
                 "object": "chat.completion.chunk",
                 "created": 0,
                 "model": request.model,
@@ -266,7 +375,7 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         )
 
         response = {
-            "id": "chatcmpl-local",
+            "id": response_id,
             "object": "chat.completion",
             "created": 0,
             "model": request.model,
@@ -294,6 +403,16 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         if request.rag or rag_sources:
             response["rag_sources"] = rag_sources
         response["profile_id"] = profile_id
+        response["provenance"] = _record_chat_provenance(
+            response_id,
+            conversation_id,
+            request.model,
+            result.get("content", ""),
+            rag_sources,
+            sources,
+            matched_skills,
+            result.get("tool_calls_made") or [],
+        )
         return response
 
     # ── Non-Streaming (no tools) ───────────────────────────────────────
@@ -305,7 +424,7 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
     )
 
     response = {
-        "id": "chatcmpl-local",
+        "id": response_id,
         "object": "chat.completion",
         "created": 0,
         "model": request.model,
@@ -331,4 +450,14 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
     elif rag_sources:
         response["rag_sources"] = rag_sources
     response["profile_id"] = profile_id
+    response["provenance"] = _record_chat_provenance(
+        response_id,
+        conversation_id,
+        request.model,
+        result.get("content", ""),
+        rag_sources,
+        sources,
+        matched_skills,
+        [],
+    )
     return response

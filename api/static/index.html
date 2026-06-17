@@ -2359,6 +2359,46 @@ html { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
 .source-item a:hover { color: var(--cyan); text-decoration: underline; }
 .source-title { color: var(--text); }
 
+/* Provenance / citation rail — grounding chips under a grounded answer. */
+.provenance-rail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #ffffff08;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.pv-group { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.pv-group-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint, #6b7280);
+  margin-right: 2px;
+  flex-shrink: 0;
+  min-width: 48px;
+}
+.pv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #ffffff14);
+  background: var(--surface-card, #ffffff06);
+  color: var(--text-dim, #9ca3af);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pv-chip.pv-chunk { border-color: rgba(43,212,180,0.35); color: var(--accent, #2BD4B4); }
+.pv-chip.pv-skill { border-color: rgba(139,127,255,0.35); color: #b3a9ff; }
+.pv-chip.pv-tool  { border-color: rgba(96,165,250,0.35); color: #93c5fd; }
+.pv-chip.pv-web   { border-color: rgba(224,179,65,0.35); color: var(--amber, #e0b341); }
+.pv-score { opacity: 0.7; font-variant-numeric: tabular-nums; }
+
 /* ── SEARCH SETTINGS PANEL ──────────────────────────────────────── */
 .search-settings {
   display: none;
@@ -9646,6 +9686,41 @@ function renderSources(sources) {
   </div>`;
 }
 
+/* ── PROVENANCE / CITATION RAIL ──────────────────────────────────────
+   Closes the #1 gap: every grounded answer shows WHAT it was grounded on.
+   `prov` is the {response_id, edges:[{source_type,source_id,source_label,
+   metadata}]} summary returned inline by /v1/chat/completions (and emitted
+   as a custom SSE event on streamed replies). Renders a compact chip rail
+   grouped by source kind. Web sources are already shown by renderSources,
+   so the rail folds in chunks / skills / tools (the previously-invisible
+   grounding) and de-dupes web entries against the sources block. */
+function renderProvenanceRail(prov) {
+  if (!prov || !Array.isArray(prov.edges) || prov.edges.length === 0) return '';
+  const meta = {
+    rag_chunk:   { icon: '📄', cls: 'pv-chunk', label: 'Context' },
+    skill:       { icon: '✦',  cls: 'pv-skill', label: 'Skills' },
+    plugin_tool: { icon: '⚙',  cls: 'pv-tool',  label: 'Tools' },
+    mcp_tool:    { icon: '⚙',  cls: 'pv-tool',  label: 'Tools' },
+    web_source:  { icon: '🌐', cls: 'pv-web',   label: 'Web' },
+  };
+  const groups = {};
+  prov.edges.forEach(e => {
+    const m = meta[e.source_type] || { icon: '•', cls: 'pv-other', label: 'Other' };
+    (groups[m.label] = groups[m.label] || { m, items: [] }).items.push(e);
+  });
+  const order = ['Context', 'Skills', 'Tools', 'Web', 'Other'];
+  const sections = order.filter(k => groups[k]).map(k => {
+    const g = groups[k];
+    const chips = g.items.map(e => {
+      const score = e.metadata && typeof e.metadata.score === 'number'
+        ? ` <span class="pv-score">${(e.metadata.score * 100).toFixed(0)}%</span>` : '';
+      return `<span class="pv-chip ${g.m.cls}" title="${esc(e.source_id)}">${g.m.icon} ${esc(e.source_label)}${score}</span>`;
+    }).join('');
+    return `<div class="pv-group"><span class="pv-group-label">${esc(k)}</span>${chips}</div>`;
+  }).join('');
+  return `<div class="provenance-rail" title="What this answer was grounded on">${sections}</div>`;
+}
+
 /* ── CHAT CODE-BLOCK HAND-OFF ────────────────────────────────────────
    Powers the copy / → step buttons on chat code blocks (rendered by
    renderMarkdown in chat mode). "→ step" pins the code as a workflow step
@@ -10005,6 +10080,7 @@ async function sendMessage() {
         messages.innerHTML += `<div class="msg system-msg" style="background:rgba(255,200,0,0.05);border-left-color:var(--amber)"><strong>⚠ Model fallback:</strong> Pinned <code>${esc(fb.requested || '?')}</code> not installed — using <code>${esc(fb.resolved || d.model || '?')}</code>.</div>`;
       }
 
+      const provenance = d.provenance || null;
       chatHistory.push({ role: 'assistant', content });
       chatMetadata.push({
         role: 'assistant',
@@ -10012,12 +10088,14 @@ async function sendMessage() {
         timestamp: new Date().toISOString(),
         model,
         sources,
+        provenance,
         usage,
         web_search: webSearchEnabled,
       });
 
       const citedContent = renderCitations(content, sources);
       const sourcesHtml = renderSources(sources);
+      const provRailHtml = renderProvenanceRail(provenance);
       // Name the model AND the backend that served it (vLLM GPU path vs
       // Ollama) — without this every reply is backend-anonymous and the
       // operator can't tell which runner is doing the work.
@@ -10027,7 +10105,7 @@ async function sendMessage() {
         ? `<span style="color:var(--text-muted);font-size:0.55rem;margin-left:6px;font-family:var(--mono)">${esc(ranModel)}${backend ? ' · ' + esc(backend) : ''}</span>`
         : '';
       const mid = ChatRating.nextId();
-      messages.innerHTML += `<div class="msg assistant" id="${mid}">${citedContent}${sourcesHtml}${runChip}${ChatRating.toolbarHtml(mid, {model: ranModel, backend, web_search: webSearchEnabled})}</div>`;
+      messages.innerHTML += `<div class="msg assistant" id="${mid}">${citedContent}${sourcesHtml}${provRailHtml}${runChip}${ChatRating.toolbarHtml(mid, {model: ranModel, backend, web_search: webSearchEnabled})}</div>`;
     }
   } catch(e) {
     const ti = document.getElementById(typingId);
