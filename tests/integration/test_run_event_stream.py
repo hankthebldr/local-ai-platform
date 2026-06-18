@@ -64,3 +64,48 @@ def test_emits_step_started_and_completed(tmp_path, monkeypatch):
     assert started and completed
     assert completed[0].data["status"] == "completed"
     assert "duration_ms" in completed[0].data
+
+
+def test_emits_gate_pending_when_awaiting_approval(tmp_path, monkeypatch):
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    reb._BUS = None
+
+    # Enable the code executor and register a Tier-1 subprocess sandbox
+    # (tier_default on Tier-1 maps to approval="required", so the run always gates).
+    monkeypatch.setenv("CODE_EXEC_ENABLED", "true")
+    from api.services.sandbox_registry import SandboxRegistry, _set_current
+    from api.services.sandbox_impl.subprocess import SubprocessSandbox
+
+    reg = SandboxRegistry()
+    reg.register(SubprocessSandbox())
+    _set_current(reg)
+
+
+    wf = WorkflowDefinition.model_validate(
+        {
+            "id": "evt_gate_wf",
+            "name": "evt_gate_wf",
+            "steps": [
+                {
+                    "id": "c",
+                    "name": "gated code step",
+                    "kind": "code",
+                    "outputs": ["result"],
+                    "code": {
+                        "code": "print('gate-test')",
+                        "approval": "required",
+                    },
+                }
+            ],
+        }
+    )
+    engine = WorkflowEngine(_FullFakeOllama([]))
+    run = engine.run(wf, seed={})
+    assert run.status == "awaiting_approval"
+    gate_evs = [
+        e
+        for e in reb.get_run_event_bus().read_log(run.run_id)
+        if e.type == EventType.GATE_PENDING
+    ]
+    assert gate_evs and gate_evs[0].data["gate_id"]
+    assert gate_evs[0].data["step_id"] == "c"

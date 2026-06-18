@@ -1013,6 +1013,22 @@ class WorkflowEngine:
                 with state_lock:
                     workflow_run.status = "awaiting_approval"
                     self._checkpoint(workflow_run)
+                g = workflow_run.pending_gate
+                if g is not None:
+                    self._bus.publish(
+                        workflow_run.run_id,
+                        "gate.pending",
+                        {
+                            "gate_id": g.gate_id,
+                            "step_id": g.step_id,
+                            "kind": "approval",
+                            "prompt": g.question or f"Approve step '{g.step_id}'?",
+                            "tier": g.tier,
+                            "files": g.files,
+                            "network": g.network,
+                        },
+                        step_id=g.step_id,
+                    )
                 logger.info(
                     f"Workflow '{definition.id}' paused at step "
                     f"'{kept.step_id}' awaiting operator approval"
