@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional
 from api.logging_config import logger
 from api.services.hook_bus import HookContext, HookResult
 
+
 # ── Shared PluginService singleton ────────────────────────────────────────────
 #
 # Lazily scan plugins on first use.  Tests can override by injecting a custom
@@ -193,6 +194,19 @@ class PluginToolInvokerHook:
             result = service.call_tool(self.plugin_id, self.tool_id, params)
             duration_ms = (time.monotonic() - t0) * 1000.0
             self._record_call(ctx, duration_ms, status="ok")
+            try:
+                from api.hooks.builtins.mcp_tool_invoker import _emit_tool_called
+
+                run_id = getattr(getattr(ctx, "workflow", None), "run_id", None) or ""
+                _emit_tool_called(
+                    run_id=run_id,
+                    step_id=getattr(ctx.step, "id", ""),
+                    tool=self.tool_id,
+                    server=self.plugin_id,
+                    status="ok",
+                )
+            except Exception:
+                pass
             return result
         except Exception as exc:
             duration_ms = (time.monotonic() - t0) * 1000.0
