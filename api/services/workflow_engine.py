@@ -1322,52 +1322,76 @@ class WorkflowEngine:
         per-attempt state in retry_with_feedback). Errors propagate to the
         future; the caller synthesizes a failed StepResult.
         """
-        if step.kind == "parallel":
-            from .engine_executors import parallel as _parallel
 
-            return _parallel.execute(self, step, definition, context, workflow_run)
-        if step.kind == "loop":
-            from .engine_executors import loop as _loop
+        def _dispatch() -> StepResult:
+            if step.kind == "parallel":
+                from .engine_executors import parallel as _parallel
 
-            return _loop.execute(self, step, definition, context, workflow_run)
-        if step.kind == "a2a":
-            from .engine_executors import a2a as _a2a
+                return _parallel.execute(self, step, definition, context, workflow_run)
+            if step.kind == "loop":
+                from .engine_executors import loop as _loop
 
-            return _a2a.execute(self, step, context)
-        if step.kind == "orchestrator":
-            from .engine_executors import orchestrator as _orchestrator
+                return _loop.execute(self, step, definition, context, workflow_run)
+            if step.kind == "a2a":
+                from .engine_executors import a2a as _a2a
 
-            return _orchestrator.execute(self, step, definition, context, workflow_run)
-        if step.kind == "consolidate":
-            from .engine_executors import consolidate as _consolidate
+                return _a2a.execute(self, step, context)
+            if step.kind == "orchestrator":
+                from .engine_executors import orchestrator as _orchestrator
 
-            return _consolidate.execute(self, step, definition, context)
-        if step.kind == "ralph":
-            from .engine_executors import ralph as _ralph
+                return _orchestrator.execute(
+                    self, step, definition, context, workflow_run
+                )
+            if step.kind == "consolidate":
+                from .engine_executors import consolidate as _consolidate
 
-            return _ralph.execute(self, step, definition, context, workflow_run)
-        if step.kind == "code":
-            from .engine_executors import code as _code
+                return _consolidate.execute(self, step, definition, context)
+            if step.kind == "ralph":
+                from .engine_executors import ralph as _ralph
 
-            return _code.execute(self, step, definition, context, workflow_run)
+                return _ralph.execute(self, step, definition, context, workflow_run)
+            if step.kind == "code":
+                from .engine_executors import code as _code
 
-        # kind == "llm" — the default
-        step_bus = self._build_step_bus(step)
-        step_executor = StepExecutor(
-            ollama_service=self.ollama,
-            composer=self.composer,
-            hook_bus=step_bus,
-            model_resolver=self.resolver,
+                return _code.execute(self, step, definition, context, workflow_run)
+
+            # kind == "llm" — the default
+            step_bus = self._build_step_bus(step)
+            step_executor = StepExecutor(
+                ollama_service=self.ollama,
+                composer=self.composer,
+                hook_bus=step_bus,
+                model_resolver=self.resolver,
+            )
+            return step_executor.execute(
+                step=step,
+                workflow=definition,
+                context=context,
+                resolved_model=resolved_model,
+                defaults=definition.defaults,
+                workflow_run=workflow_run,
+                prefix_locked=prefix_locked,
+            )
+
+        self._bus.publish(
+            workflow_run.run_id,
+            "step.started",
+            {"kind": step.kind, "title": getattr(step, "name", step.id)},
+            step_id=step.id,
         )
-        return step_executor.execute(
-            step=step,
-            workflow=definition,
-            context=context,
-            resolved_model=resolved_model,
-            defaults=definition.defaults,
-            workflow_run=workflow_run,
-            prefix_locked=prefix_locked,
+        result = _dispatch()
+        self._bus.publish(
+            workflow_run.run_id,
+            "step.completed",
+            {
+                "status": result.status,
+                "duration_ms": int((result.duration_seconds or 0) * 1000),
+                "model_used": result.model_used,
+                "error": result.error,
+            },
+            step_id=step.id,
         )
+        return result
 
     # ── Hook Bus Assembly ──────────────────────────────────────────────
 

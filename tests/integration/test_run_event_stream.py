@@ -49,3 +49,18 @@ def test_run_emits_status_and_baseline_plan(tmp_path, monkeypatch):
         if e.type == EventType.RUN_STATUS
     ]
     assert statuses[0] == "running" and statuses[-1] == "completed"
+
+
+def test_emits_step_started_and_completed(tmp_path, monkeypatch):
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    reb._BUS = None
+    engine = WorkflowEngine(_FullFakeOllama(["done"]))
+    run = engine.run(_wf(), seed={})
+    log = reb.get_run_event_bus().read_log(run.run_id)
+    started = [e for e in log if e.type == EventType.STEP_STARTED and e.step_id == "a"]
+    completed = [
+        e for e in log if e.type == EventType.STEP_COMPLETED and e.step_id == "a"
+    ]
+    assert started and completed
+    assert completed[0].data["status"] == "completed"
+    assert "duration_ms" in completed[0].data
