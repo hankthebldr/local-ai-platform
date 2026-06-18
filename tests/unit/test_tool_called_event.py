@@ -15,3 +15,14 @@ def test_emit_tool_called_helper(tmp_path, monkeypatch):
     ]
     assert evs and evs[0].data["tool"] == "search" and evs[0].data["server"] == "srv"
     assert evs[0].step_id == "s"
+
+
+def test_emit_tool_called_noops_on_empty_run_id(tmp_path, monkeypatch):
+    # A hook firing outside a real run has run_id="" — must NOT publish
+    # (no run to attribute to; would otherwise write a junk data/workflows path).
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    reb._BUS = None
+    from api.hooks.builtins.mcp_tool_invoker import _emit_tool_called
+
+    _emit_tool_called(run_id="", step_id="s", tool="t", server="p")
+    assert reb.get_run_event_bus().read_log("") == []

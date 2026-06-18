@@ -293,7 +293,13 @@ def _emit_tool_called(
     Uses local imports so the formatter never strips them as unused.
     Safe to call from a try/except — callers should swallow any exception
     so observability never breaks a tool invocation.
+
+    No-ops when ``run_id`` is empty (a hook firing outside a real workflow run,
+    e.g. in isolated tool tests): there is no run to attribute the event to, and
+    publishing would write to a junk ``data/workflows/`` path.
     """
+    if not run_id:
+        return
     from ...models.run_event import EventType
     from ...services.run_event_bus import get_run_event_bus
 
