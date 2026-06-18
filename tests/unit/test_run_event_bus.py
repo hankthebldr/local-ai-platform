@@ -1,3 +1,7 @@
+import asyncio
+
+import pytest
+
 import api.services.run_event_bus as reb
 from api.models.run_event import EventType
 
@@ -17,3 +21,48 @@ def test_publish_appends_monotonic_seq_and_reads_back(tmp_path, monkeypatch):
 
 def test_singleton_accessor_is_stable():
     assert reb.get_run_event_bus() is reb.get_run_event_bus()
+
+
+def test_read_log_skips_corrupt_line(tmp_path, monkeypatch):
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    bus = reb.RunEventBus()
+    bus.publish("rc", EventType.RUN_STATUS, {"status": "running"})
+    # inject a corrupt line
+    p = bus._log_path("rc")
+    with open(p, "a") as f:
+        f.write("{not valid json}\n")
+    bus2 = reb.RunEventBus()  # fresh, no seq cache
+    log = bus2.read_log("rc")
+    assert [e.type for e in log] == [EventType.RUN_STATUS]  # corrupt line skipped
+
+
+@pytest.mark.asyncio
+async def test_subscribe_replays_then_tails_live(tmp_path, monkeypatch):
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    bus = reb.RunEventBus()
+    bus.bind_loop(asyncio.get_running_loop())
+    bus.publish(
+        "r", EventType.RUN_STATUS, {"status": "running"}
+    )  # pre-existing (replayed)
+
+    received = []
+    sub = bus.subscribe("r", since=0)
+
+    async def reader():
+        async for ev in sub:
+            received.append(ev)
+            if len(received) == 3:
+                break
+
+    task = asyncio.create_task(reader())
+    await asyncio.sleep(0.05)
+    bus.publish("r", EventType.STEP_STARTED, {"kind": "llm"}, step_id="s1")  # live
+    bus.publish("r", EventType.STEP_COMPLETED, {"status": "completed"}, step_id="s1")
+    await asyncio.wait_for(task, timeout=2.0)
+
+    assert [e.type for e in received] == [
+        EventType.RUN_STATUS,
+        EventType.STEP_STARTED,
+        EventType.STEP_COMPLETED,
+    ]
+    assert [e.seq for e in received] == [1, 2, 3]
