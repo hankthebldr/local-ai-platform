@@ -201,6 +201,29 @@ def test_orchestrator_spawn_enriches_plan(tmp_path, monkeypatch):
     ), f"No orchestrator-origin plan items found. Items: {[(i.id, i.origin) for i in plan.items]}"
 
 
+def test_sse_endpoint_replays_run_events(tmp_path, monkeypatch):
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    reb._BUS = None
+    engine = WorkflowEngine(_FullFakeOllama(["done"]))
+    run = engine.run(_wf(), seed={})  # completed run; log on disk
+
+    from fastapi.testclient import TestClient
+    from api.main import app
+
+    with TestClient(app) as client:
+        with client.stream("GET", f"/api/workflows/runs/{run.run_id}/stream") as r:
+            assert r.status_code == 200
+            assert "text/event-stream" in r.headers["content-type"]
+            body = ""
+            for chunk in r.iter_text():
+                body += chunk
+                if "stream.end" in body:
+                    break
+    assert "event: run.status" in body
+    assert "event: plan.updated" in body
+    assert "event: stream.end" in body
+
+
 def test_ralph_iterations_enrich_plan(tmp_path, monkeypatch):
     """Each ralph iteration must add a plan item with origin='ralph'."""
     monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
