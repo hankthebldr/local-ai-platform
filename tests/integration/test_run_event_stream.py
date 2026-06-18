@@ -276,3 +276,67 @@ def test_ralph_iterations_enrich_plan(tmp_path, monkeypatch):
         f"Expected >=2 ralph-origin plan items, got {len(iters)}. "
         f"Items: {[(i.id, i.origin) for i in plan.items]}"
     )
+
+
+def test_gate_resolution_emits_event(tmp_path, monkeypatch):
+    """Calling the resolve endpoint emits a gate.resolved event."""
+    import yaml as _yaml
+
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    reb._BUS = None
+
+    # Same sandbox setup as test_emits_gate_pending_when_awaiting_approval
+    monkeypatch.setenv("CODE_EXEC_ENABLED", "true")
+    from api.services.sandbox_registry import SandboxRegistry, _set_current
+    from api.services.sandbox_impl.subprocess import SubprocessSandbox
+
+    reg = SandboxRegistry()
+    reg.register(SubprocessSandbox())
+    _set_current(reg)
+
+    wf_dict = {
+        "id": "evt_gate_resolve_wf",
+        "name": "evt_gate_resolve_wf",
+        "steps": [
+            {
+                "id": "c",
+                "name": "gated code step",
+                "kind": "code",
+                "outputs": ["result"],
+                "code": {
+                    "code": "print('gate-resolve-test')",
+                    "approval": "required",
+                },
+            }
+        ],
+    }
+    wf = WorkflowDefinition.model_validate(wf_dict)
+
+    # Write the workflow YAML so resume() can reload it from disk
+    wf_dir = tmp_path / "workflows"
+    wf_dir.mkdir()
+    (wf_dir / "evt_gate_resolve_wf.yaml").write_text(_yaml.dump(wf_dict))
+    monkeypatch.chdir(tmp_path)
+
+    engine = WorkflowEngine(_FullFakeOllama([]))
+    run = engine.run(wf, seed={})
+    assert run.status == "awaiting_approval"
+    gate_id = run.pending_gate.gate_id
+
+    from fastapi.testclient import TestClient
+    from api.main import app
+
+    with TestClient(app) as client:
+        resp = client.post(
+            f"/api/workflows/runs/{run.run_id}/approvals/{gate_id}",
+            json={"action": "approve"},
+        )
+        assert resp.status_code in (200, 202), resp.text
+
+    evs = [
+        e
+        for e in reb.get_run_event_bus().read_log(run.run_id)
+        if e.type == EventType.GATE_RESOLVED
+    ]
+    assert evs, "Expected at least one gate.resolved event"
+    assert evs[0].data["response"] == "approved"

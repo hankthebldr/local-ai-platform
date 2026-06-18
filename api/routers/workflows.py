@@ -742,6 +742,17 @@ def resolve_approval(run_id: str, gate_id: str, body: ApprovalRequest):
     run.status = "running"
     engine._checkpoint(run)
 
+    step_id = run.pending_gate.step_id
+
+    from ..services.run_event_bus import get_run_event_bus
+
+    get_run_event_bus().publish(
+        run_id,
+        "gate.resolved",
+        {"gate_id": gate_id, "response": decision},
+        step_id=step_id,
+    )
+
     try:
         resumed = engine.resume(run_id)
     except ValueError as exc:
