@@ -4376,6 +4376,36 @@ textarea.composer-desc-area {
   max-height: 46vh; overflow-y: auto; padding: 10px 12px;
 }
 
+/* Live plan panel — SSE-driven; appears above the floor-grid when a
+   plan.updated frame arrives. Hidden by default. */
+.runs-tab-live-plan {
+  padding: 10px 12px; margin-bottom: 12px;
+}
+.runs-tab-live-plan[hidden] { display: none; }
+.rtp-sse-badge {
+  display: inline-block; font-size: 0.55rem; letter-spacing: 0.08em;
+  color: var(--accent); padding: 1px 5px; border: 1px solid var(--accent-dim);
+  border-radius: 3px; vertical-align: middle; margin-left: 6px;
+}
+.rtp-sse-badge[hidden] { display: none; }
+.rtp-plan-item {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 5px 0; border-bottom: 1px solid var(--border);
+  font-family: var(--mono); font-size: 0.66rem; color: var(--text);
+}
+.rtp-plan-item:last-child { border-bottom: none; }
+.rtp-plan-status {
+  flex-shrink: 0; font-size: 0.55rem; text-transform: uppercase;
+  letter-spacing: 0.08em; padding: 1px 5px; border-radius: 3px;
+  border: 1px solid var(--border); color: var(--text-muted);
+}
+.rtp-plan-status.pending  { color: var(--amber); border-color: rgba(255,165,0,0.4); }
+.rtp-plan-status.running  { color: var(--cyan); border-color: var(--cyan-dim); animation: dfRunPulse 1.4s ease-in-out infinite; }
+.rtp-plan-status.completed { color: var(--accent); border-color: var(--accent-dim); }
+.rtp-plan-status.failed   { color: var(--red,#ff5252); border-color: rgba(255,80,80,0.4); }
+.rtp-plan-title { flex: 1; color: var(--text); }
+.rtp-plan-origin { flex-shrink: 0; color: var(--text-muted); font-size: 0.58rem; }
+
 /* Top-of-pane run-level error banner (shown for failed runs). */
 .run-error-banner {
   display: flex; align-items: flex-start; gap: 8px;
@@ -6711,7 +6741,7 @@ textarea.composer-desc-area {
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="runs-tab-detail-head" id="runs-tab-detail-head">
           <div class="panel-label" style="margin:0;flex:1">Run Detail</div>
-          <span class="ws-run-meta" id="runs-tab-detail-meta">Pick a run on the left</span>
+          <span class="ws-run-meta" id="runs-tab-detail-meta" data-testid="run-status" data-status="">Pick a run on the left</span>
           <!-- Run management toolbar — buttons enable/disable based on
                the run's status. Pause is currently shown disabled with
                a tooltip until the engine grows a step-level pause
@@ -6784,6 +6814,16 @@ textarea.composer-desc-area {
                wrote). The runs-tab-context pane shows the producer
                graph — which step wrote which workspace key — so the
                operator can audit context handoff. -->
+          <!-- Live plan panel — populated by SSE plan.updated events.
+               Hidden until a plan arrives; falls back to polling-derived
+               step list when no SSE plan is received. -->
+          <div class="runs-tab-live-plan panel" id="runs-tab-live-plan" hidden>
+            <div class="panel-label">Live Plan <span class="rtp-sse-badge" id="rtp-sse-badge" hidden>● SSE</span></div>
+            <div id="runs-tab-plan-body" data-testid="run-plan">
+              <div class="model-empty">Waiting for plan…</div>
+            </div>
+          </div>
+
           <div class="runs-tab-floor-grid">
             <div class="runs-tab-steps panel" id="runs-tab-steps">
               <div class="panel-label">Step Results</div>
@@ -19013,6 +19053,7 @@ const RunsTab = (function () {
   let _currentRun = null;      // last fetched run (for cascade / context analysis)
   let _currentSteps = [];      // step list used for the rendered DAG
   let _drawerCopyTexts = [];   // bottom-drawer Copy payloads, keyed by data-idx
+  let _sseSource = null;       // active EventSource for run stream (or null)
   const _expandedSteps = new Set();  // step_ids the user clicked to expand
   const _expandedOutputs = new Set();  // "stepId::key" of fully-expanded outputs
 
@@ -19119,8 +19160,12 @@ const RunsTab = (function () {
     const meta = document.getElementById('runs-tab-detail-meta');
     if (meta) meta.textContent = `Loading ${runId.slice(0, 12)}…`;
     document.getElementById('runs-tab-graph-empty').setAttribute('hidden', '');
-    // Stop any prior poller.
+    // Stop any prior poller and SSE stream.
     if (_pollHandle) { clearInterval(_pollHandle); _pollHandle = null; }
+    _unsubscribeSSE();
+    // Hide the live plan panel until a plan.updated SSE frame arrives.
+    const _livePlanPanel = document.getElementById('runs-tab-live-plan');
+    if (_livePlanPanel) _livePlanPanel.hidden = true;
     // Fetch the run + the workflow definition so we can lay out the DAG.
     try {
       const run = await Net.getJson(`/api/workflows/runs/${encodeURIComponent(runId)}`);
@@ -19145,8 +19190,10 @@ const RunsTab = (function () {
       _renderSteps(run);
       _renderContextTrace(run);
       _toggleActionButtons(run);
-      // Live poll while running.
+      // Live stream (SSE) + poll while running. SSE is additive — polling
+      // keeps going as a fallback if the stream errors or isn't supported.
       if (['running', 'queued'].includes((run.status || '').toLowerCase())) {
+        _subscribeSSE(runId);
         _pollHandle = setInterval(async () => {
           try {
             // silent + retries:0 — poll loop: no toast spam, and Net's
@@ -19478,11 +19525,13 @@ const RunsTab = (function () {
       spinner.classList.toggle('done', statusLower === 'completed');
       spinner.classList.toggle('failed', ['failed', 'error', 'canceled'].includes(statusLower) || zombie);
     }
-    // Detail meta line.
+    // Detail meta line + data-status attribute (read by Playwright selectors
+    // and the SSE run.status handler for test assertions).
     const meta = document.getElementById('runs-tab-detail-meta');
     if (meta) {
       const tag = zombie ? `${run.status || '?'} (stalled)` : (run.status || '?');
       meta.textContent = `${run.workflow_id || '?'} · ${tag} · ${completed}/${planned.length} steps`;
+      meta.dataset.status = statusLower;
     }
     // Zombie banner above the steps strip — gives the operator a
     // clear surface to mark the run as failed.
@@ -20062,6 +20111,163 @@ const RunsTab = (function () {
       output: _stepWorkspace(s),
     };
     try { navigator.clipboard.writeText(JSON.stringify(payload, null, 2)); } catch (_) {}
+  }
+
+  // ── SSE live-stream subscriber ────────────────────────────────────────────
+  // Opens an EventSource against the run's /stream endpoint and handles
+  // named event types. On onerror the source is closed and polling continues
+  // as before (polling was already started by select() before this fires).
+  // Call _unsubscribeSSE() when navigating away from the detail view.
+
+  function _unsubscribeSSE() {
+    if (_sseSource) {
+      try { _sseSource.close(); } catch (_) {}
+      _sseSource = null;
+    }
+    const badge = document.getElementById('rtp-sse-badge');
+    if (badge) badge.hidden = true;
+  }
+
+  function _renderLivePlan(items) {
+    const panel = document.getElementById('runs-tab-live-plan');
+    const body  = document.getElementById('runs-tab-plan-body');
+    if (!panel || !body) return;
+    panel.hidden = false;
+    if (!items || !items.length) {
+      body.innerHTML = '<div class="model-empty">No plan items yet.</div>';
+      return;
+    }
+    body.innerHTML = items.map(item => {
+      const s = (item.status || 'pending').toLowerCase();
+      return `<div class="rtp-plan-item" data-testid="plan-item" data-plan-id="${esc(item.id || '')}">
+        <span class="rtp-plan-status ${esc(s)}">${esc(s)}</span>
+        <span class="rtp-plan-title">${esc(item.title || item.id || '?')}</span>
+        ${item.origin ? `<span class="rtp-plan-origin">${esc(item.origin)}</span>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function _subscribeSSE(runId) {
+    _unsubscribeSSE();
+    if (typeof EventSource === 'undefined') return; // SSE not supported
+    const src = new EventSource('/api/workflows/runs/' + encodeURIComponent(runId) + '/stream');
+    _sseSource = src;
+
+    // Show SSE badge once connected.
+    src.addEventListener('stream.hello', () => {
+      const badge = document.getElementById('rtp-sse-badge');
+      if (badge) badge.hidden = false;
+    });
+
+    // Run-level status update — mirror into the data-status attribute.
+    src.addEventListener('run.status', e => {
+      try {
+        const frame = JSON.parse(e.data);
+        const status = (frame.data && frame.data.status) || '';
+        const meta = document.getElementById('runs-tab-detail-meta');
+        if (meta && status) meta.dataset.status = status.toLowerCase();
+        // If the run just reached a terminal state, close the stream
+        // and let the poller do one final refresh.
+        if (['completed', 'failed', 'canceled', 'error'].includes(status.toLowerCase())) {
+          _unsubscribeSSE();
+          load();
+        }
+      } catch (_) {}
+    });
+
+    // Step started — upsert a synthetic result so the strip shows "running".
+    src.addEventListener('step.started', e => {
+      try {
+        const frame = JSON.parse(e.data);
+        const stepId = frame.step_id || (frame.data && frame.data.step_id);
+        if (_currentRun && stepId) {
+          const results = _currentRun.step_results || [];
+          const existing = results.find(r => r.step_id === stepId);
+          if (existing) { existing.status = 'running'; }
+          else { results.push({ step_id: stepId, status: 'running' }); _currentRun.step_results = results; }
+          _renderSteps(_currentRun);
+          _applyStatus(_currentRun);
+        }
+      } catch (_) {}
+    });
+
+    // Step completed — upsert result with final status + duration.
+    src.addEventListener('step.completed', e => {
+      try {
+        const frame = JSON.parse(e.data);
+        const stepId = frame.step_id || (frame.data && frame.data.step_id);
+        const stepData = frame.data || {};
+        if (_currentRun && stepId) {
+          const results = _currentRun.step_results || [];
+          const existing = results.find(r => r.step_id === stepId);
+          const status = stepData.status || 'completed';
+          if (existing) {
+            existing.status = status;
+            if (stepData.duration_ms != null) existing.duration_ms = stepData.duration_ms;
+          } else {
+            results.push({ step_id: stepId, status, duration_ms: stepData.duration_ms });
+            _currentRun.step_results = results;
+          }
+          _renderSteps(_currentRun);
+          _applyStatus(_currentRun);
+        }
+      } catch (_) {}
+    });
+
+    // Plan updated — re-render the live plan panel.
+    src.addEventListener('plan.updated', e => {
+      try {
+        const frame = JSON.parse(e.data);
+        const plan = frame.data && frame.data.plan;
+        if (plan && Array.isArray(plan.items)) {
+          _renderLivePlan(plan.items);
+        }
+      } catch (_) {}
+    });
+
+    // Gate pending — surface the approval bar (re-use existing machinery
+    // by patching _currentRun with a synthetic pending_gate and calling
+    // _renderSteps, which already calls _renderApprovalGate).
+    src.addEventListener('gate.pending', e => {
+      try {
+        const frame = JSON.parse(e.data);
+        const gateData = frame.data || {};
+        if (_currentRun) {
+          _currentRun.status = 'awaiting_approval';
+          _currentRun.pending_gate = {
+            gate_id:  gateData.gate_id || '',
+            step_id:  gateData.step_id || frame.step_id || '',
+            question: gateData.prompt  || '',
+          };
+          _renderSteps(_currentRun);
+          _toggleActionButtons(_currentRun);
+          if (window.Toast) Toast.info('Gate pending', gateData.prompt || 'Approval required');
+        }
+      } catch (_) {}
+    });
+
+    // Gate resolved — clear synthetic gate state.
+    src.addEventListener('gate.resolved', e => {
+      try {
+        if (_currentRun) {
+          delete _currentRun.pending_gate;
+          // status will be corrected by the next run.status or poll tick
+          _renderSteps(_currentRun);
+        }
+      } catch (_) {}
+    });
+
+    // Stream end — clean up; polling keeps going until terminal status.
+    src.addEventListener('stream.end', () => {
+      _unsubscribeSSE();
+    });
+
+    // On any SSE error fall back to polling (already running) and close.
+    src.onerror = () => {
+      _unsubscribeSSE();
+      // Polling was already started by select() before SSE was opened,
+      // so no action needed — the interval keeps running.
+    };
   }
 
   function _toggleActionButtons(run) {
