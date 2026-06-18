@@ -933,8 +933,10 @@ class WorkflowEngine:
                     try:
                         step_result = future.result()
                     except Exception as e:
-                        # _execute_one_step has its own try/except; reaching
-                        # here means something deeply unexpected happened.
+                        # _execute_one_step emits a failed step.completed then
+                        # re-raises; reaching here means the dispatch raised
+                        # unexpectedly. Synthesize a failed StepResult so the
+                        # run can continue or be checkpointed cleanly.
                         step_result = StepResult(
                             step_id=step.id,
                             status="failed",
@@ -1319,8 +1321,10 @@ class WorkflowEngine:
 
         Builds the step-scoped hook bus and a fresh StepExecutor (executors
         are cheap; sharing one across threads would risk contaminating
-        per-attempt state in retry_with_feedback). Errors propagate to the
-        future; the caller synthesizes a failed StepResult.
+        per-attempt state in retry_with_feedback). On an unexpected dispatch
+        exception this method emits a failed step.completed event then
+        re-raises; the caller still synthesizes a failed StepResult from the
+        exception.
         """
 
         def _dispatch() -> StepResult:
@@ -1379,7 +1383,21 @@ class WorkflowEngine:
             {"kind": step.kind, "title": getattr(step, "name", step.id)},
             step_id=step.id,
         )
-        result = _dispatch()
+        try:
+            result = _dispatch()
+        except Exception as exc:
+            self._bus.publish(
+                workflow_run.run_id,
+                "step.completed",
+                {
+                    "status": "failed",
+                    "duration_ms": 0,
+                    "model_used": None,
+                    "error": str(exc),
+                },
+                step_id=step.id,
+            )
+            raise
         self._bus.publish(
             workflow_run.run_id,
             "step.completed",
