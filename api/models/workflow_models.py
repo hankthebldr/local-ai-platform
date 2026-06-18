@@ -245,9 +245,9 @@ class ConsolidateSpec(BaseModel):
     model: Optional[str] = None
     target: Literal["playbook", "semantic", "episodic"]
     target_name: str
-    merge_strategy: Literal[
-        "replace", "append", "append_with_dedup"
-    ] = "append_with_dedup"
+    merge_strategy: Literal["replace", "append", "append_with_dedup"] = (
+        "append_with_dedup"
+    )
     system_prompt: str
 
     @model_validator(mode="after")
@@ -1244,6 +1244,30 @@ class MCPRunnerStats(BaseModel):
     circuit_breaker_tripped: bool = False
 
 
+# ── Workflow Plan (observable projection — not executable) ────────────────
+
+
+class PlanItem(BaseModel):
+    """One node of a run's live plan. Observable projection — not an executable step."""
+
+    id: str
+    title: str
+    status: Literal[
+        "pending", "in_progress", "done", "skipped", "failed", "blocked"
+    ] = "pending"
+    origin: Literal["dag", "orchestrator", "ralph", "external"] = "dag"
+    step_ref: Optional[str] = None
+    parent_id: Optional[str] = None
+    detail: Optional[str] = None
+    updated_seq: int = 0
+
+
+class WorkflowPlan(BaseModel):
+    goal: str = ""
+    revision: int = 0
+    items: List[PlanItem] = Field(default_factory=list)
+
+
 # ── Workflow Run ──────────────────────────────────────────────────────────
 
 
@@ -1252,6 +1276,7 @@ class WorkflowRun(BaseModel):
     workflow_id: str
     status: str = "pending"
     context: WorkflowContext
+    plan: Optional[WorkflowPlan] = None
     step_results: List[StepResult] = Field(default_factory=list)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
