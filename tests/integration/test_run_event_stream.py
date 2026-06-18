@@ -199,3 +199,57 @@ def test_orchestrator_spawn_enriches_plan(tmp_path, monkeypatch):
     assert (
         orchestrator_items
     ), f"No orchestrator-origin plan items found. Items: {[(i.id, i.origin) for i in plan.items]}"
+
+
+def test_ralph_iterations_enrich_plan(tmp_path, monkeypatch):
+    """Each ralph iteration must add a plan item with origin='ralph'."""
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    reb._BUS = None
+
+    journal = str(tmp_path / "ralph_journal.jsonl")
+    wf = WorkflowDefinition.model_validate(
+        {
+            "id": "ralph_plan_wf",
+            "name": "Ralph Plan Test",
+            "schema_version": 1,
+            "defaults": {"role": "fast", "max_tokens": 128},
+            "steps": [
+                {
+                    "id": "loop",
+                    "name": "Autonomous Loop",
+                    "kind": "ralph",
+                    "outputs": ["result"],
+                    "ralph": {
+                        "journal_path": journal,
+                        "halt": {"max_iterations": 2},
+                    },
+                    "body": [
+                        {
+                            "id": "do_work",
+                            "name": "Do Work",
+                            "role": "fast",
+                            "system_prompt": "do the work",
+                            "outputs": ["result"],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    # 2 iterations × 1 body step each = 2 LLM calls
+    fake = _FullFakeOllama(["work done iter1", "work done iter2"])
+    engine = WorkflowEngine(fake)
+    run = engine.run(wf, seed={})
+
+    assert run.status == "completed", f"run failed: {run.error}"
+
+    from api.services.run_plan import PlanBuilder
+
+    plan = PlanBuilder.reconstruct_from_log(reb.get_run_event_bus(), run.run_id)
+    assert plan is not None
+    iters = [i for i in plan.items if i.origin == "ralph"]
+    assert len(iters) >= 2, (
+        f"Expected >=2 ralph-origin plan items, got {len(iters)}. "
+        f"Items: {[(i.id, i.origin) for i in plan.items]}"
+    )

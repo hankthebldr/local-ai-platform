@@ -95,6 +95,21 @@ def execute(
         iteration += 1
         logger.info(f"Ralph '{step.id}' iteration {iteration}/{halt.max_iterations}")
 
+        if workflow_run.plan is not None:
+            from ..run_plan import PlanBuilder
+
+            PlanBuilder.add_child(
+                workflow_run.plan,
+                parent_id=step.id,
+                item_id=f"{step.id}::iter{iteration}",
+                title=f"iteration {iteration}",
+                origin="ralph",
+                updated_seq=0,
+            )
+            PlanBuilder.emit(
+                engine._bus, workflow_run.run_id, workflow_run.plan, step_id=step.id
+            )
+
         iter_failed = False
         iter_error: Optional[str] = None
         iter_tokens = 0
