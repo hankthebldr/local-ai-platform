@@ -12,6 +12,34 @@ current step's inference, and report hit/miss in the Runs view." Telemetry
 (`load_duration_ms`, `pressure_before/after`, per-step `keep_alive_used`) is
 captured on every run and aggregated into `RunTelemetrySummary`.
 
+### Added — Run event substrate + dynamic plan
+
+- **Run event substrate (L1).** New in-process `RunEventBus`
+  (`api/services/run_event_bus.py`) with an append-only per-run event log
+  (`data/workflows/<run_id>/events.jsonl`, monotonic `seq`) and a sync→async
+  bridge (`bind_loop` + `call_soon_threadsafe`) so the synchronous, threaded
+  engine can publish events that async SSE subscribers tail. `RunEvent`
+  envelope + `EventType` taxonomy in `api/models/run_event.py`
+  (`run.status`, `step.started`/`step.completed`, `plan.updated`,
+  `gate.pending`/`gate.resolved`, `tool.called`, …). Log writes are
+  degraded-not-fatal — observability never crashes a run.
+- **SSE run stream.** `GET /api/workflows/runs/{run_id}/stream`
+  (`text/event-stream`) replays the event log then tails live, with
+  `Last-Event-ID` / `?since=` resume and a terminal `stream.end`. Polling
+  (`GET /runs/{id}`) is retained as a fallback.
+- **First-class dynamic plan (L2, observable).** `WorkflowPlan` / `PlanItem`
+  on `WorkflowRun`, projected over the event stream via `plan.updated`
+  full-snapshot events (`api/services/run_plan.py`). Seeded from the compiled
+  DAG and enriched live as the orchestrator spawns workers and Ralph iterates
+  — the implicit plan becomes a visible, revisable structure. The current plan
+  is always reconstructable from the log.
+- **Live Runs view.** The Cortex Console Runs view subscribes to the stream via
+  `EventSource` and renders the live plan + step timeline + run status, falling
+  back to polling on stream error.
+- _Inspired by OpenWork / OpenCode's session + todo-plan + `/event` model;
+  absorbed as native Enclave architecture. Deferred fast-follows: executable
+  dynamic planning, cross-run chaining, and a `kind: opencode` event producer._
+
 ### Added — Architecture-aware orchestration (Phases 1–5)
 
 - **Phase 1: Detection + abstractions (PR #88).** `Architecture` and
