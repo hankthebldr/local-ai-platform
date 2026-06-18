@@ -340,3 +340,38 @@ def test_gate_resolution_emits_event(tmp_path, monkeypatch):
     ]
     assert evs, "Expected at least one gate.resolved event"
     assert evs[0].data["response"] == "approved"
+
+
+def test_cancel_emits_terminal_run_status(tmp_path, monkeypatch):
+    # Pre-seed a cancel so the first tick boundary cancels the run, then assert
+    # a terminal run.status=canceled event is emitted (so SSE can emit stream.end).
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    reb._BUS = None
+    engine = WorkflowEngine(_FullFakeOllama(["done"]))
+    rid = "cancel-evt-run"
+    engine.request_cancel(rid)
+    run = engine.run(_wf(), seed={}, run_id=rid)
+    assert run.status == "canceled"
+    statuses = [
+        e.data["status"]
+        for e in reb.get_run_event_bus().read_log(rid)
+        if e.type == EventType.RUN_STATUS
+    ]
+    assert statuses and statuses[-1] == "canceled"
+
+
+def test_baseline_dag_plan_items_advance_to_done(tmp_path, monkeypatch):
+    # The live plan must reflect DAG progress: a completed top-level step's
+    # baseline plan item should end as "done", not perpetually "pending".
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    reb._BUS = None
+    engine = WorkflowEngine(_FullFakeOllama(["done"]))
+    run = engine.run(_wf(), seed={})
+    assert run.status == "completed"
+
+    from api.services.run_plan import PlanBuilder
+
+    plan = PlanBuilder.reconstruct_from_log(reb.get_run_event_bus(), run.run_id)
+    assert plan is not None
+    item_a = next(i for i in plan.items if i.id == "a")
+    assert item_a.status == "done", f"expected done, got {item_a.status}"

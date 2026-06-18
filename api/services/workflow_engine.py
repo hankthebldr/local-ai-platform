@@ -775,6 +775,9 @@ class WorkflowEngine:
                     workflow_run.error = "Run canceled by operator"
                     self._checkpoint(workflow_run)
                 self._cancel_set.discard(workflow_run.run_id)
+                self._bus.publish(
+                    workflow_run.run_id, "run.status", {"status": "canceled"}
+                )
                 logger.info(f"Workflow '{definition.id}' canceled at tick boundary")
                 return
 
@@ -1399,6 +1402,7 @@ class WorkflowEngine:
             {"kind": step.kind, "title": getattr(step, "name", step.id)},
             step_id=step.id,
         )
+        self._advance_plan_item(workflow_run, step.id, "in_progress")
         try:
             result = _dispatch()
         except Exception as exc:
@@ -1413,6 +1417,7 @@ class WorkflowEngine:
                 },
                 step_id=step.id,
             )
+            self._advance_plan_item(workflow_run, step.id, "failed")
             raise
         self._bus.publish(
             workflow_run.run_id,
@@ -1425,7 +1430,34 @@ class WorkflowEngine:
             },
             step_id=step.id,
         )
+        self._advance_plan_item(
+            workflow_run,
+            step.id,
+            self._PLAN_STATUS_BY_STEP_STATUS.get(result.status, "done"),
+        )
         return result
+
+    _PLAN_STATUS_BY_STEP_STATUS = {
+        "completed": "done",
+        "failed": "failed",
+        "awaiting_approval": "blocked",
+        "skipped": "skipped",
+    }
+
+    def _advance_plan_item(self, workflow_run, step_id: str, plan_status: str) -> None:
+        """Reflect a baseline DAG step's progress into the live plan projection.
+
+        No-ops for steps not present in the baseline plan (composite children
+        and orchestrator/ralph enrichment items are managed on their own paths),
+        so this advances only top-level DAG items and emits no empty snapshots.
+        """
+        plan = getattr(workflow_run, "plan", None)
+        if plan is None or not any(i.id == step_id for i in plan.items):
+            return
+        from .run_plan import PlanBuilder
+
+        PlanBuilder.mark_item(plan, step_id, plan_status, updated_seq=plan.revision)
+        PlanBuilder.emit(self._bus, workflow_run.run_id, plan, step_id=step_id)
 
     # ── Hook Bus Assembly ──────────────────────────────────────────────
 
