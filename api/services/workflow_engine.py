@@ -170,6 +170,9 @@ class WorkflowEngine:
         # Memory store for kind=consolidate steps + $memory.* accessors.
         # Lazy import keeps the module load order tolerant; the store itself
         # is stateless beyond its base dir.
+        from .run_event_bus import get_run_event_bus
+
+        self._bus = get_run_event_bus()
         from .memory_store import MemoryStore
 
         self.memory = MemoryStore()
@@ -602,6 +605,19 @@ class WorkflowEngine:
         # Initial checkpoint so the run is discoverable mid-flight.
         self._checkpoint(workflow_run)
 
+        self._bus.publish(workflow_run.run_id, "run.status", {"status": "running"})
+        from .run_plan import PlanBuilder
+
+        workflow_run.plan = PlanBuilder.baseline_from_definition(definition)
+        self._bus.publish(
+            workflow_run.run_id,
+            "plan.updated",
+            {
+                "revision": workflow_run.plan.revision,
+                "plan": workflow_run.plan.model_dump(mode="json"),
+            },
+        )
+
         try:
             self._execute_steps(workflow_run, definition, context, definition.steps)
             # Final terminal persist (full artifacts + summary). _persist_run
@@ -785,6 +801,11 @@ class WorkflowEngine:
                         workflow_run.pre_warm_events,
                     )
                     self._checkpoint(workflow_run)
+                self._bus.publish(
+                    workflow_run.run_id,
+                    "run.status",
+                    {"status": "failed", "reason": workflow_run.error},
+                )
                 logger.error(
                     f"Workflow '{definition.id}' deadlocked: arch deferred all ready steps"
                 )
@@ -845,6 +866,11 @@ class WorkflowEngine:
                         workflow_run.pre_warm_events,
                     )
                     self._checkpoint(workflow_run)
+                self._bus.publish(
+                    workflow_run.run_id,
+                    "run.status",
+                    {"status": "failed", "reason": workflow_run.error},
+                )
                 logger.error(
                     f"Workflow failed at step '{resolution_failed_step.id}': "
                     f"{resolution_error}"
@@ -1012,6 +1038,11 @@ class WorkflowEngine:
                         workflow_run.pre_warm_events,
                     )
                     self._checkpoint(workflow_run)
+                self._bus.publish(
+                    workflow_run.run_id,
+                    "run.status",
+                    {"status": "failed", "reason": workflow_run.error},
+                )
                 logger.error(
                     f"Workflow '{definition.id}' failed at step '{first.step_id}'"
                 )
@@ -1020,6 +1051,7 @@ class WorkflowEngine:
         # All scope steps succeeded.
         workflow_run.status = "completed"
         workflow_run.completed_at = datetime.utcnow()
+        self._bus.publish(workflow_run.run_id, "run.status", {"status": "completed"})
         # Phase 5b — brief wait for in-flight pre-warms so their timing
         # makes it into the run's telemetry. Capped at 500ms — beyond that,
         # the pre-warm is genuinely slow and the operator's better off
