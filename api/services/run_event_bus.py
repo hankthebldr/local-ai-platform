@@ -13,6 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
+
+from pydantic import ValidationError
+
 from ..models.run_event import RunEvent
 
 RUNS_DIR = os.getenv("ENCLAVE_RUNS_DIR", "./data/workflows")
@@ -112,7 +115,7 @@ class RunEventBus:
                     continue
                 try:
                     ev = RunEvent.model_validate(json.loads(line))
-                except (json.JSONDecodeError, ValueError):
+                except (ValueError, ValidationError):
                     continue
                 if ev.seq > since:
                     out.append(ev)
@@ -122,7 +125,7 @@ class RunEventBus:
         self, run_id: str, since: int = 0
     ) -> AsyncGenerator[RunEvent, None]:
         """Async generator: replay log from `since` (exclusive), then tail live events."""
-        q: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        q: "asyncio.Queue[RunEvent]" = asyncio.Queue(maxsize=1000)
         with self._lock:
             self._subs.setdefault(run_id, []).append(q)
             replay = self.read_log(run_id, since=since)

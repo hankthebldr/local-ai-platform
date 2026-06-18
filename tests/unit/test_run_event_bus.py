@@ -36,6 +36,18 @@ def test_read_log_skips_corrupt_line(tmp_path, monkeypatch):
     assert [e.type for e in log] == [EventType.RUN_STATUS]  # corrupt line skipped
 
 
+def test_read_log_skips_wrong_shape_line(tmp_path, monkeypatch):
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    bus = reb.RunEventBus()
+    bus.publish("rs", EventType.RUN_STATUS, {"status": "running"})
+    p = bus._log_path("rs")
+    with open(p, "a") as f:
+        f.write('{"valid_json": true, "but": "wrong shape, no seq"}\n')
+    fresh = reb.RunEventBus()
+    log = fresh.read_log("rs")
+    assert [e.type for e in log] == [EventType.RUN_STATUS]  # wrong-shape line skipped
+
+
 @pytest.mark.asyncio
 async def test_subscribe_replays_then_tails_live(tmp_path, monkeypatch):
     monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
