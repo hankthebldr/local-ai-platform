@@ -80,7 +80,6 @@ def test_emits_gate_pending_when_awaiting_approval(tmp_path, monkeypatch):
     reg.register(SubprocessSandbox())
     _set_current(reg)
 
-
     wf = WorkflowDefinition.model_validate(
         {
             "id": "evt_gate_wf",
@@ -109,3 +108,94 @@ def test_emits_gate_pending_when_awaiting_approval(tmp_path, monkeypatch):
     ]
     assert gate_evs and gate_evs[0].data["gate_id"]
     assert gate_evs[0].data["step_id"] == "c"
+
+
+def test_orchestrator_spawn_enriches_plan(tmp_path, monkeypatch):
+    """Spawning a worker from an orchestrator step adds a plan item with
+    origin='orchestrator' that is visible via reconstruct_from_log."""
+    import json
+
+    monkeypatch.setattr(reb, "RUNS_DIR", str(tmp_path))
+    reb._BUS = None
+
+    def _spawn(worker_id, task, **inputs):
+        return (
+            "Spawning now.\n```json\n"
+            + json.dumps(
+                {
+                    "action": "spawn_worker",
+                    "worker_id": worker_id,
+                    "task": task,
+                    "inputs": inputs,
+                }
+            )
+            + "\n```"
+        )
+
+    def _complete(**outputs):
+        return (
+            "Done.\n```json\n"
+            + json.dumps({"action": "complete", "outputs": outputs})
+            + "\n```"
+        )
+
+    # Sequential responses: planner spawn → worker reply → planner complete
+    fake = _FullFakeOllama(
+        [
+            _spawn("extractor", "extract things", raw_text="hello"),
+            "extracted facts",  # worker response
+            _complete(findings="all done"),
+        ]
+    )
+
+    wf = WorkflowDefinition.model_validate(
+        {
+            "id": "orch_plan_wf",
+            "name": "Orchestrator Plan Test",
+            "schema_version": 1,
+            "defaults": {"role": "reasoning", "max_tokens": 256},
+            "steps": [
+                {
+                    "id": "lead",
+                    "name": "Lead Step",
+                    "kind": "orchestrator",
+                    "outputs": ["findings"],
+                    "planner": {
+                        "role_inline": "You are the lead agent.",
+                        "task": "Investigate and produce findings.",
+                    },
+                    "workers": {
+                        "extractor": {
+                            "id": "w_extractor",
+                            "name": "Extractor Worker",
+                            "role": "fast",
+                            "prompt": {
+                                "role_inline": "You extract facts.",
+                                "task": "extract",
+                            },
+                            "inputs": ["seed.raw_text"],
+                            "outputs": ["facts"],
+                        }
+                    },
+                    "budget": {
+                        "max_workers_spawned": 2,
+                        "max_planner_turns": 6,
+                    },
+                }
+            ],
+        }
+    )
+
+    engine = WorkflowEngine(fake)
+    run = engine.run(wf, seed={})
+
+    assert run.status == "completed", f"run failed: {run.error}"
+
+    from api.services.run_plan import PlanBuilder
+
+    plan = PlanBuilder.reconstruct_from_log(reb.get_run_event_bus(), run.run_id)
+    assert plan is not None
+    orchestrator_items = [i for i in plan.items if i.origin == "orchestrator"]
+    assert (
+        orchestrator_items
+    ), f"No orchestrator-origin plan items found. Items: {[(i.id, i.origin) for i in plan.items]}"

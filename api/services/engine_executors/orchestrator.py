@@ -254,6 +254,24 @@ def execute(
             f"'{directive.worker_id}' (spawn #{spawned}/{budget.max_workers_spawned})"
         )
 
+        if workflow_run.plan is not None:
+            from ..run_plan import PlanBuilder
+
+            PlanBuilder.add_child(
+                workflow_run.plan,
+                parent_id=step.id,
+                item_id=f"{step.id}::{directive.worker_id}_{spawned}",
+                title=f"worker: {directive.worker_id}",
+                origin="orchestrator",
+                updated_seq=spawned,
+            )
+            PlanBuilder.emit(
+                engine._bus,
+                workflow_run.run_id,
+                workflow_run.plan,
+                step_id=step.id,
+            )
+
         try:
             worker_result = engine._execute_one_step(
                 worker_instance,
