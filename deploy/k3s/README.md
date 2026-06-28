@@ -27,8 +27,23 @@ holds the reused docker-volume data dirs.
 
 ## Prerequisites
 
-1. GPU schedulable on bd790i — done via `dot-files/config/k3s/gpu`
-   (RuntimeClass `nvidia` + device plugin; `nvidia.com/gpu: 1` advertised).
+1. GPU schedulable on bd790i via the **NVIDIA DRA driver** (the recently
+   released Dynamic Resource Allocation plugin; DRA is GA on the cluster's
+   k8s 1.34). Install once:
+
+   ```bash
+   helm upgrade --install nvidia-dra-driver-gpu nvidia/dra-driver-nvidia-gpu \
+     --version 0.4.0 -n nvidia-dra-driver-gpu --create-namespace \
+     -f deploy/k3s/dra-driver-values.yaml
+   # verify: kubectl get deviceclasses ; kubectl get resourceslices
+   ```
+
+   The vLLM pod then claims the GPU with a `ResourceClaimTemplate`
+   (deviceClass `gpu.nvidia.com`) instead of `limits.nvidia.com/gpu: 1`, and
+   runs on the default runtime (DRA injects the GPU via CDI — no
+   `runtimeClassName: nvidia`). The classic device plugin is no longer the
+   path for the vLLM pod. The API pod still uses `runtimeClassName: nvidia`
+   for NVML-only visibility.
 2. The API image present in bd790i's containerd (it was never pushed to a
    registry — it's a local compose build):
 
@@ -62,8 +77,14 @@ curl -s localhost:8001/health
 
 ## Notes / caveats
 
-- **One GPU unit.** vLLM holds it; the API gets NVML visibility only. Don't add
-  `nvidia.com/gpu` to the API or it won't schedule.
+- **vLLM image pinned to `v0.17.1`.** It is the known-good build for NVFP4 on
+  the RTX PRO 4000 (SM120/Blackwell). `v0.18.1`+ rewrote the engine (V1) and
+  regressed SM120 — a ~3x throughput drop AND a kv-cache scale loader crash
+  (`KVCacheScaleParameter.weight_loader() takes 2 positional arguments but 3
+  were given`) loading `nvidia/Qwen3-8B-NVFP4`. `v0.23.0` (latest stable) is
+  still broken. Do not bump to `:latest` without re-validating NVFP4 on SM120.
+- **One GPU unit.** vLLM holds it (via the DRA ResourceClaim); the API gets
+  NVML visibility only. Don't give the API a GPU claim.
 - **Ollama fallback** points at `192.168.1.104:11434` but host Ollama binds
   loopback only — set `Environment=OLLAMA_HOST=0.0.0.0:11434` on the host
   `ollama.service` to make the fallback reachable from the pod. vLLM is primary.
