@@ -17250,9 +17250,16 @@ window.Heartbeat = (function () {
 // promise that resolves to true/false. Built on the admin-modal CSS so
 // it inherits the brand palette + motion.
 window.Confirm = (function () {
+  let _open = false;   // re-entrancy guard — the singleton modal can't host two asks
   function ask(opts) {
     opts = opts || {};
+    // A second ask() while one is pending would stack listeners on the
+    // shared modal buttons (one OK → both promises resolve true). Decline
+    // the overlap instead. Legitimate sequential confirms await the first,
+    // so _open is already false by the time they call.
+    if (_open) return Promise.resolve(false);
     return new Promise((resolve) => {
+      _open = true;
       let m = document.getElementById('enclave-confirm-modal');
       if (!m) {
         m = document.createElement('div');
@@ -17284,10 +17291,11 @@ window.Confirm = (function () {
 
       const _restoreFocus = document.activeElement;
       function _close(value) {
+        _open = false;
         m.hidden = true;
         okBtn.removeEventListener('click', _yes);
         cancelBtn.removeEventListener('click', _no);
-        document.removeEventListener('keydown', _onKey);
+        document.removeEventListener('keydown', _onKey, true);
         // Hand focus back to whatever opened the dialog (keyboard users
         // otherwise land back at the top of the document).
         if (_restoreFocus && _restoreFocus.isConnected) {
@@ -17298,13 +17306,29 @@ window.Confirm = (function () {
       function _yes() { _close(true); }
       function _no()  { _close(false); }
       function _onKey(e) {
-        if (e.key === 'Escape') { e.preventDefault(); _no(); }
-        if (e.key === 'Enter')  { e.preventDefault(); _yes(); }
+        if (e.key === 'Escape') { e.preventDefault(); _no(); return; }
+        // Enter confirms — but NOT when Cancel holds focus. Pressing Enter
+        // on a focused Cancel is the standard decline gesture; mapping it to
+        // _yes() (and preventDefault-ing the button's own activation) would
+        // silently confirm a destructive action.
+        if (e.key === 'Enter') {
+          if (document.activeElement === cancelBtn) return;  // let Cancel activate natively
+          e.preventDefault(); _yes(); return;
+        }
+        // Focus trap: keep Tab inside the two buttons so keyboard users
+        // can't walk out to (and accidentally activate) background controls
+        // while the dialog is open.
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const next = (document.activeElement === okBtn) ? cancelBtn : okBtn;
+          next.focus();
+        }
       }
       const cancelBtn = m.querySelector('#enclave-confirm-cancel');
       okBtn.addEventListener('click', _yes);
       cancelBtn.addEventListener('click', _no);
-      document.addEventListener('keydown', _onKey);
+      // Capture phase so the trap sees Tab before it reaches the document.
+      document.addEventListener('keydown', _onKey, true);
       setTimeout(() => okBtn.focus(), 0);
     });
   }
