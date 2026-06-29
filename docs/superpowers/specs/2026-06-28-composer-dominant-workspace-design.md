@@ -172,17 +172,28 @@ api/static/
   js/
     main.js             entry: boot sequence, mount shell + workspace, init router
     core/
-      net.js            Net
-      ui.js             Toast · Confirm · EmptyState · ErrorPanel · Skeleton
+      dom.js            esc() (497 call sites, the import floor) · renderMarkdown · renderMarkdownBasic
+      net.js            Net (only edge: Net→Toast)
+      ui.js             Toast (pure leaf) · Confirm · EmptyState · ErrorPanel · Skeleton
       theme.js          Theme
       shortcuts.js      Shortcuts
       heartbeat.js      Heartbeat
-      state.js          NEW — Workspace state object + localStorage persistence
+      state.js          NEW — Workspace session state + localStorage; ALSO the single owner of the
+                        shared mutable globals the audit flagged: dfEditor/dfNodeData/dfNextId,
+                        graphConfig (localStorage-backed), graphData/graphSim, chatHistory, _chatModels,
+                        _connExpand — routing these here prevents composer↔runs import cycles
     shell/
+      boot.js           NEW — single ordered boot(): replaces the ~40 parse-time side effects
+                        (13 DOMContentLoaded handlers, setInterval(updateClock), free-floating
+                        Actions.click/.change/.input registration blocks). Modules are implicitly
+                        deferred, so naive DOMContentLoaded handlers may never fire — boot() is called
+                        from main.js after imports resolve.
       nav.js            NEW top-bar nav (Composer/Runs/Library/Admin); retires switchTab's tab list
+                        (first fix switchTab's onclick-string fallback @ index.html:7817 — ensure
+                        every .tab-btn carries data-tab, then delete the fallback branch)
       router.js         hash routing (#/<dest>)
-      actions.js        Actions — the data-action delegation dispatcher
-      legacy-bridge.js  window.fn = fn exposures for remaining inline handlers (see below)
+      actions.js        Actions — the data-action delegation dispatcher (162 sites)
+      legacy-bridge.js  window.fn = fn exposures for the static-markup inline handlers (see below)
     workspace/
       workspace.js      orchestrator: 3 regions + selection
       left-rail.js      Projects locator + palette
@@ -236,6 +247,8 @@ The backend autonomous engine + research loops are specified separately in [auto
 - **Boot ordering** — module execution is deferred. Any code that today runs at classic-script parse time must move into `main.js`'s explicit boot sequence. Audit for parse-time side effects during Phase 1.
 - **Caching** — `index.html` is already served `no-store`; module files are normal `/static` assets. Add cache-busting (query string or content hash in import URLs) if stale modules become a problem in the k3s dev container.
 - **Bigger diff, mostly mechanical** — Phase 1's relocation is large but low-logic-risk; review per-domain file moves independently.
+- **Two Drawflow instances** — `dfEditor` (global composer, `index.html:12549`, touched by 50+ `df*` fns) and `_editor` (RunsTab-private read-only run viz, `:19219`) are both `new Drawflow(...)`. Keep `dfEditor` in `core/state`; keep `_editor` **private** inside the runs module — never export it. Conflating them corrupts run rendering or composer state.
+- **`esc()` shadowing** — 5 panels (`ApiKeysPanel`/`PluginsPanel`/`SkillsPanel`/`CloudPanel`/`ExportsPanel`) define a private `esc`; `renderMarkdown` has its own intentionally-different regex `esc`. Audit for parity before replacing the 5 with the shared `core/dom.js` import; leave `renderMarkdown`'s internal one alone. Add a characterization snapshot of `esc()` output.
 
 ## Error handling
 
@@ -248,7 +261,18 @@ The backend autonomous engine + research loops are specified separately in [auto
 
 ## Testing
 
-UI tests live under `tests/ui/` (see existing 46-file suite). Cover:
+> **Grounding (gap-fill `wf_73491e72-c87`):** tests are 100% Python/pytest (173 files); there is **no JS test runner, no `package.json`, no build step**. UI is covered by `tests/ui/` (BeautifulSoup string-matching) + `tests/playwright/` (live-stack e2e that **auto-skips when the stack is down and is NOT in GitHub CI**). The composer already uses `data-action` delegation, so all 208 inline handlers are in **static** markup; the namespace graph is a near-DAG with `Net`/`Toast`/`Confirm`/`Actions`/`esc()` as the import floor.
+
+**Phase 0 — capture goldens FIRST (non-negotiable, before one line of `index.html` moves):** the "270 globals" golden does **not** yet exist committed (it's captured in scratchpad). Commit `tests/parity/golden/{window_globals.json, inline_handlers.json, dom_shell.json}` captured from the *current* served `index.html`. A golden is only trustworthy captured pre-split.
+
+**Parity gate (Stage 1 → Stage 2):**
+- **Global-surface superset**: post-split `Object.keys(window)` (minus an `about:blank` native baseline) **⊇** golden. Fail only on *removed* keys; report adds as info. (Superset, not exact — modules legitimately add.)
+- **Inline-handler integrity**: every `on*=` symbol in static markup resolves to a defined `window.*` — runnable as a cheap **pure-Python BeautifulSoup test in the existing matrix** (no browser) plus a Playwright booted-page check.
+- **Zero-console-error boot** (reuse `tests/playwright` `no_console_errors` fixture): module graph loads clean; vendor globals resolve before `main.js` boot.
+
+**Trim (per critique — defer for v1):** node:test JS-unit layer (adds a Node toolchain to a no-build repo), DOM accessibility-snapshot diff (high-maintenance, low-yield — superset + handler checks catch the real regression), and a dedicated Chromium `ui-parity` CI job (run the pure-Python checks in the existing matrix instead).
+
+Behavioral coverage (Playwright/`tests/ui`):
 1. **Selection → right pane**: selecting node A then node B renders A's then B's thread (history isolation).
 2. **Seed → Promote**: seed chat with N messages, Promote, assert a node exists, `threads[newId]` has the N messages, `threads['seed']` is empty, canvas selection = new node.
 3. **Promote into existing graph**: with node selected, Promote appends downstream with an edge.
