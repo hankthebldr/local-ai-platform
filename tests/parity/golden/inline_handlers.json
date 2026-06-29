@@ -1,0 +1,489 @@
+{
+  "_meta": {
+    "source": "static markup of api/static/index.html (<script>/<style> stripped)",
+    "purpose": "Every symbol here is invoked by an inline on*= handler. After the ES-module split each MUST be reachable as a window global (legacy-bridge.js), or the handler silently no-ops. 'must_bridge' lists symbols reachable today ONLY via a classic-script global lexical const/let/function \u2014 these break under modules unless explicitly assigned to window.",
+    "handler_count": 196,
+    "symbol_count": 81,
+    "must_bridge_count": 57,
+    "unknown_count": 0
+  },
+  "symbols": [
+    "AdminAuth",
+    "AdminMenu",
+    "AgentGen",
+    "ApiKeysPanel",
+    "CatalogPage",
+    "CloudPanel",
+    "ComposerWorkstream",
+    "ExportsPanel",
+    "Kanban",
+    "MCPPanel",
+    "PluginsPanel",
+    "Projects",
+    "RunsTab",
+    "Shortcuts",
+    "SkillsBuilder",
+    "SkillsDiscover",
+    "SkillsPanel",
+    "Theme",
+    "WorkflowIndex",
+    "WorkflowMemory",
+    "addFact",
+    "applyRoleAsSystemPrompt",
+    "cleanupStaleSessions",
+    "clearSystemPrompt",
+    "closeAgentChat",
+    "closeStepConfigPopup",
+    "composerClearWithConfirm",
+    "composerExitStepEngage",
+    "composerExportBundle",
+    "composerLoadFromIndex",
+    "composerNewWorkflow",
+    "composerSwitchBench",
+    "dfAutoLayout",
+    "dfExportYaml",
+    "dfImportBundle",
+    "dfImportYaml",
+    "dfRunWorkflowFromComposer",
+    "dfRunWorkflowLive",
+    "dfSave",
+    "dfToggleFullscreen",
+    "dfZoomIn",
+    "dfZoomOut",
+    "dfZoomReset",
+    "exportSession",
+    "filterCatalog",
+    "graphZoomIn",
+    "graphZoomOut",
+    "loadActiveSessions",
+    "loadAgentsTab",
+    "loadInstalledLocal",
+    "markSettingsDirty",
+    "onAgentSelectionChanged",
+    "rebuildGraph",
+    "refreshArchitectureDetection",
+    "refreshDiscovery",
+    "reloadProfiles",
+    "renderDiscovery",
+    "renderWorkflowIndex",
+    "resetGraphConfigDefaults",
+    "resetGraphZoom",
+    "runDeepDive",
+    "saveSearchSettings",
+    "saveSystemPrompt",
+    "searchDocuments",
+    "searchMemory",
+    "sendAgentMessage",
+    "sendMessage",
+    "setDiscFilter",
+    "setFilter",
+    "showCreateAgentModal",
+    "switchTab",
+    "toggleAgentDock",
+    "toggleComposerWorkstream",
+    "toggleGraphConfigPanel",
+    "toggleLoadedModelsPopover",
+    "toggleSearch",
+    "toggleSessionDetailExpand",
+    "toggleSettings",
+    "toggleStepConfigDock",
+    "toggleSystemPrompt",
+    "uploadDocument"
+  ],
+  "classification": {
+    "AdminAuth": "window",
+    "AdminMenu": "window",
+    "AgentGen": "lexical",
+    "ApiKeysPanel": "window",
+    "CatalogPage": "window",
+    "CloudPanel": "window",
+    "ComposerWorkstream": "window",
+    "ExportsPanel": "window",
+    "Kanban": "window",
+    "MCPPanel": "window",
+    "PluginsPanel": "window",
+    "Projects": "lexical",
+    "RunsTab": "window",
+    "Shortcuts": "window",
+    "SkillsBuilder": "window",
+    "SkillsDiscover": "window",
+    "SkillsPanel": "window",
+    "Theme": "window",
+    "WorkflowIndex": "lexical",
+    "WorkflowMemory": "window",
+    "addFact": "lexical",
+    "applyRoleAsSystemPrompt": "lexical",
+    "cleanupStaleSessions": "lexical",
+    "clearSystemPrompt": "lexical",
+    "closeAgentChat": "lexical",
+    "closeStepConfigPopup": "window",
+    "composerClearWithConfirm": "lexical",
+    "composerExitStepEngage": "lexical",
+    "composerExportBundle": "lexical",
+    "composerLoadFromIndex": "lexical",
+    "composerNewWorkflow": "lexical",
+    "composerSwitchBench": "lexical",
+    "dfAutoLayout": "lexical",
+    "dfExportYaml": "lexical",
+    "dfImportBundle": "lexical",
+    "dfImportYaml": "lexical",
+    "dfRunWorkflowFromComposer": "lexical",
+    "dfRunWorkflowLive": "lexical",
+    "dfSave": "lexical",
+    "dfToggleFullscreen": "lexical",
+    "dfZoomIn": "lexical",
+    "dfZoomOut": "lexical",
+    "dfZoomReset": "lexical",
+    "exportSession": "lexical",
+    "filterCatalog": "lexical",
+    "graphZoomIn": "window",
+    "graphZoomOut": "window",
+    "loadActiveSessions": "lexical",
+    "loadAgentsTab": "lexical",
+    "loadInstalledLocal": "lexical",
+    "markSettingsDirty": "lexical",
+    "onAgentSelectionChanged": "lexical",
+    "rebuildGraph": "lexical",
+    "refreshArchitectureDetection": "lexical",
+    "refreshDiscovery": "lexical",
+    "reloadProfiles": "lexical",
+    "renderDiscovery": "lexical",
+    "renderWorkflowIndex": "lexical",
+    "resetGraphConfigDefaults": "window",
+    "resetGraphZoom": "lexical",
+    "runDeepDive": "lexical",
+    "saveSearchSettings": "lexical",
+    "saveSystemPrompt": "lexical",
+    "searchDocuments": "lexical",
+    "searchMemory": "lexical",
+    "sendAgentMessage": "lexical",
+    "sendMessage": "lexical",
+    "setDiscFilter": "lexical",
+    "setFilter": "lexical",
+    "showCreateAgentModal": "lexical",
+    "switchTab": "lexical",
+    "toggleAgentDock": "lexical",
+    "toggleComposerWorkstream": "lexical",
+    "toggleGraphConfigPanel": "window",
+    "toggleLoadedModelsPopover": "lexical",
+    "toggleSearch": "lexical",
+    "toggleSessionDetailExpand": "window",
+    "toggleSettings": "lexical",
+    "toggleStepConfigDock": "window",
+    "toggleSystemPrompt": "lexical",
+    "uploadDocument": "lexical"
+  },
+  "must_bridge": [
+    "AgentGen",
+    "Projects",
+    "WorkflowIndex",
+    "addFact",
+    "applyRoleAsSystemPrompt",
+    "cleanupStaleSessions",
+    "clearSystemPrompt",
+    "closeAgentChat",
+    "composerClearWithConfirm",
+    "composerExitStepEngage",
+    "composerExportBundle",
+    "composerLoadFromIndex",
+    "composerNewWorkflow",
+    "composerSwitchBench",
+    "dfAutoLayout",
+    "dfExportYaml",
+    "dfImportBundle",
+    "dfImportYaml",
+    "dfRunWorkflowFromComposer",
+    "dfRunWorkflowLive",
+    "dfSave",
+    "dfToggleFullscreen",
+    "dfZoomIn",
+    "dfZoomOut",
+    "dfZoomReset",
+    "exportSession",
+    "filterCatalog",
+    "loadActiveSessions",
+    "loadAgentsTab",
+    "loadInstalledLocal",
+    "markSettingsDirty",
+    "onAgentSelectionChanged",
+    "rebuildGraph",
+    "refreshArchitectureDetection",
+    "refreshDiscovery",
+    "reloadProfiles",
+    "renderDiscovery",
+    "renderWorkflowIndex",
+    "resetGraphZoom",
+    "runDeepDive",
+    "saveSearchSettings",
+    "saveSystemPrompt",
+    "searchDocuments",
+    "searchMemory",
+    "sendAgentMessage",
+    "sendMessage",
+    "setDiscFilter",
+    "setFilter",
+    "showCreateAgentModal",
+    "switchTab",
+    "toggleAgentDock",
+    "toggleComposerWorkstream",
+    "toggleLoadedModelsPopover",
+    "toggleSearch",
+    "toggleSettings",
+    "toggleSystemPrompt",
+    "uploadDocument"
+  ],
+  "unknown": [],
+  "by_symbol": {
+    "AdminAuth": [
+      "click"
+    ],
+    "AdminMenu": [
+      "click"
+    ],
+    "AgentGen": [
+      "click"
+    ],
+    "ApiKeysPanel": [
+      "click"
+    ],
+    "CatalogPage": [
+      "click"
+    ],
+    "CloudPanel": [
+      "click"
+    ],
+    "ComposerWorkstream": [
+      "click"
+    ],
+    "ExportsPanel": [
+      "click"
+    ],
+    "Kanban": [
+      "change",
+      "click"
+    ],
+    "MCPPanel": [
+      "change",
+      "click"
+    ],
+    "PluginsPanel": [
+      "click"
+    ],
+    "Projects": [
+      "change",
+      "click"
+    ],
+    "RunsTab": [
+      "click",
+      "input"
+    ],
+    "Shortcuts": [
+      "click"
+    ],
+    "SkillsBuilder": [
+      "click"
+    ],
+    "SkillsDiscover": [
+      "change",
+      "click",
+      "input"
+    ],
+    "SkillsPanel": [
+      "change",
+      "click"
+    ],
+    "Theme": [
+      "click"
+    ],
+    "WorkflowIndex": [
+      "click"
+    ],
+    "WorkflowMemory": [
+      "click"
+    ],
+    "addFact": [
+      "click"
+    ],
+    "applyRoleAsSystemPrompt": [
+      "change"
+    ],
+    "cleanupStaleSessions": [
+      "click"
+    ],
+    "clearSystemPrompt": [
+      "click"
+    ],
+    "closeAgentChat": [
+      "click"
+    ],
+    "closeStepConfigPopup": [
+      "click"
+    ],
+    "composerClearWithConfirm": [
+      "click"
+    ],
+    "composerExitStepEngage": [
+      "click"
+    ],
+    "composerExportBundle": [
+      "click"
+    ],
+    "composerLoadFromIndex": [
+      "click"
+    ],
+    "composerNewWorkflow": [
+      "click"
+    ],
+    "composerSwitchBench": [
+      "click"
+    ],
+    "dfAutoLayout": [
+      "click"
+    ],
+    "dfExportYaml": [
+      "click"
+    ],
+    "dfImportBundle": [
+      "click"
+    ],
+    "dfImportYaml": [
+      "click"
+    ],
+    "dfRunWorkflowFromComposer": [
+      "click"
+    ],
+    "dfRunWorkflowLive": [
+      "click"
+    ],
+    "dfSave": [
+      "click"
+    ],
+    "dfToggleFullscreen": [
+      "click"
+    ],
+    "dfZoomIn": [
+      "click"
+    ],
+    "dfZoomOut": [
+      "click"
+    ],
+    "dfZoomReset": [
+      "click"
+    ],
+    "exportSession": [
+      "click"
+    ],
+    "filterCatalog": [
+      "input"
+    ],
+    "graphZoomIn": [
+      "click"
+    ],
+    "graphZoomOut": [
+      "click"
+    ],
+    "loadActiveSessions": [
+      "click"
+    ],
+    "loadAgentsTab": [
+      "click"
+    ],
+    "loadInstalledLocal": [
+      "click"
+    ],
+    "markSettingsDirty": [
+      "change",
+      "input"
+    ],
+    "onAgentSelectionChanged": [
+      "change"
+    ],
+    "rebuildGraph": [
+      "click"
+    ],
+    "refreshArchitectureDetection": [
+      "click"
+    ],
+    "refreshDiscovery": [
+      "click"
+    ],
+    "reloadProfiles": [
+      "click"
+    ],
+    "renderDiscovery": [
+      "input"
+    ],
+    "renderWorkflowIndex": [
+      "input"
+    ],
+    "resetGraphConfigDefaults": [
+      "click"
+    ],
+    "resetGraphZoom": [
+      "click"
+    ],
+    "runDeepDive": [
+      "click"
+    ],
+    "saveSearchSettings": [
+      "click"
+    ],
+    "saveSystemPrompt": [
+      "click"
+    ],
+    "searchDocuments": [
+      "click"
+    ],
+    "searchMemory": [
+      "input"
+    ],
+    "sendAgentMessage": [
+      "click"
+    ],
+    "sendMessage": [
+      "click"
+    ],
+    "setDiscFilter": [
+      "click"
+    ],
+    "setFilter": [
+      "click"
+    ],
+    "showCreateAgentModal": [
+      "click"
+    ],
+    "switchTab": [
+      "click"
+    ],
+    "toggleAgentDock": [
+      "click"
+    ],
+    "toggleComposerWorkstream": [
+      "click"
+    ],
+    "toggleGraphConfigPanel": [
+      "click"
+    ],
+    "toggleLoadedModelsPopover": [
+      "click"
+    ],
+    "toggleSearch": [
+      "click"
+    ],
+    "toggleSessionDetailExpand": [
+      "click"
+    ],
+    "toggleSettings": [
+      "click"
+    ],
+    "toggleStepConfigDock": [
+      "click"
+    ],
+    "toggleSystemPrompt": [
+      "click"
+    ],
+    "uploadDocument": [
+      "change"
+    ]
+  }
+}
