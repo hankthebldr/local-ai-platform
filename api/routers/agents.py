@@ -98,7 +98,10 @@ async def create_agent(defn: AgentDefinition):
             detail=f"Agent '{defn.id}' already exists. Use PUT to update.",
         )
 
-    path = service.create_agent(defn)
+    try:
+        path = service.create_agent(defn)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return {"status": "created", "agent_id": defn.id, "path": path}
 
 
@@ -106,7 +109,10 @@ async def create_agent(defn: AgentDefinition):
 async def update_agent(agent_id: str, defn: AgentDefinition):
     """Update an existing agent definition"""
     service = get_service()
-    success = service.update_agent(agent_id, defn)
+    try:
+        success = service.update_agent(agent_id, defn)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     if not success:
         raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
     return {"status": "updated", "agent_id": agent_id}

@@ -1,0 +1,67 @@
+<!-- @dsCard group="Colors" viewport="700x250" name="Teal flavors" subtitle="Every way teal shows up: derivatives, gradients, glow, and in-use treatments" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg); padding: 16px 20px; font-family: var(--font-mono); }
+  .seclab { font-size: 8px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 8px; }
+  .sec { margin-bottom: 15px; }
+  .row { display: flex; gap: 8px; }
+  .sw { flex: 1; border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; }
+  .chip { height: 40px; }
+  .meta { padding: 4px 7px; background: var(--surface-card); }
+  .name { font-size: 8.5px; color: var(--text); }
+  .val { font-size: 7px; color: var(--text-muted); }
+  /* gradients */
+  .g1 { background: linear-gradient(120deg, var(--teal-400), var(--emerald-500)); }
+  .g2 { background: linear-gradient(120deg, var(--teal-300), var(--sky-400)); }
+  .g3 { background: linear-gradient(120deg, var(--teal-200), var(--teal-700)); }
+  .g4 { background: radial-gradient(circle at 30% 30%, var(--teal-300), var(--teal-700) 80%); }
+  .g5 { background: linear-gradient(120deg, var(--teal-400), #7C84E8); }
+  /* in use */
+  .use { display: flex; gap: 10px; align-items: center; }
+  .u { display: inline-flex; align-items: center; gap: 6px; font-size: 9px; letter-spacing: .04em; padding: 7px 12px; border-radius: var(--radius-sm); }
+  .fill { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  .ghost { background: var(--accent-ghost); color: var(--accent); border: 1px solid var(--accent-dim); }
+  .outline { color: var(--accent); border: 1px solid var(--accent); }
+  .glow { background: var(--surface-card); color: var(--accent); border: 1px solid transparent; box-shadow: var(--glow-accent); }
+  .dotpip { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: var(--glow-accent); }
+</style>
+</head>
+<body>
+  <div class="sec">
+    <div class="seclab">Derivatives — the working teal tokens</div>
+    <div class="row">
+      <div class="sw"><div class="chip" style="background:var(--accent)"></div><div class="meta"><div class="name">accent</div><div class="val">#2BD4B4</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--accent-bright)"></div><div class="meta"><div class="name">bright</div><div class="val">hover</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--accent-deep)"></div><div class="meta"><div class="name">deep</div><div class="val">#128A78</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--accent-dim)"></div><div class="meta"><div class="name">dim</div><div class="val">42% α</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--accent-ghost)"></div><div class="meta"><div class="name">ghost</div><div class="val">12% α</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--accent-trace)"></div><div class="meta"><div class="name">trace</div><div class="val">6% α</div></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="seclab">Gradients — for data viz, heroes, accents</div>
+    <div class="row">
+      <div class="sw"><div class="chip g1"></div><div class="meta"><div class="name">teal → emerald</div></div></div>
+      <div class="sw"><div class="chip g2"></div><div class="meta"><div class="name">teal → sky</div></div></div>
+      <div class="sw"><div class="chip g3"></div><div class="meta"><div class="name">bright → deep</div></div></div>
+      <div class="sw"><div class="chip g4"></div><div class="meta"><div class="name">radial glow</div></div></div>
+      <div class="sw"><div class="chip g5"></div><div class="meta"><div class="name">teal → periwinkle</div></div></div>
+    </div>
+  </div>
+
+  <div class="sec" style="margin-bottom:0">
+    <div class="seclab">In use</div>
+    <div class="use">
+      <span class="u fill">primary fill</span>
+      <span class="u ghost">ghost chip</span>
+      <span class="u outline">outline</span>
+      <span class="u glow"><span class="dotpip"></span> live · glow</span>
+    </div>
+  </div>
+</body>
+</html>

@@ -16,9 +16,7 @@ auto-forces dark theme + injects the license key.
 
 from __future__ import annotations
 
-import time
 
-import requests
 
 # ── Catalog Models tab populates (#73) ───────────────────────────────────
 
@@ -189,25 +187,41 @@ def test_composer_clear_button_exists_and_clears(signed_in_page):
     page = signed_in_page
     page.evaluate("() => composerLoadById('email-draft')")
     page.wait_for_timeout(3000)
+    # Chat-led redesign: the workflow-admin toolbar (New / Clear / Load / Import)
+    # now lives inside the receding `.composer-mgmt-drawer` <details>, collapsed
+    # by default. Open it so the Clear button is interactable — the same gesture
+    # an operator makes to reach workflow admin.
+    page.evaluate(
+        "() => { const d = document.querySelector('.composer-mgmt-drawer'); if (d) d.open = true; }"
+    )
     # Auto-accept the confirm dialog the Clear button triggers.
     page.on("dialog", lambda d: d.accept())
     btn = page.locator('button[onclick="composerClearWithConfirm()"]')
     assert btn.count() == 1, "Clear button not present in the composer actions row"
     btn.click()
     page.wait_for_timeout(1200)
+    # The composer now keeps always-present editable START/END anchors, so an
+    # empty canvas legitimately holds those two __start__/__end__ nodes. Count
+    # only the real (non-anchor) steps when asserting the wipe.
     state = page.evaluate(
-        """() => ({
-            id: document.getElementById('df-wf-id').value,
-            name: document.getElementById('df-wf-name').value,
-            desc: document.getElementById('df-wf-desc').value,
-            nodes: Object.keys(dfEditor?.drawflow?.drawflow?.Home?.data || {}).length,
-        })"""
+        """() => {
+            const data = dfEditor?.drawflow?.drawflow?.Home?.data || {};
+            const realNodes = Object.values(data).filter(
+                n => n.name !== '__start__' && n.name !== '__end__'
+            ).length;
+            return {
+                id: document.getElementById('df-wf-id').value,
+                name: document.getElementById('df-wf-name').value,
+                desc: document.getElementById('df-wf-desc').value,
+                realNodes,
+            };
+        }"""
     )
     assert state == {
         "id": "",
         "name": "",
         "desc": "",
-        "nodes": 0,
+        "realNodes": 0,
     }, f"Clear button did not fully wipe composer state: {state}"
 
 
@@ -349,7 +363,7 @@ def test_composer_chat_parses_agent_endpoint_response(
             }""",
             timeout=180_000,
         )
-    except Exception as e:
+    except Exception:
         # Fall back to assert: if the timeout hit, the test fails with the
         # literal '(empty response)' check below — clearer diagnostic.
         pass

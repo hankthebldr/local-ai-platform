@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B0E0D"></stop>
+      <stop offset="100%" stop-color="#101413"></stop>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#bg)"></rect>
+  
+  
+  <rect x="20" y="70" width="50" height="40" rx="4" fill="#2BD4B4" opacity="0.12" stroke="#2BD4B4" stroke-width="1"></rect>
+  <text x="45" y="86" text-anchor="middle" fill="#2BD4B4" font-family="monospace" font-size="7" opacity="0.8">analyze</text>
+  <text x="45" y="98" text-anchor="middle" fill="#555" font-family="monospace" font-size="6">reasoning</text>
+  <circle cx="45" cy="64" r="3" fill="#2BD4B4" opacity="0.6"></circle>
+
+  
+  <line x1="74" y1="90" x2="94" y2="90" stroke="#2BD4B4" stroke-width="1" opacity="0.3"></line>
+  <polygon points="94,87 100,90 94,93" fill="#2BD4B4" opacity="0.3"></polygon>
+  
+  <rect x="79" y="82" width="10" height="4" rx="1" fill="#2BD4B4" opacity="0.2"></rect>
+
+  
+  <rect x="104" y="70" width="50" height="40" rx="4" fill="#57C4D2" opacity="0.1" stroke="#57C4D2" stroke-width="1"></rect>
+  <text x="129" y="86" text-anchor="middle" fill="#57C4D2" font-family="monospace" font-size="7" opacity="0.7">generate</text>
+  <text x="129" y="98" text-anchor="middle" fill="#555" font-family="monospace" font-size="6">coding</text>
+  <circle cx="129" cy="64" r="3" fill="#57C4D2" opacity="0.5"></circle>
+
+  
+  <line x1="158" y1="90" x2="178" y2="90" stroke="#57C4D2" stroke-width="1" opacity="0.3"></line>
+  <polygon points="178,87 184,90 178,93" fill="#57C4D2" opacity="0.3"></polygon>
+
+  
+  <rect x="188" y="70" width="50" height="40" rx="4" fill="#2BD4B4" opacity="0.08" stroke="#28302D" stroke-width="1"></rect>
+  <text x="213" y="86" text-anchor="middle" fill="#888" font-family="monospace" font-size="7">validate</text>
+  <text x="213" y="98" text-anchor="middle" fill="#555" font-family="monospace" font-size="6">fast</text>
+  <circle cx="213" cy="64" r="3" fill="#888" opacity="0.3"></circle>
+
+  
+  <line x1="242" y1="90" x2="262" y2="90" stroke="#28302D" stroke-width="1"></line>
+  <polygon points="262,87 268,90 262,93" fill="#28302D"></polygon>
+
+  
+  <rect x="272" y="70" width="36" height="40" rx="4" fill="#2BD4B4" opacity="0.06" stroke="#28302D" stroke-width="1"></rect>
+  <text x="290" y="86" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">output</text>
+  <circle cx="290" cy="64" r="3" fill="#555" opacity="0.3"></circle>
+
+  
+  <rect x="20" y="125" width="288" height="30" rx="4" fill="none" stroke="#28302D" stroke-width="1" stroke-dasharray="4 4"></rect>
+  <text x="30" y="143" fill="#333" font-family="monospace" font-size="7">workspace.analyze.result → workspace.generate.input → workspace.validate.passed</text>
+
+  
+  <rect x="20" y="30" width="60" height="20" rx="3" fill="none" stroke="#555" stroke-width="0.8"></rect>
+  <text x="50" y="43" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">seed{}</text>
+  <line x1="50" y1="50" x2="45" y2="64" stroke="#555" stroke-width="0.5" stroke-dasharray="2 2"></line>
+</svg>

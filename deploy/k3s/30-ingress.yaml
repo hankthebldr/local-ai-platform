@@ -1,0 +1,27 @@
+# Traefik ingress for the Console at http://enclave.lab.local
+#
+# Traefik is k3s's bundled ingress controller (LoadBalancer on the cluster VIPs).
+# Add a DNS record so enclave.lab.local resolves to a cluster node IP — on this
+# homelab that's a Pi-hole local-DNS / dnsmasq entry, e.g.:
+#   address=/enclave.lab.local/192.168.1.109
+# (192.168.1.109 = ms-01, a Traefik LB endpoint; .102 works too.)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: enclave-console
+  namespace: enclave
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: enclave.lab.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: enclave-api
+                port:
+                  number: 8001

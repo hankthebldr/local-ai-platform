@@ -9,9 +9,10 @@ RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
 WORKDIR /app
 
 # Install core + RAG dependencies (chromadb + langchain + sentence-transformers).
-# requirements-rag.txt extends requirements-core.txt via `-r`, so installing rag
-# gives us both. Needed for the Documents tab and any embedding-backed feature.
-COPY setup/requirements-core.txt setup/requirements-rag.txt setup/
+# requirements-rag.txt extends requirements-core.txt AND requirements-onnx.txt
+# via `-r`, so installing rag gives us all three. Needed for the Documents tab
+# and any embedding-backed feature (onnx is the torch-free encoder substrate).
+COPY setup/requirements-core.txt setup/requirements-rag.txt setup/requirements-onnx.txt setup/
 RUN pip install --no-cache-dir -r setup/requirements-rag.txt
 
 # Copy application code + runtime data (workflows, agents, prompts, model

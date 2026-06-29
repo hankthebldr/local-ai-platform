@@ -25,6 +25,7 @@ from .routers import (
     graph,
     workflows,
     workflow_index,
+    composer,
     api_keys,
     plugins,
     mcp,
@@ -41,6 +42,8 @@ from .routers import (
     skills,  # noqa: F401 — used below via app.include_router
     discover,  # noqa: F401 — used below via app.include_router
     system,  # noqa: F401 — architecture-aware orchestration (Phase 1)
+    provenance,  # noqa: F401 — response→source grounding chains
+    conversations,  # noqa: F401 — durable chat threads
 )
 from .services.ollama_service import OllamaService
 from .services.workflow_engine import WorkflowEngine
@@ -313,6 +316,7 @@ app.include_router(exports.router)
 app.include_router(graph.router)
 app.include_router(workflows.router)
 app.include_router(workflow_index.router)
+app.include_router(composer.router)
 app.include_router(api_keys.router)
 app.include_router(plugins.router)
 app.include_router(mcp.router)
@@ -329,6 +333,8 @@ app.include_router(feedback.router)
 app.include_router(skills.router)
 app.include_router(discover.router)
 app.include_router(system.router)
+app.include_router(provenance.router)
+app.include_router(conversations.router)
 from .routers import projects as _projects_router  # noqa: E402
 
 app.include_router(_projects_router.router)
@@ -343,27 +349,60 @@ async def health_check():
     import psutil
 
     ollama_healthy = ollama_service.health_check()
-    model_count = 0
-    model_names = []
+    # list_models() merges vLLM-served weights into the Ollama list (so every
+    # picker sees one catalog); split them back out here so /health attributes
+    # each model to the runner that actually serves it. The vLLM entries carry
+    # a `runner: "vllm"` marker; an empty vLLM list while the runner is
+    # registered means the server is down (it always serves its pinned model).
+    ollama_names = []
+    vllm_names = []
     if ollama_healthy:
         try:
-            models = ollama_service.list_models()
-            model_count = len(models)
-            model_names = [m["name"] for m in models]
+            for m in ollama_service.list_models():
+                (vllm_names if m.get("runner") == "vllm" else ollama_names).append(
+                    m["name"]
+                )
         except Exception:
             pass
+
+    runners = [
+        {
+            "name": "ollama",
+            "status": "healthy" if ollama_healthy else "unhealthy",
+            "models_loaded": len(ollama_names),
+            "models": ollama_names,
+        }
+    ]
+    try:
+        from .services.runner_registry import get_current_registry
+
+        registered = {k.value for k in get_current_registry().kinds()}
+    except Exception:
+        registered = {"ollama"}
+    if "vllm" in registered:
+        runners.append(
+            {
+                "name": "vllm",
+                "status": "healthy" if vllm_names else "unreachable",
+                "models_loaded": len(vllm_names),
+                "models": vllm_names,
+            }
+        )
 
     mem = psutil.virtual_memory()
 
     return {
         "status": "healthy" if ollama_healthy else "degraded",
         "version": __version__,
+        # Back-compat: this key now carries ONLY true Ollama models; vLLM
+        # weights moved to the runners array (they were never Ollama's).
         "ollama": {
             "host": OLLAMA_HOST,
             "status": "healthy" if ollama_healthy else "unhealthy",
-            "models_loaded": model_count,
-            "models": model_names,
+            "models_loaded": len(ollama_names),
+            "models": ollama_names,
         },
+        "runners": runners,
         "system": {
             "cpu_percent": psutil.cpu_percent(interval=0.1),
             "cpu_count": psutil.cpu_count(),

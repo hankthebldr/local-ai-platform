@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0a"></stop>
+      <stop offset="50%" stop-color="#0d1520"></stop>
+      <stop offset="100%" stop-color="#1a1a2e"></stop>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <rect width="40" height="40" fill="none" stroke="#1a1a2e" stroke-width="0.5" opacity="0.3"></rect>
+    </pattern>
+  </defs>
+
+  
+  <rect width="1280" height="640" fill="url(#bg)"></rect>
+  <rect width="1280" height="640" fill="url(#grid)"></rect>
+
+  
+  <circle cx="640" cy="280" r="200" fill="#00E87B" opacity="0.03"></circle>
+
+  
+  <g transform="translate(580, 200) scale(1.5)">
+    <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="#00E87B" stroke-width="2.5"></rect>
+    <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="#00E87B" stroke-width="1.5" opacity="0.5"></rect>
+    <rect x="28" y="28" width="24" height="24" rx="2" fill="#00E87B" opacity="0.2"></rect>
+    <rect x="34" y="34" width="12" height="12" rx="1" fill="#00E87B" opacity="0.6"></rect>
+  </g>
+
+  
+  <text x="640" y="370" text-anchor="middle" font-family="&#39;JetBrains Mono&#39;, monospace" font-size="48" font-weight="700" fill="#00E87B" letter-spacing="6">ENCLAVE</text>
+
+  
+  <text x="640" y="420" text-anchor="middle" font-family="&#39;Space Grotesk&#39;, &#39;Inter&#39;, sans-serif" font-size="20" fill="#888888">Self-hosted AI inference. CPU-optimized. One price. Forever.</text>
+
+</svg>

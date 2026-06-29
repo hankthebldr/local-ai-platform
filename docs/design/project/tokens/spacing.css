@@ -1,0 +1,60 @@
+/* ============================================================================
+   ENCLAVE · SPACING, RADII, ELEVATION
+   ----------------------------------------------------------------------------
+   A 4px base grid. The UI is dense (operator console), so the lower end of
+   the scale gets the most use. Radii are restrained — panels are near-square
+   (mil-spec calm), cards and controls take a small soft radius.
+   ========================================================================== */
+
+:root {
+  /* Spacing — 4px grid */
+  --space-0:  0;
+  --space-1:  2px;
+  --space-2:  4px;
+  --space-3:  6px;
+  --space-4:  8px;
+  --space-5:  12px;
+  --space-6:  16px;
+  --space-7:  20px;
+  --space-8:  24px;
+  --space-9:  32px;
+  --space-10: 40px;
+  --space-11: 48px;
+  --space-12: 64px;
+  --space-14: 80px;
+  --space-16: 96px;
+
+  /* Radii — restrained. Panels are crisp; controls softly rounded. */
+  --radius-none: 0;
+  --radius-xs:  3px;    /* chips, tags, pips */
+  --radius-sm:  5px;    /* buttons, inputs */
+  --radius-md:  8px;    /* cards */
+  --radius-lg:  12px;   /* modals, large panels */
+  --radius-xl:  18px;
+  --radius-pill: 999px;
+
+  /* Border widths */
+  --bw-hair: 1px;
+  --bw-thick: 1.5px;
+  --bw-heavy: 2px;
+
+  /* Elevation — dark-theme shadows: deep, soft, with a faint top highlight */
+  --shadow-0: none;
+  --shadow-1: 0 1px 0 rgba(255,255,255,0.02), 0 1px 3px rgba(0,0,0,0.40);
+  --shadow-2: 0 4px 14px rgba(0,0,0,0.48), 0 1px 0 rgba(255,255,255,0.02);
+  --shadow-3: 0 14px 34px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.02);
+  --shadow-4: 0 24px 60px rgba(0,0,0,0.62), 0 2px 0 rgba(255,255,255,0.025);
+
+  /* Interactive elevation (used by hover lifts) */
+  --elev-1: 0 1px 2px rgba(0,0,0,0.35);
+  --elev-2: 0 6px 18px rgba(0,0,0,0.46), 0 0 0 1px var(--accent-trace);
+  --elev-3: 0 10px 28px rgba(0,0,0,0.55), 0 0 0 1px var(--accent-dim);
+
+  /* Layout rhythm */
+  --rail-w: 248px;          /* left navigation rail */
+  --inspector-w: 320px;     /* right inspector rail */
+  --topbar-h: 52px;
+  --dock-h: 264px;          /* agent chat dock */
+  --content-max: 1440px;
+  --blur-panel: 14px;       /* backdrop blur for translucent panels */
+}

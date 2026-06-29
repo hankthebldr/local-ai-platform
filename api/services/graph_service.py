@@ -316,6 +316,65 @@ def _build_workflow_nodes(nodes: List[Dict], links: List[Dict], topic_set: set) 
             logger.warning(f"Failed to parse workflow run {filepath}: {e}")
 
 
+def _build_provenance_nodes(nodes: List[Dict], links: List[Dict]) -> int:
+    """Scan the provenance store and add response→source grounding edges.
+
+    Each recorded response becomes a ``response`` node; every edge becomes a
+    link to a source node (chunk / web / skill / tool), creating the source
+    node on first sight. Link type encodes the relationship so the UI can
+    colour grounded_on vs activated_skill vs invoked_tool distinctly.
+
+    Returns the number of response nodes added.
+    """
+    try:
+        from .provenance_store import get_provenance_store
+    except Exception:  # noqa: BLE001
+        return 0
+
+    store = get_provenance_store()
+    rows = store.list_responses()
+    seen_sources: set = set()
+    response_count = 0
+    # Newest first, bounded — the graph is a navigation aid, not an archive.
+    for prov in sorted(rows, key=lambda r: str(r.created_at), reverse=True)[:50]:
+        edges = store.get_edges(prov.response_id)
+        if not edges:
+            continue
+        rnode_id = f"response:{prov.response_id[:18]}"
+        nodes.append(
+            {
+                "id": rnode_id,
+                "type": "response",
+                "label": (prov.content_preview or prov.response_id)[:48],
+                "model": prov.model,
+                "conversation_id": prov.conversation_id,
+                "edge_count": len(edges),
+            }
+        )
+        response_count += 1
+        for e in edges:
+            if e.source_type == "rag_chunk":
+                sid, stype, ltype = f"chunk:{e.source_id}", "chunk", "grounded_on"
+            elif e.source_type == "web_source":
+                sid, stype, ltype = f"web:{e.source_id}", "source", "grounded_on"
+            elif e.source_type == "skill":
+                sid, stype, ltype = f"skill:{e.source_id}", "skill", "activated_skill"
+            else:  # mcp_tool / plugin_tool
+                sid, stype, ltype = f"tool:{e.source_id}", "tool", "invoked_tool"
+            if sid not in seen_sources:
+                nodes.append({"id": sid, "type": stype, "label": e.source_label[:40]})
+                seen_sources.add(sid)
+            links.append(
+                {
+                    "source": rnode_id,
+                    "target": sid,
+                    "type": ltype,
+                    "weight": e.metadata.get("score") if e.metadata else None,
+                }
+            )
+    return response_count
+
+
 def _build_structural_links(nodes: List[Dict], links: List[Dict]) -> None:
     """Add agent↔agent, run↔run, agent↔run links that don't depend on
     session-derived topics. Keeps the knowledge graph readable on a
@@ -506,6 +565,9 @@ def build_graph(force: bool = False) -> Dict[str, Any]:
     _build_agent_nodes(nodes, links, topic_nodes_added)
     _build_workflow_nodes(nodes, links, topic_nodes_added)
 
+    # Provenance: response→source grounding edges (the #1-gap citation chain).
+    provenance_count = _build_provenance_nodes(nodes, links)
+
     # Structural links — added regardless of whether session exports
     # exist. Ensures the graph reads as connected even on a fresh
     # install (no sessions yet) so the operator can still drill in.
@@ -523,6 +585,7 @@ def build_graph(force: bool = False) -> Dict[str, Any]:
         "source_count": len(source_nodes_added),
         "agent_count": agent_count,
         "workflow_run_count": run_count,
+        "provenance_count": provenance_count,
         "built_at": time.time(),
     }
 

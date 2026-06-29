@@ -1,0 +1,34 @@
+<!-- @dsCard group="Spacing" viewport="700x210" name="Elevation & shadow" subtitle="Each level lifts higher, lightens its surface, and casts a deeper shadow" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg-deep); padding: 0; font-family: var(--font-mono); }
+  .stage { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 22px 26px; height: 210px;
+    background: radial-gradient(120% 80% at 50% 120%, rgba(43,212,180,0.05), transparent 70%), var(--bg-deep); }
+  .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .card { width: 100%; height: 56px; border-radius: var(--radius-md); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
+  .card .lv { font-size: 13px; font-weight: 600; color: var(--text); }
+  /* surface lightens + shadow deepens + element lifts as level climbs */
+  .l0 { background: var(--bg);             box-shadow: var(--shadow-0); margin-top: 64px; }
+  .l1 { background: var(--surface-card);   box-shadow: var(--shadow-1); margin-top: 48px; }
+  .l2 { background: var(--surface-raised); box-shadow: var(--shadow-2); margin-top: 30px; }
+  .l3 { background: var(--surface-overlay);box-shadow: var(--shadow-3); margin-top: 14px; }
+  .l4 { background: var(--ink-650);        box-shadow: var(--shadow-4); margin-top: 0; border-color: var(--border-strong); }
+  .meta { text-align: center; }
+  .meta .n { font-size: 9px; color: var(--text); letter-spacing: .06em; }
+  .meta .s { font-size: 7.5px; color: var(--text-muted); margin-top: 2px; }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="col"><div class="card l0"><span class="lv">0</span></div><div class="meta"><div class="n">flat</div><div class="s">on canvas</div></div></div>
+    <div class="col"><div class="card l1"><span class="lv">1</span></div><div class="meta"><div class="n">card</div><div class="s">rest</div></div></div>
+    <div class="col"><div class="card l2"><span class="lv">2</span></div><div class="meta"><div class="n">raised</div><div class="s">hover</div></div></div>
+    <div class="col"><div class="card l3"><span class="lv">3</span></div><div class="meta"><div class="n">overlay</div><div class="s">popover</div></div></div>
+    <div class="col"><div class="card l4"><span class="lv">4</span></div><div class="meta"><div class="n">modal</div><div class="s">top layer</div></div></div>
+  </div>
+</body>
+</html>

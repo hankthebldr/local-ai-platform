@@ -1,0 +1,29 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Emerald — structure & success" subtitle="Deep secondary; the success hue" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg); padding: 20px; font-family: var(--font-mono); }
+  .row { display: flex; gap: 10px; }
+  .sw { flex: 1; border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; }
+  .chip { height: 56px; }
+  .meta { padding: 6px 8px; background: var(--surface-card); }
+  .name { font-size: 10px; color: var(--text); letter-spacing: .04em; }
+  .hex { font-size: 9px; color: var(--text-muted); text-transform: uppercase; }
+  .primary { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--emerald-800)"></div><div class="meta"><div class="name">800</div><div class="hex">#073B2A</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--emerald-700)"></div><div class="meta"><div class="name">700</div><div class="hex">#0A573E</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--emerald-600)"></div><div class="meta"><div class="name">600</div><div class="hex">#0E7351</div></div></div>
+    <div class="sw primary"><div class="chip" style="background:var(--emerald-500)"></div><div class="meta"><div class="name">500 · accent-2</div><div class="hex">#149468</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--emerald-400)"></div><div class="meta"><div class="name">400 success</div><div class="hex">#1FB983</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--emerald-300)"></div><div class="meta"><div class="name">300</div><div class="hex">#46D49E</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--emerald-200)"></div><div class="meta"><div class="name">200</div><div class="hex">#84E7C0</div></div></div>
+  </div>
+</body>
+</html>

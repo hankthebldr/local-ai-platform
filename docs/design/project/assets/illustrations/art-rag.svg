@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B0E0D"></stop>
+      <stop offset="100%" stop-color="#101413"></stop>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#bg)"></rect>
+  
+  <rect x="20" y="50" width="50" height="60" rx="3" fill="none" stroke="#28302D" stroke-width="1"></rect>
+  <line x1="28" y1="62" x2="62" y2="62" stroke="#28302D" stroke-width="0.5"></line>
+  <line x1="28" y1="70" x2="55" y2="70" stroke="#28302D" stroke-width="0.5"></line>
+  <line x1="28" y1="78" x2="60" y2="78" stroke="#28302D" stroke-width="0.5"></line>
+  <line x1="28" y1="86" x2="50" y2="86" stroke="#28302D" stroke-width="0.5"></line>
+  <line x1="28" y1="94" x2="58" y2="94" stroke="#28302D" stroke-width="0.5"></line>
+  <text x="45" y="42" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">docs</text>
+
+  
+  <line x1="75" y1="65" x2="95" y2="55" stroke="#57C4D2" stroke-width="0.5" opacity="0.4"></line>
+  <line x1="75" y1="80" x2="95" y2="80" stroke="#57C4D2" stroke-width="0.5" opacity="0.4"></line>
+  <line x1="75" y1="95" x2="95" y2="105" stroke="#57C4D2" stroke-width="0.5" opacity="0.4"></line>
+
+  
+  <circle cx="110" cy="55" r="6" fill="#57C4D2" opacity="0.15" stroke="#57C4D2" stroke-width="0.8"></circle>
+  <circle cx="110" cy="80" r="6" fill="#57C4D2" opacity="0.25" stroke="#57C4D2" stroke-width="0.8"></circle>
+  <circle cx="110" cy="105" r="6" fill="#57C4D2" opacity="0.1" stroke="#57C4D2" stroke-width="0.8"></circle>
+
+  
+  <rect x="140" y="25" width="100" height="130" rx="6" fill="none" stroke="#57C4D2" stroke-width="1" opacity="0.3"></rect>
+  <text x="190" y="20" text-anchor="middle" fill="#57C4D2" font-family="monospace" font-size="7" opacity="0.5">vector space</text>
+  
+  <circle cx="160" cy="50" r="3" fill="#57C4D2" opacity="0.3"></circle>
+  <circle cx="180" cy="65" r="3" fill="#57C4D2" opacity="0.5"></circle>
+  <circle cx="200" cy="45" r="3" fill="#57C4D2" opacity="0.2"></circle>
+  <circle cx="170" cy="90" r="3" fill="#57C4D2" opacity="0.4"></circle>
+  <circle cx="210" cy="80" r="3" fill="#57C4D2" opacity="0.3"></circle>
+  <circle cx="155" cy="120" r="3" fill="#57C4D2" opacity="0.2"></circle>
+  <circle cx="195" cy="110" r="3" fill="#57C4D2" opacity="0.4"></circle>
+  <circle cx="220" cy="130" r="3" fill="#57C4D2" opacity="0.3"></circle>
+  
+  <circle cx="185" cy="85" r="20" fill="#2BD4B4" opacity="0.06" stroke="#2BD4B4" stroke-width="0.5"></circle>
+  <circle cx="180" cy="82" r="3" fill="#2BD4B4" opacity="0.7"></circle>
+  <circle cx="190" cy="90" r="3" fill="#2BD4B4" opacity="0.5"></circle>
+
+  
+  <line x1="120" y1="80" x2="140" y2="80" stroke="#2BD4B4" stroke-width="1" opacity="0.4"></line>
+  <polygon points="138,77 144,80 138,83" fill="#2BD4B4" opacity="0.4"></polygon>
+
+  
+  <line x1="244" y1="85" x2="268" y2="85" stroke="#2BD4B4" stroke-width="1" opacity="0.3"></line>
+  <polygon points="268,82 274,85 268,88" fill="#2BD4B4" opacity="0.3"></polygon>
+  <rect x="278" y="70" width="30" height="30" rx="4" fill="none" stroke="#2BD4B4" stroke-width="1" opacity="0.4"></rect>
+  <text x="293" y="88" text-anchor="middle" fill="#2BD4B4" font-family="monospace" font-size="7" opacity="0.5">LLM</text>
+</svg>

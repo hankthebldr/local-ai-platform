@@ -1,0 +1,64 @@
+<!-- @dsCard group="Components" viewport="720x540" name="Data viz" subtitle="Sparkline · TrendStat · UtilChart — performance and utilization atoms" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+  body { background: var(--bg-deep); padding: 22px 24px; }
+  .grid { display: flex; flex-direction: column; gap: 22px; }
+  .sect { display: flex; flex-direction: column; gap: 10px; }
+  .sect > .ds-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-faint); }
+  .strip { display: flex; align-items: flex-start; gap: 34px; flex-wrap: wrap; }
+  .inline { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { Sparkline, TrendStat, UtilChart } = window.EnclaveDesignSystem_47ed55;
+const TPS = [31, 35, 33, 41, 38, 47, 44, 49, 46, 51, 47, 44, 47];
+const CPU = [22, 31, 28, 36, 44, 41, 52, 48, 57, 61, 55, 40, 34];
+const MEM = [38, 38, 41, 48, 48, 59, 64, 64, 73, 81, 81, 76, 69];
+const DUR = [62, 58, 55, 49, 52, 47, 44, 41];
+const RUNS = [3, 5, 4, 7, 6, 9, 8, 11];
+
+function Demo() {
+  return (
+    <div className="grid">
+      <div className="sect">
+        <span className="ds-label">Sparkline — trends next to the number they explain</span>
+        <div className="strip">
+          <span className="inline"><Sparkline data={TPS} /> 47 tok/s</span>
+          <span className="inline"><Sparkline data={MEM} color="var(--accent-2)" max={100} min={0} /> mem 69%</span>
+          <span className="inline"><Sparkline data={CPU} color="var(--info)" fill={false} max={100} min={0} /> cpu 34%</span>
+        </div>
+      </div>
+
+      <div className="sect">
+        <span className="ds-label">TrendStat — a metric with memory</span>
+        <div className="strip">
+          <TrendStat label="throughput" value="47 tok/s" delta="+12%" data={TPS} />
+          <TrendStat label="avg run" value="0:41" delta="-9s" deltaGood={false} data={DUR} color="var(--accent-2)" />
+          <TrendStat label="runs / day" value="11" delta="+3" data={RUNS} color="var(--info)" />
+          <TrendStat label="mem peak" value="52 GB" delta="+6 GB" deltaGood={false} data={MEM} />
+        </div>
+      </div>
+
+      <div className="sect">
+        <span className="ds-label">UtilChart — utilization over time, warn threshold in amber</span>
+        <UtilChart width={620} height={160} max={100} unit="%" warn={85}
+          series={[{ label: 'cpu', data: CPU }, { label: 'mem', data: MEM }]}
+          xlabels={['-60m', '-30m', 'now']} />
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>

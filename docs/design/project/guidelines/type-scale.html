@@ -1,0 +1,24 @@
+<!-- @dsCard group="Type" viewport="700x250" name="Type scale" subtitle="1.25-ish ramp on a 14px operator base" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg); padding: 20px 24px; font-family: var(--font-sans); }
+  .r { display: flex; align-items: baseline; gap: 16px; padding: 4px 0; border-bottom: 1px solid var(--border-faint); }
+  .r:last-child { border-bottom: none; }
+  .spec { width: 120px; flex: none; font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); letter-spacing: .1em; text-transform: uppercase; }
+  .samp { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+  <div class="r"><span class="spec">3xl · 45px</span><span class="samp" style="font-size:var(--text-3xl);font-weight:600;letter-spacing:-.02em">Enclave</span></div>
+  <div class="r"><span class="spec">2xl · 31px</span><span class="samp" style="font-size:var(--text-2xl);font-weight:600;letter-spacing:-.02em">Workflow Composer</span></div>
+  <div class="r"><span class="spec">xl · 22px</span><span class="samp" style="font-size:var(--text-xl);font-weight:500">Section heading</span></div>
+  <div class="r"><span class="spec">lg · 17px</span><span class="samp" style="font-size:var(--text-lg);font-weight:500">Card title</span></div>
+  <div class="r"><span class="spec">base · 12px</span><span class="samp" style="font-size:var(--text-base)">Body default — the operator reads this all day.</span></div>
+  <div class="r"><span class="spec">sm · 11px</span><span class="samp" style="font-size:var(--text-sm);color:var(--text-dim)">Caption / secondary</span></div>
+  <div class="r"><span class="spec">xs · 9.6px</span><span class="samp" style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:.18em;text-transform:uppercase;color:var(--text-muted)">Mono label</span></div>
+</body>
+</html>

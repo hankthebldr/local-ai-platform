@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400">
+  <rect width="800" height="400" fill="#0a0a0a"></rect>
+
+  <text x="40" y="40" font-family="&#39;JetBrains Mono&#39;, monospace" font-size="16" font-weight="700" fill="#00E87B" letter-spacing="2">ENCLAVE — COLOR SYSTEM</text>
+
+  <text x="40" y="80" font-family="&#39;JetBrains Mono&#39;, monospace" font-size="10" fill="#555" letter-spacing="1">CORE</text>
+  <rect x="40" y="90" width="80" height="80" rx="8" fill="#0a0a0a" stroke="#333" stroke-width="1"></rect>
+  <text x="80" y="190" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Void</text>
+  <text x="80" y="202" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#0a0a0a</text>
+
+  <rect x="140" y="90" width="80" height="80" rx="8" fill="#1a1a2e"></rect>
+  <text x="180" y="190" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Deep</text>
+  <text x="180" y="202" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#1a1a2e</text>
+
+  <rect x="240" y="90" width="80" height="80" rx="8" fill="#141414"></rect>
+  <text x="280" y="190" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Surface</text>
+  <text x="280" y="202" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#141414</text>
+
+  <rect x="340" y="90" width="80" height="80" rx="8" fill="#222222"></rect>
+  <text x="380" y="190" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Border</text>
+  <text x="380" y="202" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#222222</text>
+
+  <text x="40" y="240" font-family="&#39;JetBrains Mono&#39;, monospace" font-size="10" fill="#555" letter-spacing="1">ACCENT</text>
+  <rect x="40" y="250" width="80" height="80" rx="8" fill="#00E87B"></rect>
+  <text x="80" y="350" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Terminal Green</text>
+  <text x="80" y="362" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#00E87B</text>
+
+  <rect x="140" y="250" width="80" height="80" rx="8" fill="#00C0E8"></rect>
+  <text x="180" y="350" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Signal Cyan</text>
+  <text x="180" y="362" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#00C0E8</text>
+
+  <rect x="240" y="250" width="80" height="80" rx="8" fill="#FA582D"></rect>
+  <text x="280" y="350" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Alert Orange</text>
+  <text x="280" y="362" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#FA582D</text>
+
+  <text x="500" y="240" font-family="&#39;JetBrains Mono&#39;, monospace" font-size="10" fill="#555" letter-spacing="1">TEXT</text>
+  <rect x="500" y="250" width="80" height="80" rx="8" fill="#E0E0E0"></rect>
+  <text x="540" y="350" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Primary</text>
+  <text x="540" y="362" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#E0E0E0</text>
+
+  <rect x="600" y="250" width="80" height="80" rx="8" fill="#888888"></rect>
+  <text x="640" y="350" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Secondary</text>
+  <text x="640" y="362" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#888888</text>
+
+  <rect x="700" y="250" width="80" height="80" rx="8" fill="#555555"></rect>
+  <text x="740" y="350" text-anchor="middle" font-family="monospace" font-size="9" fill="#888">Muted</text>
+  <text x="740" y="362" text-anchor="middle" font-family="monospace" font-size="8" fill="#555">#555555</text>
+</svg>

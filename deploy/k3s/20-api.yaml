@@ -1,0 +1,151 @@
+# enclave-api — the Cortex Console FastAPI app (the k3s port of the compose
+# `api` service). Serves the SPA + REST API on :8001.
+#
+# IMAGE: the locally-built enclave-api:bd790i, imported into k3s containerd via
+#   docker save enclave-api:bd790i | sudo k3s ctr images import -
+# (it was never pushed to a registry), so imagePullPolicy MUST be Never and the
+# pod is pinned to bd790i — the node that has the image. bd790i is also the GPU
+# node, so this colocates the API with vLLM, same as the host-networked compose.
+#
+# GPU: the API does NOT run models — it only needs NVML so detect_architecture()
+# reports gpu_nvidia_single. It therefore uses runtimeClassName: nvidia +
+# NVIDIA_DRIVER_CAPABILITIES=utility for libnvidia-ml.so visibility, but takes
+# NO `nvidia.com/gpu` resource — the cluster has exactly one GPU unit and vLLM
+# holds it. (In compose this was the [gpu,utility] vs [gpu] split.)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: enclave-api
+  namespace: enclave
+  labels:
+    app: enclave-api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # single hostPath data dir — avoid two writers
+  selector:
+    matchLabels:
+      app: enclave-api
+  template:
+    metadata:
+      labels:
+        app: enclave-api
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        nvidia.com/gpu.present: "true"   # pins to bd790i (local image + NVML)
+      tolerations:
+        - key: nvidia.com/gpu        # bd790i is tainted by the GPU join toolchain
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: api
+          image: enclave-api:bd790i
+          imagePullPolicy: Never          # image lives in bd790i containerd only
+          command:
+            - uvicorn
+            - api.main:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8001"
+          env:
+            # ── GPU visibility (NVML only — no compute claim) ──
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: utility
+            # ── API binding ──
+            - name: API_HOST
+              value: 0.0.0.0
+            - name: API_PORT
+              value: "8001"
+            # ── Backends ──
+            # vLLM is now an in-cluster Service (was localhost:8000 under host net).
+            - name: ENCLAVE_VLLM_BASE_URLS
+              value: http://enclave-vllm.enclave.svc.cluster.local:8000
+            # Host Ollama fallback. NOTE: host ollama binds 127.0.0.1 only, so it
+            # is NOT reachable from the pod until you set the systemd unit to
+            # listen on the LAN (Environment=OLLAMA_HOST=0.0.0.0:11434). vLLM is
+            # the primary backend, so this is a soft/optional fallback.
+            - name: OLLAMA_HOST
+              value: http://192.168.1.104:11434
+            # ── Auth (matches compose: auto-provision + SPA auto-sign-in) ──
+            - name: ENABLE_API_AUTH
+              value: "true"
+            # ⚠ Known local-dev admin credential — same as compose. Rotate via
+            # /api/keys for any non-localhost exposure.
+            - name: MASTER_API_KEY
+              value: sk-bd790i-dev-admin
+            - name: RATE_LIMIT_RPM
+              value: "600"
+            - name: MAX_CONCURRENT_LLM
+              value: "1"
+            - name: OLLAMA_KEEP_ALIVE
+              value: 10m
+            - name: REQUEST_TIMEOUT
+              value: "900"
+            - name: LOG_LEVEL
+              value: INFO
+            # ── Host hardware truth (container can't introspect the host) ──
+            - name: ENCLAVE_HOST_CPU_BRAND
+              value: AMD Ryzen 9 7945HX
+            - name: ENCLAVE_HOST_CPU_CORES
+              value: "32"
+            - name: ENCLAVE_HOST_RAM_GB
+              value: "60"
+            - name: ENCLAVE_HOST_GPU
+              value: NVIDIA RTX PRO 4000 Blackwell
+            - name: ENCLAVE_HOST_PLATFORM
+              value: linux
+          ports:
+            - name: http
+              containerPort: 8001
+          volumeMounts:
+            # Persistent app data (issued keys, workflow runs, RAG store, uploads)
+            # — reuses the existing docker volume dir.
+            - name: data
+              mountPath: /app/data
+            # Curated discovery catalogs ship in the repo; the data mount above
+            # shadows /app/data/discovery, so surface them read-only on top
+            # (more-specific mount wins) — mirrors the compose bind mount.
+            - name: discovery
+              mountPath: /app/data/discovery
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/lib/docker/volumes/enclave-bd790i-data/_data
+            type: Directory
+        - name: discovery
+          hostPath:
+            path: /home/henry/Github/local-ai-platform/data/discovery
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: enclave-api
+  namespace: enclave
+  labels:
+    app: enclave-api
+spec:
+  selector:
+    app: enclave-api
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001

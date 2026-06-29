@@ -1,0 +1,26 @@
+<!-- @dsCard group="Type" viewport="700x220" name="Body & captions" subtitle="Space Grotesk body, with quiet inline mono that sits on the same baseline" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { background: var(--bg); padding: 22px 24px; font-family: var(--font-sans); max-width: 648px; }
+  /* inline mono is sized to match the body's lowercase height and kept neutral,
+     so technical tokens read inline without breaking the typographic colour */
+  .body { font-size: var(--text-base); line-height: 1.6; color: var(--text); }
+  .body b { font-weight: 600; color: var(--text-strong); }
+  .body .m { font-family: var(--font-mono); font-size: 0.86em; color: var(--text-dim); letter-spacing: -0.01em; }
+  .rule { height: 1px; background: var(--border-faint); margin: 16px 0; }
+  .cap { font-size: var(--text-sm); line-height: 1.55; color: var(--text-dim); }
+  .cap .m { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-muted); }
+  .meta { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); letter-spacing: .16em; text-transform: uppercase; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <p class="body">Point your client at <span class="m">localhost:8000</span> and Enclave resolves each step's <b>role</b> to a local model. With <span class="m">Q4_K_M</span> quantization a 7B model runs at <b>40–50 tokens per second</b> on CPU alone — no GPU, and no data leaves the host unless you opt in.</p>
+  <div class="rule"></div>
+  <p class="cap">Caption and helper text drop to <span class="m">text-sm</span> in a dimmer grey. Same Space Grotesk, same rhythm — it recedes without changing voice, so a paragraph and its aside still read as one family.</p>
+  <div class="meta">Space Grotesk 400 · 0.875rem · leading 1.6 · inline mono 0.86em, neutral tone</div>
+</body>
+</html>

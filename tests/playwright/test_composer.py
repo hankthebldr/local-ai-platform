@@ -8,6 +8,20 @@ twice during the build-out.
 from __future__ import annotations
 
 
+def _prime_composer(page):
+    """Reveal the canvas surface (workbench + grid).
+
+    Chat-led redesign: the composer canvas is *dormant until primed* — the
+    `.composer-grid` (workbench tabs + canvas) is `display:none` under
+    `.composer-split:not(.is-primed)` so the chat leads on a fresh thread.
+    These canvas-surface assertions must prime the spine first, exactly as
+    promoting a conversation / starting a workflow does at runtime.
+    """
+    page.wait_for_function("() => typeof ComposerSplit !== 'undefined'", timeout=10_000)
+    page.evaluate("ComposerSplit.setSpinePrimed(true)")
+    page.wait_for_selector(".composer-grid", state="visible", timeout=10_000)
+
+
 def _wait_workbench(page, timeout: int = 15_000):
     """The workbench fires three parallel fetches at Composer init; wait
     until all five panes have rendered something other than 'Loading…'."""
@@ -31,6 +45,7 @@ def test_workbench_agents_pane_lists_ootb_xql_agents(signed_in_page):
     all 3 cards to render rather than reading text once and asserting
     against an in-flight snapshot."""
     page = signed_in_page
+    _prime_composer(page)
     page.click('.workbench-tab[data-bench="agents"]')
     _wait_workbench(page)
     # Wait until 3 card elements are in the DOM (load finished, not just kicked off).
@@ -64,6 +79,7 @@ def test_workbench_agents_pane_lists_ootb_xql_agents(signed_in_page):
 def test_workbench_skills_pane_lists_xdm_toolkit_skills(signed_in_page):
     """xdm-toolkit ships with 2 skills — they should appear in the Skills pane."""
     page = signed_in_page
+    _prime_composer(page)
     page.click('.workbench-tab[data-bench="skills"]')
     _wait_workbench(page)
     pane = page.locator("#bench-skills-list")
@@ -77,8 +93,21 @@ def test_workbench_skills_pane_lists_xdm_toolkit_skills(signed_in_page):
 def test_workbench_plugins_pane_lists_xdm_toolkit(signed_in_page):
     """xdm-toolkit plugin ships 3 tools — Plugins pane should surface them."""
     page = signed_in_page
+    _prime_composer(page)
     page.click('.workbench-tab[data-bench="plugins"]')
     _wait_workbench(page)
+    # Plugins render incrementally — the built-ins paint first, then the
+    # heavier xdm-toolkit. Wait for it specifically rather than reading an
+    # in-flight snapshot (same pattern as the agents pane's ≥3-cards wait).
+    page.wait_for_function(
+        """() => {
+            const el = document.getElementById('bench-plugins-list');
+            if (!el) return false;
+            const t = el.textContent || '';
+            return t.includes('xdm-toolkit') || t.includes('XDM');
+        }""",
+        timeout=15_000,
+    )
     text = page.locator("#bench-plugins-list").inner_text()
     assert (
         "xdm-toolkit" in text or "XDM" in text
@@ -89,6 +118,7 @@ def test_workbench_mcps_pane_renders_even_when_empty(signed_in_page):
     """MCP servers list is empty by default. The pane must still render an
     empty-state message, not stay on 'Loading…' forever."""
     page = signed_in_page
+    _prime_composer(page)
     page.click('.workbench-tab[data-bench="mcps"]')
     _wait_workbench(page)
     text = page.locator("#bench-mcps-list").inner_text()
@@ -99,6 +129,7 @@ def test_composer_canvas_is_full_width(signed_in_page):
     """The composer-right rail was removed; the canvas must now stretch
     into the freed column."""
     page = signed_in_page
+    _prime_composer(page)
     grid = page.locator(".composer-grid").first
     cols = page.evaluate(
         "(el) => getComputedStyle(el).gridTemplateColumns",

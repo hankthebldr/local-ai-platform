@@ -1,0 +1,104 @@
+<!-- @dsCard group="Data" viewport="820x980" name="Data visualization" subtitle="Calm analytics — sparklines first, mono axes, thresholds in amber, numbers where decisions happen" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../_ds_bundle.js"></script>
+<style>
+  body { background: var(--bg-deep); color: var(--text); padding: 26px 28px; }
+  .col { display: flex; flex-direction: column; gap: 22px; max-width: 760px; }
+  .lab { font-family: var(--font-mono); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-faint); }
+  h2 { margin: 0; font-size: var(--text-xl); font-weight: 600; letter-spacing: -.015em; color: var(--text-strong); }
+  p { margin: 0; font-size: var(--text-sm); color: var(--text-dim); line-height: 1.6; }
+  .rule { display: grid; grid-template-columns: 170px 1fr; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border-faint); align-items: start; }
+  .rule .k { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); padding-top: 2px; }
+  .demo { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px 18px; }
+  .dont li { margin: 0 0 6px; font-size: var(--text-sm); color: var(--text-dim); line-height: 1.5; }
+  .dont b { color: var(--text); font-weight: 500; }
+  .swatches { display: flex; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-dim); flex-wrap: wrap; }
+  .sw { display: inline-flex; align-items: center; gap: 6px; }
+  .sw i { width: 18px; height: 4px; border-radius: 2px; display: block; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { Sparkline, TrendStat, UtilChart } = window.EnclaveDesignSystem_47ed55;
+const TPS = [31, 35, 33, 41, 38, 47, 44, 49, 46, 51, 47, 44, 47];
+const CPU = [22, 31, 28, 36, 44, 41, 52, 48, 57, 61, 55, 40, 34];
+const MEM = [38, 38, 41, 48, 48, 59, 64, 64, 73, 81, 81, 76, 69];
+
+function Doc() {
+  return (
+    <div className="col">
+      <div>
+        <span className="lab">Guidance · data visualization &amp; analytics</span>
+        <h2 style={{ marginTop: 8 }}>Calm analytics</h2>
+        <p style={{ marginTop: 8, maxWidth: 640 }}>
+          Enclave shows performance the way it writes: terse, mono, honest. Charts are instruments,
+          not decoration — they appear where a decision happens (a composer, a run row, a model peek),
+          never on a vanity dashboard. The test for any chart: which action does it change?
+        </p>
+      </div>
+
+      <div>
+        <div className="rule"><span className="k">Sparklines first</span>
+          <p>The default visualization is a sparkline beside the number it explains. Reach for a full chart only when the <em>shape</em> of the series carries the decision — thresholds, spikes, drift.</p></div>
+        <div className="rule"><span className="k">Series colors</span>
+          <div>
+            <p>Maximum three series. Order is fixed; hue never encodes category creatively.</p>
+            <div className="swatches" style={{ marginTop: 8 }}>
+              <span className="sw"><i style={{ background: 'var(--accent)' }} />1 · accent (teal)</span>
+              <span className="sw"><i style={{ background: 'var(--accent-2)' }} />2 · accent-2 (emerald)</span>
+              <span className="sw"><i style={{ background: 'var(--info)' }} />3 · info</span>
+              <span className="sw"><i style={{ background: 'var(--warn)' }} />thresholds only</span>
+              <span className="sw"><i style={{ background: 'var(--danger)' }} />failures only</span>
+            </div>
+          </div></div>
+        <div className="rule"><span className="k">Honest axes</span>
+          <p>Utilization and rate axes start at zero, always. Grid is three hairlines (0 / 50 / 100), labels in mono on the right. No axis truncation to dramatize a trend.</p></div>
+        <div className="rule"><span className="k">Thresholds, not alarms</span>
+          <p>Capacity limits render as a dashed amber line in the chart itself. The chart warns; it does not flash, animate, or toast.</p></div>
+        <div className="rule"><span className="k">Data ink only</span>
+          <p>Area fills at 8–10% opacity, 1.5–1.6px strokes, no drop shadows, no gradients beyond the fill, no markers except the latest point. The warm-charcoal ground is part of the chart.</p></div>
+        <div className="rule"><span className="k">Deltas compare like periods</span>
+          <p>"+12%" means vs the previous equal window — never vs an arbitrary best. When up is bad (latency, memory pressure, error rate), say so: <code>deltaGood={'{false}'}</code> flips the delta color to ember.</p></div>
+        <div className="rule"><span className="k">Motion</span>
+          <p>At most a single draw-in under 300ms on first mount; live series update by stepping, not tweening. Everything still under <code>prefers-reduced-motion</code>.</p></div>
+      </div>
+
+      <div>
+        <span className="lab">The three atoms</span>
+        <div className="demo" style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'flex', gap: 30, alignItems: 'center', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text-dim)', flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}><Sparkline data={TPS} /> 47 tok/s</span>
+            <TrendStat label="throughput" value="47 tok/s" delta="+12%" data={TPS} />
+            <TrendStat label="mem peak" value="52 GB" delta="+6 GB" deltaGood={false} data={MEM} />
+          </div>
+          <UtilChart width={680} height={150} max={100} unit="%" warn={85}
+            series={[{ label: 'cpu', data: CPU }, { label: 'mem', data: MEM }]}
+            xlabels={['-60m', '-30m', 'now']} />
+        </div>
+      </div>
+
+      <div>
+        <span className="lab">Deliberately not doing</span>
+        <ul className="dont" style={{ marginTop: 10, paddingLeft: 18 }}>
+          <li><b>Pie and donut charts.</b> Composition questions get a stacked bar of at most three segments, or a table.</li>
+          <li><b>Rainbow palettes and per-category hues.</b> Three series max; past that it's a table.</li>
+          <li><b>Dashboard pages.</b> Charts live where the decision is — composer, run row, model peek, fleet flyout.</li>
+          <li><b>Smoothed curves.</b> Straight segments between real samples; bezier smoothing invents data.</li>
+          <li><b>Animated counters and pulsing charts.</b> The status pip is the only heartbeat in this system.</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Doc />);
+</script>
+</body>
+</html>
