@@ -216,15 +216,19 @@ api/static/
 - **Untouched legacy regions keep their inline handlers working** via an explicit bridge: each module that owns a still-referenced function re-exposes it (`window.dfExportYaml = dfExportYaml`), and all such exposures are **centralized in `shell/legacy-bridge.js`** so they are easy to find and delete.
 - `legacy-bridge.js` is a **shrinking list**: as the `data-action` migration (already 160 attributes in) retires each inline handler, its window exposure is removed. The bridge documents exactly how much legacy coupling remains.
 
-### Sequencing — modularize first, then redesign
+### Sequencing — one effort, two internal stages gated by the parity harness
 
-The two bodies of work (module fan-out, workspace redesign) are deliberately **ordered, not interleaved**, and become **two implementation plans**:
+Per the operator's "single deep phase" directive this ships as **one coordinated effort**, not two review/ship cycles. Internally it still follows the only safe *technical* order — and the **parity harness is the gate between the two stages**:
 
-**Phase 1 — Behavior-preserving modularization.** Move the existing code into the module tree with **no UX change**. CSS → `app.css`; the `<script>` block → `js/**` (every namespace relocated + `export`ed + `window`-bridged); switch to `<script type="module">`; stand up `main.js` boot. Success criterion: **the app behaves identically and the full existing test suite stays green.** This is provably a no-op refactor — the safest possible first step, and it gives the redesign a clean modular surface to build on.
+**Stage 1 — Behavior-preserving modularization.** Move the existing code into the module tree with **no UX change**. CSS → `app.css`; the `<script>` block → `js/**` (every namespace relocated + `export`ed + `window`-bridged); switch to `<script type="module">`; stand up `main.js` boot. **Gate:** the parity harness is green — post-refactor `window` surface ⊇ the captured golden (270 globals), DOM accessibility snapshot matches, zero console errors on boot, every inline `on*=` handler resolves. This is a provable no-op; do not begin Stage 2 until it passes.
 
-**Phase 2 — Composer-dominant workspace.** On the now-modular codebase, build `workspace/` + the new `shell/nav.js`, retire the old surfaces (`agent-chat-dock`, `composer-workstream`, step-engage, `df-config-popup`), and wire the Session model + Promote. New code is `data-action`-only.
+**Stage 2 — Composer-dominant workspace.** On the now-modular, parity-verified base, build `workspace/` + the new `shell/nav.js`, retire the old surfaces (`agent-chat-dock`, `composer-workstream`, step-engage, `df-config-popup`), and wire the Session model + Promote. New code is `data-action`-only.
 
-Phase 1 carries the bulk of the mechanical risk but no design risk; Phase 2 carries the design risk on a stable base. Each phase ships and is verifiable on its own.
+Stage 1 carries mechanical risk but no design risk; Stage 2 carries design risk on a stable base. The harness makes collapsing them into one push safe.
+
+### Relationship to Subsystem C (autonomous orchestration)
+
+The backend autonomous engine + research loops are specified separately in [autonomous-orchestration-design.md](2026-06-29-autonomous-orchestration-design.md) — that work is mostly **already built** (`kind:ralph`/`parallel`/`consolidate`) and is a distinct backend track. The one hard dependency on this spec: **Stage 2's Runs view is where deep autonomous runs become legible** (per-agent lanes, budget burn-down, dry-streak, vault-write log, resume state), so the `runs/` module tree here is designed to surface C.
 
 ### Risks specific to modularization
 
