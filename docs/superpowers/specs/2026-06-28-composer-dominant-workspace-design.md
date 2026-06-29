@@ -1,7 +1,7 @@
 # Composer-Dominant Dynamic Workspace — Design
 
-**Status:** Draft · **Date:** 2026-06-28 · **Surface:** `api/static/index.html` (in-place)
-**Supersedes:** the current Composer tab layout (canvas + `agent-chat-dock` + sliding `composer-workstream`) and the flat top tab-bar + Admin dropdown nav.
+**Status:** Draft · **Date:** 2026-06-28 · **Surface:** `api/static/` — `index.html` shell + extracted `css/app.css` + `js/**` ES modules
+**Supersedes:** the current Composer tab layout (canvas + `agent-chat-dock` + sliding `composer-workstream`), the flat top tab-bar + Admin dropdown nav, **and the 21k-line single-file `index.html`** (this rework also stages the deferred ES-module fan-out).
 
 ## Problem
 
@@ -150,6 +150,89 @@ One `sendMessage(threadKey)` for both seed and node threads:
 - `#step-engage-badge`, `composerEnterStepEngage`, `composerExitStepEngage`, `window._composerEngagedNodeId`.
 - `#df-config-popup` floating popup → step info region.
 
+## ES modularization (staged with this rework)
+
+This rework is the vehicle for beginning the deferred `index.html` → ES-module fan-out. The file is already ~35 self-contained IIFE namespaces (`window.X = (function(){…})()`), so each becomes a module by adding an `export` — the work is mostly **mechanical relocation, not rewriting**. The new workspace code is authored as modules from birth.
+
+### Mechanism: native ES modules, no build step
+
+There is **no JS build tooling** in the repo, and FastAPI already serves `/static` via `StaticFiles`. So we use **native ES modules** — `<script type="module" src="/static/js/main.js">` with URL-path imports. No bundler, no transpile, no new build step.
+
+- The single `<script>` block (lines 7672–21270) is replaced by the `js/` module graph below, entered via `main.js`.
+- The `<style>` block (lines 36–5679) is extracted verbatim to `css/app.css` and linked with `<link rel="stylesheet">` — near-zero risk, removes ~5,600 lines from `index.html`.
+- Vendored libs (d3, dagre, drawflow, js-yaml) **stay classic** `<script defer>` and expose their globals; modules consume `window.Drawflow` / `window.d3` etc. as today. Classic-defer scripts execute before the module script, so the globals are ready.
+- The head theme-bootstrap script (lines 19–35) **stays inline classic** (it must run synchronously before paint to avoid theme flash).
+
+### Module tree
+
+```
+api/static/
+  index.html            shell only: head, body skeleton, <link app.css>, <script type=module main.js>
+  css/app.css           extracted <style>
+  js/
+    main.js             entry: boot sequence, mount shell + workspace, init router
+    core/
+      net.js            Net
+      ui.js             Toast · Confirm · EmptyState · ErrorPanel · Skeleton
+      theme.js          Theme
+      shortcuts.js      Shortcuts
+      heartbeat.js      Heartbeat
+      state.js          NEW — Workspace state object + localStorage persistence
+    shell/
+      nav.js            NEW top-bar nav (Composer/Runs/Library/Admin); retires switchTab's tab list
+      router.js         hash routing (#/<dest>)
+      actions.js        Actions — the data-action delegation dispatcher
+      legacy-bridge.js  window.fn = fn exposures for remaining inline handlers (see below)
+    workspace/
+      workspace.js      orchestrator: 3 regions + selection
+      left-rail.js      Projects locator + palette
+      canvas.js         Drawflow DAG (df* functions)
+      step-info.js      center "step info below"; retires df-config-popup + Step Config pane
+      right-pane.js     renderRightPane(selection) dispatcher
+      chat-thread.js    ChatThread model + unified send + ChatRating
+      seed-promote.js   seed → Promote flow
+    library/
+      workflow-index.js WorkflowIndex · Kanban
+      agents.js         AgentGen
+      models.js         CatalogPage · CatalogModelsShare
+      skills.js         SkillsPanel · SkillsBuilder · SkillsDiscover
+      plugins.js        PluginsPanel · ExtDiscover
+      mcp.js            MCPPanel
+    runs/
+      runs.js           RunsTab
+      workflow-memory.js WorkflowMemory
+      research-artifacts.js ResearchArtifacts
+    admin/
+      menu.js · auth.js · api-keys.js · cloud.js · exports.js
+```
+
+(Exact file-to-namespace grouping is a plan-time detail; the domains above are fixed. `ComposerView` / `ComposerWorkstream` are absorbed/retired into `workspace/`.)
+
+### Inline handlers — the window-bridge
+
+~207 inline `on*=` handlers remain in the HTML (`onclick="dfExportYaml()"`, etc.). Under module scope a top-level `function foo(){}` is **not** global, so these break the moment the script becomes a module. Strategy:
+
+- **New workspace code uses `data-action` delegation only** — zero new inline handlers, zero new window globals.
+- **Untouched legacy regions keep their inline handlers working** via an explicit bridge: each module that owns a still-referenced function re-exposes it (`window.dfExportYaml = dfExportYaml`), and all such exposures are **centralized in `shell/legacy-bridge.js`** so they are easy to find and delete.
+- `legacy-bridge.js` is a **shrinking list**: as the `data-action` migration (already 160 attributes in) retires each inline handler, its window exposure is removed. The bridge documents exactly how much legacy coupling remains.
+
+### Sequencing — modularize first, then redesign
+
+The two bodies of work (module fan-out, workspace redesign) are deliberately **ordered, not interleaved**, and become **two implementation plans**:
+
+**Phase 1 — Behavior-preserving modularization.** Move the existing code into the module tree with **no UX change**. CSS → `app.css`; the `<script>` block → `js/**` (every namespace relocated + `export`ed + `window`-bridged); switch to `<script type="module">`; stand up `main.js` boot. Success criterion: **the app behaves identically and the full existing test suite stays green.** This is provably a no-op refactor — the safest possible first step, and it gives the redesign a clean modular surface to build on.
+
+**Phase 2 — Composer-dominant workspace.** On the now-modular codebase, build `workspace/` + the new `shell/nav.js`, retire the old surfaces (`agent-chat-dock`, `composer-workstream`, step-engage, `df-config-popup`), and wire the Session model + Promote. New code is `data-action`-only.
+
+Phase 1 carries the bulk of the mechanical risk but no design risk; Phase 2 carries the design risk on a stable base. Each phase ships and is verifiable on its own.
+
+### Risks specific to modularization
+
+- **Import cycles** — namespaces cross-reference each other and shared globals (`window._chatAgent`, etc.). Mitigation: shared mutable state lives only in `core/state.js` (imported, never circular); legacy cross-refs go through the `window`-bridge until migrated.
+- **Boot ordering** — module execution is deferred. Any code that today runs at classic-script parse time must move into `main.js`'s explicit boot sequence. Audit for parse-time side effects during Phase 1.
+- **Caching** — `index.html` is already served `no-store`; module files are normal `/static` assets. Add cache-busting (query string or content hash in import URLs) if stale modules become a problem in the k3s dev container.
+- **Bigger diff, mostly mechanical** — Phase 1's relocation is large but low-logic-risk; review per-domain file moves independently.
+
 ## Error handling
 
 - **localStorage unavailable / quota**: threads degrade to in-memory only; surface a one-time `Toast` warning; never block chatting.
@@ -169,9 +252,13 @@ UI tests live under `tests/ui/` (see existing 46-file suite). Cover:
 5. **Removal regressions**: `window._composerEngagedNodeId` and `#step-engage-badge` are gone; node selection still routes chat to `test-step`.
 6. **Nav**: Composer/Runs/Library/Admin reachable; hash deep-links (`#/runs`, etc.) still resolve.
 7. **Graceful degradation**: localStorage throwing does not break send.
+8. **Module load**: page boots with the module graph — no console errors, every domain (`library/*`, `runs/*`, `admin/*`) initializes, vendor globals (Drawflow/d3) resolve before `main.js` boot.
+9. **Legacy-bridge integrity**: every inline `on*=` handler still present in the HTML resolves to a defined `window.*` function (a smoke test that walks the DOM for `on*` attributes and asserts each referenced symbol exists) — guards against an extraction dropping a global.
 
 ## Out of scope / deferred
 
 - Server-side thread persistence (Approach B) — revisit with fleet-awareness (1.4.x).
 - LLM-authored DAG generation.
-- ES-module split of `index.html` (operator chose in-place; the deferred 1.x module fan-out is unaffected by this work).
+- **Completing** the `data-action` migration (retiring all 207 inline handlers) — this rework bridges them via `window` and shrinks the list; finishing it is a follow-on so `legacy-bridge.js` reaches empty.
+- **Component-level CSS splitting** — `app.css` ships as one extracted file; breaking it into per-domain stylesheets is a later refinement.
+- A JS **build/bundler** step — native ESM is sufficient at current scale; revisit only if module count or load latency demands it.
