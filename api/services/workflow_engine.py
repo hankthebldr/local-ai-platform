@@ -170,6 +170,9 @@ class WorkflowEngine:
         # Memory store for kind=consolidate steps + $memory.* accessors.
         # Lazy import keeps the module load order tolerant; the store itself
         # is stateless beyond its base dir.
+        from .run_event_bus import get_run_event_bus
+
+        self._bus = get_run_event_bus()
         from .memory_store import MemoryStore
 
         self.memory = MemoryStore()
@@ -602,6 +605,19 @@ class WorkflowEngine:
         # Initial checkpoint so the run is discoverable mid-flight.
         self._checkpoint(workflow_run)
 
+        self._bus.publish(workflow_run.run_id, "run.status", {"status": "running"})
+        from .run_plan import PlanBuilder
+
+        workflow_run.plan = PlanBuilder.baseline_from_definition(definition)
+        self._bus.publish(
+            workflow_run.run_id,
+            "plan.updated",
+            {
+                "revision": workflow_run.plan.revision,
+                "plan": workflow_run.plan.model_dump(mode="json"),
+            },
+        )
+
         try:
             self._execute_steps(workflow_run, definition, context, definition.steps)
             # Final terminal persist (full artifacts + summary). _persist_run
@@ -759,6 +775,9 @@ class WorkflowEngine:
                     workflow_run.error = "Run canceled by operator"
                     self._checkpoint(workflow_run)
                 self._cancel_set.discard(workflow_run.run_id)
+                self._bus.publish(
+                    workflow_run.run_id, "run.status", {"status": "canceled"}
+                )
                 logger.info(f"Workflow '{definition.id}' canceled at tick boundary")
                 return
 
@@ -785,6 +804,11 @@ class WorkflowEngine:
                         workflow_run.pre_warm_events,
                     )
                     self._checkpoint(workflow_run)
+                self._bus.publish(
+                    workflow_run.run_id,
+                    "run.status",
+                    {"status": "failed", "reason": workflow_run.error},
+                )
                 logger.error(
                     f"Workflow '{definition.id}' deadlocked: arch deferred all ready steps"
                 )
@@ -845,6 +869,11 @@ class WorkflowEngine:
                         workflow_run.pre_warm_events,
                     )
                     self._checkpoint(workflow_run)
+                self._bus.publish(
+                    workflow_run.run_id,
+                    "run.status",
+                    {"status": "failed", "reason": workflow_run.error},
+                )
                 logger.error(
                     f"Workflow failed at step '{resolution_failed_step.id}': "
                     f"{resolution_error}"
@@ -907,8 +936,10 @@ class WorkflowEngine:
                     try:
                         step_result = future.result()
                     except Exception as e:
-                        # _execute_one_step has its own try/except; reaching
-                        # here means something deeply unexpected happened.
+                        # _execute_one_step emits a failed step.completed then
+                        # re-raises; reaching here means the dispatch raised
+                        # unexpectedly. Synthesize a failed StepResult so the
+                        # run can continue or be checkpointed cleanly.
                         step_result = StepResult(
                             step_id=step.id,
                             status="failed",
@@ -985,6 +1016,22 @@ class WorkflowEngine:
                 with state_lock:
                     workflow_run.status = "awaiting_approval"
                     self._checkpoint(workflow_run)
+                g = workflow_run.pending_gate
+                if g is not None:
+                    self._bus.publish(
+                        workflow_run.run_id,
+                        "gate.pending",
+                        {
+                            "gate_id": g.gate_id,
+                            "step_id": g.step_id,
+                            "kind": "approval",
+                            "prompt": g.question or f"Approve step '{g.step_id}'?",
+                            "tier": g.tier,
+                            "files": g.files,
+                            "network": g.network,
+                        },
+                        step_id=g.step_id,
+                    )
                 logger.info(
                     f"Workflow '{definition.id}' paused at step "
                     f"'{kept.step_id}' awaiting operator approval"
@@ -1012,6 +1059,11 @@ class WorkflowEngine:
                         workflow_run.pre_warm_events,
                     )
                     self._checkpoint(workflow_run)
+                self._bus.publish(
+                    workflow_run.run_id,
+                    "run.status",
+                    {"status": "failed", "reason": workflow_run.error},
+                )
                 logger.error(
                     f"Workflow '{definition.id}' failed at step '{first.step_id}'"
                 )
@@ -1020,6 +1072,7 @@ class WorkflowEngine:
         # All scope steps succeeded.
         workflow_run.status = "completed"
         workflow_run.completed_at = datetime.utcnow()
+        self._bus.publish(workflow_run.run_id, "run.status", {"status": "completed"})
         # Phase 5b — brief wait for in-flight pre-warms so their timing
         # makes it into the run's telemetry. Capped at 500ms — beyond that,
         # the pre-warm is genuinely slow and the operator's better off
@@ -1287,55 +1340,124 @@ class WorkflowEngine:
 
         Builds the step-scoped hook bus and a fresh StepExecutor (executors
         are cheap; sharing one across threads would risk contaminating
-        per-attempt state in retry_with_feedback). Errors propagate to the
-        future; the caller synthesizes a failed StepResult.
+        per-attempt state in retry_with_feedback). On an unexpected dispatch
+        exception this method emits a failed step.completed event then
+        re-raises; the caller still synthesizes a failed StepResult from the
+        exception.
         """
-        if step.kind == "parallel":
-            from .engine_executors import parallel as _parallel
 
-            return _parallel.execute(self, step, definition, context, workflow_run)
-        if step.kind == "loop":
-            from .engine_executors import loop as _loop
+        def _dispatch() -> StepResult:
+            if step.kind == "parallel":
+                from .engine_executors import parallel as _parallel
 
-            return _loop.execute(self, step, definition, context, workflow_run)
-        if step.kind == "a2a":
-            from .engine_executors import a2a as _a2a
+                return _parallel.execute(self, step, definition, context, workflow_run)
+            if step.kind == "loop":
+                from .engine_executors import loop as _loop
 
-            return _a2a.execute(self, step, context)
-        if step.kind == "orchestrator":
-            from .engine_executors import orchestrator as _orchestrator
+                return _loop.execute(self, step, definition, context, workflow_run)
+            if step.kind == "a2a":
+                from .engine_executors import a2a as _a2a
 
-            return _orchestrator.execute(self, step, definition, context, workflow_run)
-        if step.kind == "consolidate":
-            from .engine_executors import consolidate as _consolidate
+                return _a2a.execute(self, step, context)
+            if step.kind == "orchestrator":
+                from .engine_executors import orchestrator as _orchestrator
 
-            return _consolidate.execute(self, step, definition, context)
-        if step.kind == "ralph":
-            from .engine_executors import ralph as _ralph
+                return _orchestrator.execute(
+                    self, step, definition, context, workflow_run
+                )
+            if step.kind == "consolidate":
+                from .engine_executors import consolidate as _consolidate
 
-            return _ralph.execute(self, step, definition, context, workflow_run)
-        if step.kind == "code":
-            from .engine_executors import code as _code
+                return _consolidate.execute(self, step, definition, context)
+            if step.kind == "ralph":
+                from .engine_executors import ralph as _ralph
 
-            return _code.execute(self, step, definition, context, workflow_run)
+                return _ralph.execute(self, step, definition, context, workflow_run)
+            if step.kind == "code":
+                from .engine_executors import code as _code
 
-        # kind == "llm" — the default
-        step_bus = self._build_step_bus(step)
-        step_executor = StepExecutor(
-            ollama_service=self.ollama,
-            composer=self.composer,
-            hook_bus=step_bus,
-            model_resolver=self.resolver,
+                return _code.execute(self, step, definition, context, workflow_run)
+
+            # kind == "llm" — the default
+            step_bus = self._build_step_bus(step)
+            step_executor = StepExecutor(
+                ollama_service=self.ollama,
+                composer=self.composer,
+                hook_bus=step_bus,
+                model_resolver=self.resolver,
+            )
+            return step_executor.execute(
+                step=step,
+                workflow=definition,
+                context=context,
+                resolved_model=resolved_model,
+                defaults=definition.defaults,
+                workflow_run=workflow_run,
+                prefix_locked=prefix_locked,
+            )
+
+        self._bus.publish(
+            workflow_run.run_id,
+            "step.started",
+            {"kind": step.kind, "title": getattr(step, "name", step.id)},
+            step_id=step.id,
         )
-        return step_executor.execute(
-            step=step,
-            workflow=definition,
-            context=context,
-            resolved_model=resolved_model,
-            defaults=definition.defaults,
-            workflow_run=workflow_run,
-            prefix_locked=prefix_locked,
+        self._advance_plan_item(workflow_run, step.id, "in_progress")
+        try:
+            result = _dispatch()
+        except Exception as exc:
+            self._bus.publish(
+                workflow_run.run_id,
+                "step.completed",
+                {
+                    "status": "failed",
+                    "duration_ms": 0,
+                    "model_used": None,
+                    "error": str(exc),
+                },
+                step_id=step.id,
+            )
+            self._advance_plan_item(workflow_run, step.id, "failed")
+            raise
+        self._bus.publish(
+            workflow_run.run_id,
+            "step.completed",
+            {
+                "status": result.status,
+                "duration_ms": int((result.duration_seconds or 0) * 1000),
+                "model_used": result.model_used,
+                "error": result.error,
+            },
+            step_id=step.id,
         )
+        self._advance_plan_item(
+            workflow_run,
+            step.id,
+            self._PLAN_STATUS_BY_STEP_STATUS.get(result.status, "done"),
+        )
+        return result
+
+    _PLAN_STATUS_BY_STEP_STATUS = {
+        "completed": "done",
+        "failed": "failed",
+        "awaiting_approval": "blocked",
+        "skipped": "skipped",
+    }
+
+    def _advance_plan_item(self, workflow_run, step_id: str, plan_status: str) -> None:
+        """Reflect a baseline DAG step's progress into the live plan projection.
+
+        No-ops for steps not present in the baseline plan (composite children
+        and orchestrator/ralph enrichment items are managed on their own paths),
+        so this advances only top-level DAG items and emits no empty snapshots.
+        """
+        plan = getattr(workflow_run, "plan", None)
+        if plan is None or not any(i.id == step_id for i in plan.items):
+            return
+        from .run_plan import PlanBuilder
+
+        PlanBuilder.mark_item(plan, step_id, plan_status, updated_seq=plan.revision)
+        PlanBuilder.emit(self._bus, workflow_run.run_id, plan, step_id=step_id)
 
     # ── Hook Bus Assembly ──────────────────────────────────────────────
 

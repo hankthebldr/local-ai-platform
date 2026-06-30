@@ -230,6 +230,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.warning("Sandbox detection failed: %s", e)
 
+    # Bind the running event loop to the RunEventBus so subscribe() works.
+    import asyncio
+    from .services.run_event_bus import get_run_event_bus
+
+    get_run_event_bus().bind_loop(asyncio.get_running_loop())
+
     yield
     logger.info("Shutting down Enclave API")
 

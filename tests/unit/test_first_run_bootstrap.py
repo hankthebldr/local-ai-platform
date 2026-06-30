@@ -1,6 +1,5 @@
 """Tests for first-run API key auto-provisioning."""
 
-import os
 
 import pytest
 
@@ -13,8 +12,18 @@ from api.services.api_key_service import (
 
 @pytest.fixture
 def fresh_keystore(tmp_path, monkeypatch):
-    """Empty keystore in an isolated tmp dir; clears API_KEY env."""
-    monkeypatch.delenv("API_KEY", raising=False)
+    """Empty keystore in an isolated tmp dir; neutralizes API_KEY env.
+
+    Set API_KEY to "" rather than deleting it: importing ``api.middleware``
+    (which the scope test does in its body) runs ``load_dotenv()`` at import
+    time, and the repo's ``.env`` carries a placeholder ``API_KEY``. With the
+    var deleted, a load_dotenv triggered *after* this fixture would repopulate
+    it and make ``bootstrap_first_run_key`` think a legacy key is pinned —
+    failing depending on module import order. An empty string is already
+    present (so ``load_dotenv(override=False)`` won't touch it) and is falsy
+    (so bootstrap still provisions). Order-independent.
+    """
+    monkeypatch.setenv("API_KEY", "")
     return APIKeyService(config_dir=str(tmp_path))
 
 

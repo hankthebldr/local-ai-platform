@@ -211,6 +211,16 @@ class MCPToolInvokerHook:
                 request_size_bytes=request_size,
                 response_size_bytes=_json_size(result),
             )
+            try:
+                _emit_tool_called(
+                    run_id=run_id or "",
+                    step_id=getattr(ctx.step, "id", ""),
+                    tool=self.tool_name,
+                    server=self.server_id,
+                    status="ok" if result is not None else "error",
+                )
+            except Exception:
+                pass
             return result
         except TimeoutError as exc:
             duration_ms = (time.monotonic() - t0) * 1000.0
@@ -269,6 +279,36 @@ class MCPToolInvokerHook:
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"mcp_tool_invoker: instrumentation skipped: {exc}")
+
+
+def _emit_tool_called(
+    run_id: str,
+    step_id: str,
+    tool: str,
+    server: Optional[str] = None,
+    status: str = "ok",
+) -> None:
+    """Emit a ``tool.called`` event onto the run event bus.
+
+    Uses local imports so the formatter never strips them as unused.
+    Safe to call from a try/except — callers should swallow any exception
+    so observability never breaks a tool invocation.
+
+    No-ops when ``run_id`` is empty (a hook firing outside a real workflow run,
+    e.g. in isolated tool tests): there is no run to attribute the event to, and
+    publishing would write to a junk ``data/workflows/`` path.
+    """
+    if not run_id:
+        return
+    from ...models.run_event import EventType
+    from ...services.run_event_bus import get_run_event_bus
+
+    get_run_event_bus().publish(
+        run_id,
+        EventType.TOOL_CALLED,
+        {"tool": tool, "server": server, "status": status},
+        step_id=step_id,
+    )
 
 
 def _json_size(obj: Any) -> int:

@@ -12,12 +12,14 @@ Endpoints:
   GET  /api/workflows/{id}         — Full parsed WorkflowDefinition
 """
 
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 import yaml
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..logging_config import logger
@@ -26,6 +28,27 @@ from ..services.workflow_engine import WorkflowEngine
 from ..exceptions import WorkflowValidationError
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
+
+_TERMINAL_STATUSES = {"completed", "failed", "canceled"}
+
+
+async def _sse_generator(bus, run_id: str, since: int):
+    """Async generator that replays the run log then tails live events via subscribe().
+
+    Yields SSE-formatted strings. Emits stream.end and returns after the first
+    terminal run.status event so the response completes for finished runs.
+    """
+    existing = bus.read_log(run_id, since=since)
+    last_seq = existing[-1].seq if existing else since
+    yield f"event: stream.hello\ndata: {json.dumps({'last_seq': last_seq})}\n\n"
+
+    async for ev in bus.subscribe(run_id, since=since):
+        payload = json.dumps(ev.model_dump(mode="json"))
+        yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {payload}\n\n"
+        if ev.type == "run.status" and ev.data.get("status") in _TERMINAL_STATUSES:
+            yield "event: stream.end\ndata: {}\n\n"
+            return
+
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 WORKFLOWS_DIR = os.getenv("WORKFLOWS_DIR", "./workflows")
@@ -568,6 +591,24 @@ async def get_run(run_id: str):
     return run_data
 
 
+@router.get("/runs/{run_id}/stream")
+async def stream_run(run_id: str, request: Request, since: int = 0):
+    """Live SSE stream of a run's events. Honors Last-Event-ID / ?since= for resume."""
+    from ..services.run_event_bus import get_run_event_bus
+
+    bus = get_run_event_bus()
+
+    last_event_id = request.headers.get("last-event-id")
+    if last_event_id and last_event_id.isdigit():
+        since = int(last_event_id)
+
+    return StreamingResponse(
+        _sse_generator(bus, run_id, since),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/runs/{run_id}/resume")
 async def resume_run(run_id: str):
     """
@@ -700,6 +741,17 @@ def resolve_approval(run_id: str, gate_id: str, body: ApprovalRequest):
     # internally and keeps the persisted snapshot consistent if resume throws.
     run.status = "running"
     engine._checkpoint(run)
+
+    step_id = run.pending_gate.step_id
+
+    from ..services.run_event_bus import get_run_event_bus
+
+    get_run_event_bus().publish(
+        run_id,
+        "gate.resolved",
+        {"gate_id": gate_id, "response": decision},
+        step_id=step_id,
+    )
 
     try:
         resumed = engine.resume(run_id)
