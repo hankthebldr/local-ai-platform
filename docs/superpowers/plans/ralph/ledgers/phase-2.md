@@ -37,3 +37,14 @@ GATE: every domain [x]; full parity + tests/ui + non-slow e2e green on the modul
   before Stage 2.
 
 ## Notes
+- HALT: plan drift — the card's unit ORDER (extract domains U1–U6 → flip U7; legacy-bridge at U2) is not mechanically realizable with the card's own "parity green after EACH domain". Proof (all verified iter 1, server up):
+  - Monolith `<script>` = index.html **2420–18154** (one classic script). `esc(` appears **710×**; the plan pins esc at 497 import sites. `core/` symbols are referenced pervasively.
+  - **U1 is RED both ways.** (a) Remove `core/` from the classic monolith but DON'T flip index.html to a module loader (flip is U7) → 710+ call-sites hit undefined `esc/Net/Toast/...` → console-error storm, e2e RED. (b) Keep the functions in the monolith (dead-copy the modules) → `api/static/js/` now exists → `tests/parity::test_post_split_symbols_are_window_bridged` UN-SKIPS (skipif `not JS_DIR.is_dir()`) and requires **all 63** must-bridge as `window.X=` in the corpus; **0** are bridged today → parity RED.
+  - Root cause: an ES module can't run without the module entry, and the classic monolith can't lose symbols it still calls. So the flip to `<script type="module">` and all 63 `legacy-bridge.js` window-bridges must land at the FIRST domain iteration — the REVERSE of the card's U7/U2 placement.
+  - Guardrail (Facts above + HARNESS): "do NOT improvise a reorder" → HALTED for operator sign-off.
+- RECOMMENDED resolution (needs Henry's OK — changes the card's unit order): adopt **flip-first, carve-after**:
+  - New U1 = "flip + bridge": move the monolith body (2420–18154) verbatim into `js/main.js` as the module entry (temp remainder), add `<script type="module" src="/static/js/main.js">`, create `js/shell/legacy-bridge.js` bridging all 63 must-bridge `window.*`, keep vendored libs classic `defer`. VERIFY green here = the whole app runs as one module with parity intact.
+  - Then U2..Un = carve one domain per iteration OUT of `js/main.js` into `core/ → shell/ → library/ → runs/ → admin/ → workspace-legacy/`, each `export` + bridge, VERIFY per domain.
+  - Final U = remainder in `main.js` is empty → the "delete the extracted <script> body" clause is satisfied.
+  - Boot-ordering cleanup (parse-time side effects → `boot()`) stays deferred to phase-3 per D3, as written.
+- consec_fail: 0 (this is a design/ordering HALT, not a build failure). Loop re-feeds cheaply until `/cancel-ralph` or max-iterations; do NOT emit the promise.
