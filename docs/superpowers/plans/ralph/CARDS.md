@@ -28,17 +28,18 @@ VERIFY: `pytest tests/ui -q` + screenshot diff clean + 0 console errors + no x-o
 GATE: pixel-parity @3 widths AND `pytest tests/ui -q` green.
 
 ### phase-2 — extract JS to ES modules · CAP=20 · type/scope=refactor(js)
-GOAL: relocate the `<script>` block into `js/**` per the plan's D2 map — ONE DOMAIN per iteration — each namespace `export`ed and re-exposed via `shell/legacy-bridge.js`; then flip `index.html` to `<script type="module" src="/static/js/main.js">`. Vendored libs (Drawflow, d3, dagre, js-yaml) stay classic `<script defer>`.
-UNITS (one per iteration, in order — DAG-safe, import floor first):
-- [ ] core/ — dom(esc/renderMarkdown), net(Net), ui(Toast/Confirm/EmptyState/ErrorPanel/Skeleton), theme, shortcuts, heartbeat, state(dfEditor/dfNodeData/dfNextId/graphConfig/graphData/graphSim/chatHistory/_chatModels/_connExpand/DfSeedSchema). Snapshot each of the 5 shadowed esc() (ApiKeys/Plugins/Skills/Cloud/Exports) before swapping to core/dom.esc; leave renderMarkdown's private esc ALONE.
-- [ ] shell/ — actions(Actions, 162 sites), router(hash), legacy-bridge(the 57 must-bridge).
-- [ ] library/ — workflow-index(+Kanban), agents(AgentGen), models(CatalogPage+CatalogModelsShare), skills, plugins, mcp, install-wizard, compare, asset-peek.
-- [ ] runs/ — runs(RunsTab), run-lens, workflow-memory, research-artifacts, research-flow. Keep RunsTab's private `_editor` Drawflow instance PRIVATE — never export it.
-- [ ] admin/ — menu, auth, api-keys, cloud, exports.
-- [ ] workspace-legacy/ — df* → canvas.js; relocate ComposerWorkstream/ComposerSplit/BootSequence/ScaffoldModal/Pins/Threads/AgentTuning as-is (retirement is Stage 2).
-- [ ] Flip `index.html` to the module entry; delete the extracted `<script>` body.
-VERIFY (after EACH domain): `pytest tests/parity -q && pytest tests/ui -q && ENCLAVE_PLAYWRIGHT_BASE_URL=http://localhost:8001 pytest tests/playwright -m "not slow" -q`
-GATE: every domain [x]; full parity + tests/ui + non-slow e2e green on the modular base.
+GOAL: relocate the `<script>` block into `js/**` per the plan's D2 map. **FLIP-FIRST, CARVE-AFTER** (operator sign-off 2026-07-07; the original extract-domains-then-flip order was mechanically unrealizable — see ledger HALT proof: 710 `esc(` sites break on removal-without-flip, and the static must-bridge parity test un-skips demanding all 63 bridges the instant `js/` exists). Flip the whole monolith to a single module entry + bridge all 63 up front (app runs as ONE module, parity green), THEN carve one domain per iteration out of `main.js` until the remainder is empty. Same D2 map + end state; boot-ordering cleanup stays in phase-3. Vendored libs (Drawflow, d3, dagre, js-yaml) stay classic `<script defer>`.
+UNITS (one per iteration, in order):
+- [ ] U1 flip — move the monolith `<script>` body (index.html 2420–18154) VERBATIM into `js/main.js` as a `type="module"` entry; add `<script type="module" src="/static/js/main.js">` (replacing the inline body); create `shell/legacy-bridge.js` re-exposing ALL 63 must-bridge symbols as `window.*` (imported from main.js or a shared surface); relocate the 7 component `<script id=...>` blocks (journey/pins/threads/library/runlens/components/flow5) into modules too (or import them). Vendored libs stay classic `defer`. Net effect: the entire app runs as one module graph, every inline `on*=` still resolves.
+- [ ] U2 core/ — carve OUT of main.js: dom(esc/renderMarkdown/renderMarkdownBasic), net(Net), ui(Toast/Confirm/EmptyState/ErrorPanel/Skeleton), theme, shortcuts, heartbeat, state(dfEditor/dfNodeData/dfNextId/graphConfig/graphData/graphSim/chatHistory/_chatModels/_connExpand/DfSeedSchema). Snapshot each of the 5 shadowed esc() (ApiKeys/Plugins/Skills/Cloud/Exports) before swapping to core/dom.esc; leave renderMarkdown's private esc ALONE.
+- [ ] U3 shell/ — carve actions(Actions, 162 sites), router(hash). (legacy-bridge already created in U1; extend as symbols move.)
+- [ ] U4 library/ — workflow-index(+Kanban), agents(AgentGen), models(CatalogPage+CatalogModelsShare), skills, plugins, mcp, install-wizard, compare, asset-peek.
+- [ ] U5 runs/ — runs(RunsTab), run-lens, workflow-memory, research-artifacts, research-flow. Keep RunsTab's private `_editor` Drawflow instance PRIVATE — never export it.
+- [ ] U6 admin/ — menu, auth, api-keys, cloud, exports.
+- [ ] U7 workspace-legacy/ — df* → canvas.js; relocate ComposerWorkstream/ComposerSplit/BootSequence/ScaffoldModal/Pins/Threads/AgentTuning as-is (retirement is Stage 2).
+- [ ] U8 finalize — `main.js` remainder is now only imports + wiring; confirm the extracted `<script>` body is fully gone from index.html; the D2 module tree is complete.
+VERIFY (after EACH unit): `pytest tests/parity -q && pytest tests/ui -q && ENCLAVE_PLAYWRIGHT_BASE_URL=http://localhost:8001 pytest tests/playwright -m "not slow" -q`
+GATE: every unit [x]; full parity + tests/ui + non-slow e2e green on the modular base.
 
 ### phase-3 — ordered boot() · CAP=6 · type/scope=refactor(js)
 GOAL: replace parse-time side effects with a single ordered `boot()` called from `main.js`.

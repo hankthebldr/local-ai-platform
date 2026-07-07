@@ -8,14 +8,15 @@ d3, dagre, js-yaml) stay classic `<script defer>`.
 
 consec_fail: 0
 
-## Units (one domain per iteration, in order — DAG-safe, import floor first)
-- [ ] U1 core/ — dom(esc/renderMarkdown), net(Net), ui(Toast/Confirm/EmptyState/ErrorPanel/Skeleton), theme, shortcuts, heartbeat, state(dfEditor/dfNodeData/dfNextId/graphConfig/graphData/graphSim/chatHistory/_chatModels/_connExpand/DfSeedSchema). Snapshot each of the 5 shadowed esc() (ApiKeys/Plugins/Skills/Cloud/Exports) before swapping to core/dom.esc; leave renderMarkdown's private esc ALONE.
-- [ ] U2 shell/ — actions(Actions, 162 sites), router(hash), legacy-bridge (the must-bridge set — see Facts: now 63, not the card's 57).
-- [ ] U3 library/ — workflow-index(+Kanban), agents(AgentGen), models(CatalogPage+CatalogModelsShare), skills, plugins, mcp, install-wizard, compare, asset-peek.
-- [ ] U4 runs/ — runs(RunsTab), run-lens, workflow-memory, research-artifacts, research-flow. Keep RunsTab's private `_editor` Drawflow instance PRIVATE — never export it.
-- [ ] U5 admin/ — menu, auth, api-keys, cloud, exports.
-- [ ] U6 workspace-legacy/ — df* → canvas.js; relocate ComposerWorkstream/ComposerSplit/BootSequence/ScaffoldModal/Pins/Threads/AgentTuning as-is (retirement is Stage 2).
-- [ ] U7 Flip `index.html` to the module entry; delete the extracted `<script>` body.
+## Units — FLIP-FIRST, CARVE-AFTER (operator sign-off 2026-07-07; supersedes the original order — see resolved HALT in Notes)
+- [ ] U1 flip — monolith `<script>` body (index.html 2420–18154) VERBATIM → `js/main.js` (`type="module"` entry); replace inline body with `<script type="module" src="/static/js/main.js">`; create `shell/legacy-bridge.js` re-exposing ALL 63 must-bridge as `window.*`; relocate/import the 7 component `<script id=...>` blocks (journey/pins/threads/library/runlens/components/flow5). Vendored libs stay classic `defer`. End state: whole app = one module graph, every inline `on*=` resolves.
+- [ ] U2 core/ — carve OUT of main.js: dom(esc/renderMarkdown/renderMarkdownBasic), net(Net), ui(Toast/Confirm/EmptyState/ErrorPanel/Skeleton), theme, shortcuts, heartbeat, state(dfEditor/dfNodeData/dfNextId/graphConfig/graphData/graphSim/chatHistory/_chatModels/_connExpand/DfSeedSchema). Snapshot the 5 shadowed esc() (ApiKeys/Plugins/Skills/Cloud/Exports) before swapping to core/dom.esc; leave renderMarkdown's private esc ALONE.
+- [ ] U3 shell/ — carve actions(Actions, 162 sites), router(hash); extend legacy-bridge as symbols move.
+- [ ] U4 library/ — workflow-index(+Kanban), agents(AgentGen), models(CatalogPage+CatalogModelsShare), skills, plugins, mcp, install-wizard, compare, asset-peek.
+- [ ] U5 runs/ — runs(RunsTab), run-lens, workflow-memory, research-artifacts, research-flow. Keep RunsTab's private `_editor` Drawflow instance PRIVATE — never export it.
+- [ ] U6 admin/ — menu, auth, api-keys, cloud, exports.
+- [ ] U7 workspace-legacy/ — df* → canvas.js; relocate ComposerWorkstream/ComposerSplit/BootSequence/ScaffoldModal/Pins/Threads/AgentTuning as-is (retirement is Stage 2).
+- [ ] U8 finalize — main.js remainder = imports + wiring only; confirm extracted `<script>` body fully gone from index.html; D2 tree complete.
 
 VERIFY (after EACH domain): `pytest tests/parity -q && pytest tests/ui -q && ENCLAVE_PLAYWRIGHT_BASE_URL=http://localhost:8001 pytest tests/playwright -m "not slow" -q`
 GATE: every domain [x]; full parity + tests/ui + non-slow e2e green on the modular base.
@@ -37,7 +38,8 @@ GATE: every domain [x]; full parity + tests/ui + non-slow e2e green on the modul
   before Stage 2.
 
 ## Notes
-- HALT: plan drift — the card's unit ORDER (extract domains U1–U6 → flip U7; legacy-bridge at U2) is not mechanically realizable with the card's own "parity green after EACH domain". Proof (all verified iter 1, server up):
+- HALT RESOLVED (2026-07-07, operator approved flip-first): units above rewritten to flip-first/carve-after; CARDS.md ## phase-2 updated to match. Loop RESUMES on the new U1. Original proof retained below for the record.
+- [was] HALT: plan drift — the card's unit ORDER (extract domains U1–U6 → flip U7; legacy-bridge at U2) is not mechanically realizable with the card's own "parity green after EACH domain". Proof (all verified iter 1, server up):
   - Monolith `<script>` = index.html **2420–18154** (one classic script). `esc(` appears **710×**; the plan pins esc at 497 import sites. `core/` symbols are referenced pervasively.
   - **U1 is RED both ways.** (a) Remove `core/` from the classic monolith but DON'T flip index.html to a module loader (flip is U7) → 710+ call-sites hit undefined `esc/Net/Toast/...` → console-error storm, e2e RED. (b) Keep the functions in the monolith (dead-copy the modules) → `api/static/js/` now exists → `tests/parity::test_post_split_symbols_are_window_bridged` UN-SKIPS (skipif `not JS_DIR.is_dir()`) and requires **all 63** must-bridge as `window.X=` in the corpus; **0** are bridged today → parity RED.
   - Root cause: an ES module can't run without the module entry, and the classic monolith can't lose symbols it still calls. So the flip to `<script type="module">` and all 63 `legacy-bridge.js` window-bridges must land at the FIRST domain iteration — the REVERSE of the card's U7/U2 placement.
