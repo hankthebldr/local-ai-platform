@@ -7,7 +7,7 @@ consec_fail: 0
 
 ## Units
 - [x] U1: Capture baseline screenshots @1440/1024/768 into scratchpad (reference set).
-- [ ] U2: Move the main `<style>` block verbatim into `api/static/css/app.css`.
+- [x] U2: Move the main `<style>` block verbatim into `api/static/css/app.css`.
 - [ ] U3: Add `<link rel="stylesheet" href="/static/css/app.css">` in `<head>`; KEEP the head theme-bootstrap script inline classic (must run before paint — no flash).
 - [ ] U4: Screenshot-compare @3 widths vs baseline; assert visually identical.
 
@@ -23,3 +23,5 @@ GATE: pixel-parity @3 widths AND `pytest tests/ui -q` green.
 
 ## Notes
 - U1 (iter 1): shot `composer-{1440,1024,768}.png` full-page of the default booted Composer into `playwright-results/phase1-baseline/`. All 3 widths: **0 boot console errors, 0 x-overflow**. Verified 1440 render = fully-styled dark/teal Composer (not blank). This is the pre-CSS-move reference set for U4. Capture script: `$CLAUDE_JOB_DIR/tmp/shoot_baseline.py`.
+- U2 (iter 2): extracted inner CSS (index.html lines 37–6442, i.e. the main `<style>`…`</style>` at 36/6443) into `api/static/css/app.css` — **6406 lines, byte-exact verbatim** (round-trip assert vs the index region passed). **index.html left UNTOUCHED this unit** so the served page stays byte-identical to baseline (screenshot parity trivially preserved); the actual DOM swap (link-in + inline-out, atomic — no unstyled intermediate) is U3, screenshot-diff is U4. VERIFY: `pytest tests/ui -q` = **160 passed**. Committed app.css + ledger.
+- U3 RISK NOTE: the 160 tests/ui are static-markup assertions over index.html. Before removing the inline `<style>` in U3, grep them for any that assert CSS-rule/selector presence inside index.html (would flip RED once the block moves to app.css). If found, re-point them at app.css.
