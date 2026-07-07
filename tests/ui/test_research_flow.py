@@ -15,8 +15,9 @@ def test_flow5_markup_present(index_soup):
 
 
 def test_flow5_module_and_entry_point(index_html_text):
-    assert "window.ResearchFlow" in index_html_text
-    assert 'id="enclave-flow5-js"' in index_html_text
+    assert (
+        "window.ResearchFlow" in index_html_text
+    )  # module code (phase-2: now in js/main.js)
     # Entry point lives in the research results panel.
     assert "Build an agent from this" in index_html_text
     assert "ResearchFlow.open()" in index_html_text
@@ -35,13 +36,17 @@ def test_flow5_reuses_real_agent_endpoints(index_html_text):
 
 def test_flow5_reuses_canonical_atoms(index_html_text):
     # WizardStepper (encl-wstep), SeedChip, and verify-by-seedChat.
-    f5 = index_html_text[index_html_text.index('id="enclave-flow5-js"') :]
+    # phase-2 moved flow5 out of its <script id> wrapper into js/main.js; anchor the
+    # region on its stable block comment instead of the (now-gone) wrapper id.
+    f5 = index_html_text[index_html_text.index("Flow 5 — research") :]
     assert "encl-wstep" in f5
     assert "window.SeedChip" in f5 and "sc.html(" in f5  # seed chips via the helper
     assert "AssetPeek.seedChat(null, id)" in f5
 
 
 def test_flow5_reads_existing_research(index_html_text):
-    f5 = index_html_text[index_html_text.index('id="enclave-flow5-js"') :]
+    # phase-2 moved flow5 out of its <script id> wrapper into js/main.js; anchor the
+    # region on its stable block comment instead of the (now-gone) wrapper id.
+    f5 = index_html_text[index_html_text.index("Flow 5 — research") :]
     assert "research-output" in f5
     assert "window._lastResearch" in f5

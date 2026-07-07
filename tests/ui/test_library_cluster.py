@@ -16,9 +16,10 @@ def test_library_markup_present(index_soup):
 
 
 def test_library_modules_present(index_html_text):
-    assert "window.Compare" in index_html_text
+    assert (
+        "window.Compare" in index_html_text
+    )  # module code (phase-2: now in js/main.js)
     assert "window.InstallWizard" in index_html_text
-    assert 'id="enclave-library-js"' in index_html_text
     assert 'id="enclave-library-styles"' in index_html_text
 
 

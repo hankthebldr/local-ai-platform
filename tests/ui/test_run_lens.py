@@ -16,8 +16,9 @@ def test_run_lens_markup_present(index_soup):
 
 
 def test_run_lens_module_present(index_html_text):
-    assert "window.RunLens" in index_html_text
-    assert 'id="enclave-runlens-js"' in index_html_text
+    assert (
+        "window.RunLens" in index_html_text
+    )  # module code (phase-2: now in js/main.js)
     assert 'id="enclave-runlens-styles"' in index_html_text
     assert "RunLens.open()" in index_html_text  # launcher wiring
 

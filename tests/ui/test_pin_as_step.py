@@ -16,9 +16,8 @@ def test_pin_markup_anchors_present(index_soup):
 
 
 def test_pin_modules_present(index_html_text):
-    assert "window.Pins" in index_html_text
+    assert "window.Pins" in index_html_text  # module code (phase-2: now in js/main.js)
     assert "window.ScaffoldModal" in index_html_text
-    assert 'id="enclave-pins-js"' in index_html_text
     assert 'id="enclave-pins-styles"' in index_html_text
 
 
