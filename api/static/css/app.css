@@ -5230,6 +5230,9 @@ textarea.composer-desc-area {
 .composer-divider {
   cursor: row-resize;
   position: relative;
+  /* Keep the row-resize handle grabbable above the chat dock's input, which
+     can reach the divider's fat hit target in a narrow composer. */
+  z-index: 2;
   border-radius: 999px;
   background: var(--border);
   transition: background 0.15s ease;
@@ -6449,6 +6452,9 @@ body.bs-show-hint .bs-dispatch:hover::after {
     align-self: stretch;
     min-height: calc(100vh - 190px);
     background: linear-gradient(180deg, var(--accent-trace) 0%, transparent 130px);
+    /* sticky makes the rail a stacking context; lift it above main so the
+       Admin dropdown (below) isn't painted behind the composer. */
+    z-index: 30;
   }
   body > .tab-nav::before {
     content: "Navigate";
@@ -6490,5 +6496,6 @@ body.bs-show-hint .bs-dispatch:hover::after {
   }
   body > .tab-nav .admin-trigger { width: 100%; text-align: left; display: flex; align-items: center; gap: 8px; }
   body > .tab-nav .admin-trigger .caret { margin-left: auto; }
-  body > .tab-nav .admin-menu { left: calc(100% + 6px); bottom: 0; top: auto; }
+  /* Admin sits at the rail bottom → the menu drops UP from the trigger. */
+  body > .tab-nav .admin-menu { bottom: calc(100% + 4px); top: auto; right: 0; left: auto; }
 }
