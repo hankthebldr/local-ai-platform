@@ -25,6 +25,7 @@ from ..services.workspace import (
     WorkspaceViolation,
     get_workspace_registry,
 )
+from ..services.workspace_index import WorkspaceIndex
 
 router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
 
@@ -53,6 +54,20 @@ class ExpandBody(BaseModel):
     path: str
     content: str
     heading: Optional[str] = None
+
+
+class AddItemsBody(BaseModel):
+    items: List[dict]
+
+
+class StatusBody(BaseModel):
+    status: str
+    artifact: Optional[str] = None
+    note: Optional[str] = None
+
+
+class RenderBody(BaseModel):
+    path: Optional[str] = None
 
 
 def _guard(fn):
@@ -152,3 +167,70 @@ def expand_file(name: str, body: ExpandBody):
     """expand — append, or insert under a markdown heading."""
     ws = _ws(name)
     return _guard(lambda: ws.expand(body.path, body.content, body.heading))
+
+
+# ── durable index / worklist (C3) ───
+def _index(name: str, index: str) -> WorkspaceIndex:
+    return WorkspaceIndex(_ws(name), index)
+
+
+def _item_payload(idx: WorkspaceIndex) -> dict:
+    return {
+        "name": idx.name,
+        "counts": idx.counts(),
+        "complete": idx.is_complete(),
+        "items": [it.model_dump() for it in idx.items()],
+    }
+
+
+@router.get("/{name}/index/{index}")
+def get_index(name: str, index: str):
+    return _guard(lambda: _item_payload(_index(name, index)))
+
+
+@router.post("/{name}/index/{index}/items")
+def add_index_items(name: str, index: str, body: AddItemsBody):
+    idx = _index(name, index)
+    return _guard(lambda: {**idx.add_items(body.items), "counts": idx.counts()})
+
+
+@router.post("/{name}/index/{index}/next")
+def next_pending(name: str, index: str, requeue_stale: bool = False):
+    """Claim the next pending item (marks it in_progress). Pass
+    requeue_stale=true at loop start to first reclaim interrupted items."""
+    idx = _index(name, index)
+
+    def run():
+        if requeue_stale:
+            idx.requeue_stale()
+        nxt = idx.next_pending(claim=True)
+        return {"item": nxt.model_dump() if nxt else None, "counts": idx.counts()}
+
+    return _guard(run)
+
+
+@router.post("/{name}/index/{index}/requeue")
+def requeue_stale(name: str, index: str):
+    """Reclaim interrupted (in_progress) items back to pending — resume prep.
+    Does NOT claim a new item (unlike /next)."""
+    idx = _index(name, index)
+
+    def run():
+        n = idx.requeue_stale()
+        return {"requeued": n, "counts": idx.counts()}
+
+    return _guard(run)
+
+
+@router.post("/{name}/index/{index}/items/{item_id}/status")
+def set_index_status(name: str, index: str, item_id: str, body: StatusBody):
+    idx = _index(name, index)
+    return _guard(
+        lambda: idx.set_status(item_id, body.status, body.artifact, body.note).model_dump()
+    )
+
+
+@router.post("/{name}/index/{index}/render")
+def render_index(name: str, index: str, body: RenderBody):
+    idx = _index(name, index)
+    return _guard(lambda: {"rendered": idx.render_markdown(body.path)})
