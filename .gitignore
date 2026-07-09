@@ -71,6 +71,7 @@ data/models/*.ckpt
 data/vectors/chroma_db/
 data/cache/**
 data/logs/*.log
+data/workspaces/
 
 # Workflow memory stores (kind=consolidate runtime artifacts)
 data/playbooks/
