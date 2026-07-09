@@ -10,56 +10,27 @@ const { Drawflow, d3, dagre, jsyaml } = window;
 // window-bridged via shell/legacy-bridge.js (esc, renderMarkdownBasic) below.
 import { esc, renderMarkdown, renderMarkdownBasic } from './core/dom.js';
 import { Net } from './core/net.js';
+import { Theme } from './core/theme.js';
+import { Toast, Confirm, EmptyState, ErrorPanel, Skeleton } from './core/ui.js';
+import { Shortcuts } from './core/shortcuts.js';
+import { Heartbeat } from './core/heartbeat.js';
 // Preserve early window availability (these were direct window.* assigns).
 window.renderMarkdown = renderMarkdown;
 window.Net = Net;
+window.Theme = Theme;
+window.Toast = Toast;
+window.Confirm = Confirm;
+window.EmptyState = EmptyState;
+window.ErrorPanel = ErrorPanel;
+window.Skeleton = Skeleton;
+window.Shortcuts = Shortcuts;
+window.Heartbeat = Heartbeat;
 
 
 /* ── THEME CONTROLLER ──────────────────────────────────────────── */
 // Pairs with the early-bootstrap script in <head> that sets data-theme
 // before paint. This handles the runtime toggle, persists the choice,
 // and keeps the toggle's icon in sync.
-window.Theme = (function () {
-  var STORAGE_KEY = 'enclave.theme';
-
-  function current() {
-    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  }
-
-  function apply(theme) {
-    if (theme === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-    // Browser-chrome color follows the palette (mirrors --bg-deep).
-    var tc = document.querySelector('meta[name="theme-color"]');
-    if (tc) tc.setAttribute('content', theme === 'light' ? '#F2F4F7' : '#070A0F');
-    _syncIcon();
-  }
-
-  function toggle() {
-    var next = current() === 'light' ? 'dark' : 'light';
-    apply(next);
-    try { localStorage.setItem(STORAGE_KEY, next); } catch (e) { /* private mode */ }
-  }
-
-  function _syncIcon() {
-    var icon = document.getElementById('theme-toggle-icon');
-    if (!icon) return;
-    // Sun when current is light (clicking → goes dark); moon when current is dark.
-    icon.textContent = current() === 'light' ? '☀' : '☾';
-  }
-
-  // Initial sync on DOM ready.
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _syncIcon);
-  } else {
-    _syncIcon();
-  }
-
-  return { toggle: toggle, apply: apply, current: current };
-})();
 
 /* ── TAB SWITCHING ─────────────────────────────────────────────── */
 function switchTab(name, el) {
@@ -7948,53 +7919,6 @@ window.Auth = window.AdminAuth;
 //   Toast.warn('Rate limit nearing', 'Slow down or bump RATE_LIMIT_RPM')
 //   Toast.danger('Workflow failed', err.message)
 // Toasts auto-dismiss after 4s; click to dismiss earlier.
-window.Toast = (function () {
-  function _container() {
-    let c = document.getElementById('enclave-toasts');
-    if (!c) {
-      c = document.createElement('div');
-      c.id = 'enclave-toasts';
-      // Live region: every async notification in the app funnels through
-      // this one container, so screen readers hear all of them for free.
-      c.setAttribute('role', 'status');
-      c.setAttribute('aria-live', 'polite');
-      document.body.appendChild(c);
-    }
-    return c;
-  }
-  function _esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-  function show(kind, title, body, opts) {
-    opts = opts || {};
-    const el = document.createElement('div');
-    el.className = 'enclave-toast kind-' + kind;
-    // Danger toasts interrupt (role=alert → assertive); the rest queue
-    // politely behind whatever the screen reader is saying.
-    if (kind === 'danger') el.setAttribute('role', 'alert');
-    el.innerHTML =
-      (title ? '<div class="toast-title">' + _esc(title) + '</div>' : '') +
-      '<div class="toast-body">' + _esc(body || title) + '</div>';
-    el.addEventListener('click', () => dismiss(el));
-    _container().appendChild(el);
-    const ttl = opts.ttl != null ? opts.ttl : 4000;
-    if (ttl > 0) setTimeout(() => dismiss(el), ttl);
-    return el;
-  }
-  function dismiss(el) {
-    if (!el || !el.isConnected) return;
-    el.classList.add('dismissing');
-    setTimeout(() => el.remove(), 240);
-  }
-  return {
-    info:    (t, b, o) => show('info', t, b, o),
-    success: (t, b, o) => show('success', t, b, o),
-    warn:    (t, b, o) => show('warn', t, b, o),
-    danger:  (t, b, o) => show('danger', t, b, o),
-    dismiss,
-  };
-})();
 
 // ── Global error safety net ───────────────────────────────────────────────
 // Catches uncaught exceptions and unhandled promise rejections so they
@@ -8061,54 +7985,8 @@ window.Toast = (function () {
 // ── ErrorPanel: consistent inline error rendering ─────────────────────────
 // Drop the same visual treatment everywhere a panel fails to load. Pairs
 // with EmptyState for the success-but-empty case.
-window.ErrorPanel = (function () {
-  function render(el, opts) {
-    if (!el) return;
-    opts = opts || {};
-    const title = opts.title || 'Something went wrong';
-    const detail = opts.detail || opts.error || '';
-    const action = opts.retry
-      ? `<button class="action-btn xs cyan" data-error-retry>Retry</button>`
-      : '';
-    el.innerHTML = `
-      <div class="enclave-error-panel">
-        <div class="enclave-error-icon" aria-hidden="true">!</div>
-        <div class="enclave-error-body">
-          <div class="enclave-error-title">${esc(title)}</div>
-          ${detail ? `<div class="enclave-error-detail">${esc(String(detail).slice(0, 400))}</div>` : ''}
-          ${action ? `<div class="enclave-error-actions">${action}</div>` : ''}
-        </div>
-      </div>`;
-    if (opts.retry) {
-      const btn = el.querySelector('[data-error-retry]');
-      if (btn) btn.addEventListener('click', () => opts.retry());
-    }
-  }
-  return { render };
-})();
 
 // ── EmptyState: consistent zero-data treatment ───────────────────────────
-window.EmptyState = (function () {
-  function render(el, opts) {
-    if (!el) return;
-    opts = opts || {};
-    const title = opts.title || 'Nothing here yet';
-    const detail = opts.detail || '';
-    const cta = opts.cta;  // {label, onclick}
-    el.innerHTML = `
-      <div class="enclave-empty-state">
-        <div class="enclave-empty-glyph" aria-hidden="true">${esc(opts.glyph || '◇')}</div>
-        <div class="enclave-empty-title">${esc(title)}</div>
-        ${detail ? `<div class="enclave-empty-detail">${esc(detail)}</div>` : ''}
-        ${cta ? `<button class="action-btn accent" data-empty-cta>${esc(cta.label)}</button>` : ''}
-      </div>`;
-    if (cta && cta.onclick) {
-      const btn = el.querySelector('[data-empty-cta]');
-      if (btn) btn.addEventListener('click', cta.onclick);
-    }
-  }
-  return { render };
-})();
 
 // ── Heartbeat: backend liveness + degraded-state banner ───────────────────
 // Polls /health every 30s with no auth (it's a public endpoint). Surfaces
@@ -8116,261 +7994,17 @@ window.EmptyState = (function () {
 // instantly when Ollama drops out, the auth keystore is misconfigured,
 // or the API itself starts erroring. Reuses the existing #env-chip
 // container so we don't compete for header real estate.
-window.Heartbeat = (function () {
-  let _timer = null;
-  let _lastStatus = null;
-
-  function _chip() {
-    return document.getElementById('env-chip-label');
-  }
-  function _envChip() {
-    return document.getElementById('env-chip');
-  }
-
-  async function _tick() {
-    const r = await Net.call('/health', { silent: true, retries: 0 });
-    const status = r.ok && r.data ? (r.data.status || 'unknown') : 'offline';
-    // /health returns ollama: { status: "healthy" | "degraded", models_loaded: N }
-    const ollamaUp = !!(r.ok && r.data && r.data.ollama && r.data.ollama.status === 'healthy');
-    _paint(status, ollamaUp, r.data);
-    _lastStatus = status;
-  }
-
-  function _paint(status, ollamaUp, data) {
-    const chip = _chip();
-    const env = _envChip();
-    if (!chip || !env) return;
-    env.classList.remove('healthy', 'degraded', 'offline');
-    const modelCount = (data && data.ollama && (data.ollama.models_loaded || (data.ollama.models || []).length)) || 0;
-    if (status === 'healthy' && ollamaUp) {
-      env.classList.add('healthy');
-      chip.textContent = 'LOCAL';
-      env.title = 'Healthy · ' + modelCount + ' models loaded';
-    } else if (status === 'degraded' || (status === 'healthy' && !ollamaUp)) {
-      env.classList.add('degraded');
-      chip.textContent = 'DEGRADED';
-      env.title = 'Ollama unreachable. Inference will fail until it comes back.';
-      if (_lastStatus && _lastStatus !== 'degraded' && window.Toast) {
-        Toast.warn('Ollama unreachable', 'Models won’t respond until the service is back.', { ttl: 4500 });
-      }
-    } else {
-      env.classList.add('offline');
-      chip.textContent = 'OFFLINE';
-      env.title = 'API not responding to /health.';
-    }
-  }
-
-  function start(intervalMs) {
-    if (_timer) clearInterval(_timer);
-    _tick();
-    _timer = setInterval(_tick, intervalMs || 30_000);
-  }
-  function stop() { if (_timer) clearInterval(_timer); _timer = null; }
-  function lastStatus() { return _lastStatus; }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => start(30_000));
-  } else {
-    start(30_000);
-  }
-
-  return { start, stop, tick: _tick, lastStatus };
-})();
 
 // ── Confirm: styled replacement for window.confirm() ──────────────────────
 // Same call-site shape as a real promise-based confirm. Returns a
 // promise that resolves to true/false. Built on the admin-modal CSS so
 // it inherits the brand palette + motion.
-window.Confirm = (function () {
-  let _open = false;   // re-entrancy guard — the singleton modal can't host two asks
-  function ask(opts) {
-    opts = opts || {};
-    // A second ask() while one is pending would stack listeners on the
-    // shared modal buttons (one OK → both promises resolve true). Decline
-    // the overlap instead. Legitimate sequential confirms await the first,
-    // so _open is already false by the time they call.
-    if (_open) return Promise.resolve(false);
-    return new Promise((resolve) => {
-      _open = true;
-      let m = document.getElementById('enclave-confirm-modal');
-      if (!m) {
-        m = document.createElement('div');
-        m.id = 'enclave-confirm-modal';
-        m.className = 'admin-modal';
-        m.setAttribute('role', 'dialog');
-        m.setAttribute('aria-modal', 'true');
-        m.setAttribute('aria-labelledby', 'enclave-confirm-title');
-        m.setAttribute('aria-describedby', 'enclave-confirm-body');
-        m.innerHTML = `
-          <div class="admin-modal-card" style="width:min(440px,90vw)">
-            <h3 id="enclave-confirm-title">Confirm</h3>
-            <p class="admin-modal-sub" id="enclave-confirm-body"></p>
-            <div class="admin-modal-actions">
-              <button type="button" class="admin-modal-btn"        id="enclave-confirm-cancel">Cancel</button>
-              <button type="button" class="admin-modal-btn primary" id="enclave-confirm-ok">OK</button>
-            </div>
-          </div>
-        `;
-        document.body.appendChild(m);
-      }
-      m.querySelector('#enclave-confirm-title').textContent = opts.title || 'Confirm';
-      m.querySelector('#enclave-confirm-body').textContent  = opts.body  || 'Are you sure?';
-      m.querySelector('#enclave-confirm-ok').textContent    = opts.okLabel    || 'OK';
-      m.querySelector('#enclave-confirm-cancel').textContent = opts.cancelLabel || 'Cancel';
-      const okBtn = m.querySelector('#enclave-confirm-ok');
-      okBtn.className = 'admin-modal-btn primary' + (opts.danger ? ' kind-danger' : '');
-      m.hidden = false;
-
-      const _restoreFocus = document.activeElement;
-      function _close(value) {
-        _open = false;
-        m.hidden = true;
-        okBtn.removeEventListener('click', _yes);
-        cancelBtn.removeEventListener('click', _no);
-        document.removeEventListener('keydown', _onKey, true);
-        // Hand focus back to whatever opened the dialog (keyboard users
-        // otherwise land back at the top of the document).
-        if (_restoreFocus && _restoreFocus.isConnected) {
-          try { _restoreFocus.focus(); } catch (_) {}
-        }
-        resolve(value);
-      }
-      function _yes() { _close(true); }
-      function _no()  { _close(false); }
-      function _onKey(e) {
-        if (e.key === 'Escape') { e.preventDefault(); _no(); return; }
-        // Enter confirms — but NOT when Cancel holds focus. Pressing Enter
-        // on a focused Cancel is the standard decline gesture; mapping it to
-        // _yes() (and preventDefault-ing the button's own activation) would
-        // silently confirm a destructive action.
-        if (e.key === 'Enter') {
-          if (document.activeElement === cancelBtn) return;  // let Cancel activate natively
-          e.preventDefault(); _yes(); return;
-        }
-        // Focus trap: keep Tab inside the two buttons so keyboard users
-        // can't walk out to (and accidentally activate) background controls
-        // while the dialog is open.
-        if (e.key === 'Tab') {
-          e.preventDefault();
-          const next = (document.activeElement === okBtn) ? cancelBtn : okBtn;
-          next.focus();
-        }
-      }
-      const cancelBtn = m.querySelector('#enclave-confirm-cancel');
-      okBtn.addEventListener('click', _yes);
-      cancelBtn.addEventListener('click', _no);
-      // Capture phase so the trap sees Tab before it reaches the document.
-      document.addEventListener('keydown', _onKey, true);
-      setTimeout(() => okBtn.focus(), 0);
-    });
-  }
-  return { ask };
-})();
 
 // ── Keyboard Shortcuts ────────────────────────────────────────────────────
 // Operator productivity layer: command palette + tab jumps. Press
 // Cmd/Ctrl-K to toggle, or any of the keymap entries for direct jumps.
 // Designed to fail silently when focus is on a text input so users can
 // type the keys literally without triggering shortcuts.
-window.Shortcuts = (function () {
-  const keymap = [
-    { key: 'g d', label: 'Composer (dashboard)',  action: () => switchTab('dashboard') },
-    { key: 'g w', label: 'Workflow Index',         action: () => switchTab('workflow-index') },
-    { key: 'g a', label: 'Agents',                 action: () => switchTab('agents') },
-    { key: 'g r', label: 'Skill Lab',              action: () => switchTab('research') },
-    { key: 'g m', label: 'Models',                 action: () => switchTab('inventory') },
-    { key: 'g c', label: 'Context',                action: () => switchTab('documents') },
-    { key: 'g p', label: 'Plugins',                action: () => switchTab('admin-plugins') },
-    { key: 'g s', label: 'Skills',                 action: () => switchTab('admin-skills') },
-    { key: 'g x', label: 'MCP Servers',            action: () => switchTab('admin-mcp') },
-    { key: 'g y', label: 'System (Memory)',        action: () => switchTab('memory') },
-    { key: 'g k', label: 'License Keys',           action: () => switchTab('admin-keys') },
-    { key: 'g h', label: 'Runs (history)',         action: () => switchTab('runs') },
-    { key: '?',   label: 'Show this overlay',      action: () => toggle(true) },
-    { key: 'Escape', label: 'Close overlay',       action: () => toggle(false), inOverlay: true },
-  ];
-
-  let _open = false;
-  let _seq = '';
-  let _seqTimer = null;
-
-  function _modal() {
-    let m = document.getElementById('shortcuts-modal');
-    if (m) return m;
-    m = document.createElement('div');
-    m.id = 'shortcuts-modal';
-    m.className = 'admin-modal';
-    m.setAttribute('role', 'dialog');
-    m.setAttribute('aria-modal', 'true');
-    m.hidden = true;
-    const rows = keymap.filter(e => !e.inOverlay || e.key === 'Escape').map(e => `
-      <div class="kbd-row">
-        <kbd class="kbd-key">${esc(e.key)}</kbd>
-        <span class="kbd-label">${esc(e.label)}</span>
-      </div>
-    `).join('');
-    m.innerHTML = `
-      <div class="admin-modal-card" style="width:min(560px,90vw)">
-        <h3 style="display:flex;align-items:center;justify-content:space-between">
-          <span>Keyboard shortcuts</span>
-          <button class="action-btn xs" type="button" data-action="shortcuts.close">close</button>
-        </h3>
-        <p class="admin-modal-sub">
-          Shortcuts ignore your keystrokes when focus is on a text input,
-          so typing inside fields is safe. <kbd class="kbd-key">g</kbd>
-          followed by another key jumps tabs.
-        </p>
-        <div class="kbd-list">${rows}</div>
-      </div>
-    `;
-    document.body.appendChild(m);
-    return m;
-  }
-
-  function toggle(force) {
-    const m = _modal();
-    _open = (force === undefined) ? !_open : !!force;
-    m.hidden = !_open;
-  }
-
-  function _isTextTarget(t) {
-    if (!t) return false;
-    const tag = (t.tagName || '').toLowerCase();
-    return tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable;
-  }
-
-  function _onKey(e) {
-    // Cmd/Ctrl-K toggles overlay regardless of focus.
-    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
-      e.preventDefault();
-      toggle();
-      return;
-    }
-    // Escape closes overlay even when on text input.
-    if (e.key === 'Escape' && _open) { toggle(false); return; }
-    if (_isTextTarget(e.target)) return;
-
-    // ? help
-    if (e.key === '?') { e.preventDefault(); toggle(true); return; }
-
-    // Two-key sequences: "g <x>"
-    if (e.key === 'g') {
-      _seq = 'g';
-      if (_seqTimer) clearTimeout(_seqTimer);
-      _seqTimer = setTimeout(() => { _seq = ''; }, 900);
-      return;
-    }
-    if (_seq === 'g') {
-      const combo = 'g ' + e.key.toLowerCase();
-      _seq = '';
-      const entry = keymap.find(k => k.key === combo);
-      if (entry) { e.preventDefault(); entry.action(); }
-    }
-  }
-
-  document.addEventListener('keydown', _onKey);
-  return { toggle };
-})();
 
 // Delegated action for the shortcuts overlay close button.
 Actions.click({ 'shortcuts.close': () => Shortcuts.toggle(false) });
@@ -9268,20 +8902,6 @@ window.ChatRating = (function () {
 //   Skeleton.fill(el, 3)
 //   ... fetch ...
 //   el.innerHTML = renderedRows;
-window.Skeleton = (function () {
-  function fill(el, count, opts) {
-    if (!el) return;
-    count = count || 3;
-    opts = opts || {};
-    const lines = [];
-    for (let i = 0; i < count; i++) {
-      const cls = i % 2 === 0 ? 'long' : 'short';
-      lines.push('<div class="skeleton skeleton-line ' + cls + '"></div>');
-    }
-    el.innerHTML = lines.join('');
-  }
-  return { fill };
-})();
 
 (function installGlobalAuthFetch() {
   const _origFetch = window.fetch.bind(window);

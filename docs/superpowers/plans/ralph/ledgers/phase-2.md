@@ -14,7 +14,8 @@ consec_fail: 0
   - U2 done incrementally, one module per commit (safer than one 7-module commit). Progress:
   - [x] core/dom.js — esc (497-site floor) + renderMarkdown (private esc left as-is) + renderMarkdownBasic; imported into main.js, esc/renderMarkdownBasic re-export the imports, window.renderMarkdown set early; 5 shadowed esc left untouched. VERIFY: parity 4 / ui 160 / non-slow e2e **14 failed 163 passed = baseline exactly (0 new)**.
   - [x] core/net.js — Net IIFE → core/net.js, imported + `window.Net = Net`. Fast VERIFY: parity 4 / ui 160 / runtime-parity boot 1 = 165 passed (clean boot, window superset intact).
-  - [ ] core/ui.js · [ ] core/theme.js · [ ] core/shortcuts.js · [ ] core/heartbeat.js · [ ] core/state.js (df*/graph* are reassigned lexicals — needs a state-object accessor or stays via bridge; assess at that module).
+  - [x] core/theme.js · core/ui.js (Toast/Confirm/EmptyState/ErrorPanel/Skeleton) · core/shortcuts.js · core/heartbeat.js — 8 IIFEs carved. NOTE: moving IIFEs to import-time eval (before main.js body) exposed cross-refs → added explicit sibling imports (ui→dom.esc, shortcuts→dom.esc, heartbeat→net.Net+ui.Toast); no cycles. Re-anchored test_shortcuts_module_defined off `window.X=(function` onto the module form. Fast VERIFY: 165 passed.
+  - [ ] core/state.js (df*/graph* are reassigned lexicals — needs a state-object accessor or stays via bridge; assess at that module).
 - [ ] U3 shell/ — carve actions(Actions, 162 sites), router(hash); extend legacy-bridge as symbols move.
 - [ ] U4 library/ — workflow-index(+Kanban), agents(AgentGen), models(CatalogPage+CatalogModelsShare), skills, plugins, mcp, install-wizard, compare, asset-peek.
 - [ ] U5 runs/ — runs(RunsTab), run-lens, workflow-memory, research-artifacts, research-flow. Keep RunsTab's private `_editor` Drawflow instance PRIVATE — never export it.
