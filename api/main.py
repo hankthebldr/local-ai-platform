@@ -20,6 +20,7 @@ from .routers import (
     chat,
     completions,
     models,
+    model_registry,  # noqa: F401 — runner-aware model selection (/api/models)
     inventory,
     exports,
     graph,
@@ -311,6 +312,7 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(completions.router)
 app.include_router(models.router)
+app.include_router(model_registry.router)
 app.include_router(inventory.router)
 app.include_router(exports.router)
 app.include_router(graph.router)
