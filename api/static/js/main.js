@@ -22,13 +22,14 @@ import { PluginsPanel } from './library/plugins.js';
 import { Kanban } from './library/kanban.js';
 import { WorkflowIndex } from './library/workflow-index.js';
 import { AgentGen } from './library/agents.js';
-import { CatalogPage } from './library/models.js';
+import { CatalogPage, CatalogModelsShare } from './library/models.js';
 import { MCPPanel } from './library/mcp.js';
 // Preserve early window availability (these were direct window.* assigns).
 window.renderMarkdown = renderMarkdown;
 window.Actions = Actions;
 window.AssetPeek = AssetPeek;
 window.CatalogPage = CatalogPage;
+window.CatalogModelsShare = CatalogModelsShare;
 window.SkillsPanel = SkillsPanel;
 window.PluginsPanel = PluginsPanel;
 window.Kanban = Kanban;
@@ -5101,49 +5102,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // appendChild loop here at DOMContentLoaded, which permanently
     // ripped the inventory grid out of #tab-inventory — the Models
     // tab rendered empty thereafter. Bug surfaced in PR #71 review.)
-    window.CatalogModelsShare = (function () {
-      let inCatalog = false;
-      const ids = ['inv-stats', 'inv-grid', 'discover-section'];
-      const sel = ['.panel', '.inv-toolbar'];
-      function _nodes() {
-        const arr = [];
-        // Hardware profile + toolbar are sibling elements of
-        // #tab-inventory; grab them by selector. The grid + stats +
-        // discover have stable ids.
-        sel.forEach(s => {
-          const home = document.getElementById('tab-inventory');
-          const owned = document.getElementById('catalog-models-mount');
-          (home?.querySelector(s) || owned?.querySelector(s))
-            && arr.push(home?.querySelector(s) || owned.querySelector(s));
-        });
-        ids.forEach(id => { const n = document.getElementById(id); if (n) arr.push(n); });
-        return arr;
-      }
-      function _moveTo(host) {
-        if (!host) return;
-        _nodes().forEach(n => { try { host.appendChild(n); } catch (_) {} });
-      }
-      return {
-        showInCatalog() {
-          if (inCatalog) return;
-          const mount = document.getElementById('catalog-models-mount');
-          if (!mount) return;
-          // Drop the "Loading model catalog…" placeholder before we
-          // move the real grid in.
-          mount.replaceChildren();
-          _moveTo(mount);
-          inCatalog = true;
-        },
-        showInModelsTab() {
-          if (!inCatalog) return;
-          const home = document.getElementById('tab-inventory');
-          if (!home) return;
-          _moveTo(home);
-          inCatalog = false;
-        },
-        get isInCatalog() { return inCatalog; },
-      };
-    })();
 
     // SkillsDiscoverShare — the discovery/catalog panel (#skills-discover-
     // panel) is a single DOM node. By default it lives in the Catalog's

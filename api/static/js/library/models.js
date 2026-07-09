@@ -94,3 +94,50 @@ export const CatalogPage = (function () {
 
   return { show, _active, _loaded, _renderAgentsList };
 })();
+
+// CatalogModelsShare — relocates the models grid between the Models tab and
+// the Library catalog mount (phase-2 U4 carve; was nested in a DOMContentLoaded
+// handler — object build is side-effect-free, DOM work is method-only).
+export const CatalogModelsShare = (function () {
+  let inCatalog = false;
+  const ids = ['inv-stats', 'inv-grid', 'discover-section'];
+  const sel = ['.panel', '.inv-toolbar'];
+  function _nodes() {
+    const arr = [];
+    // Hardware profile + toolbar are sibling elements of
+    // #tab-inventory; grab them by selector. The grid + stats +
+    // discover have stable ids.
+    sel.forEach(s => {
+      const home = document.getElementById('tab-inventory');
+      const owned = document.getElementById('catalog-models-mount');
+      (home?.querySelector(s) || owned?.querySelector(s))
+        && arr.push(home?.querySelector(s) || owned.querySelector(s));
+    });
+    ids.forEach(id => { const n = document.getElementById(id); if (n) arr.push(n); });
+    return arr;
+  }
+  function _moveTo(host) {
+    if (!host) return;
+    _nodes().forEach(n => { try { host.appendChild(n); } catch (_) {} });
+  }
+  return {
+    showInCatalog() {
+      if (inCatalog) return;
+      const mount = document.getElementById('catalog-models-mount');
+      if (!mount) return;
+      // Drop the "Loading model catalog…" placeholder before we
+      // move the real grid in.
+      mount.replaceChildren();
+      _moveTo(mount);
+      inCatalog = true;
+    },
+    showInModelsTab() {
+      if (!inCatalog) return;
+      const home = document.getElementById('tab-inventory');
+      if (!home) return;
+      _moveTo(home);
+      inCatalog = false;
+    },
+    get isInCatalog() { return inCatalog; },
+  };
+})();
