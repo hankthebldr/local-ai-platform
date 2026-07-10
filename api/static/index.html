@@ -59,7 +59,9 @@
 .ollama-down-banner { display:flex; align-items:center; gap:10px; padding:7px 12px; margin:0 0 8px; border:1px solid var(--danger-dim,var(--danger)); border-radius:6px; background:var(--danger-ghost,rgba(229,104,90,0.12)); color:var(--text); font-size:0.66rem; font-family:var(--mono); }
 .ollama-down-banner[hidden] { display:none; }
 .composer-split.ollama-down .bs-dispatch,
-.composer-split.ollama-down .msg-pin-btn { opacity:0.4; pointer-events:none; }
+.composer-split.ollama-down .msg-pin-btn,
+.agent-chat-dock.ollama-down .bs-dispatch,
+.agent-chat-dock.ollama-down .msg-pin-btn { opacity:0.4; pointer-events:none; }
 .nba-container { display:flex; flex-wrap:wrap; gap:6px; padding:0 0 8px; }
 .nba-container:empty { display:none; }
 .nba-nudge { display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:var(--text-xs,0.7rem); padding:5px 8px 5px 12px; border:1px solid var(--accent-dim,rgba(43,212,180,.42)); border-radius:var(--radius-pill,999px); background:var(--accent-ghost,rgba(43,212,180,.12)); color:var(--accent); cursor:pointer; transition:border-color var(--t-fast,140ms) var(--ease-out,ease); }
@@ -342,7 +344,11 @@
       <summary class="composer-mgmt-summary">&#x2699; Workflow admin &middot; projects &middot; import / export / save</summary>
 
     <!-- Project context bar — pin the composer to a project so saves /
-         exports include the right workflows, agents, MCP refs, and chats. -->
+         exports include the right workflows, agents, MCP refs, and chats.
+         G1 (S1): its home stays HERE, in the Composer admin drawer — it
+         scopes Composer saves. Populated by Projects.load() from
+         ComposerView.init(); onchange &rarr; Projects.setActive(). A global
+         Build/Library switcher remains a possible future re-home. -->
     <div class="composer-project-bar panel">
       <span class="corner-tr"></span><span class="corner-bl"></span>
       <label for="project-select" style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Project</label>
@@ -461,10 +467,10 @@
     </div>
     </details>
 
-    <!-- Chat-led split: chat pane (left) &middot; workflow spine (right).
-         CSS grid placement (.composer-split) puts the chat dock in column 1
-         and the composer grid + workstream in column 3, so the large
-         chat-dock block does not move in the DOM — only wrappers are added. -->
+    <!-- Canvas-dominant split (S1): with chat extracted to #tab-chat, the
+         Composer split is a single canvas-first column — the DAG canvas
+         fills the freed width (row 1) with the workstream strip (Step
+         Config / Active Run / History) pinned below (row 2). -->
     <div class="composer-split" id="composer-split">
 
       <!-- S0 (chat extraction): the chat/canvas/focus mode toggle and the

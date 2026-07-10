@@ -338,6 +338,11 @@ async function loadStatus() {
     if (_odb) _odb.hidden = !_ollamaDown;
     const _split = document.getElementById('composer-split');
     if (_split) _split.classList.toggle('ollama-down', _ollamaDown);
+    // S1: the Promote (.bs-dispatch) / Pin (.msg-pin-btn) affordances moved
+    // to #tab-chat with the dock, so the disable class must land on the
+    // dock too — the .composer-split scope alone no longer reaches them.
+    const _dock = document.getElementById('agent-chat-dock');
+    if (_dock) _dock.classList.toggle('ollama-down', _ollamaDown);
 
     // Host-utilization ring buffer — feeds the Runs tab's performance band
     // (UtilChart over the last ~15 min). 90 samples × 10s poll = 15 min.
@@ -4827,13 +4832,28 @@ const dfStepTemplates = [
 const dfRoleColors = { reasoning: '#2BD4B4', coding: '#57C4D2', fast: '#E0A33C', general: '#1FB983', uncensored: '#E08A4C' };
 const dfFmtDescs = { raw: 'Full LLM text as-is', json: 'Parse as JSON object', json_array: 'Parse as JSON array', markdown_sections: 'Split by ## headings', key_value: 'Parse key: value lines', csv: 'Parse CSV/TSV', regex: 'Extract via regex' };
 
+// S1 (G5 quarantine): legacy Catalog runner mode toggle. The compose/run
+// chrome it drove (#wf-mode-run, #wf-mode-compose, #wf-composer-controls,
+// #wf-composer) left the DOM when the Composer became the sole authoring
+// surface — only #wf-runner-controls / #wf-detail survive as hidden ID
+// anchors inside #catalog-legacy-mounts. Null-guard every anchor so the
+// surviving callers (dfRunWorkflow's post-save pivot at ~5901 and the
+// window bridge) degrade to a no-op against absent chrome instead of a
+// TypeError that would abort the Composer "Run ▶" path mid-flight.
 function setWfMode(mode) {
-  document.getElementById('wf-mode-run').classList.toggle('active', mode === 'run');
-  document.getElementById('wf-mode-compose').classList.toggle('active', mode === 'compose');
-  document.getElementById('wf-runner-controls').style.display = mode === 'run' ? 'flex' : 'none';
-  document.getElementById('wf-composer-controls').style.display = mode === 'compose' ? 'flex' : 'none';
-  document.getElementById('wf-composer').style.display = mode === 'compose' ? 'block' : 'none';
-  document.getElementById('wf-detail').style.display = mode === 'run' ? document.getElementById('wf-detail').dataset.wasVisible || 'none' : 'none';
+  const $id = (id) => document.getElementById(id);
+  const modeRun = $id('wf-mode-run');
+  if (modeRun) modeRun.classList.toggle('active', mode === 'run');
+  const modeCompose = $id('wf-mode-compose');
+  if (modeCompose) modeCompose.classList.toggle('active', mode === 'compose');
+  const runnerControls = $id('wf-runner-controls');
+  if (runnerControls) runnerControls.style.display = mode === 'run' ? 'flex' : 'none';
+  const composerControls = $id('wf-composer-controls');
+  if (composerControls) composerControls.style.display = mode === 'compose' ? 'flex' : 'none';
+  const wfComposer = $id('wf-composer');
+  if (wfComposer) wfComposer.style.display = mode === 'compose' ? 'block' : 'none';
+  const detail = $id('wf-detail');
+  if (detail) detail.style.display = mode === 'run' ? detail.dataset.wasVisible || 'none' : 'none';
   if (mode === 'compose') { dfInitEditor(); dfInitPalette(); }
 }
 
