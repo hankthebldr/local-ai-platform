@@ -8226,7 +8226,12 @@ Actions.click({ 'shortcuts.close': () => Shortcuts.toggle(false) });
 // re-rendered on every poll tick during live runs.
 Actions.click({
   'ws.clear-run':    () => ComposerWorkstream.clearRun(),
-  'ws.run-collapse': () => ComposerWorkstream.toggleRunCollapse()
+  'ws.run-collapse': () => ComposerWorkstream.toggleRunCollapse(),
+  // BU6 — the 4th (Logs) workstream tab is Actions-wired; the legacy
+  // three tabs keep their inline onclicks as pre-existing debt.
+  'ws.switch':            el => ComposerWorkstream.switch(el.dataset.wsTarget || 'logs', el),
+  // Per-step Input/Output expanders inside the Logs pane.
+  'wslogs.output-toggle': el => ComposerWorkstream.toggleLogExpand(el)
 });
 
 // ── Chat Rating ───────────────────────────────────────────────────────────

@@ -649,6 +649,14 @@
           <span class="ws-tab-label">History</span>
           <span class="ws-tab-meta" id="ws-history-meta">—</span>
         </button>
+        <!-- BU6: Logs — per-step I/O for the active run. Wired via the
+             Actions module (data-action), not inline onclick; the three
+             legacy tabs above keep theirs as pre-existing debt. -->
+        <button type="button" class="workstream-tab" data-ws="logs"
+                data-action="ws.switch" data-ws-target="logs">
+          <span class="ws-tab-label">Logs</span>
+          <span class="ws-tab-meta" id="ws-logs-meta">—</span>
+        </button>
         <span style="flex:1"></span>
         <button type="button" class="action-btn xs ghost"
                 onclick="ComposerWorkstream.refresh()" title="Refresh the active sub-tab">⟲</button>
@@ -679,6 +687,17 @@
           <div class="panel-label">Run History</div>
           <div id="ws-history-body">
             <div class="model-empty">Recent runs land here. Filter / re-open from the list.</div>
+          </div>
+        </div>
+
+        <!-- BU6: per-step logs for the active run — rendered prompts in,
+             workspace output out, plus a metadata-only strategy strip
+             (MCP calls / plugin tools / skills). Reads run.json via
+             GET /api/workflows/runs/{run_id}; no new backend. -->
+        <div class="ws-pane" id="ws-pane-logs" hidden style="max-height:340px;overflow:auto">
+          <div class="panel-label">Step Logs</div>
+          <div id="ws-logs-body">
+            <div class="model-empty">Run the workflow to see per-step logs.</div>
           </div>
         </div>
       </div>

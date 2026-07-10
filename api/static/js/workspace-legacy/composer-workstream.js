@@ -5,7 +5,7 @@ import { Net } from '../core/net.js';
 import { Toast, EmptyState, ErrorPanel, Skeleton } from '../core/ui.js';
 
 export const ComposerWorkstream = (function () {
-  const panes = ['step', 'run', 'history'];
+  const panes = ['step', 'run', 'history', 'logs'];
 
   function _setActive(name) {
     panes.forEach(p => {
@@ -22,6 +22,7 @@ export const ComposerWorkstream = (function () {
     _setActive(name);
     if (name === 'run')     _refreshRun();
     if (name === 'history') _refreshHistory();
+    if (name === 'logs')    _refreshLogs();
   }
 
   function focusStep(stepId) {
@@ -264,6 +265,145 @@ export const ComposerWorkstream = (function () {
     if (hm) hm.textContent = rows.length + (rows.length === 20 ? '+' : '');
   }
 
+  // ── BU6: Logs pane — per-step I/O + strategy strip ─────────────────
+  // Resolves the active run the same way the Active Run pane does
+  // (window._lastRunSummary, set by anything that runs a workflow) and
+  // fetches the full run record — per-step rendered prompts and the
+  // workspace outputs live in run.json, NOT in the SSE event stream.
+  // Tool-call args/bodies are never persisted, so the strategy strip is
+  // explicitly metadata-only (name · duration · status).
+  const _expandedLogs = new Set();  // 'stepId:input' / 'stepId:output' keys
+  let _logsRun = null;              // last fetched run, for toggle re-renders
+
+  function _setLogsMeta(text) {
+    const m = document.getElementById('ws-logs-meta');
+    if (m) m.textContent = text;
+  }
+
+  function _logChip(name, duration, status) {
+    const bad = status && status !== 'ok';
+    return `<span class="df-tag" style="${bad ? 'color:var(--red, #e5484d);' : ''}font-size:0.56rem">`
+      + esc(name) + ' · ' + esc(duration) + ' · ' + esc(status) + '</span>';
+  }
+
+  function _logBlock(stepId, which, label, text, captured) {
+    const key = stepId + ':' + which;
+    const open = _expandedLogs.has(key);
+    if (!captured) {
+      return `<div style="padding:2px 0">
+        <span style="font-size:0.54rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em">${esc(label)}</span>
+        <span style="font-size:0.62rem;color:var(--text-faint);font-style:italic;margin-left:6px">${esc(text)}</span>
+      </div>`;
+    }
+    return `<div style="padding:2px 0">
+      <button type="button" class="ws-run-action ghost" data-action="wslogs.output-toggle"
+              data-log-key="${esc(key)}" style="font-size:0.54rem;text-transform:uppercase;letter-spacing:0.08em"
+              title="Expand / collapse">${open ? '▾' : '▸'} ${esc(label)}</button>
+      <div style="font-size:0.62rem;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;
+                  ${open ? 'max-height:220px;overflow:auto' : 'max-height:2.6em;overflow:hidden'};
+                  padding:2px 0 0 14px">${esc(text)}</div>
+    </div>`;
+  }
+
+  function _renderLogs() {
+    const body = document.getElementById('ws-logs-body');
+    if (!body || !_logsRun) return;
+    const run = _logsRun;
+    const steps = run.step_results || [];
+    if (!steps.length) {
+      EmptyState.render(body, {
+        title: 'No steps yet',
+        detail: 'The engine hasn’t reported any step results for this run.',
+        glyph: '≡',
+      });
+      _setLogsMeta(run.status || '—');
+      return;
+    }
+    const workspace = (run.context && run.context.workspace) || {};
+    body.innerHTML = steps.map(s => {
+      // Input = what the engine actually sent (rendered Jinja2 prompts).
+      const promptParts = [];
+      if (s.rendered_system_prompt) promptParts.push('[system]\n' + s.rendered_system_prompt);
+      if (s.rendered_prompt)        promptParts.push(s.rendered_prompt);
+      const hasPrompt = promptParts.length > 0;
+      // Output = this step's slice of the three-layer context workspace.
+      const out = workspace[s.step_id];
+      const hasOut = out !== undefined && out !== null;
+      const outText = !hasOut ? 'no output captured'
+        : (typeof out === 'string' ? out : JSON.stringify(out, null, 2));
+      // Strategy strip — metadata only (args/bodies aren't persisted).
+      const chips = []
+        .concat((s.mcp_calls || []).map(c =>
+          _logChip(c.server_id + '·' + c.tool_name, Math.round(c.duration_ms || 0) + 'ms', c.status || 'ok')))
+        .concat((s.plugin_tools_called || []).map(p =>
+          _logChip(p.plugin_id + '__' + p.tool_id, Math.round(p.duration_ms || 0) + 'ms', p.status || 'ok')))
+        .concat((s.skills_activated || []).map(k =>
+          _logChip(k.plugin_id + '::' + k.skill_id, (k.injected_chars || 0) + 'ch', k.trigger || 'keyword')));
+      const stateClass = s.status === 'completed' ? 'ok' : s.status === 'failed' ? 'fail' : 'pending';
+      const dur = s.duration_seconds != null ? Math.round(s.duration_seconds) + 's' : '?';
+      return `
+        <div class="ws-log-step ws-run-step-${stateClass}" data-step-id="${esc(s.step_id)}"
+             style="padding:6px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <strong style="font-size:0.66rem;color:var(--text)">${esc(s.step_id)}</strong>
+            ${s.kind ? '<span class="workbench-item-pill">' + esc(s.kind) + '</span>' : ''}
+            <span style="flex:1"></span>
+            <span style="font-size:0.56rem;color:var(--text-muted)">${esc(s.model_used || '?')} · ${dur} · ${esc(s.status || '?')}</span>
+          </div>
+          ${_logBlock(s.step_id, 'input', 'Input', hasPrompt ? promptParts.join('\n\n') : 'prompt not captured', hasPrompt)}
+          ${_logBlock(s.step_id, 'output', 'Output', outText, hasOut)}
+          ${chips.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 0 0">
+            <span style="font-size:0.52rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.08em">strategy · metadata-only</span>
+            ${chips.join('')}
+          </div>` : ''}
+        </div>`;
+    }).join('');
+    _setLogsMeta(steps.length + ' steps');
+  }
+
+  async function _refreshLogs() {
+    const body = document.getElementById('ws-logs-body');
+    if (!body) return;
+    const last = window._lastRunSummary;
+    if (!last || !last.run_id) {
+      _logsRun = null;
+      EmptyState.render(body, {
+        title: 'No run yet',
+        detail: 'Run the workflow to see per-step logs.',
+        glyph: '≡',
+      });
+      _setLogsMeta('idle');
+      return;
+    }
+    // silent + retries:0 — same posture as the run poller; the pane just
+    // keeps its last render if a single fetch drops.
+    const r = await Net.call('/api/workflows/runs/' + encodeURIComponent(last.run_id), { silent: true, retries: 0 });
+    if (!r.ok) {
+      if (!_logsRun) {
+        ErrorPanel.render(body, {
+          title: 'Couldn’t load run logs',
+          detail: r.error,
+          retry: () => _refreshLogs(),
+        });
+      }
+      return;
+    }
+    _logsRun = r.data;
+    _renderLogs();
+  }
+
+  // Expand/collapse one Input/Output block. Membership in _expandedLogs
+  // survives the 1200 ms poll re-render, so open blocks stay open while
+  // a live run streams in.
+  function toggleLogExpand(el) {
+    const key = (el && el.dataset.logKey) || '';
+    if (!key) return;
+    if (_expandedLogs.has(key)) _expandedLogs.delete(key);
+    else _expandedLogs.add(key);
+    if (_logsRun) _renderLogs();
+    else _refreshLogs();
+  }
+
   function _setRunMeta(text) {
     const m = document.getElementById('ws-run-meta');
     if (m) m.textContent = text;
@@ -342,6 +482,8 @@ export const ComposerWorkstream = (function () {
           try { window.dfApplyRunState(run); } catch (_) {}
         }
         if (document.querySelector('.workstream-tab[data-ws="run"].active')) _refreshRun();
+        // BU6: keep the Logs pane live too while it's the active tab.
+        if (document.querySelector('.workstream-tab[data-ws="logs"].active')) _refreshLogs();
         // Toast new completed steps once each.
         (run.step_results || []).forEach(s => {
           const key = s.step_id + ':' + s.status;
@@ -465,5 +607,6 @@ export const ComposerWorkstream = (function () {
     stopPolling,
     clearRun,
     toggleRunCollapse,
+    toggleLogExpand,
   };
 })();
