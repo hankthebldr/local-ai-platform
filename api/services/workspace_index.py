@@ -24,10 +24,17 @@ See C3 of docs/plans/2026-07-09-fusion-autonomous-local-workspace-feature-reques
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+try:
+    import fcntl  # POSIX advisory file locking (serializes concurrent claims)
+except ImportError:  # non-POSIX: degrade to no-op lock
+    fcntl = None
 
 from pydantic import BaseModel, Field
 
@@ -132,19 +139,44 @@ class WorkspaceIndex:
         self._save()
         return it
 
+    @contextmanager
+    def _claim_lock(self):
+        """Exclusive advisory lock so two concurrent /next requests can't claim
+        the same item (the router runs sync handlers in a threadpool, and each
+        request builds its own lock-free WorkspaceIndex)."""
+        if fcntl is None:
+            yield
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.path.with_suffix(".lock")
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
     def next_pending(self, claim: bool = True) -> Optional[IndexItem]:
         """First pending item in insertion order. When claim=True, mark it
         in_progress and persist before returning (so a crash leaves a resumable
-        trail)."""
-        for iid in self._order:
-            it = self._items[iid]
-            if it.status == "pending":
-                if claim:
+        trail). The claim is serialized + re-reads from disk under a file lock so
+        concurrent callers never double-claim one item."""
+        if not claim:
+            for iid in self._order:
+                if self._items[iid].status == "pending":
+                    return self._items[iid]
+            return None
+        with self._claim_lock():
+            self._load()  # re-read under the lock to see other workers' claims
+            for iid in self._order:
+                it = self._items[iid]
+                if it.status == "pending":
                     it.status = "in_progress"
                     it.updated_at = time.time()
                     self._save()
-                return it
-        return None
+                    return it
+            return None
 
     def requeue_stale(self) -> int:
         """Flip any in_progress item back to pending — call at loop start to

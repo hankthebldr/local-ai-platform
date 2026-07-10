@@ -186,3 +186,35 @@ def test_router_make_edit_expand_flow(client, tmp_path):
     # escape is forbidden
     r = client.get("/api/workspaces/proj/file", params={"path": "../../etc/passwd"})
     assert r.status_code == 403
+
+
+# ── security regressions (found by the whole-effort code review, 2026-07-09) ──
+def test_glob_traversal_blocked(tmp_path):
+    ws = _ws(tmp_path)
+    ws.write("in.md", "hello")
+    import pytest as _pt
+    for g in ("../../../../etc/passwd", "../*.md", "/etc/*"):
+        with _pt.raises(WorkspaceViolation):
+            ws.search("x", glob=g)
+        with _pt.raises(WorkspaceViolation):
+            ws.list("", glob=g)
+    # legit globs still work
+    assert ws.search("hello", glob="**/*.md")
+    assert ws.list("", glob="**/*.md") == ["in.md"]
+
+
+def test_delete_root_blocked(tmp_path):
+    ws = _ws(tmp_path)
+    ws.write("keep.md", "x")
+    import pytest as _pt
+    for p in ("", ".", "./"):
+        with _pt.raises(WorkspaceViolation):
+            ws.delete(p)
+    assert ws.exists("keep.md") and tmp_path.exists()
+
+
+def test_edit_negative_count_clamped(tmp_path):
+    ws = _ws(tmp_path)
+    ws.write("a.md", "l l l")
+    r = ws.edit("a.md", "l", "L", count=-5)   # negative must not replace-all-misreport
+    assert r["replacements"] >= 0 and ws.read("a.md").count("L") == 3

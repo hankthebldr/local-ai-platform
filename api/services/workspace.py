@@ -100,6 +100,25 @@ class Workspace:
             raise WorkspaceViolation(f"path '{rel_path}' escapes workspace root")
         return candidate
 
+    def _within_root(self, p: Path) -> bool:
+        """True iff p resolves to inside the workspace root (guards symlink /
+        glob escapes)."""
+        try:
+            p.resolve().relative_to(self.root)
+            return True
+        except (ValueError, OSError):
+            return False
+
+    def _safe_glob(self, base: Path, pattern: str):
+        """glob() with the traversal guard applied to BOTH the pattern and every
+        result. Without this, a caller-controlled `glob=../../etc/*` walks out of
+        the workspace (search()/list() take glob straight from the HTTP query)."""
+        if pattern.startswith(("/", "\\")) or ".." in re.split(r"[\\/]", pattern):
+            raise WorkspaceViolation(f"glob pattern {pattern!r} not allowed")
+        for p in base.glob(pattern):
+            if self._within_root(p):
+                yield p
+
     # ── policy checks ───
     def _require_writable(self) -> None:
         if self.meta.policy.read_only:
@@ -141,7 +160,7 @@ class Workspace:
             return []
         return sorted(
             p.relative_to(self.root).as_posix()
-            for p in base.glob(glob)
+            for p in self._safe_glob(base, glob)
             if p.is_file()
         )
 
@@ -153,7 +172,7 @@ class Workspace:
         before editing/expanding."""
         needle = query.lower()
         hits: List[Dict[str, Any]] = []
-        for p in sorted(self.root.glob(glob)):
+        for p in sorted(self._safe_glob(self.root, glob)):
             if not p.is_file():
                 continue
             try:
@@ -189,6 +208,7 @@ class Workspace:
         """edit — literal find/replace. count=0 replaces all occurrences.
         Raises if `find` is absent so the agent never silently no-ops."""
         self._require_writable()
+        count = max(0, count)  # negative count would replace-all + misreport
         current = self.read(path)
         occurrences = current.count(find)
         if occurrences == 0:
@@ -233,6 +253,10 @@ class Workspace:
     def delete(self, path: str) -> None:
         self._require_writable()
         p = self.resolve(path)
+        # resolve("")/"."/"./" returns the root; deleting it would rmtree the
+        # entire bound directory (a vault/repo). Never allow that.
+        if p == self.root:
+            raise WorkspaceViolation("refusing to delete the workspace root")
         if p.is_file():
             p.unlink()
         elif p.is_dir():

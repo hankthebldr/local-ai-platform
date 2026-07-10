@@ -90,3 +90,27 @@ def test_index_persists_json_in_workspace(tmp_path):
     idx = WorkspaceIndex(ws, "sites")
     idx.add_items([{"title": "one"}])
     assert (ws.root / ".enclave" / "index" / "sites.json").exists()
+
+
+def test_concurrent_next_pending_no_double_claim(tmp_path):
+    """Two threads racing /next must never claim the same item (CR#3)."""
+    import threading
+    ws = _ws(tmp_path)
+    idx = WorkspaceIndex(ws, "sites")
+    idx.add_items([{"title": f"s{i}"} for i in range(20)])
+    claimed = []
+    lock = threading.Lock()
+
+    def worker():
+        while True:
+            # fresh instance per call == what the router does per request
+            it = WorkspaceIndex(ws, "sites").next_pending(claim=True)
+            if not it:
+                return
+            with lock:
+                claimed.append(it.id)
+
+    ts = [threading.Thread(target=worker) for _ in range(6)]
+    for t in ts: t.start()
+    for t in ts: t.join()
+    assert len(claimed) == len(set(claimed)) == 20, f"double-claim: {len(claimed)} vs {len(set(claimed))}"
