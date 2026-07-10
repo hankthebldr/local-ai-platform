@@ -35,6 +35,10 @@ import { AdminMenu } from './admin/menu.js';
 import { AdminAuth } from './admin/auth.js';
 import { ApiKeysPanel } from './admin/api-keys.js';
 import { CloudPanel } from './admin/cloud.js';
+// Side-effect import (LB0-U2): SourcesPanel wires itself via Actions
+// data-actions + the adminPanelActivated listener — no window global,
+// no inline handlers, so no bridge assign below.
+import './admin/sources.js';
 import { ExportsPanel } from './admin/exports.js';
 import { ComposerWorkstream } from './workspace-legacy/composer-workstream.js';
 import { AgentTuning } from './workspace-legacy/agent-tuning.js';
@@ -227,7 +231,8 @@ function switchTab(name, el) {
     }
   }
   if (name === 'admin-plugins' || name === 'admin-skills' || name === 'admin-mcp'
-      || name === 'admin-cloud' || name === 'admin-exports' || name === 'admin-keys') {
+      || name === 'admin-cloud' || name === 'admin-exports' || name === 'admin-keys'
+      || name === 'admin-sources') {
     window.dispatchEvent(new CustomEvent('adminPanelActivated', { detail: { panel: name } }));
     // Also activate the Admin trigger so the operator sees an admin-context
     // hint when they're on a system-area tab (admin-keys reached via System

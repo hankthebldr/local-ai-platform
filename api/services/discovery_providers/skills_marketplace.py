@@ -28,8 +28,11 @@ repo. The per-skill ``SKILL.md`` fetches go to raw.githubusercontent.com
 ``GITHUB_TOKEN``) to raise the trees-call ceiling. The feed is cached
 upstream for ``CACHE_TTL`` so we don't crawl on every page hit.
 
-Config (env):
-  ENCLAVE_SKILL_REPOS     comma-separated owner/repo allow-list (override default)
+Config (file > env > default, consulted at FETCH time — LB0-U2):
+  data/config/discovery_sources.json   operator-owned allow-list + token
+                                       (Admin ▸ Sources; PUT /api/discover/config
+                                       takes effect on the next refresh, no restart)
+  ENCLAVE_SKILL_REPOS     comma-separated owner/repo allow-list (env fallback)
   ENCLAVE_GITHUB_TOKEN    GitHub token for higher rate limits (or GITHUB_TOKEN)
   ENCLAVE_SKILLS_MAX_PER_REPO   per-repo SKILL.md cap (default 30)
 """
@@ -43,7 +46,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 import yaml
 
-from ..agentic_discovery import DiscoveryFeed, DiscoveryItem, register_provider
+from ..agentic_discovery import (
+    DiscoveryFeed,
+    DiscoveryItem,
+    load_sources_config,
+    register_provider,
+)
 
 SOURCE = "skills-sh"
 NAME = "Skills.sh (GitHub-backed)"
@@ -55,15 +63,6 @@ DESCRIPTION = (
 )
 HOMEPAGE = "https://skills.sh"
 
-# Curated allow-list of public skill repos skills.sh indexes. Override with
-# ENCLAVE_SKILL_REPOS="owner/repo,owner2/repo2". Kept short + reputable to
-# stay well under unauthenticated GitHub limits and avoid spam.
-_DEFAULT_REPOS = [
-    "anthropics/skills",
-    "obra/superpowers",
-    "vercel-labs/skills",
-]
-
 GITHUB_API = "https://api.github.com"
 RAW_BASE = "https://raw.githubusercontent.com"
 _TIMEOUT = float(os.getenv("ENCLAVE_SKILLS_TIMEOUT", "12"))
@@ -71,15 +70,19 @@ _MAX_PER_REPO = int(os.getenv("ENCLAVE_SKILLS_MAX_PER_REPO", "30"))
 
 
 def _repos() -> List[str]:
-    raw = os.getenv("ENCLAVE_SKILL_REPOS", "").strip()
-    if raw:
-        return [r.strip() for r in raw.split(",") if r.strip()]
-    return list(_DEFAULT_REPOS)
+    """Allow-list of skill repos, resolved at FETCH time.
+
+    Delegates to the shared discovery-sources config (file > env >
+    default — defaults live in ``agentic_discovery.DEFAULT_SKILL_REPOS``),
+    so an operator PUT to /api/discover/config governs the very next
+    refresh without a restart.
+    """
+    return list(load_sources_config()["skill_repos"])
 
 
 def _headers() -> Dict[str, str]:
     h = {"Accept": "application/vnd.github+json"}
-    tok = os.getenv("ENCLAVE_GITHUB_TOKEN") or os.getenv("GITHUB_TOKEN")
+    tok = load_sources_config().get("github_token") or ""
     if tok:
         h["Authorization"] = f"Bearer {tok.strip()}"
     return h

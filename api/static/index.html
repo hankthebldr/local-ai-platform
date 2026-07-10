@@ -370,6 +370,10 @@
                 data-panel="admin-cloud" onclick="AdminMenu.select('admin-cloud')">Cloud Models</button>
         <button class="admin-menu-item" role="menuitem" type="button"
                 data-panel="admin-exports" onclick="AdminMenu.select('admin-exports')">Exports</button>
+        <!-- Sources (LB0-U2): data-action (Actions delegation), not inline
+             onclick — new wiring rides js/shell/actions.js per the spec. -->
+        <button class="admin-menu-item" role="menuitem" type="button"
+                data-panel="admin-sources" data-action="admin.sources.open">Sources</button>
         <div class="admin-menu-divider" aria-hidden="true"></div>
         <div class="admin-menu-status" id="admin-menu-status">
           <span class="dot" id="admin-status-dot"></span>
@@ -2610,6 +2614,72 @@
         <div class="admin-modal-actions">
           <button type="button" class="admin-modal-btn" onclick="CloudPanel._closeModal()">Cancel</button>
           <button type="button" class="admin-modal-btn primary" onclick="CloudPanel._submit()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: ADMIN ▸ SOURCES (LB0-U2) ═══════════════════════════════
+       Admin determines the SOURCE and system-level changes to library
+       inventory; Library panels own per-item behavior. Providers list +
+       per-source operator-triggered Refresh (the ONLY network-egress
+       path) + editor for data/config/discovery_sources.json (allowlists,
+       cache TTLs, masked GitHub token) via GET/PUT /api/discover/config.
+       All wiring is data-action (js/admin/sources.js) — no inline
+       handlers. Gate is ApiKeysPanel-strict (isSignedIn + renderLock
+       before any fetch). -->
+  <div class="tab-content" id="tab-admin-sources" style="display:none">
+    <div class="admin-modal-error" style="background:rgba(0,192,232,0.10);border-color:#00C0E8;color:#00C0E8;margin-bottom:14px;font-size:0.7rem">
+      ℹ Discovery sources fetch upstream ONLY when you press Refresh — reads always serve the cached feed. Config persists to <code>data/config/discovery_sources.json</code> (chmod 0600); tokens are masked on read and never echoed back.
+    </div>
+
+    <div class="plugins-layout">
+      <div class="panel plugins-list-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// DISCOVERY PROVIDERS</div>
+        <div id="admin-sources-list" style="margin-top:10px;font-size:0.78rem"></div>
+      </div>
+
+      <div class="panel plugins-detail-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// SOURCE CONFIG
+          <span style="float:right">
+            <button class="action-btn accent" type="button" data-action="admin.sources.edit">Edit sources</button>
+          </span>
+        </div>
+        <div id="admin-sources-config" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
+          Sign in as admin to inspect the persisted source configuration.
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit modal (cloud.js grammar) -->
+    <div id="admin-sources-edit-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="admin-sources-edit-title">
+      <div class="admin-modal-card" style="width:640px">
+        <h3 id="admin-sources-edit-title">Edit discovery sources</h3>
+        <label for="admin-sources-skill-repos" class="admin-modal-label">Skill repos <span style="color:var(--text-muted);font-weight:normal">(owner/repo, one per line — skills-sh allowlist)</span></label>
+        <textarea id="admin-sources-skill-repos" rows="3" spellcheck="false"></textarea>
+        <label for="admin-sources-marketplaces" class="admin-modal-label">Plugin marketplaces <span style="color:var(--text-muted);font-weight:normal">(owner/repo, one per line)</span></label>
+        <textarea id="admin-sources-marketplaces" rows="3" spellcheck="false"></textarea>
+        <label for="admin-sources-prompt-sources" class="admin-modal-label">Prompt digest sources <span style="color:var(--text-muted);font-weight:normal">(owner/repo, one per line)</span></label>
+        <textarea id="admin-sources-prompt-sources" rows="3" spellcheck="false"></textarea>
+        <label for="admin-sources-catalog-skills" class="admin-modal-label">Skills catalog URL <span style="color:var(--text-muted);font-weight:normal">(optional remote JSON index)</span></label>
+        <input id="admin-sources-catalog-skills" type="text" placeholder="https://…" autocomplete="off">
+        <label for="admin-sources-catalog-mcp" class="admin-modal-label">MCP catalog URL <span style="color:var(--text-muted);font-weight:normal">(optional remote JSON index)</span></label>
+        <input id="admin-sources-catalog-mcp" type="text" placeholder="https://…" autocomplete="off">
+        <label for="admin-sources-ttl-default" class="admin-modal-label">Default refresh cache TTL <span style="color:var(--text-muted);font-weight:normal">(seconds — max age applied to operator-triggered refreshes; nothing polls)</span></label>
+        <input id="admin-sources-ttl-default" type="number" min="0" placeholder="300" autocomplete="off">
+        <label for="admin-sources-ttl-hf" class="admin-modal-label">HF discovery cache TTL <span style="color:var(--text-muted);font-weight:normal">(seconds; empty = default)</span></label>
+        <input id="admin-sources-ttl-hf" type="number" min="0" placeholder="" autocomplete="off">
+        <label for="admin-sources-token" class="admin-modal-label">GitHub token <span style="color:var(--text-muted);font-weight:normal">(raises the 60/hr API ceiling; leave empty to keep the current token)</span></label>
+        <input id="admin-sources-token" type="password" placeholder="ghp_…" autocomplete="off">
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.74rem;color:var(--text-dim)">
+          <input id="admin-sources-token-clear" type="checkbox"> Clear the stored token
+        </label>
+        <div id="admin-sources-edit-error" class="admin-modal-error" hidden></div>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-modal-btn" data-action="admin.sources.cancel">Cancel</button>
+          <button type="button" class="admin-modal-btn primary" data-action="admin.sources.save">Save</button>
         </div>
       </div>
     </div>
