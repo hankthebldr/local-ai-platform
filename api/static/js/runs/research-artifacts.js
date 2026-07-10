@@ -38,7 +38,7 @@ export const ResearchArtifacts = (function () {
       if (window.Toast) {
         Toast.success(
           'Captured',
-          (rec.title || payload.title) + (rec.rag_ingested ? ' · also indexed in Context' : ''),
+          (rec.title || payload.title) + (rec.rag_ingested ? ' · also indexed in Research' : ''),
           { ttl: 3000 }
         );
       }

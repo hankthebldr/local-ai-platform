@@ -98,6 +98,11 @@ function switchTab(name, el) {
     if (sect) sect.open = true;
     if (typeof discoverLoaded !== 'undefined' && !discoverLoaded) loadDiscovery();
   }
+  // Legacy 'documents' routes (the retired Context tab: old links,
+  // #/documents deep links, the g-c shortcut) land on Research — the
+  // RAG + deep-research + Role-Library surface was promoted into
+  // #tab-research (S3). Same pre-lookup remap pattern as 'discover'.
+  if (name === 'documents') name = 'research';
   // Unknown tab names (stale hashes, removed tabs) must not take down the
   // caller — warn and stay on the current tab instead of throwing.
   const panel = document.getElementById('tab-' + name);
@@ -168,18 +173,21 @@ function switchTab(name, el) {
   }
   if (name === 'memory') { loadMemory(); loadMemoryTab(); loadArchitecturePanel(); WorkflowMemory && WorkflowMemory.refresh(); }
   else { _stopArchPressurePoll(); }
-  // (Legacy 'discover' redirect now lives at the top of this function —
-  // it has to run before the panel lookup to actually work.)
-  // Skill Lab tab is gone from nav; Context now hosts the graph +
-  // research panels. initResearch() runs from BOTH tab entries (the
-  // hidden 'research' fallback is harmless).
-  if (name === 'research') initResearch();
-  if (name === 'documents') {
-    try { initResearch(); } catch (_) {}
-    // Role Library was relocated here from the legacy Runs tab — keep
+  // (Legacy 'discover' + 'documents' redirects now live at the top of
+  // this function — they have to run before the panel lookup to work.)
+  // Research (S3): the promoted Build tab hosts the knowledge graph +
+  // deep research + the RAG document surface + the Role Library. The
+  // 'documents' remap above funnels every legacy Context entry here.
+  if (name === 'research') {
+    initResearch();
+    // Role Library (C14) — statically authored in #tab-research; keep
     // it fresh on every visit since prompts/roles/ may have changed.
     if (typeof loadRoles === 'function') {
       try { loadRoles(); } catch (_) {}
+    }
+    // RAG documents list + stats (moved from the retired Context tab).
+    if (typeof loadDocumentsTab === 'function') {
+      try { loadDocumentsTab(); } catch (_) {}
     }
   }
   if (name === 'workflows') {
@@ -190,7 +198,6 @@ function switchTab(name, el) {
     if (typeof loadWorkflowsTab === 'function') { try { loadWorkflowsTab(); } catch (_) {} }
     if (typeof loadCatalogPage === 'function') { try { loadCatalogPage(); } catch (_) {} }
   }
-  if (name === 'documents') loadDocumentsTab();
   if (name === 'agents') loadAgentsTab();
 
   // Promoted admin panels (Plugins / Skills / MCP / Cloud / Exports) were
@@ -3607,7 +3614,7 @@ function renderResearchResults(data) {
 // ── Research artifact capture ────────────────────────────────────────────
 // Wraps POST /api/feedback/artifacts. Each click captures the finding as
 // a durable record (and best-effort RAG-ingests it server-side so the
-// artifact becomes semantically searchable in the Context tab).
+// artifact becomes semantically searchable in the Research tab).
 
 
 async function exportResearch() {
@@ -4801,29 +4808,14 @@ async function uploadDocument() {
   input.value = '';   // reset so picking the same file again re-fires onchange
 }
 
-// Drag-and-drop wiring for the Documents drop zone. Mirrors the visual
-// state class `.is-dragging` so the zone highlights under the cursor.
-// IA shuffle (2026-05-18): the Knowledge Graph + Deep Research panel
-// used to live in the now-removed "Skill Lab" tab. Move them into the
-// Context tab once on boot — preserves IDs, listeners, and the
-// existing initResearch() lifecycle without any per-call DOM lookup
-// changes elsewhere.
+// IA shuffle (S3): the Context-tab relocator is GONE. #tab-research now
+// statically owns the knowledge graph + deep research + the RAG document
+// surface + the Role Library (see index.html) — no boot-time DOM moves,
+// and #wf-roles-list / #wf-role-preview resolve directly to the visible
+// Research mounts (the old id-promotion trick is retired; the Catalog's
+// hidden anchors are statically named wf-roles-list-legacy /
+// wf-role-preview-legacy).
 document.addEventListener('DOMContentLoaded', () => {
-  const layout = document.querySelector('#tab-research .research-layout');
-  const ctxTab = document.getElementById('tab-documents');
-  if (layout && ctxTab) {
-    // Prepend so the graph + research are at the top of the Context
-    // tab; existing documents/search panels follow.
-    ctxTab.insertBefore(layout, ctxTab.firstChild);
-    // Add a thin header separating the new content from the legacy
-    // documents UI below.
-    const sep = document.createElement('div');
-    sep.className = 'panel-label';
-    sep.style.cssText = 'margin: 18px 0 10px; padding-top: 8px; border-top: 1px dashed var(--border)';
-    sep.textContent = '// Documents + RAG';
-    layout.after(sep);
-  }
-
   // IA shuffle (cont.): the 5 Discover panels that previously lived
   // INSIDE the Models tab (#tab-inventory) move into the Catalog
   // page's per-section mounts. Each panel keeps its existing ID
@@ -4913,42 +4905,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (kanbanModal) projTab.appendChild(kanbanModal);
   }
 
-  // IA shuffle (cont.): the Role Library now lives at the bottom of
-  // the Context tab. Built fresh here because the original panel
-  // inside tab-workflows was replaced by the Catalog dashboard; the
-  // legacy IDs (#wf-roles-list, #wf-role-preview) live in a hidden
-  // mount inside tab-workflows so loadRoles() still has targets if
-  // ever called from there — but we ALSO mount visible copies into
-  // Context. loadRoles() finds the FIRST matching id, so the newest
-  // wf-roles-list is the visible one.
-  if (ctxTab) {
-    const rolesSep = document.createElement('div');
-    rolesSep.className = 'panel-label';
-    rolesSep.style.cssText = 'margin: 18px 0 10px; padding-top: 8px; border-top: 1px dashed var(--border)';
-    rolesSep.textContent = '// Role Library';
-    ctxTab.appendChild(rolesSep);
-
-    const rolesPanel = document.createElement('div');
-    rolesPanel.className = 'panel';
-    rolesPanel.style.marginBottom = '16px';
-    rolesPanel.innerHTML = `
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">// ROLE LIBRARY
-        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">prompts/roles/</span>
-      </div>
-      <div id="wf-roles-list-ctx" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px"></div>
-      <div id="wf-role-preview-ctx" style="display:none;margin-top:14px;padding:12px;background:var(--bg-deep);border-left:2px solid var(--accent-dim);font-family:var(--mono);font-size:0.72rem;line-height:1.6;white-space:pre-wrap;color:var(--text-dim)"></div>`;
-    ctxTab.appendChild(rolesPanel);
-    // Rewrite the legacy IDs so loadRoles() (which targets
-    // #wf-roles-list) writes into the new visible container.
-    // Sequence: rename legacy → strip; promote ctx → legacy id.
-    const legacy = document.getElementById('wf-roles-list');
-    if (legacy) legacy.id = 'wf-roles-list-legacy';
-    const legacyPv = document.getElementById('wf-role-preview');
-    if (legacyPv) legacyPv.id = 'wf-role-preview-legacy';
-    document.getElementById('wf-roles-list-ctx').id = 'wf-roles-list';
-    document.getElementById('wf-role-preview-ctx').id = 'wf-role-preview';
-  }
+  // (S3: the Role-Library boot builder that used to live here is gone —
+  // the panel is statically authored inside #tab-research and refreshed
+  // by switchTab's research branch via loadRoles().)
 });
 
 /* ── HASH ROUTES (deep links) ───────────────────────────────────────
@@ -4963,6 +4922,9 @@ document.addEventListener('DOMContentLoaded', () => {
    soft re-init re-fires the active tab, which is hash-stable. */
 initRouter();  // hash router — registered here to preserve DOMContentLoaded order (phase-2 U3)
 
+// Drag-and-drop wiring for the Documents drop zone (now in #tab-research).
+// Mirrors the visual state class `.is-dragging` so the zone highlights
+// under the cursor.
 document.addEventListener('DOMContentLoaded', () => {
   const zone = document.getElementById('doc-drop-zone');
   if (!zone) return;

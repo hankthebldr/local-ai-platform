@@ -6,9 +6,11 @@ export const Shortcuts = (function () {
     { key: 'g d', label: 'Composer (dashboard)',  action: () => switchTab('dashboard') },
     { key: 'g w', label: 'Workflow Index',         action: () => switchTab('workflow-index') },
     { key: 'g a', label: 'Agents',                 action: () => switchTab('agents') },
-    { key: 'g r', label: 'Skill Lab',              action: () => switchTab('research') },
+    { key: 'g r', label: 'Research',               action: () => switchTab('research') },
     { key: 'g m', label: 'Models',                 action: () => switchTab('inventory') },
-    { key: 'g c', label: 'Context',                action: () => switchTab('documents') },
+    // S3: 'documents' (retired Context tab) remaps to Research in
+    // switchTab; keep g-c as a muscle-memory alias for the same place.
+    { key: 'g c', label: 'Research (was Context)', action: () => switchTab('research') },
     { key: 'g p', label: 'Plugins',                action: () => switchTab('admin-plugins') },
     { key: 'g s', label: 'Skills',                 action: () => switchTab('admin-skills') },
     { key: 'g x', label: 'MCP Servers',            action: () => switchTab('admin-mcp') },

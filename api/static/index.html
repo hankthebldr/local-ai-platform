@@ -279,18 +279,24 @@
     <div class="nav-section" aria-hidden="true">Build</div>
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Composer</button>
     <button class="tab-btn" data-tab="chat" data-action="switch-tab" data-tab-target="chat">Chat</button>
+    <!-- S3: Research promoted to a first-class Build surface — RAG docs,
+         deep research, and the Role Library moved here from the retired
+         Context tab (switchTab remaps 'documents' → 'research'). -->
+    <button class="tab-btn" data-tab="research" data-action="switch-tab" data-tab-target="research">Research</button>
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
     <div class="nav-section" aria-hidden="true">Operate</div>
     <button class="tab-btn" data-tab="projects" onclick="switchTab('projects', this)">Projects<span class="tab-count" id="projects-tab-count"></span></button>
     <button class="tab-btn" data-tab="runs" onclick="switchTab('runs', this)">Runs<span class="tab-count" id="runs-tab-count"></span></button>
     <div class="nav-section" aria-hidden="true">Library</div>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
-    <!-- Skill Lab folded into the Skills tab + Context tab. The
-         knowledge graph + deep-research panel live in Context now;
+    <!-- Skill Lab folded into the Skills tab + Research tab. The
+         knowledge graph + deep-research panel live in Research (Build);
          the Skills tab is the unified skill management page. -->
 
     <button class="tab-btn" data-tab="inventory" onclick="switchTab('inventory', this)">Models<span class="tab-count" id="inv-count"></span></button>
-    <button class="tab-btn" data-tab="documents" onclick="switchTab('documents', this)">Context</button>
+    <!-- The Context nav button is retired (S3): its documents/RAG surface
+         moved into the Research tab under Build. Old switchTab('documents')
+         callers and #/documents deep links remap to 'research' in switchTab. -->
     <button class="tab-btn" data-tab="admin-plugins" onclick="switchTab('admin-plugins', this)">Plugins<span class="tab-count" id="plugins-count"></span></button>
     <button class="tab-btn" data-tab="admin-skills" onclick="switchTab('admin-skills', this)">Skills<span class="tab-count" id="skills-count"></span></button>
     <button class="tab-btn" data-tab="admin-mcp" onclick="switchTab('admin-mcp', this)">MCP<span class="tab-count" id="mcp-count"></span></button>
@@ -1575,13 +1581,15 @@
     <div id="projects-tab-placeholder" class="model-empty" style="font-size:0.72rem">Loading projects…</div>
   </div>
 
-  <!-- ═══ TAB: RESEARCH ════════════════════════════════════════════ -->
-  <!-- Skill Lab tab — preserved as a wrapper but the nav button is
-       removed. The research-layout (Knowledge Graph + Deep Research)
-       has moved into the Context tab. Anything that programmatically
-       activates this tab still works; users just won't see it in the
-       nav anymore. -->
-  <div class="tab-content" id="tab-research" hidden>
+  <!-- ═══ TAB: RESEARCH (Build) ═════════════════════════════════════
+       S3: promoted from a hidden fallback to a first-class Build tab —
+       the obsidian-node artifact forge. Hosts the knowledge graph,
+       deep research, the RAG document surface (moved verbatim from the
+       retired Context/#tab-documents tab), and the Role Library
+       (statically authored below — the old DOMContentLoaded relocator
+       that built it at boot is gone). The C2/C3 workspace runtime
+       (/api/workspaces/*) stays the artifact substrate underneath. -->
+  <div class="tab-content" id="tab-research" style="display:none">
 
     <div class="research-layout">
 
@@ -1683,6 +1691,84 @@
       </div>
 
     </div>
+
+    <!-- ── Documents + RAG (S3) ──────────────────────────────────────
+         Moved verbatim from the retired Context tab (#tab-documents):
+         upload/ingest drop zone, document list, semantic search, and
+         the stats tiles. IDs are unchanged so _uploadDocumentFile /
+         loadDocumentsList / searchDocuments / loadDocStats keep
+         resolving without per-call lookup changes. -->
+    <div class="panel-label" style="margin:18px 0 10px;padding-top:8px;border-top:1px dashed var(--border)">// Documents + RAG</div>
+    <div style="margin-bottom:14px;padding:10px 12px;background:var(--accent-ghost);border:1px solid var(--accent-dim);border-radius:4px;font-size:0.72rem;color:var(--text-dim);line-height:1.5">
+      <strong style="color:var(--accent)">Context Manager.</strong>
+      Documents here are RAG sources <em>and</em> reference architecture for new agents. Use
+      <strong>Convert to Agent</strong> on any document to launch the doc → agent generator —
+      the LLM drafts a system prompt grounded in the document, you review it, run validation cases,
+      and save it as a reusable agent.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Documents</h3>
+        <!-- Drop zone: click to open the file picker, or drag a file onto it.
+             Upload fires automatically on selection — no second click. The
+             hidden <input> still backs it so accept=".txt,.md,.pdf" works. -->
+        <div id="doc-drop-zone" class="doc-drop-zone"
+             onclick="document.getElementById('doc-file-input').click()"
+             role="button" tabindex="0"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('doc-file-input').click()}"
+             aria-label="Choose a document, or drag one here">
+          <div class="doc-drop-zone-icon" aria-hidden="true">⤓</div>
+          <div class="doc-drop-zone-title">Drag a file here or click to browse</div>
+          <div class="doc-drop-zone-sub">Accepted: .txt, .md, .pdf</div>
+        </div>
+        <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" hidden
+               aria-label="Document file" onchange="uploadDocument()">
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <span id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);flex:1;"></span>
+          <button onclick="AgentGen.openFromText()" style="background:transparent;color:var(--accent);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.75rem;">Paste → Agent</button>
+        </div>
+        <div id="documents-list" style="max-height:400px;overflow-y:auto;margin-top:12px;"></div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Search Preview</h3>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="doc-search-input" aria-label="Search documents" placeholder="Try a query..." style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:0.8rem;" onkeydown="if(event.key==='Enter')searchDocuments()">
+          <button onclick="searchDocuments()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Search</button>
+        </div>
+        <div id="doc-search-results" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:16px;">
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="doc-stat-count">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Documents</div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="doc-stat-chunks">0</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Chunks</div>
+      </div>
+      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
+        <div style="font-size:0.85rem;font-weight:600;color:var(--cyan);" id="doc-stat-backend">—</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);">Embedding Backend</div>
+      </div>
+    </div>
+
+    <!-- ── Role Library (S3, C14 no-loss fix) ────────────────────────
+         Statically authored here — the old boot relocator that built
+         this panel (and id-promoted #wf-roles-list-ctx → #wf-roles-list)
+         is deleted. This is now THE canonical #wf-roles-list /
+         #wf-role-preview mount: loadRoles()/previewRole() write here,
+         and switchTab's research branch refreshes it on every visit.
+         The legacy Catalog anchors are statically renamed *-legacy. -->
+    <div class="panel-label" style="margin:18px 0 10px;padding-top:8px;border-top:1px dashed var(--border)">// Role Library</div>
+    <div class="panel" style="margin-bottom:16px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="panel-label">// ROLE LIBRARY
+        <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">prompts/roles/</span>
+      </div>
+      <div id="wf-roles-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px"></div>
+      <div id="wf-role-preview" style="display:none;margin-top:14px;padding:12px;background:var(--bg-deep);border-left:2px solid var(--accent-dim);font-family:var(--mono);font-size:0.72rem;line-height:1.6;white-space:pre-wrap;color:var(--text-dim)"></div>
+    </div>
   </div>
 
   <!-- Graph tooltip (global) -->
@@ -1691,14 +1777,12 @@
   <!-- TAB: WORKFLOWS — repurposed as Catalog (Plugins/Skills/MCP/
        External management). The Runs picker that used to live here
        moved to the dedicated Runs tab; the Role Library moved to
-       Context. The tab id is preserved so existing switchTab calls
+       Research (S3). The tab id is preserved so existing switchTab calls
        don't 404 — they just land on the Catalog dashboard now.
 
-       The DOMContentLoaded relocators above migrate the A2A panel,
-       Runs picker, Role Library, and Recent Runs OUT of here. Those
-       original blocks are kept below (hidden by CSS) so any JS that
-       directly mounts to their IDs (wf-roles-list, wf-runs-list,
-       wf-select, etc.) keeps working without per-call lookup changes. -->
+       Legacy ID anchors are kept below (hidden by CSS) so any JS that
+       directly mounts to their IDs (wf-runs-list, wf-select, etc.)
+       keeps working without per-call lookup changes. -->
   <div class="tab-content" id="tab-workflows">
     <div class="system-subnav" role="tablist" aria-label="System area">
       <span class="system-subnav-label">⚙ System</span>
@@ -1714,7 +1798,7 @@
         available across the system. Pick a section on the left to manage that asset class in place
         (no redirects). Workflow runs moved to the
         <a href="#" onclick="switchTab('runs');return false">Runs tab</a>;
-        the Role Library moved to <a href="#" onclick="switchTab('documents');return false">Context</a>.
+        the Role Library moved to <a href="#" onclick="switchTab('research');return false">Research</a>.
       </div>
     </div>
 
@@ -1944,77 +2028,29 @@
 
     <!-- Legacy mount points — hidden but kept so existing JS that
          directly writes to these IDs (loadWorkflowDetail, refreshWorkflows,
-         a2a panel, etc.) doesn't NPE. The DOMContentLoaded relocators
-         move the original panels OUT of this tab into Runs/Context;
-         these are the lingering ID anchors only. -->
+         a2a panel, etc.) doesn't NPE. The relocated surfaces now live in
+         Runs and Research; these are the lingering ID anchors only. -->
     <div id="catalog-legacy-mounts" style="display:none">
       <div id="a2a-panel"><div id="a2a-skill-count"></div><code id="a2a-card-url"></code><div id="a2a-skills-list"></div></div>
       <select id="wf-select"></select>
       <div id="wf-runner-controls"></div>
       <div id="wf-detail"><div id="wf-detail-name"></div><div id="wf-detail-desc"></div><div class="wf-dag" id="wf-dag"></div><div class="wf-dag-actions" id="wf-dag-actions" style="display:none;gap:8px;margin:0 0 10px"><button type="button" class="action-btn accent" onclick="openWorkflowInComposer(currentWorkflowDef &amp;&amp; currentWorkflowDef.id)" title="Load this workflow into the Composer canvas and chat with its agents">Open in Composer →</button></div><div id="wf-pipeline"></div><textarea id="wf-seed"></textarea><button id="wf-run-btn"></button></div>
       <div id="wf-results"><div id="wf-results-content"></div></div>
-      <div id="wf-roles-list"></div>
-      <div id="wf-role-preview"></div>
+      <!-- S3: statically renamed *-legacy — the canonical #wf-roles-list /
+           #wf-role-preview now live in #tab-research (the boot-time
+           id-promotion trick is retired). Kept so nothing NPEs if an old
+           code path ever grabs them by the legacy names. -->
+      <div id="wf-roles-list-legacy"></div>
+      <div id="wf-role-preview-legacy"></div>
       <div id="wf-runs-list"></div>
     </div>
   </div>
 
-  <!-- ── DOCUMENTS TAB ───────────────────────────────────────────── -->
-  <div class="tab-content" id="tab-documents" style="display:none">
-    <div style="margin-bottom:14px;padding:10px 12px;background:var(--accent-ghost);border:1px solid var(--accent-dim);border-radius:4px;font-size:0.72rem;color:var(--text-dim);line-height:1.5">
-      <strong style="color:var(--accent)">Context Manager.</strong>
-      Documents here are RAG sources <em>and</em> reference architecture for new agents. Use
-      <strong>Convert to Agent</strong> on any document to launch the doc → agent generator —
-      the LLM drafts a system prompt grounded in the document, you review it, run validation cases,
-      and save it as a reusable agent.
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
-        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Documents</h3>
-        <!-- Drop zone: click to open the file picker, or drag a file onto it.
-             Upload fires automatically on selection — no second click. The
-             hidden <input> still backs it so accept=".txt,.md,.pdf" works. -->
-        <div id="doc-drop-zone" class="doc-drop-zone"
-             onclick="document.getElementById('doc-file-input').click()"
-             role="button" tabindex="0"
-             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('doc-file-input').click()}"
-             aria-label="Choose a document, or drag one here">
-          <div class="doc-drop-zone-icon" aria-hidden="true">⤓</div>
-          <div class="doc-drop-zone-title">Drag a file here or click to browse</div>
-          <div class="doc-drop-zone-sub">Accepted: .txt, .md, .pdf</div>
-        </div>
-        <input type="file" id="doc-file-input" accept=".txt,.md,.pdf" hidden
-               aria-label="Document file" onchange="uploadDocument()">
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-          <span id="doc-upload-status" style="font-size:0.75rem;color:var(--text-dim);flex:1;"></span>
-          <button onclick="AgentGen.openFromText()" style="background:transparent;color:var(--accent);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.75rem;">Paste → Agent</button>
-        </div>
-        <div id="documents-list" style="max-height:400px;overflow-y:auto;margin-top:12px;"></div>
-      </div>
-      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:16px;">
-        <h3 style="color:var(--cyan);margin-bottom:12px;font-size:0.9rem;">Search Preview</h3>
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <input type="text" id="doc-search-input" aria-label="Search documents" placeholder="Try a query..." style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--mono);font-size:0.8rem;" onkeydown="if(event.key==='Enter')searchDocuments()">
-          <button onclick="searchDocuments()" style="background:var(--cyan);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Search</button>
-        </div>
-        <div id="doc-search-results" style="max-height:400px;overflow-y:auto;"></div>
-      </div>
-    </div>
-    <div style="display:flex;gap:16px;margin-top:16px;">
-      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
-        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="doc-stat-count">0</div>
-        <div style="font-size:0.75rem;color:var(--text-dim);">Documents</div>
-      </div>
-      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
-        <div style="font-size:1.4rem;font-weight:600;color:var(--cyan);" id="doc-stat-chunks">0</div>
-        <div style="font-size:0.75rem;color:var(--text-dim);">Chunks</div>
-      </div>
-      <div class="panel" style="border:1px solid var(--border);border-radius:8px;padding:12px;flex:1;text-align:center;">
-        <div style="font-size:0.85rem;font-weight:600;color:var(--cyan);" id="doc-stat-backend">—</div>
-        <div style="font-size:0.75rem;color:var(--text-dim);">Embedding Backend</div>
-      </div>
-    </div>
-  </div>
+  <!-- ── DOCUMENTS TAB — retired (S3). The Context Manager surface
+       (RAG upload/list/search/stats) moved verbatim into #tab-research
+       under Build; switchTab remaps 'documents' → 'research' so old
+       links, bookmarks, and the g-c shortcut keep landing somewhere
+       real. -->
 
   <!-- AGENTS TAB -->
   <div class="tab-content" id="tab-agents" style="display:none">
