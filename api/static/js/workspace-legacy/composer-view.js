@@ -18,7 +18,8 @@ export const ComposerView = (function () {
       return;
     }
     _booted = true;
-    loadAgentsForSelector();
+    // S0: loadAgentsForSelector() moved to ChatView.init() — #agent-select
+    // lives in the Chat tab now (cold-start populates there, not here).
     loadWorkbenches();
     composerSwitchBench('steps');
     if (typeof Projects !== 'undefined') Projects.load();

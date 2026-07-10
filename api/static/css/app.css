@@ -5169,82 +5169,27 @@ textarea.composer-desc-area {
   }
 }
 
-/* ── Chat-led composer split ──────────────────────────────────────────
-   The chat dock (column 1) is the primary surface; the workflow "spine"
-   (column 3) holds the canvas + workstream and stays dormant until a
-   workflow is primed. The 8px middle column is the drag divider. Children
-   keep their DOM order — explicit grid-column/grid-row place them, so the
-   large chat-dock block never moves. */
+/* ── Composer split (S0: canvas-dominant) ─────────────────────────────
+   The chat dock extracted to #tab-chat, so the Composer split is the
+   workflow surface alone: the canvas fills the freed height with the
+   workstream strip below. The spine stays dormant (ghost) until a
+   workflow is primed. */
 .composer-split {
   display: grid;
-  /* Vertical stack — chat on TOP, the workflow canvas BOTTOM (with a
-     row-resize divider). --chat-frac is the chat pane's HEIGHT fraction.
-     Rows: chat · divider · canvas · workstream strip. */
-  grid-template-rows: var(--chat-frac, 58%) 8px minmax(0, 1fr) auto;
+  /* Canvas-first single column. Rows: canvas · workstream strip. */
+  grid-template-rows: minmax(0, 1fr) auto;
   grid-template-columns: minmax(0, 1fr);
   row-gap: 12px;
   align-items: stretch;
   width: 100%;
   box-sizing: border-box;
-  /* Viewport-fit: chat + canvas fill the space below the chrome — no page
+  /* Viewport-fit: the canvas fills the space below the chrome — no page
      scroll, no panels lost under the fold. Children scroll internally. */
   height: clamp(480px, calc(100vh - 200px), 1800px);
 }
-.composer-split > .agent-chat-dock      { grid-row: 1; grid-column: 1; margin-top: 0; min-height: 0; max-height: none; height: 100%; }
-.composer-split > #composer-divider     { grid-row: 2; grid-column: 1; }
-.composer-split > .composer-grid        { grid-row: 3; grid-column: 1; min-height: 0; min-width: 0; }
-.composer-split > .composer-workstream  { grid-row: 4; grid-column: 1; min-width: 0; max-height: 150px; overflow-y: auto; }
-.composer-split > #composer-spine-dormant { grid-row: 3 / 5; grid-column: 1; }
-
-/* Inside the split, the transcript flexes to the dock's full height —
-   the standalone .chat-messages 400px clamp is for other surfaces. The
-   chat genuinely reaches the bottom of the screen. */
-.composer-split .agent-chat-dock .chat-messages {
-  flex: 1 1 auto;
-  min-height: 120px;
-  max-height: none;
-}
-
-/* Canvas mode — workflow leads. The workstream row collapses (step config
-   lives in the floating popup on the canvas), so the DAG gets the full
-   column height. */
-.composer-split.mode-canvas > .composer-grid { grid-row: 3 / 5; }
-.composer-split.mode-canvas > .composer-workstream { display: none; }
-
-/* Focus mode — the canvas slides over the full width and the chat docks
-   UNDERNEATH as a full-width strip (the v1 bottom agent-dock pattern).
-   One column, two rows: canvas dominant, chat docked at the foot. */
-/* Focus mode — the canvas takes the whole composer; chat hides (toggle back
-   to Chat/Canvas to bring it in). Full-bleed workflow. */
-.composer-split.mode-focus {
-  grid-template-columns: 1fr;
-  grid-template-rows: 0 0 minmax(0, 1fr) 0;
-  row-gap: 0;
-}
-.composer-split.mode-focus > .agent-chat-dock      { display: none; }
-.composer-split.mode-focus > #composer-divider     { display: none; }
-.composer-split.mode-focus > .composer-grid        { grid-column: 1; grid-row: 3; }
-.composer-split.mode-focus > .composer-workstream  { display: none; }
-.composer-split.mode-focus > #composer-spine-dormant { grid-column: 1; grid-row: 3; }
-
-.composer-divider {
-  cursor: row-resize;
-  position: relative;
-  /* Keep the row-resize handle grabbable above the chat dock's input, which
-     can reach the divider's fat hit target in a narrow composer. */
-  z-index: 2;
-  border-radius: 999px;
-  background: var(--border);
-  transition: background 0.15s ease;
-}
-.composer-divider::before { content: ""; position: absolute; inset: -6px 0; } /* fat hit target (vertical) */
-.composer-divider::after {
-  content: ""; position: absolute; left: 50%; top: 50%;
-  width: 28px; height: 2px; transform: translate(-50%, -50%);
-  background: var(--text-muted); border-radius: 999px; opacity: 0.5;
-}
-.composer-divider:hover,
-.composer-split.is-dragging > .composer-divider { background: var(--accent-dim); }
+.composer-split > .composer-grid        { grid-row: 1; grid-column: 1; min-height: 0; min-width: 0; }
+.composer-split > .composer-workstream  { grid-row: 2; grid-column: 1; min-width: 0; max-height: 150px; overflow-y: auto; }
+.composer-split > #composer-spine-dormant { grid-row: 1 / 3; grid-column: 1; }
 
 /* Dormant vs primed */
 .composer-split:not(.is-primed) > .composer-grid,
@@ -5275,16 +5220,11 @@ textarea.composer-desc-area {
 .spine-dormant-title { font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
 .spine-dormant-sub { font-size: 0.7rem; line-height: 1.6; color: var(--text-muted); margin-bottom: 16px; }
 
-/* Spine collapsed → full-chat */
-.composer-split.spine-collapsed { grid-template-rows: 1fr 0 0 0; row-gap: 0; }
-.composer-split.spine-collapsed > #composer-divider,
+/* Spine collapsed (legacy toggle — retained for ComposerSplit.toggleSpine) */
+.composer-split.spine-collapsed { grid-template-rows: 0 0; row-gap: 0; }
 .composer-split.spine-collapsed > .composer-grid,
 .composer-split.spine-collapsed > .composer-workstream,
 .composer-split.spine-collapsed > #composer-spine-dormant { display: none; }
-
-/* During drag: kill selection + canvas pointer noise */
-.composer-split.is-dragging { user-select: none; }
-.composer-split.is-dragging #drawflow-canvas { pointer-events: none; }
 
 /* Management drawer — recedes the platform-management surfaces */
 .composer-mgmt-drawer { margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel, rgba(255,255,255,0.015)); }
@@ -5302,26 +5242,37 @@ textarea.composer-desc-area {
 #tab-dashboard > .composer-mgmt-drawer { order: 2; margin-top: 12px; margin-bottom: 0; }
 #tab-dashboard > #step-config-panel { order: 3; }
 
-/* Floating view toggle — always reachable, including Focus mode (where the
-   docked chat header + its toggle are hidden, so this is the only way back). */
-.composer-float-toggle {
-  position: absolute; top: 10px; right: 12px; z-index: 60; display: none;
-  box-shadow: var(--shadow-2);
+/* ── Chat tab (S0) — the extracted agent-chat dock fills the viewport.
+   Same viewport-fit clamp the split uses, so the transcript flexes to
+   the bottom of the screen instead of the standalone 400px clamp. */
+#tab-chat.active { display: flex; flex-direction: column; }
+#tab-chat > .agent-chat-dock {
+  flex: 1 1 auto;
+  margin-top: 0;
+  min-height: 0;
 }
-.composer-split.mode-focus .composer-float-toggle { display: inline-flex; }
+/* Full-height when expanded; the .collapsed max-height clamp (▾ toggle)
+   still wins when the operator folds the dock down to its strip. */
+#tab-chat > .agent-chat-dock:not(.collapsed) {
+  max-height: none;
+  height: clamp(480px, calc(100vh - 200px), 1800px);
+}
+#tab-chat .agent-chat-dock .chat-messages {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: none;
+}
 
-/* Responsive: stack chat over spine */
+/* Responsive: the split relaxes to natural heights on narrow screens */
 @media (max-width: 900px) {
   .composer-split {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
     min-height: 0;
   }
-  .composer-split > .agent-chat-dock      { grid-column: 1; grid-row: 1; max-height: none; }
-  .composer-split > #composer-divider     { display: none; }
   .composer-split > #composer-spine-dormant,
-  .composer-split > .composer-grid        { grid-column: 1; grid-row: 2; }
-  .composer-split > .composer-workstream  { grid-column: 1; grid-row: 3; }
+  .composer-split > .composer-grid        { grid-column: 1; grid-row: 1; }
+  .composer-split > .composer-workstream  { grid-column: 1; grid-row: 2; }
 }
 
 /* ══ BOOT SEQUENCE — chat→workflow handoff (the flagship "Promote") ══════
@@ -5481,7 +5432,6 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .drawflow .drawflow-node.bs-node-enter.bs-node-in { clip-path: inset(0 0 0 0); transform: translateY(0); opacity: 1; }
 .composer-split.bs-current .drawflow .connection .main-path {
   stroke: var(--accent-bright); stroke-dasharray: 8 10; animation: bs-current 600ms linear 1; }
-.composer-split.bs-booting #composer-divider { pointer-events: none; }
 
 @keyframes bs-wipe    { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @keyframes bs-resolve { to { opacity: 1; } }
@@ -6173,42 +6123,8 @@ body.bs-show-hint .bs-dispatch:hover::after {
   .chat-system-strip .hide-narrow { display: inline-flex; }
 }
 
-/* ── Composer mode toggle — the in-shell pivot (Chat ↔ Canvas) ─────── */
-/* View toggle — front-and-center: the primary way to flip between the chat
-   (top) and the workflow canvas (bottom). A bold segmented control with a
-   solid-accent active segment so the current view reads at a glance. */
-.composer-mode-toggle {
-  display: inline-flex;
-  border: 1px solid var(--border-strong, var(--border));
-  border-radius: var(--radius-md, 8px);
-  overflow: hidden;
-  flex-shrink: 0;
-  background: var(--surface-card);
-  box-shadow: var(--shadow-1);
-}
-.composer-mode-toggle .mode-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  padding: 7px 18px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
-}
-.composer-mode-toggle .mode-btn + .mode-btn { border-left: 1px solid var(--border); }
-.composer-mode-toggle .mode-btn:hover { color: var(--text); background: var(--accent-trace); }
-.composer-mode-toggle .mode-btn[aria-pressed="true"] {
-  color: var(--on-accent, #06201B);
-  background: var(--accent);
-}
-.composer-mode-toggle .mode-btn[aria-pressed="true"]:hover { background: var(--accent-bright, var(--accent)); }
+/* (S0: the composer mode-toggle segmented control was retired — Chat is
+   its own tab; full-screen canvas survives via #canvas-fullscreen-btn.) */
 
 /* Loaded-models chip + popover */
 .strip-models-chip {

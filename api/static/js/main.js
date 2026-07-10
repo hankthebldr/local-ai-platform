@@ -39,6 +39,7 @@ import { ChatRating } from './workspace-legacy/chat-rating.js';
 import { ComposerSplit } from './workspace-legacy/composer-split.js';
 import { BootSequence } from './workspace-legacy/boot-sequence.js';
 import { ComposerView } from './workspace-legacy/composer-view.js';
+import { ChatView } from './workspace-legacy/chat-view.js';
 import { DfSeedSchema } from './workspace-legacy/df-seed-schema.js';
 import { Projects } from './shell/projects.js';
 import { SkillsBuilder, WorkflowBuilder } from './library/builders.js';
@@ -131,6 +132,7 @@ function switchTab(name, el) {
   }
 
   if (name === 'dashboard') ComposerView.init();
+  if (name === 'chat') ChatView.init();
   // Workflow Index no longer needs to refresh Kanban — the panel
   // moved to the Projects tab. Keep WorkflowIndex.load on its own.
   if (name === 'workflow-index') { WorkflowIndex.load(); }
@@ -227,6 +229,11 @@ function switchTab(name, el) {
     }
   } catch (_) { /* sandboxed contexts may deny history access */ }
 }
+
+// data-action nav (S0+): new tab buttons carry data-action="switch-tab"
+// + data-tab-target instead of inline onclick. Registered ONCE here —
+// future phases add buttons, not handlers.
+Actions.click({ 'switch-tab': (el) => switchTab(el.dataset.tabTarget || el.dataset.tab, el) });
 
 /* ── TABLIST SEMANTICS (a11y) ───────────────────────────────────────
    The markup keeps plain .tab-btn buttons; roles + roving tabindex are
@@ -3701,8 +3708,9 @@ async function openWorkflowInComposer(wfId, stepId) {
   if (!wfId) { if (window.Toast) Toast.info('No workflow', 'Pick a workflow first.'); return; }
   try {
     await composerLoadById(wfId);
+    // S0: chat lives in its own tab — landing on the Composer tab IS the
+    // canvas reveal (the retired canvas-mode pivot is subsumed).
     if (typeof switchTab === 'function') switchTab('dashboard');
-    if (typeof ComposerSplit !== 'undefined' && ComposerSplit.setMode) ComposerSplit.setMode('canvas');
     if (stepId) {
       setTimeout(() => {
         try {
@@ -7924,6 +7932,13 @@ async function composerLoadById(wfId) {
 function composerLoadDefinition(defn) {
   defn = defn || {};
   try {
+    // Centralized reveal (S0): loading a definition is a canvas-intent
+    // action, so the Composer tab takes the stage — and it must do so
+    // BEFORE drawflow lays out nodes, so the canvas is visible + sized
+    // (Pins.convert / BootSequence now arrive from the separate Chat tab,
+    // where #tab-dashboard is display:none). Replaces the retired
+    // ComposerSplit canvas-mode pivot at every caller.
+    if (typeof switchTab === 'function') { try { switchTab('dashboard'); } catch (_) {} }
     // Ensure the drawflow editor exists BEFORE the cleanup + node spawn path
     // runs (idempotent). A scaffold/open before the operator has ever visited
     // the Composer tab would otherwise silently produce zero nodes.
@@ -8062,14 +8077,8 @@ function composerLoadDefinition(defn) {
       const firstNodeId = firstStep ? idMap[firstStep.id] : null;
       if (firstNodeId != null && typeof composerEnterStepEngage === 'function') composerEnterStepEngage(firstNodeId);
     } catch (_) {}
-    // Parity with the pre-split composer: loading a definition is a
-    // canvas-intent action, so the canvas takes the stage. Focus mode is
-    // respected if the operator already chose it; chat mode pivots.
-    try {
-      if (typeof ComposerSplit !== 'undefined' && ComposerSplit.getMode() === 'chat') {
-        ComposerSplit.setMode('canvas');
-      }
-    } catch (_) {}
+    // (The reveal happens at the top of this function — switchTab('dashboard')
+    // before node spawn — replacing the old tail-end canvas-mode pivot.)
   } catch (e) { Toast.danger('Load error', e.message); }
 }
 
@@ -8499,8 +8508,10 @@ window.MCPPanel = MCPPanel;
     };
     if (window.ScaffoldModal) window.ScaffoldModal.close();
     try {
+      // composerLoadDefinition switches to the Composer tab itself (S0
+      // reveal-centralization) — the DAG lands on a visible canvas.
       if (typeof composerLoadDefinition === 'function') composerLoadDefinition(defn);
-      if (typeof ComposerSplit !== 'undefined' && ComposerSplit.setMode) ComposerSplit.setMode('canvas');
+      else if (typeof switchTab === 'function') switchTab('dashboard');
     } catch (e) { console.warn('pin-convert failed:', e); }
     if (window.OpPath) window.OpPath.refresh();
   }

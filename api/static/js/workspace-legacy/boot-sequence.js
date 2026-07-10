@@ -283,13 +283,11 @@ export const BootSequence = (function () {
       // updateCanvasEmptyState). Then build via the shared load path.
       window._bsPriming = true;
       if (typeof ComposerSplit !== 'undefined') ComposerSplit.setSpinePrimed(true);
+      // composerLoadDefinition switches to the Composer tab BEFORE spawning
+      // nodes (S0 reveal-centralization) — the canvas is visible + sized when
+      // drawflow lays out, replacing the retired canvas-mode pivot.
       composerLoadDefinition(defn);
-      if (typeof ComposerSplit !== 'undefined') {
-        ComposerSplit.setSpinePrimed(true);
-        // The in-shell pivot: the workflow just became the artifact, so
-        // the canvas takes the stage and the chat docks as test surface.
-        ComposerSplit.setMode('canvas');
-      }
+      if (typeof ComposerSplit !== 'undefined') ComposerSplit.setSpinePrimed(true);
       window._bsPriming = false;
       // Mark the handoff in the transcript — the chat is the operator's
       // timeline, and without this the promotion never appears in it.

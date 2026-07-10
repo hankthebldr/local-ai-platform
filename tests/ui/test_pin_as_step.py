@@ -38,11 +38,14 @@ def test_scaffold_shows_source_traceability(index_html_text):
 
 def test_convert_reuses_composer_load_definition(index_html_text):
     # Conversion must build a real definition and reuse the shared load path,
-    # chaining steps via depends_on, then pivot to canvas — not a bespoke DAG.
+    # chaining steps via depends_on — not a bespoke DAG. S0 re-anchor: the
+    # canvas reveal is centralized in composerLoadDefinition, which switches
+    # to the Composer tab BEFORE spawning nodes (the retired setMode('canvas')
+    # pivot's replacement), so the DAG lands on a visible, sized canvas.
     assert "composerLoadDefinition(defn)" in index_html_text
     assert "depends_on" in index_html_text
     assert "'step-' + i" in index_html_text  # sequential chaining
-    assert "ComposerSplit.setMode('canvas')" in index_html_text
+    assert "switchTab('dashboard')" in index_html_text  # centralized reveal
 
 
 def test_pins_exposed_for_journey_ladder(index_html_text):

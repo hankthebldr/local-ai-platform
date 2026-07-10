@@ -276,6 +276,7 @@
   <div class="tab-nav" role="tablist">
     <div class="nav-section" aria-hidden="true">Build</div>
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Composer</button>
+    <button class="tab-btn" data-tab="chat" data-action="switch-tab" data-tab-target="chat">Chat</button>
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
     <div class="nav-section" aria-hidden="true">Operate</div>
     <button class="tab-btn" data-tab="projects" onclick="switchTab('projects', this)">Projects<span class="tab-count" id="projects-tab-count"></span></button>
@@ -466,19 +467,10 @@
          chat-dock block does not move in the DOM — only wrappers are added. -->
     <div class="composer-split" id="composer-split">
 
-      <!-- Floating view toggle — always reachable, esp. in Focus where the
-           docked toggle is hidden (the "no way back" fix). -->
-      <div class="composer-mode-toggle composer-float-toggle" role="group" aria-label="Composer view mode (floating)">
-        <button type="button" id="composer-fmode-chat" class="mode-btn" aria-pressed="false" onclick="ComposerSplit.setMode('chat')" title="Chat leads"><span aria-hidden="true">▭</span> Chat</button>
-        <button type="button" id="composer-fmode-canvas" class="mode-btn" aria-pressed="false" onclick="ComposerSplit.setMode('canvas')" title="Canvas leads"><span aria-hidden="true">⬓</span> Canvas</button>
-        <button type="button" id="composer-fmode-focus" class="mode-btn" aria-pressed="true" onclick="ComposerSplit.setMode('focus')" title="Full-screen canvas"><span aria-hidden="true">⛶</span> Focus</button>
-      </div>
-
-      <!-- Draggable divider between chat and spine. -->
-      <div class="composer-divider" id="composer-divider" role="separator"
-           tabindex="0" aria-orientation="horizontal" aria-label="Resize chat / workflow"
-           aria-valuemin="25" aria-valuemax="85" aria-valuenow="58"
-           title="Drag to resize &middot; double-click or Home to reset &middot; ↑/↓ to nudge"></div>
+      <!-- S0 (chat extraction): the chat/canvas/focus mode toggle and the
+           drag divider are retired — Chat is its own tab now, the canvas
+           owns the Composer, and full-screen survives via
+           #canvas-fullscreen-btn (dfToggleFullscreen). -->
 
       <!-- Dormant spine — shown until a workflow is primed (.is-primed on
            #composer-split). Reuses the .wf-anchor grammar from the live
@@ -492,8 +484,8 @@
             <div class="wf-anchor wf-anchor-end"><div class="wf-anchor-label">&#9632; END</div><div class="wf-anchor-sub">deliverable</div></div>
           </div>
           <div class="spine-dormant-title">No workflow yet</div>
-          <div class="spine-dormant-sub">Talk it through on the left. When you&rsquo;re ready, hand the work to your local agents &mdash; it takes shape here.</div>
-          <button type="button" class="action-btn accent spine-dormant-cta" onclick="document.getElementById('prompt').focus()">Start in chat &uarr;</button>
+          <div class="spine-dormant-sub">Talk it through in the Chat tab. When you&rsquo;re ready, hand the work to your local agents &mdash; it takes shape here.</div>
+          <button type="button" class="action-btn accent spine-dormant-cta" onclick="switchTab('chat')">Start in chat &uarr;</button>
         </div>
       </div>
 
@@ -605,6 +597,81 @@
 
     </div>
 
+    <!-- S0: the agent chat dock moved verbatim into #tab-chat (its own
+         Build tab). Node-bound chat still bridges through the same
+         module-scoped dfNodeData — only the DOM moved. -->
+
+    <!-- Composer workstream — three sub-tabs at the bottom of the
+         Composer that share screen space without competing with the
+         canvas. Step Config is what the canvas click selects;
+         Active Run shows progress for whatever run was last kicked
+         off; History tails the run log. All three are populated by
+         the same JS module so the bottom strip stays in sync. -->
+    <div class="panel composer-workstream" id="composer-workstream" style="margin-top:12px">
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="workstream-tabs" role="tablist">
+        <button type="button" class="workstream-tab active" data-ws="step"
+                onclick="ComposerWorkstream.switch('step', this)">
+          <span class="ws-tab-label">Step Config</span>
+          <span class="ws-tab-meta" id="ws-step-meta" data-step-id="(none)">(none)</span>
+        </button>
+        <button type="button" class="workstream-tab" data-ws="run"
+                onclick="ComposerWorkstream.switch('run', this)">
+          <span class="ws-tab-label">Active Run</span>
+          <span class="ws-tab-meta" id="ws-run-meta">idle</span>
+        </button>
+        <button type="button" class="workstream-tab" data-ws="history"
+                onclick="ComposerWorkstream.switch('history', this)">
+          <span class="ws-tab-label">History</span>
+          <span class="ws-tab-meta" id="ws-history-meta">—</span>
+        </button>
+        <span style="flex:1"></span>
+        <button type="button" class="action-btn xs ghost"
+                onclick="ComposerWorkstream.refresh()" title="Refresh the active sub-tab">⟲</button>
+        <button type="button" class="action-btn xs ghost panel-collapse-btn"
+                id="workstream-collapse-btn"
+                onclick="toggleComposerWorkstream()"
+                title="Collapse / expand this panel">▾</button>
+      </div>
+
+      <div class="workstream-body">
+        <!-- Step Config — kept under the same IDs the dfRenderConfigPanel
+             code writes to, so node-click handler keeps working untouched. -->
+        <div class="ws-pane active" id="ws-pane-step" style="max-height:340px;overflow:auto">
+          <div class="panel-label" id="df-config-title">Step Config</div>
+          <div id="df-config-panel" class="composer-config-body">
+            <div class="composer-config-empty">Click a node in the canvas above to configure it, or drag a workbench item onto a node to attach a skill, plugin tool, or MCP tool.</div>
+          </div>
+        </div>
+
+        <div class="ws-pane" id="ws-pane-run" hidden style="max-height:340px;overflow:auto">
+          <div class="panel-label">Active Run</div>
+          <div id="ws-run-body">
+            <div class="model-empty">No active run. Hit <strong>Run</strong> on the toolbar above, or trigger a workflow from the Workflow Index.</div>
+          </div>
+        </div>
+
+        <div class="ws-pane" id="ws-pane-history" hidden style="max-height:340px;overflow:auto">
+          <div class="panel-label">Run History</div>
+          <div id="ws-history-body">
+            <div class="model-empty">Recent runs land here. Filter / re-open from the list.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div><!-- /.composer-split -->
+
+    <!-- Hidden legacy mount point — kept so old code that selects
+         #step-config-panel directly doesn't break. -->
+    <div id="step-config-panel" hidden></div>
+  </div>
+
+  <!-- ═══ TAB: CHAT ═════════════════════════════════════════════════
+       S0 chat extraction: the agent-chat dock, moved VERBATIM from the
+       Composer split (IDs + inline handlers intact) into its own tab.
+       The chat JS stays in main.js, so the lexical dfNodeData bridge
+       (node-bound chat → /api/workflows/test-step) survives the move. -->
+  <div class="tab-content" id="tab-chat" style="display:none">
     <!-- AGENT CHAT DOCK: repurposed from the legacy global chat into the
          primary interaction surface for talking to workflow agents. The
          chat hits /v1/chat/completions normally but can scope to a
@@ -684,20 +751,9 @@
           Agent Chat
           <span style="margin-left:8px;color:var(--text-muted);font-size:0.6rem;letter-spacing:0.1em">workflow interaction surface</span>
         </div>
-        <!-- In-shell pivot: one thread, two modes (design-system console-v2).
-             Chat = conversation leads. Canvas = workflow leads, chat docks
-             as the test surface. BootSequence.confirm() pivots to canvas. -->
-        <div class="composer-mode-toggle" role="group" aria-label="Composer view mode">
-          <button type="button" id="composer-mode-chat" class="mode-btn" aria-pressed="true"
-                  title="Chat leads — conversation on top, workflow canvas below"
-                  onclick="ComposerSplit.setMode('chat')"><span aria-hidden="true">▭</span> Chat</button>
-          <button type="button" id="composer-mode-canvas" class="mode-btn" aria-pressed="false"
-                  title="Canvas leads — workflow on top, chat docks as the test surface"
-                  onclick="ComposerSplit.setMode('canvas')"><span aria-hidden="true">⬓</span> Canvas</button>
-          <button type="button" id="composer-mode-focus" class="mode-btn" aria-pressed="false"
-                  title="Focus — full-screen workflow canvas (chat hides; toggle back to bring it in)"
-                  onclick="ComposerSplit.setMode('focus')"><span aria-hidden="true">⛶</span> Focus</button>
-        </div>
+        <!-- S0: the in-dock Chat/Canvas/Focus pivot is retired — the dock
+             now lives in its own Chat tab; the Composer canvas is reached
+             via the tab nav. -->
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <label for="agent-select" style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Agent</label>
           <select class="model-select" id="agent-select" onchange="onAgentSelectionChanged()">
@@ -786,70 +842,6 @@
         <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
       </div>
     </div>
-
-    <!-- Composer workstream — three sub-tabs at the bottom of the
-         Composer that share screen space without competing with the
-         canvas. Step Config is what the canvas click selects;
-         Active Run shows progress for whatever run was last kicked
-         off; History tails the run log. All three are populated by
-         the same JS module so the bottom strip stays in sync. -->
-    <div class="panel composer-workstream" id="composer-workstream" style="margin-top:12px">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="workstream-tabs" role="tablist">
-        <button type="button" class="workstream-tab active" data-ws="step"
-                onclick="ComposerWorkstream.switch('step', this)">
-          <span class="ws-tab-label">Step Config</span>
-          <span class="ws-tab-meta" id="ws-step-meta" data-step-id="(none)">(none)</span>
-        </button>
-        <button type="button" class="workstream-tab" data-ws="run"
-                onclick="ComposerWorkstream.switch('run', this)">
-          <span class="ws-tab-label">Active Run</span>
-          <span class="ws-tab-meta" id="ws-run-meta">idle</span>
-        </button>
-        <button type="button" class="workstream-tab" data-ws="history"
-                onclick="ComposerWorkstream.switch('history', this)">
-          <span class="ws-tab-label">History</span>
-          <span class="ws-tab-meta" id="ws-history-meta">—</span>
-        </button>
-        <span style="flex:1"></span>
-        <button type="button" class="action-btn xs ghost"
-                onclick="ComposerWorkstream.refresh()" title="Refresh the active sub-tab">⟲</button>
-        <button type="button" class="action-btn xs ghost panel-collapse-btn"
-                id="workstream-collapse-btn"
-                onclick="toggleComposerWorkstream()"
-                title="Collapse / expand this panel">▾</button>
-      </div>
-
-      <div class="workstream-body">
-        <!-- Step Config — kept under the same IDs the dfRenderConfigPanel
-             code writes to, so node-click handler keeps working untouched. -->
-        <div class="ws-pane active" id="ws-pane-step" style="max-height:340px;overflow:auto">
-          <div class="panel-label" id="df-config-title">Step Config</div>
-          <div id="df-config-panel" class="composer-config-body">
-            <div class="composer-config-empty">Click a node in the canvas above to configure it, or drag a workbench item onto a node to attach a skill, plugin tool, or MCP tool.</div>
-          </div>
-        </div>
-
-        <div class="ws-pane" id="ws-pane-run" hidden style="max-height:340px;overflow:auto">
-          <div class="panel-label">Active Run</div>
-          <div id="ws-run-body">
-            <div class="model-empty">No active run. Hit <strong>Run</strong> on the toolbar above, or trigger a workflow from the Workflow Index.</div>
-          </div>
-        </div>
-
-        <div class="ws-pane" id="ws-pane-history" hidden style="max-height:340px;overflow:auto">
-          <div class="panel-label">Run History</div>
-          <div id="ws-history-body">
-            <div class="model-empty">Recent runs land here. Filter / re-open from the list.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    </div><!-- /.composer-split -->
-
-    <!-- Hidden legacy mount point — kept so old code that selects
-         #step-config-panel directly doesn't break. -->
-    <div id="step-config-panel" hidden></div>
   </div>
 
   <!-- ═══ TAB: WORKFLOW INDEX ═══════════════════════════════════════
