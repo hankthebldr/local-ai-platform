@@ -5205,6 +5205,10 @@ textarea.composer-desc-area {
   row-gap: 12px;
   align-items: stretch;
   width: 100%;
+  /* Wide monitors: cap the split and center it so the rail + canvas
+     hold a readable measure instead of smearing edge-to-edge (ask #1). */
+  max-width: 1440px;
+  margin-inline: auto;
   box-sizing: border-box;
   /* Viewport-fit: the canvas fills the space below the chrome — no page
      scroll, no panels lost under the fold. Children scroll internally. */
