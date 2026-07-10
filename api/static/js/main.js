@@ -8012,7 +8012,10 @@ function renderMcpsWorkbench(servers) {
     'bench.add-agent': benchDrag  // agent cards: click adds, drag still works
   });
   Actions.click({
-    'bench.add-agent': el => composerAddAgentAtCenter(el.dataset.agentId)
+    'bench.add-agent': el => composerAddAgentAtCenter(el.dataset.agentId),
+    // Tab switcher for data-action-wired bench tabs (the legacy five keep
+    // their inline onclicks; new benches wire through here).
+    'bench.switch': el => composerSwitchBench(el.dataset.bench, el)
   });
   Actions.on('keydown', {
     'bench.add-agent': (el, e) => {

@@ -515,7 +515,7 @@
         <div class="panel composer-left-panel">
           <span class="corner-tr"></span><span class="corner-bl"></span>
           <div class="workbench-tabs" role="tablist">
-            <button type="button" class="workbench-tab active" data-bench="steps"   onclick="composerSwitchBench('steps', this)">Roles</button>
+            <button type="button" class="workbench-tab active" data-bench="steps"   onclick="composerSwitchBench('steps', this)">Task</button>
             <button type="button" class="workbench-tab"        data-bench="agents"  onclick="composerSwitchBench('agents', this)">Agents</button>
             <button type="button" class="workbench-tab"        data-bench="skills"  onclick="composerSwitchBench('skills', this)">Skills</button>
             <button type="button" class="workbench-tab"        data-bench="plugins" onclick="composerSwitchBench('plugins', this)">Plugins</button>
@@ -523,11 +523,11 @@
           </div>
           <div class="workbench-body">
             <div class="workbench-pane" id="bench-steps">
-              <div class="workbench-hint">Drag a role onto the canvas to add a step.</div>
+              <div class="workbench-hint">Drag a Task onto the canvas to add a step.</div>
               <div class="df-palette" id="df-palette"></div>
             </div>
             <div class="workbench-pane" id="bench-agents" hidden>
-              <div class="workbench-hint">Drag an agent to spawn a step pre-configured with its role, model, and system prompt.</div>
+              <div class="workbench-hint">An agent bundles a model, tools, and context. Drag one to spawn a step pre-configured with its role, model, and system prompt.</div>
               <div id="bench-agents-list"><div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-line long"></div></div>
             </div>
             <div class="workbench-pane" id="bench-skills" hidden>
