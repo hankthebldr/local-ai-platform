@@ -5864,6 +5864,12 @@ function dfInitPalette() {
         <span class="df-palette-role">${esc(tmpl.role)}</span>
       </span>`;
     item.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/df-template', tmpl.key); e.dataTransfer.effectAllowed = 'move'; });
+    // BU5 — hover inspection: the bottom inspector shows the Task's
+    // instructions + the engine kind it compiles to. Wired through the
+    // Actions router (mouseover) — no click behavior is registered for
+    // this action, so drag/drop semantics are untouched.
+    item.dataset.action = 'bench.inspect-template';
+    item.dataset.templateKey = tmpl.key;
     palette.appendChild(item);
   });
 }
@@ -8440,6 +8446,15 @@ function composerSwitchBench(bench, el) {
 }
 
 /* ── Workbench loaders ──────────────────────────────────────────── */
+
+// BU5 — bench inspection caches. The polymorphic bottom inspector needs
+// the RESOLVED objects behind the bench cards; loadWorkbenches() fills
+// these module-scoped caches and the hover/focus handlers further down
+// resolve ids → objects here, handing the object to
+// ComposerWorkstream.inspect*() — no cross-module state, no globals.
+let _benchAgents = [];
+const _benchCaps = { plugins: [], mcps: [] };
+
 async function loadWorkbenches() {
   // Auth is handled globally by the monkey-patched window.fetch (installed
   // alongside the Auth module). Each pane fails independently so one
@@ -8450,6 +8465,7 @@ async function loadWorkbenches() {
     const r = await Net.call('/api/plugins');
     if (r.ok) {
       const plugins = r.data;
+      _benchCaps.plugins = plugins || [];  // BU5: inspector resolves cards here
       renderSkillsWorkbench(plugins);
       renderPluginsWorkbench(plugins);
     } else {
@@ -8466,6 +8482,7 @@ async function loadWorkbenches() {
     const r = await Net.call('/api/mcp/servers');
     if (r.ok) {
       const servers = r.data;
+      _benchCaps.mcps = servers || [];  // BU5: inspector resolves cards here
       renderMcpsWorkbench(servers);
     } else {
       renderWorkbenchError('bench-mcps-list', `HTTP ${r.status}`);
@@ -8481,6 +8498,7 @@ async function loadWorkbenches() {
     const r = await Net.call('/api/agents');
     if (r.ok) {
       const agents = r.data;
+      _benchAgents = agents || [];  // BU5: inspector resolves cards here
       renderAgentsWorkbench(agents);
     } else {
       renderWorkbenchError('bench-agents-list', `HTTP ${r.status}`);
@@ -8694,16 +8712,23 @@ function renderWorkbenchError(id, msg) {
 // the composer's left rail reads as one consistent surface.
 
 function _capCard(opts) {
-  // opts: { iconKey, title, subtitle, pill, pillKind, drag, descId, body }
+  // opts: { iconKey, title, subtitle, pill, pillKind, drag, descId, body,
+  //         inspect }
   // - drag: { mime, value } to make the card draggable, or null
   // - pillKind: '', 'warn', 'dim'
+  // - inspect: { kind, id } — BU5 bottom-inspector hookup. Draggable cards
+  //   keep data-action="bench.drag" (the inspect handlers piggyback on it);
+  //   non-draggable cards get data-action="bench.inspect-cap" instead.
   const iconSvg = (window.AgentIcons ? AgentIcons.svg(opts.iconKey) : '');
   const tone    = (window.AgentIcons ? AgentIcons.tone(opts.iconKey) : 'accent');
   const draggable = opts.drag
     ? `draggable="true" data-action="bench.drag" data-drag-mime="${esc(opts.drag.mime)}" data-drag-value="${esc(opts.drag.value)}"`
     : '';
+  const inspect = opts.inspect
+    ? `${opts.drag ? '' : 'data-action="bench.inspect-cap"'} data-cap-kind="${esc(opts.inspect.kind)}" data-cap-id="${esc(opts.inspect.id)}"`
+    : '';
   const pillCls = opts.pillKind ? `workbench-item-pill ${opts.pillKind}` : 'workbench-item-pill';
-  return `<div class="workbench-item agent-card cap-card cap-${esc(opts.iconKey)}" ${draggable} ${opts.title ? `title="${esc(opts.titleAttr || opts.title)}"` : ''}>
+  return `<div class="workbench-item agent-card cap-card cap-${esc(opts.iconKey)}" ${draggable} ${inspect} ${opts.title ? `title="${esc(opts.titleAttr || opts.title)}"` : ''}>
     <div class="agent-card-head">
       <span class="agent-card-icon tone-${esc(tone)}" data-cap="${esc(opts.iconKey)}">${iconSvg}</span>
       <div class="agent-card-titleblock">
@@ -8735,6 +8760,7 @@ function renderSkillsWorkbench(plugins) {
       subtitle: skill.description || '',
       pill: 'skill',
       drag: { mime: 'application/df-skill', value: `${plugin}::${skill.id}` },
+      inspect: { kind: 'skill', id: `${plugin}::${skill.id}` },
       titleAttr: 'Drag onto a step to attach this skill manually',
       body: `<div class="cap-card-foot">
         <code class="cap-card-id">${esc(plugin)}::${esc(skill.id)}</code>
@@ -8768,6 +8794,7 @@ function renderPluginsWorkbench(plugins) {
       pill: `v${p.version || '0.0'}`,
       pillKind: 'dim',
       drag: null,
+      inspect: { kind: 'plugin', id: p.id },
       body: toolRows
         ? `<div class="cap-card-tools">
             <div class="cap-card-tools-head">tools · <span style="color:var(--text)">${toolCount}</span></div>
@@ -8805,6 +8832,7 @@ function renderMcpsWorkbench(servers) {
       subtitle: s.description || '',
       pill: s.transport || 'mcp',
       pillKind: s.enabled ? '' : 'warn',
+      inspect: { kind: 'mcp', id: s.id },
       body: toolRows,
     });
   }).join('');
@@ -8837,6 +8865,145 @@ function renderMcpsWorkbench(servers) {
   });
   Actions.on('dblclick', {
     'bench.add-agent': (el, e) => { e.preventDefault(); }
+  });
+})();
+
+// ── BU5: polymorphic bottom inspector — bench hover/focus wiring ────
+// Hover (or keyboard focus) on a bench card resolves the card back to
+// its cached object (_benchAgents / _benchCaps above) and hands it to
+// ComposerWorkstream.inspect*() for a read-only render in the bottom
+// Step Config pane. Debounced on value-change so mouseover churn across
+// a card's children doesn't repaint; click stays composerAddAgentAtCenter
+// for agent cards (parity) and drag semantics are untouched everywhere.
+let _benchInspectTimer = null;
+let _benchInspectKey = '';
+let _benchInspectGen = 0;
+
+function _benchInspectDebounced(key, render) {
+  // Inspection only makes sense while the Composer (tab-dashboard) is on
+  // screen — _capCard markup is reused by the System page and must not
+  // mutate the hidden workstream from there.
+  const tab = document.getElementById('tab-dashboard');
+  if (!tab || !tab.classList.contains('active')) return;
+  // Value-change gate: mouseover re-fires for every child crossing — skip
+  // while the same card's inspection is already painted. focusStep()
+  // clears the data-inspect-kind stamp on node selection, re-arming this.
+  const meta = document.getElementById('ws-step-meta');
+  if (key === _benchInspectKey && meta && meta.hasAttribute('data-inspect-kind')) return;
+  clearTimeout(_benchInspectTimer);
+  const gen = ++_benchInspectGen;
+  _benchInspectTimer = setTimeout(async () => {
+    if (gen !== _benchInspectGen) return;  // superseded by a later hover / node click
+    _benchInspectKey = key;
+    try { await render(gen); } catch (_) { /* inspector is best-effort */ }
+  }, 120);
+}
+
+// Agents list objects omit system_prompt/tools/context — enrich from the
+// detail endpoint once per agent and merge back into the cache so the
+// inspector can honor "model + tools + context" without refetching.
+async function _benchAgentResolved(agentId) {
+  const cached = _benchAgents.find(x => x.id === agentId);
+  if (cached && cached._detail) return cached;
+  try {
+    const r = await Net.call(`/api/agents/${encodeURIComponent(agentId)}`, { silent: true });
+    if (r.ok && r.data) {
+      const full = Object.assign({}, cached || {}, r.data, { _detail: true });
+      const idx = _benchAgents.findIndex(x => x.id === agentId);
+      if (idx >= 0) _benchAgents[idx] = full; else _benchAgents.push(full);
+      return full;
+    }
+  } catch (_) { /* fall through to the (thinner) list object */ }
+  return cached || null;
+}
+
+// Resolve a hovered capability element to its cached object. Card-level
+// data-cap-* attrs cover skill/plugin/MCP cards; the nested tool rows
+// only carry a drag payload, so fall back to parsing the MIME + value.
+function _benchCapResolve(el) {
+  const kind = el.dataset.capKind;
+  if (kind === 'plugin') {
+    const p = _benchCaps.plugins.find(x => x.id === el.dataset.capId);
+    return p ? { kind: 'plugin', plugin: p } : null;
+  }
+  if (kind === 'mcp') {
+    const s = _benchCaps.mcps.find(x => x.id === el.dataset.capId);
+    return s ? { kind: 'mcp', server: s } : null;
+  }
+  if (kind === 'skill' || el.dataset.dragMime === 'application/df-skill') {
+    const [pluginId, skillId] = (el.dataset.capId || el.dataset.dragValue || '').split('::');
+    const p = _benchCaps.plugins.find(x => x.id === pluginId);
+    const s = p && (p.skills || []).find(x => x.id === skillId);
+    return s ? { kind: 'skill', pluginId, skill: s } : null;
+  }
+  if (el.dataset.dragMime === 'application/df-tool') {
+    const ref = el.dataset.dragValue || '';
+    const cut = ref.indexOf('__');
+    const p = _benchCaps.plugins.find(x => x.id === ref.slice(0, cut));
+    const t = p && (p.tools || []).find(x => x.id === ref.slice(cut + 2));
+    return t ? { kind: 'plugin', plugin: p, tool: t } : null;
+  }
+  if (el.dataset.dragMime === 'application/df-mcp') {
+    const [serverId, toolName] = (el.dataset.dragValue || '').split('::');
+    const s = _benchCaps.mcps.find(x => x.id === serverId);
+    const t = s && (s.tools || []).find(x => x.name === toolName);
+    return s ? { kind: 'mcp', server: s, tool: t || null } : null;
+  }
+  return null;
+}
+
+(function () {
+  const inspectAgentCard = el => {
+    const agentId = el.dataset.agentId;
+    if (!agentId) return;
+    _benchInspectDebounced('agent:' + agentId, async (gen) => {
+      const a = await _benchAgentResolved(agentId);
+      if (gen !== _benchInspectGen || !a) return;  // stale by the time the fetch landed
+      ComposerWorkstream.inspectAgent(a);
+    });
+  };
+  const inspectTemplateCard = el => {
+    const tpl = dfStepTemplates.find(t => t.key === el.dataset.templateKey);
+    if (!tpl) return;
+    _benchInspectDebounced('template:' + tpl.key, () => ComposerWorkstream.inspectTemplate(tpl));
+  };
+  const inspectCapCard = el => {
+    const cap = _benchCapResolve(el);
+    if (!cap) return;  // e.g. a pattern card sharing bench.drag — not a capability
+    const key = 'cap:' + (el.dataset.capId || el.dataset.dragValue || '');
+    _benchInspectDebounced(key, () => ComposerWorkstream.inspectCapability(cap));
+  };
+  Actions.on('mouseover', {
+    'bench.add-agent':       inspectAgentCard,   // hover inspects; click still adds (parity)
+    'bench.inspect-template': inspectTemplateCard,
+    'bench.inspect-cap':     inspectCapCard,     // plugin / MCP cards (not draggable)
+    'bench.drag':            inspectCapCard      // skill cards + nested tool rows
+  });
+  Actions.on('focusin', {
+    'bench.add-agent': inspectAgentCard          // agent cards are tabbable (role=button)
+  });
+  Actions.click({
+    // Cap cards have no click-to-add, so click also inspects (spec: +click).
+    'bench.inspect-cap': inspectCapCard,
+    'bench.drag':        inspectCapCard,
+    // A single click on a canvas node must beat any lingering inspector
+    // content. Selection CHANGES already repaint via nodeSelected; this
+    // covers re-clicking the already-selected node (drawflow doesn't
+    // re-fire nodeSelected) and cancels any in-flight inspect debounce.
+    // Single-click selection behavior itself is untouched.
+    'composer.edit-node': el => {
+      _benchInspectGen++;
+      clearTimeout(_benchInspectTimer);
+      const meta = document.getElementById('ws-step-meta');
+      if (!meta || !meta.hasAttribute('data-inspect-kind')) return;
+      const host = el.closest('.drawflow-node');
+      if (!host) return;
+      const nodeId = parseInt(String(host.id).replace('node-', ''), 10);
+      if (isNaN(nodeId) || !dfNodeData[nodeId]) return;
+      dfRenderConfigPanel(nodeId);
+      const data = dfNodeData[nodeId];
+      ComposerWorkstream.focusStep((data && (data.id || data.name)) || nodeId);
+    }
   });
 })();
 
