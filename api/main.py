@@ -46,6 +46,7 @@ from .routers import (
     provenance,  # noqa: F401 — response→source grounding chains
     conversations,  # noqa: F401 — durable chat threads
     workspaces,  # noqa: F401 — durable local dirs for autonomous workflows (C2)
+    prompts,  # noqa: F401 — Prompts library object (roles + templates CRUD + render)
 )
 from .services.ollama_service import OllamaService
 from .services.workflow_engine import WorkflowEngine
@@ -339,6 +340,7 @@ app.include_router(system.router)
 app.include_router(provenance.router)
 app.include_router(conversations.router)
 app.include_router(workspaces.router)
+app.include_router(prompts.router)
 from .routers import projects as _projects_router  # noqa: E402
 
 app.include_router(_projects_router.router)
