@@ -96,6 +96,7 @@ async def export_bundle(project_id: str):
 
 import json as _json
 import os as _os
+import uuid as _uuid
 from datetime import datetime as _dt
 from pathlib import Path as _Path
 
@@ -160,7 +161,10 @@ async def create_task(project_id: str, body: Dict[str, Any]):
     column = body.get("column") or "todo"
     if column not in ("todo", "doing", "done"):
         raise HTTPException(status_code=400, detail="column must be todo|doing|done")
-    tid = f"task_{int(_dt.utcnow().timestamp() * 1000):x}"
+    # Millisecond timestamps alone collide when tasks are created in rapid
+    # succession (same-ms ids merge during JSONL replay) — suffix a random
+    # nibble run so every create yields a distinct task id.
+    tid = f"task_{int(_dt.utcnow().timestamp() * 1000):x}_{_uuid.uuid4().hex[:6]}"
     evt = {
         "id": tid,
         "title": title[:240],
