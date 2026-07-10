@@ -274,10 +274,13 @@
        Admin dropdown off-screen on standard widths. Tab order is preserved so
        muscle memory and any deep-link routes keep working. -->
   <div class="tab-nav" role="tablist">
+    <div class="nav-section" aria-hidden="true">Build</div>
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Composer</button>
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
+    <div class="nav-section" aria-hidden="true">Operate</div>
     <button class="tab-btn" data-tab="projects" onclick="switchTab('projects', this)">Projects<span class="tab-count" id="projects-tab-count"></span></button>
     <button class="tab-btn" data-tab="runs" onclick="switchTab('runs', this)">Runs<span class="tab-count" id="runs-tab-count"></span></button>
+    <div class="nav-section" aria-hidden="true">Library</div>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <!-- Skill Lab folded into the Skills tab + Context tab. The
          knowledge graph + deep-research panel live in Context now;
