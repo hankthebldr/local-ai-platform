@@ -194,12 +194,16 @@ def test_composer_clear_button_exists_and_clears(signed_in_page):
     ok.click()
     page.wait_for_timeout(1200)
     # The composer now keeps always-present editable START/END anchors, so an
-    # empty canvas legitimately holds those two __start__/__end__ nodes. Count
-    # only the real (non-anchor) steps when asserting the wipe.
+    # empty canvas legitimately holds those two __start__/__end__ nodes. The
+    # agentic-composer revamp additionally auto-seeds an editable __seed__
+    # node on every empty canvas (dfEnsureSeedNode via dfRefreshAnchors), so
+    # it too is part of the legitimate empty state. Count only the real
+    # (non-anchor, non-seed) steps when asserting the wipe.
     state = page.evaluate("""() => {
             const data = dfEditor?.drawflow?.drawflow?.Home?.data || {};
             const realNodes = Object.values(data).filter(
                 n => n.name !== '__start__' && n.name !== '__end__'
+                  && n.name !== '__seed__'
             ).length;
             return {
                 id: document.getElementById('df-wf-id').value,
