@@ -25,6 +25,7 @@ import { WorkflowIndex } from './library/workflow-index.js';
 import { AgentGen } from './library/agents.js';
 import { CatalogPage, CatalogModelsShare } from './library/models.js';
 import { MCPPanel } from './library/mcp.js';
+import { PromptsLibrary } from './library/prompts.js';
 import { RunsTab } from './runs/runs-tab.js';
 import { WorkflowMemory } from './runs/workflow-memory.js';
 import { ResearchArtifacts } from './runs/research-artifacts.js';
@@ -142,6 +143,9 @@ function switchTab(name, el) {
   // Workflow Index no longer needs to refresh Kanban — the panel
   // moved to the Projects tab. Keep WorkflowIndex.load on its own.
   if (name === 'workflow-index') { WorkflowIndex.load(); }
+  // Prompts library (roles + templates CRUD + render). Refresh on every
+  // visit since prompts/{roles,templates}/ may have changed on disk.
+  if (name === 'prompts' && window.PromptsLibrary) { PromptsLibrary.load(); }
   // Projects tab — refresh the Kanban (lists projects + the active
   // board) on every visit. Updates the count chip in the nav too.
   if (name === 'projects') {
@@ -8670,6 +8674,7 @@ function renderWorkflowIndex() { WorkflowIndex && WorkflowIndex.refresh && docum
 // Export for the static-HTML onclick guard (`if(window.MCPPanel)MCPPanel.showCreate()`):
 // without this the Catalog '+ Register' button is a silent no-op.
 window.MCPPanel = MCPPanel;
+window.PromptsLibrary = PromptsLibrary;
 
 /* Refresh workbenches whenever the composer becomes the active tab. */
 (function () {

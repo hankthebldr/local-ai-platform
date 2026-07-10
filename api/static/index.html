@@ -294,6 +294,7 @@
     <button class="tab-btn" data-tab="context" data-action="switch-tab" data-tab-target="context">Context</button>
     <div class="nav-section" aria-hidden="true">Library</div>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
+    <button class="tab-btn" data-tab="prompts" data-action="switch-tab" data-tab-target="prompts">Prompts<span class="tab-count" id="prompts-count"></span></button>
     <!-- Skill Lab folded into the Skills tab + Research tab. The
          knowledge graph + deep-research panel live in Research (Build);
          the Skills tab is the unified skill management page. -->
@@ -2289,6 +2290,53 @@
   </div>
 
   <!-- MCP Servers admin panel -->
+  <div class="tab-content" id="tab-prompts" style="display:none">
+    <div class="plugins-layout">
+      <div class="panel plugins-list-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// PROMPTS
+          <span style="float:right">
+            <button class="action-btn accent" data-action="prompts.new">+ New</button>
+            <button class="action-btn" data-action="prompts.refresh">Refresh</button>
+          </span>
+        </div>
+        <p style="margin:6px 0 4px;color:var(--text-muted);font-size:0.72rem">
+          Roles (persona text) and templates (5-part Jinja skeletons). Edit in place,
+          render a live preview through the composer, or add new ones.
+        </p>
+        <div id="prompts-list" style="margin-top:10px;font-size:0.78rem"></div>
+      </div>
+
+      <div class="panel plugins-detail-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label" id="prompts-detail-label">// SELECT A PROMPT</div>
+        <div id="prompts-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
+          Select a role or template on the left to view, edit, or render it.
+        </div>
+      </div>
+    </div>
+
+    <!-- Create modal -->
+    <div id="prompts-create-modal" class="admin-modal" hidden role="dialog" aria-modal="true" aria-labelledby="prompts-create-title">
+      <div class="admin-modal-card" style="width:600px">
+        <h3 id="prompts-create-title">New prompt</h3>
+        <label for="prompts-create-kind" class="admin-modal-label">Kind</label>
+        <select id="prompts-create-kind">
+          <option value="role">role — persona text (.md)</option>
+          <option value="template">template — 5-part Jinja skeleton (.jinja)</option>
+        </select>
+        <label for="prompts-create-id" class="admin-modal-label">ID (used in workflow role_ref / template_ref)</label>
+        <input id="prompts-create-id" type="text" placeholder="e.g. security_reviewer" autocomplete="off">
+        <label for="prompts-create-body" class="admin-modal-label">Body</label>
+        <textarea id="prompts-create-body" class="prompts-textarea" placeholder="# Role name&#10;You are…"></textarea>
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+          <button class="action-btn" data-action="prompts.create-close">Cancel</button>
+          <button class="action-btn accent" data-action="prompts.create-submit">Create</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="tab-content" id="tab-admin-mcp" style="display:none">
     <div class="admin-modal-error" style="background:rgba(245,166,35,0.12);border-color:#F5A623;color:#F5A623;margin-bottom:14px">
       ⚠ MCP servers run arbitrary local processes (stdio transport) or

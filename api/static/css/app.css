@@ -6432,6 +6432,19 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .mcp-tools-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .mcp-tool { padding: 6px 8px; border: 1px solid var(--border); border-radius: 3px; font-size: 0.66rem; }
 .mcp-tool-name { color: var(--accent); font-family: var(--mono); font-size: 0.66rem; }
+
+/* Prompts library (roles + templates) — reuses .mcp-row for list items */
+.prompts-group-label { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 10px 0 4px; }
+.prompts-group-label:first-child { margin-top: 0; }
+.prompts-kind-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: var(--text-muted); }
+.prompts-kind-dot.role { background: var(--accent); box-shadow: 0 0 6px var(--accent-dim); }
+.prompts-kind-dot.template { background: var(--warning, #F5A623); }
+.prompts-meta { font-family: var(--mono); font-size: 0.68rem; color: var(--text-muted); margin-bottom: 8px; }
+.prompts-var { font-family: var(--mono); font-size: 0.66rem; color: var(--accent); background: var(--accent-ghost); border: 1px solid var(--accent-dim); border-radius: 3px; padding: 0 4px; }
+.prompts-body { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 0.7rem; line-height: 1.5; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 10px; max-height: 320px; overflow: auto; }
+.prompts-textarea { width: 100%; min-height: 240px; font-family: var(--mono); font-size: 0.72rem; line-height: 1.5; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 10px; resize: vertical; }
+.prompts-render { margin-top: 12px; border-top: 1px dashed var(--border); padding-top: 10px; }
+.prompts-render-label { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.08em; color: var(--accent); margin: 8px 0 4px; }
 .mcp-tool-desc { color: var(--text-dim); font-size: 0.58rem; margin-top: 2px; line-height: 1.3; }
 
 /* ═══════════════════════════════════════════════════════════════════
