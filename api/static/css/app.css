@@ -4613,6 +4613,13 @@ textarea.composer-desc-area {
 .wf-anchor-end { border-color: var(--cyan-dim); background: rgba(87, 196, 210,0.06); }
 .wf-anchor-end .wf-anchor-label { color: var(--cyan); }
 
+/* Editable seed node — reuses the START pill's visual grammar but is a live
+   node (dblclick opens its query/schema config, edges emit seed.<key>). */
+.df-seed-node { cursor: pointer; max-width: 220px; }
+.df-seed-node .df-seed-query { font-size: 0.58rem; color: var(--text-dim); margin: 3px 0 4px; max-width: 196px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.df-seed-node .df-seed-query.is-empty { color: var(--text-muted); font-style: italic; }
+.drawflow-node.selected .df-seed-node { box-shadow: 0 0 0 2px var(--accent-dim); }
+
 /* START/END rows in the Step Results list */
 .ws-run-anchor-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 4px; border: 1px solid; font-family: var(--mono); }
 .ws-run-anchor-row .ws-run-step-id { font-weight: 600; font-size: 0.7rem; }

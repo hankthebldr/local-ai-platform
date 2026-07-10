@@ -5609,6 +5609,9 @@ function dfAutoChain(newNodeId) {
 }
 
 function dfNodeHtml(data) {
+  // Seed nodes render as the START-pill grammar, not a step card. Branching
+  // here keeps every repaint path (dfUpdateNodeData's apply) seed-aware.
+  if (data.is_seed) return dfSeedNodeHtml(data);
   const color = dfRoleColors[data.role] || '#6b7780';
   const outputTags = (data.outputs || []).map(o => `<span class="df-node-output-tag${data.is_decision ? ' branch' : ''}">${esc(o)}</span>`).join('');
   const gateLabel = (data.quality_gates && data.quality_gates.length)
@@ -5646,7 +5649,7 @@ function dfNodeHtml(data) {
   }
 
   return `
-    <div class="df-node-body${data.is_decision ? ' is-decision' : ''}" style="--role-color:${color}" data-persona="${esc(persona)}">
+    <div class="df-node-body${data.is_decision ? ' is-decision' : ''}" style="--role-color:${color}" data-persona="${esc(persona)}" data-action="composer.edit-node">
       <span class="df-node-icon tone-${esc(tone)}">${iconSvg}</span>
       <div class="df-node-meta">
         <div class="df-node-title">${esc(data.name)}${gateLabel}${decisionPill}</div>
@@ -5660,6 +5663,76 @@ function dfNodeHtml(data) {
     </div>`;
 }
 
+// ── Editable seed node ──────────────────────────────────────────────
+// The seed is a REAL canvas node (registered in dfNodeData) that owns the
+// user query + the declared input schema. It is NOT an engine step:
+// dfExportYaml folds its schema into context.inputs, its outgoing edges
+// become seed.<key> inputs on the target steps (never depends_on), and its
+// query feeds the dfRunWorkflowLive seed payload. Exactly one seed exists
+// per canvas; dfEnsureSeedNode auto-spawns it on an empty compose canvas.
+
+function dfFindSeedNodeId() {
+  for (const nid of Object.keys(dfNodeData)) {
+    const d = dfNodeData[nid];
+    if (d && d.is_seed) return Number(nid);
+  }
+  return null;
+}
+
+function dfSeedNodeHtml(data) {
+  const keys = (data.seed_schema || []).map(s => s && s.key).filter(Boolean);
+  const chips = (keys.length ? keys : ['—']).map(k => `<span>${esc(k)}</span>`).join('');
+  // One-line query preview so the operator reads the workflow's intent
+  // straight off the canvas; empty state nudges toward the dblclick edit.
+  const queryLine = (data.query || '').trim()
+    ? `<div class="df-seed-query" title="${esc(data.query)}">${esc(data.query)}</div>`
+    : `<div class="df-seed-query is-empty">double-click to set the query</div>`;
+  // Reuses the START anchor's visual grammar (.wf-anchor-start pill) so the
+  // canvas reads the same — but this pill is live: dblclick opens its config.
+  return `<div class="wf-anchor wf-anchor-start df-seed-node" data-action="composer.edit-node" title="Seed — the workflow's starting input. Double-click to edit the query + inputs.">
+    <div class="wf-anchor-label">▶ SEED</div>
+    <div class="wf-anchor-sub">query + inputs</div>
+    ${queryLine}
+    <div class="wf-anchor-keys">${chips}</div></div>`;
+}
+
+function dfAddSeedNode(x, y) {
+  if (!dfEditor) return null;
+  // Exactly-one-seed guard — re-entry hands back the existing node.
+  const existing = dfFindSeedNodeId();
+  if (existing != null) return existing;
+  // Inherit the declared schema (Library round-trip via dfSeedSchema);
+  // a fresh canvas starts with the canonical single `query` input.
+  const schema = (Array.isArray(dfSeedSchema) && dfSeedSchema.length)
+    ? dfSeedSchema.map(s => ({ key: s.key, description: s.description || '' }))
+    : [{ key: 'query', description: 'What should this workflow do?' }];
+  const data = {
+    id: 'seed',
+    name: 'Seed',
+    is_seed: true,
+    query: '',
+    seed_schema: schema,
+    outputs: schema.map(s => s.key),  // → connections emit seed.<key> refs
+    inputs: [],
+  };
+  const nodeId = dfEditor.addNode('__seed__', 0, 1, x, y, '__seed__', {}, dfSeedNodeHtml(data));
+  dfNodeData[nodeId] = data;
+  // Keep the mirror in sync (dfExportYaml + the DfSeedSchema modal read it).
+  dfSeedSchema = schema.map(s => ({ key: s.key, description: s.description }));
+  if (!_dfAnchorBusy) dfScheduleAnchorRefresh();
+  return nodeId;
+}
+
+// Idempotent auto-spawn: an EMPTY compose canvas always offers the seed as
+// its starting point. No-op when any node (seed included) already exists,
+// so loaded workflows keep their decorative __start__ ghost untouched.
+function dfEnsureSeedNode() {
+  if (!dfEditor) return;
+  if (dfFindSeedNodeId() != null) return;
+  if (Object.keys(dfNodeData).length) return;
+  dfAddSeedNode(40, 200);
+}
+
 function dfRenderConfigPanel(nodeId) {
   const data = dfNodeData[nodeId];
   // Two target surfaces share one HTML body: the popup (primary, auto-
@@ -5669,6 +5742,9 @@ function dfRenderConfigPanel(nodeId) {
   const popupTitle = document.getElementById('df-config-popup-title');
   const title = document.getElementById('df-config-title');
   if (!data || (!panel && !popupBody)) return;
+  // Seed nodes get their own config surface (query + input schema) instead
+  // of the step identity/prompt/gates form.
+  if (data.is_seed) return dfRenderSeedConfig(nodeId);
   if (title) title.textContent = data.id;
   if (popupTitle) popupTitle.textContent = data.id;
   const gateOps = ['not_empty','contains','not_contains','matches','has_key','all_keys','gt','lt','gte','lte','equals','not_equals','length_gt','length_lt','is_type'];
@@ -6104,6 +6180,126 @@ function dfDeleteNode(nodeId) {
   Actions.click({ 'df.node-delete': el => dfDeleteNode(nodeIdOf(el)) });
 })();
 
+// ── Seed config surface (dfRenderConfigPanel's is_seed branch) ──────
+// Query textarea + key/description schema rows, written to the same two
+// targets as the step form (popup primary, workstream dock fallback).
+// Edits commit on "Save seed" (composer.seed-save) so mid-typing repaints
+// can't steal focus; rows are DOM-only until saved.
+function _dfSeedCfgRowHtml(key, desc) {
+  return `<div class="df-seed-cfg-row" style="display:flex;gap:4px;margin-bottom:4px;align-items:center">
+      <input type="text" class="chat-input df-seed-cfg-key" placeholder="query" value="${esc(key || '')}" style="font-size:0.64rem;padding:3px 6px;flex:0 0 110px" autocomplete="off" />
+      <input type="text" class="chat-input df-seed-cfg-desc" placeholder="what this input is" value="${esc(desc || '')}" style="font-size:0.64rem;padding:3px 6px;flex:1" autocomplete="off" />
+      <button type="button" class="btn-unstyled df-tag-remove" aria-label="Remove input" data-action="composer.seed-remove-key">✕</button>
+    </div>`;
+}
+
+function dfRenderSeedConfig(nodeId) {
+  const data = dfNodeData[nodeId];
+  const panel = document.getElementById('df-config-panel');
+  const popupBody = document.getElementById('df-config-popup-body');
+  const popupTitle = document.getElementById('df-config-popup-title');
+  const title = document.getElementById('df-config-title');
+  if (!data || (!panel && !popupBody)) return;
+  if (title) title.textContent = 'seed';
+  if (popupTitle) popupTitle.textContent = 'Seed — workflow input';
+  const rows = ((data.seed_schema && data.seed_schema.length) ? data.seed_schema : [{ key: '', description: '' }])
+    .map(s => _dfSeedCfgRowHtml(s.key, s.description)).join('');
+  const html = `
+    <div style="display:flex;flex-direction:column;gap:0" data-node-id="${nodeId}">
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Query</div>
+        <textarea class="chat-input df-seed-cfg-query" style="min-height:80px;font-size:0.66rem;resize:vertical"
+          placeholder="What should this workflow do?">${esc(data.query || '')}</textarea>
+      </div>
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Inputs <span style="color:var(--text-muted);letter-spacing:0.06em">(seed schema)</span></div>
+        <div class="df-seed-cfg-rows">${rows}</div>
+        <button class="action-btn" style="font-size:0.56rem;padding:2px 8px;margin-top:4px" data-action="composer.seed-add-key">+ Input</button>
+        <div style="font-size:0.5rem;color:var(--text-muted);margin-top:6px;letter-spacing:0.04em">
+          Steps reference these as <code style="color:var(--accent)">seed.&lt;key&gt;</code>; they persist as the workflow's <code>context.inputs</code>.
+        </div>
+      </div>
+      <div style="padding:8px 0">
+        <button class="action-btn accent" style="font-size:0.56rem;padding:2px 10px" data-action="composer.seed-save">Save seed</button>
+      </div>
+    </div>`;
+  if (panel)     panel.innerHTML     = html;
+  if (popupBody) popupBody.innerHTML = html;
+  // Same auto-open contract as the step form.
+  if (!window._stepConfigDocked) openStepConfigPopup();
+}
+
+// Commit the seed-config surface: query + schema rows → dfNodeData, with
+// dfSeedSchema kept as the synced mirror (dfExportYaml + the DfSeedSchema
+// modal read it). Also re-syncs seed.<key> refs on steps already wired from
+// the seed so a renamed key can't strand stale inputs.
+function dfSaveSeedConfig(nodeId, root) {
+  const data = dfNodeData[nodeId];
+  if (!data || !data.is_seed || !root) return;
+  const q = root.querySelector('.df-seed-cfg-query');
+  if (q) data.query = q.value;
+  const schema = [];
+  root.querySelectorAll('.df-seed-cfg-row').forEach(row => {
+    const rawKey = (row.querySelector('.df-seed-cfg-key') || {}).value || '';
+    const desc = (row.querySelector('.df-seed-cfg-desc') || {}).value || '';
+    // Same seed-ref-safe normalization the DfSeedSchema modal applies.
+    const key = rawKey.trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (key && !schema.some(s => s.key === key)) schema.push({ key, description: desc.trim() });
+  });
+  if (!schema.length) schema.push({ key: 'query', description: '' });
+  data.seed_schema = schema;
+  data.outputs = schema.map(s => s.key);
+  dfSeedSchema = schema.map(s => ({ key: s.key, description: s.description }));
+  try {
+    const home = dfEditor.export().drawflow.Home.data;
+    const outs = (home[nodeId] && home[nodeId].outputs) || {};
+    Object.values(outs).forEach(out => (out.connections || []).forEach(c => {
+      const to = dfNodeData[parseInt(c.node)];
+      if (!to) return;
+      to.inputs = (to.inputs || []).filter(ref => !(typeof ref === 'string' && ref.startsWith('seed.')));
+      schema.forEach(s => { const ref = 'seed.' + s.key; if (!to.inputs.includes(ref)) to.inputs.push(ref); });
+    }));
+  } catch (_) {}
+  dfUpdateNodeData(nodeId, 'query', data.query);  // repaint the canvas pill
+  dfRenderSeedConfig(nodeId);
+  if (!_dfAnchorBusy) dfScheduleAnchorRefresh();  // key chips feed the anchors
+  if (window.Toast) Toast.success('Seed saved', schema.map(s => s.key).join(', '));
+}
+
+// Delegated actions: seed schema editing + the unified dblclick-to-edit.
+// Node BODIES carry data-action="composer.edit-node" (dfNodeHtml and
+// dfSeedNodeHtml alike); dblclick resolves the drawflow id from the node
+// wrapper and opens the config surface for ALL nodes, seed included.
+// Single-click nodeSelected behaviour is untouched (parity).
+(function () {
+  const rootOf = el => el.closest('[data-node-id]');
+  Actions.on('dblclick', {
+    'composer.edit-node': el => {
+      const host = el.closest('.drawflow-node');
+      if (!host) return;
+      const nodeId = parseInt(String(host.id).replace('node-', ''), 10);
+      if (isNaN(nodeId) || !dfNodeData[nodeId]) return;
+      dfRenderConfigPanel(nodeId);
+      openStepConfigPopup();  // guaranteed open, even when docked
+    }
+  });
+  Actions.click({
+    'composer.seed-add-key': el => {
+      const root = rootOf(el);
+      const rows = root && root.querySelector('.df-seed-cfg-rows');
+      if (rows) rows.insertAdjacentHTML('beforeend', _dfSeedCfgRowHtml('', ''));
+    },
+    'composer.seed-remove-key': el => {
+      const row = el.closest('.df-seed-cfg-row');
+      if (row) row.remove();
+    },
+    'composer.seed-save': el => {
+      const root = rootOf(el);
+      if (root) dfSaveSeedConfig(Number(root.dataset.nodeId), root);
+    }
+  });
+})();
+
 function dfOnConnectionCreated(conn) {
   const fromId = parseInt(conn.output_id), toId = parseInt(conn.input_id);
   const from = dfNodeData[fromId], to = dfNodeData[toId];
@@ -6146,18 +6342,26 @@ function dfAddAnchors(steps, idMap, hasDeps, extraSeedKeys) {
       terminalSteps = [steps[steps.length - 1]];
     }
   }
+  // A REAL seed node supersedes the decorative __start__ ghost — it brackets
+  // the flow itself. It never counts as a root/terminal step either (its
+  // outputs are seed keys, not deliverables).
+  const hasSeedNode = Object.keys(dfNodeData || {}).some(k => dfNodeData[k] && dfNodeData[k].is_seed);
+  rootSteps = rootSteps.filter(s => !(s && s.is_seed));
+  terminalSteps = terminalSteps.filter(s => !(s && s.is_seed));
   const deliverable = [...new Set(terminalSteps.flatMap(s => Array.isArray(s.outputs) ? s.outputs : []))];
   const keyChips = arr => (arr.length ? arr : ['—']).map(k => `<span>${esc(k)}</span>`).join('');
   try {
-    // START carries an inline edit affordance → opens the seed-schema editor.
-    const startHtml = `<div class="wf-anchor wf-anchor-start">`
-      + `<div class="wf-anchor-label">▶ START`
-      + `<span class="wf-anchor-edit" title="Edit the workflow's seed inputs" onclick="event.stopPropagation();DfSeedSchema.open()">✎</span>`
-      + `</div>`
-      + `<div class="wf-anchor-sub">seed input</div>`
-      + `<div class="wf-anchor-keys">${keyChips(seedKeys)}</div></div>`;
-    const startId = dfEditor.addNode('__start__', 0, 1, 40, 200, '__start__', {}, startHtml);
-    rootSteps.forEach(s => { const t = idMap[s && s.id]; if (t != null) { try { dfEditor.addConnection(startId, t, 'output_1', 'input_1'); } catch (_) {} } });
+    if (!hasSeedNode) {
+      // START carries an inline edit affordance → opens the seed-schema editor.
+      const startHtml = `<div class="wf-anchor wf-anchor-start">`
+        + `<div class="wf-anchor-label">▶ START`
+        + `<span class="wf-anchor-edit" title="Edit the workflow's seed inputs" onclick="event.stopPropagation();DfSeedSchema.open()">✎</span>`
+        + `</div>`
+        + `<div class="wf-anchor-sub">seed input</div>`
+        + `<div class="wf-anchor-keys">${keyChips(seedKeys)}</div></div>`;
+      const startId = dfEditor.addNode('__start__', 0, 1, 40, 200, '__start__', {}, startHtml);
+      rootSteps.forEach(s => { const t = idMap[s && s.id]; if (t != null) { try { dfEditor.addConnection(startId, t, 'output_1', 'input_1'); } catch (_) {} } });
+    }
     const endHtml = `<div class="wf-anchor wf-anchor-end"><div class="wf-anchor-label">■ END</div><div class="wf-anchor-sub">deliverable</div><div class="wf-anchor-keys">${keyChips(deliverable.length ? deliverable : ['output'])}</div></div>`;
     const endId = dfEditor.addNode('__end__', 1, 0, 980, 200, '__end__', {}, endHtml);
     terminalSteps.forEach(s => { const src = idMap[s && s.id]; if (src != null) { try { dfEditor.addConnection(src, endId, 'output_1', 'input_1'); } catch (_) {} } });
@@ -6172,6 +6376,9 @@ function dfRefreshAnchors() {
   if (!dfEditor) return;
   _dfAnchorBusy = true;
   try {
+    // An empty compose canvas always carries the editable seed node
+    // (idempotent — no-op when any node exists, so loads are untouched).
+    try { dfEnsureSeedNode(); } catch (_) {}
     const ex = dfEditor.export();
     const home = (ex && ex.drawflow && ex.drawflow.Home && ex.drawflow.Home.data) || {};
     // Drop existing anchors.
@@ -6196,7 +6403,7 @@ function dfRefreshAnchors() {
         }));
       }
       if (deps.length) hasDeps = true;
-      steps.push({ id: d.id, inputs: d.inputs || [], outputs: d.outputs || [], depends_on: deps });
+      steps.push({ id: d.id, inputs: d.inputs || [], outputs: d.outputs || [], depends_on: deps, is_seed: !!d.is_seed });
       idMap[d.id] = parseInt(nid);
     });
     const declaredKeys = (dfSeedSchema || []).map(s => s && s.key).filter(Boolean);
@@ -6225,11 +6432,16 @@ function dfExportYaml() {
 
   let yaml = `id: ${wfId}\nname: "${wfName}"\nversion: "1.0"\n`;
   if (wfDesc) yaml += `description: "${wfDesc}"\n`;
-  // Persist the START anchor's declared seed schema as context.inputs so the
-  // input contract round-trips (read back in composerLoadById).
-  if (Array.isArray(dfSeedSchema) && dfSeedSchema.length) {
+  // Persist the declared seed schema as context.inputs so the input contract
+  // round-trips (read back in composerLoadById). The editable seed node's
+  // schema wins when one is on the canvas; dfSeedSchema is its synced mirror
+  // and still covers seed-less canvases (legacy load path).
+  const seedNode = nodeIds.map(nid => dfNodeData[nid]).find(d => d && d.is_seed);
+  const seedInputs = (seedNode && Array.isArray(seedNode.seed_schema) && seedNode.seed_schema.length)
+    ? seedNode.seed_schema : dfSeedSchema;
+  if (Array.isArray(seedInputs) && seedInputs.length) {
     yaml += `\ncontext:\n  inputs:\n`;
-    dfSeedSchema.forEach(s => {
+    seedInputs.forEach(s => {
       if (!s || !s.key) return;
       yaml += `    - key: ${s.key}\n`;
       if (s.description) yaml += `      description: "${String(s.description).replace(/"/g, '\\"')}"\n`;
@@ -6240,9 +6452,14 @@ function dfExportYaml() {
   nodeIds.forEach(nid => {
     const data = dfNodeData[nid];
     if (!data) return;
+    // The seed is not an engine step — it compiled to context.inputs above,
+    // and its edges live on as the targets' seed.<key> input refs.
+    if (data.is_seed) return;
     const nodeInfo = homeData[nid];
     const deps = [];
-    if (nodeInfo.inputs) Object.values(nodeInfo.inputs).forEach(inp => (inp.connections||[]).forEach(conn => { const src = dfNodeData[parseInt(conn.node)]; if (src && !deps.includes(src.id)) deps.push(src.id); }));
+    // A seed source never becomes depends_on — the connection already
+    // serialized as seed.<key> inputs (dfOnConnectionCreated).
+    if (nodeInfo.inputs) Object.values(nodeInfo.inputs).forEach(inp => (inp.connections||[]).forEach(conn => { const src = dfNodeData[parseInt(conn.node)]; if (src && !src.is_seed && !deps.includes(src.id)) deps.push(src.id); }));
     yaml += `  - id: ${data.id}\n    name: "${data.name}"\n    role: ${data.role}\n    system_prompt: |\n`;
     data.system_prompt.split('\n').forEach(line => { yaml += `      ${line}\n`; });
     if (data.inputs.length) { yaml += `    inputs:\n`; data.inputs.forEach(i => { yaml += `      - ${i}\n`; }); }
@@ -8512,7 +8729,11 @@ async function dfRunWorkflowFromComposer() {
 // surfaces step-by-step progress in the Active Run pane below the
 // canvas. Operator stays in the Composer and watches the run unfold.
 async function dfRunWorkflowLive() {
-  if (!window.dfNodeData || Object.keys(window.dfNodeData).length === 0) {
+  // The auto-spawned seed doesn't count as a step — a canvas holding only
+  // the seed is still an empty workflow.
+  const realStepCount = Object.keys(window.dfNodeData || {})
+    .filter(k => !(window.dfNodeData[k] && window.dfNodeData[k].is_seed)).length;
+  if (realStepCount === 0) {
     if (window.Toast) Toast.warn('Empty workflow', 'Add at least one step to the canvas before running.');
     return;
   }
@@ -8537,6 +8758,15 @@ async function dfRunWorkflowLive() {
     const seedEl = document.getElementById('wf-seed');
     if (seedEl && seedEl.value) seed = JSON.parse(seedEl.value || '{}');
   } catch (_) { seed = {}; }
+  // The canvas seed node's query feeds the run payload (primary schema key);
+  // the #wf-seed textarea above stays working as the fallback/extra-keys path.
+  try {
+    const sd = Object.keys(dfNodeData || {}).map(k => dfNodeData[k]).find(d => d && d.is_seed);
+    if (sd && (sd.query || '').trim()) {
+      const primary = (sd.seed_schema && sd.seed_schema[0] && sd.seed_schema[0].key) || 'query';
+      seed[primary] = sd.query.trim();
+    }
+  } catch (_) {}
 
   const wfId = (document.getElementById('df-wf-id') || {}).value;
   const body = definition ? { definition, seed } : (wfId ? { workflow_id: wfId, seed } : null);
