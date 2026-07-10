@@ -33,6 +33,7 @@ def test_demo_chat_rating_toolbar(signed_in_page):
     ChatRating API, rate it good then bad, watch the toolbar paint state."""
     page = signed_in_page
     _settle(page)
+    page.evaluate("switchTab('chat')")  # chat + #messages moved to #tab-chat
 
     page.evaluate(
         """() => {

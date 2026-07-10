@@ -328,6 +328,7 @@ def test_composer_chat_parses_agent_endpoint_response(
     parser must read both. Before PR #81 it only knew the OpenAI shape
     and rendered every agent reply as literal '(empty response)'."""
     page = signed_in_page
+    page.evaluate("switchTab('chat')")  # chat dock (#prompt/#send-btn/#messages) moved to #tab-chat
     # Wire the chat dock to an agent.
     page.evaluate("() => { window._chatAgent = 'xql-snippet-curator'; }")
     page.evaluate(

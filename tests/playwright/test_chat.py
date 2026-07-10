@@ -132,6 +132,7 @@ def test_agent_selector_lists_ootb_agents(signed_in_page):
     """The agent picker in the chat dock must list the 3 OOTB XQL agents
     so an operator can scope chat to xsiam-analyst directly."""
     page = signed_in_page
+    page.evaluate("switchTab('chat')")  # chat moved to #tab-chat; ChatView.init() populates #agent-select
     page.wait_for_function(
         """() => {
             const sel = document.getElementById('agent-select');
