@@ -6391,6 +6391,198 @@ function dfEnsureSeedNode() {
   dfAddSeedNode(40, 200);
 }
 
+// ── Loop safety rails (kind:ralph / kind:loop) ──────────────────────
+// "Safety rails" section for composite loop nodes: the ralph halt budget
+// (RalphHalt caps + halt_file + goal_gate) or the loop termination fields
+// (max_iterations + until.gate + on_max_iterations). Values are read
+// straight from the pattern-preset blocks already sitting in dfNodeData
+// (ralph.halt / until), and edits land back in the same nested objects so
+// the composite serializer (_dfCleanStep) emits them unchanged.
+
+// Lightweight client-side mirror of the evaluate_gate grammar in
+// api/services/engine_executors/loop.py: dotted refs, bare names and
+// literals combined with ==, !=, >, >=, <, <=, in, not in, and/or/not,
+// unary +/- and list/tuple/set brackets. No calls, subscripts, or
+// arithmetic — same whitelist the engine's AST walk enforces. Returns
+// { ok } or { ok:false, hint } for the inline hint.
+function dfValidateGateExpr(expr, required) {
+  const src = String(expr || '').trim();
+  if (!src) return required ? { ok: false, hint: 'kind:loop requires an until gate expression' } : { ok: true };
+  const re = /\s*(?:(==|!=|>=|<=|>|<)|([()\[\]{},])|([+\-])|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\d+(?:\.\d+)?)|([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*))/y;
+  const toks = [];
+  let i = 0;
+  while (i < src.length) {
+    re.lastIndex = i;
+    const m = re.exec(src);
+    if (!m) {
+      const rest = src.slice(i).trim();
+      if (!rest) break;
+      return { ok: false, hint: `unexpected character "${rest[0]}" — only comparisons, and/or/not, in, literals and dotted refs` };
+    }
+    i = re.lastIndex;
+    if (m[1]) toks.push({ t: 'cmp', v: m[1] });
+    else if (m[2]) toks.push({ t: 'punct', v: m[2] });
+    else if (m[3]) toks.push({ t: 'sign', v: m[3] });
+    else if (m[4] || m[5]) toks.push({ t: 'val', v: m[4] || m[5] });
+    else {
+      const w = m[6];
+      toks.push(w === 'and' || w === 'or' || w === 'in' || w === 'not' ? { t: w, v: w } : { t: 'val', v: w });
+    }
+  }
+  const OPEN = { '(': ')', '[': ']', '{': '}' };
+  const stack = [];
+  let expectValue = true;
+  for (let k = 0; k < toks.length; k++) {
+    const tok = toks[k];
+    if (expectValue) {
+      if (tok.t === 'val') { expectValue = false; continue; }
+      if (tok.t === 'not' || tok.t === 'sign') continue;
+      if (tok.t === 'punct' && OPEN[tok.v]) { stack.push(OPEN[tok.v]); continue; }
+      if (tok.t === 'punct' && (tok.v === ')' || tok.v === ']' || tok.v === '}')) {
+        // empty collection literal, e.g. [] — only directly after its opener
+        const prev = toks[k - 1];
+        if (stack.length && stack[stack.length - 1] === tok.v && prev && prev.t === 'punct' && OPEN[prev.v] === tok.v) {
+          stack.pop(); expectValue = false; continue;
+        }
+        return { ok: false, hint: 'unbalanced brackets' };
+      }
+      return { ok: false, hint: `expected a value before "${tok.v}"` };
+    }
+    // operator position (a value just completed)
+    if (tok.t === 'cmp' || tok.t === 'and' || tok.t === 'or' || tok.t === 'in') { expectValue = true; continue; }
+    if (tok.t === 'not') {
+      if (toks[k + 1] && toks[k + 1].t === 'in') { k++; expectValue = true; continue; }
+      return { ok: false, hint: '"not" after a value only works as "not in"' };
+    }
+    if (tok.t === 'sign') return { ok: false, hint: 'arithmetic operators are not allowed in a gate' };
+    if (tok.t === 'punct') {
+      if (tok.v === ',') {
+        if (!stack.length) return { ok: false, hint: 'comma outside a list/tuple' };
+        expectValue = true; continue;
+      }
+      if (tok.v === '(') return { ok: false, hint: 'function calls are not allowed in a gate' };
+      if (tok.v === '[') return { ok: false, hint: 'subscripts are not allowed in a gate' };
+      if (tok.v === '{') return { ok: false, hint: 'expected an operator before "{"' };
+      if (stack.pop() !== tok.v) return { ok: false, hint: 'unbalanced brackets' };
+      continue;
+    }
+    return { ok: false, hint: `expected an operator before "${tok.v}"` };
+  }
+  if (expectValue) return { ok: false, hint: 'expression is incomplete' };
+  if (stack.length) return { ok: false, hint: 'unbalanced brackets' };
+  return { ok: true };
+}
+
+// Section HTML for dfRenderConfigPanel — '' for every non-loop kind so
+// the existing panel is untouched. Placeholders show the engine-model
+// defaults (RalphHalt / AgentStep) when a preset value is absent.
+function dfSafetyRailsHtml(nodeId, data) {
+  if (data.kind !== 'ralph' && data.kind !== 'loop') return '';
+  const num = (rail, label, val, ph) => `
+    <div><label class="df-config-label">${label}</label>
+      <input type="number" min="1" value="${val != null ? val : ''}" class="chat-input" style="font-size:0.66rem;padding:4px 8px" placeholder="${ph}"
+        data-action="composer.ralph-rail-edit" data-rail="${rail}" /></div>`;
+  const gate = (rail, label, val, required, note) => {
+    const chk = dfValidateGateExpr(val, required);
+    return `
+    <div class="df-rail-gate" style="margin-top:6px">
+      <label class="df-config-label">${label}</label>
+      <input type="text" value="${esc(val || '')}" class="chat-input" style="font-size:0.66rem;padding:4px 8px" placeholder="verify.approved == True" spellcheck="false"
+        data-action="composer.ralph-rail-edit" data-rail="${rail}" />
+      <div class="df-rail-gate-hint" style="font-size:0.52rem;color:var(--red);margin-top:3px${chk.ok ? ';display:none' : ''}">${chk.ok ? '' : '⚠ ' + esc(chk.hint)}</div>
+      <div style="font-size:0.5rem;color:var(--text-muted);margin-top:3px;letter-spacing:0.04em">${note}</div>
+    </div>`;
+  };
+  let body;
+  if (data.kind === 'ralph') {
+    const halt = (data.ralph && data.ralph.halt) || {};
+    body = `
+        <div><label class="df-config-label">Halt file (host path)</label>
+          <input type="text" value="${esc(halt.halt_file || '')}" class="chat-input" style="font-size:0.66rem;padding:4px 8px" placeholder="data/ralph/HALT"
+            data-action="composer.ralph-rail-edit" data-rail="halt_file" /></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+          ${num('max_iterations', 'Max iterations', halt.max_iterations, '50')}
+          ${num('max_wall_seconds', 'Max wall seconds', halt.max_wall_seconds, '28800')}
+          ${num('max_total_tokens', 'Max total tokens', halt.max_total_tokens, '5000000')}
+          ${num('max_consecutive_failures', 'Max consec. failures', halt.max_consecutive_failures, '3')}
+        </div>
+        ${gate('goal_gate', 'Goal gate', halt.goal_gate || '', false, 'Optional — empty runs to the hard caps. Dotted refs + ==, !=, &lt;, &gt;, in, and/or/not, e.g. <code>verify.approved == True</code>.')}
+        <div style="font-size:0.5rem;color:var(--text-muted);margin-top:6px;letter-spacing:0.04em;line-height:1.5">
+          The halt file stops the loop at the next <b>iteration boundary</b> — but only once the file is
+          created on the <b>host</b> filesystem; nothing in this UI creates it. The live in-UI brake is
+          ◼ Stop (<code>POST /api/workflows/runs/{run_id}/cancel</code>), which halts after the current step.
+        </div>`;
+  } else {
+    const until = data.until || {};
+    body = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          ${num('max_iterations', 'Max iterations', data.max_iterations, '5')}
+          <div><label class="df-config-label">On max iterations</label>
+            <select class="model-select" style="font-size:0.66rem;padding:3px 6px;width:100%" data-action="composer.ralph-rail-edit" data-rail="on_max_iterations">
+              <option value="emit_best"${(until.on_max_iterations || 'emit_best') === 'emit_best' ? ' selected' : ''}>emit_best</option>
+              <option value="fail"${until.on_max_iterations === 'fail' ? ' selected' : ''}>fail</option>
+            </select></div>
+        </div>
+        ${gate('gate', 'Until gate', until.gate || '', true, 'The loop repeats until this is true. Dotted refs + ==, !=, &lt;, &gt;, in, and/or/not, e.g. <code>critic.approved == True</code>.')}
+        <div style="font-size:0.5rem;color:var(--text-muted);margin-top:6px;letter-spacing:0.04em;line-height:1.5">
+          These rails fire at the next <b>iteration boundary</b>. The live in-UI brake is ◼ Stop
+          (<code>POST /api/workflows/runs/{run_id}/cancel</code>), which halts after the current step.
+        </div>`;
+  }
+  return `
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.56rem;color:var(--amber,#e0b341);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Safety rails</div>${body}
+      </div>`;
+}
+
+// Rail edits write into the nested ralph.halt / until blocks (creating
+// them when a hand-built node lacks the preset), then route through
+// dfUpdateNodeData for the usual canvas repaint + commit re-render.
+// Gate fields additionally repaint their inline hint on every keystroke.
+function dfRalphRailEdit(el, e) {
+  const root = el.closest('[data-node-id]');
+  const nodeId = root ? Number(root.dataset.nodeId) : NaN;
+  const data = dfNodeData[nodeId];
+  if (!data) return;
+  const rail = el.dataset.rail;
+  const opts = e && e.type === 'input' ? { live: true } : { commit: true };
+  if (rail === 'goal_gate' || rail === 'gate') {
+    const chk = dfValidateGateExpr(el.value, rail === 'gate');
+    const box = el.closest('.df-rail-gate');
+    const hint = box && box.querySelector('.df-rail-gate-hint');
+    if (hint) {
+      hint.style.display = chk.ok ? 'none' : 'block';
+      hint.textContent = chk.ok ? '' : '⚠ ' + chk.hint;
+    }
+  }
+  if (data.kind === 'ralph') {
+    data.ralph = data.ralph || {};
+    const halt = data.ralph.halt = data.ralph.halt || {};
+    if (rail === 'halt_file' || rail === 'goal_gate') {
+      const v = el.value.trim();
+      if (v) halt[rail] = v; else delete halt[rail];  // both Optional on RalphHalt
+    } else {
+      const n = parseInt(el.value, 10);
+      if (!Number.isFinite(n) || n < 1) return;  // keep the prior cap mid-edit
+      halt[rail] = n;
+    }
+    dfUpdateNodeData(nodeId, 'ralph', data.ralph, opts);
+  } else if (data.kind === 'loop') {
+    if (rail === 'max_iterations') {
+      const n = parseInt(el.value, 10);
+      if (!Number.isFinite(n) || n < 1) return;
+      dfUpdateNodeData(nodeId, 'max_iterations', n, opts);
+    } else {
+      const until = data.until = data.until || { type: 'gate', gate: '' };
+      if (rail === 'gate') until.gate = el.value.trim();
+      else if (rail === 'on_max_iterations') until.on_max_iterations = el.value;
+      dfUpdateNodeData(nodeId, 'until', until, opts);
+    }
+  }
+}
+Actions.input({ 'composer.ralph-rail-edit': dfRalphRailEdit });
+Actions.change({ 'composer.ralph-rail-edit': dfRalphRailEdit });
+
 function dfRenderConfigPanel(nodeId) {
   const data = dfNodeData[nodeId];
   // Two target surfaces share one HTML body: the popup (primary, auto-
@@ -6441,6 +6633,7 @@ function dfRenderConfigPanel(nodeId) {
         </div>
         ${data._from_agent ? `<div style="margin-top:6px;font-size:0.56rem;color:var(--text-muted);letter-spacing:0.04em">forked from agent <code style="color:var(--accent)">${esc(data._from_agent)}</code></div>` : ''}
       </div>
+      ${dfSafetyRailsHtml(nodeId, data)}
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Prompt</div>
         <textarea class="chat-input" style="min-height:80px;font-size:0.66rem;resize:vertical"
