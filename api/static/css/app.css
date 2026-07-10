@@ -6427,11 +6427,23 @@ body.bs-show-hint .bs-dispatch:hover::after {
       "shell  shell"
       "nav    main"
       "footer footer";
-    align-items: start;
+    /* App frame: header + footer are auto rows, the nav|main row fills the rest.
+       The frame is exactly the viewport; the MAIN region scrolls internally
+       (page-aware) instead of the whole document. */
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100vh;
+    overflow: hidden;
+    align-items: stretch;
     column-gap: clamp(18px, 2vw, 30px);
-    padding: 0 clamp(16px, 2.5vw, 36px) 0 0;
+    /* symmetric gutter on the body so header, rail, main AND footer share one
+       left edge (the gutter used to live as margin-left on the rail only, which
+       left the full-width header/footer flush at x=0 — a frame misalignment). */
+    padding: 0 clamp(16px, 2.5vw, 36px);
   }
-  body > .shell        { grid-area: shell; max-width: none; margin: 0; padding-left: 0; padding-right: 0; }
+  body > .shell        { grid-area: shell; max-width: none; margin: 0; padding-left: 0; padding-right: 0; align-self: start; }
+  /* the scroll lives in main (and the rail if it's tall), not the page frame */
+  body > #main-content { overflow-y: auto; overflow-x: hidden; }
+  body > .tab-nav      { overflow-y: auto; }
   body > .tab-nav      { grid-area: nav; }
   body > #main-content { grid-area: main; min-width: 0; }
   body > .footer       { grid-area: footer; }
@@ -6445,7 +6457,7 @@ body.bs-show-hint .bs-dispatch:hover::after {
     flex-wrap: nowrap;
     align-items: stretch;
     gap: 2px;
-    margin: 0 0 0 clamp(16px, 2.5vw, 36px);
+    margin: 0;
     padding: 12px 8px 14px 8px;
     border-bottom: none;
     border-right: 1px solid var(--border);
