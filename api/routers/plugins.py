@@ -53,10 +53,21 @@ plugin_service = _build_service()
 plugin_service.scan_plugins()
 
 
+def _with_layer(plugin: dict) -> dict:
+    """Annotate the physical layer (LB0-U3 provenance seam).
+
+    ``layer`` mirrors the existing ``origin`` field (system|user) — the
+    Library shell's uniform provenance vocabulary reads ``layer`` while every
+    pre-existing consumer of ``origin`` keeps working (only-add)."""
+    rec = dict(plugin)
+    rec["layer"] = rec.get("origin")
+    return rec
+
+
 @router.get("", dependencies=[Depends(require_master_key)])
 async def list_plugins():
-    """List all discovered plugins (each carries origin: system|user)."""
-    return plugin_service.list_plugins()
+    """List all discovered plugins (each carries origin + layer: system|user)."""
+    return [_with_layer(p) for p in plugin_service.list_plugins()]
 
 
 @router.post("/reload", dependencies=[Depends(require_master_key)])
@@ -92,7 +103,7 @@ async def install_plugin(plugin: UploadFile = File(...)):
     finally:
         if tmp and tmp.exists():
             tmp.unlink()
-    return {"installed": installed["id"], "plugin": installed}
+    return {"installed": installed["id"], "plugin": _with_layer(installed)}
 
 
 @router.get("/{plugin_id}", dependencies=[Depends(require_master_key)])
@@ -101,7 +112,7 @@ async def get_plugin(plugin_id: str):
     plugin = plugin_service.get_plugin(plugin_id)
     if plugin is None:
         raise HTTPException(status_code=404, detail="Plugin not found")
-    return plugin
+    return _with_layer(plugin)
 
 
 @router.delete("/{plugin_id}", dependencies=[Depends(require_master_key)])

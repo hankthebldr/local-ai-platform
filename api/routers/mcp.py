@@ -162,8 +162,19 @@ async def install_mcp(catalog_id: str, req: InstallMcpReq) -> Dict[str, Any]:
 
 @router.get("/servers")
 async def list_servers():
-    """List all registered MCP servers (secrets masked)."""
-    return get_mcp_service().list_servers()
+    """List all registered MCP servers (secrets masked).
+
+    Each record carries ``provenance`` (LB0-U3), derived from existing state:
+    ids present in the shipped local catalog are 'oob' (catalog-installed),
+    everything else is 'user' (manually registered). Read-only annotation —
+    the local catalog file only, never the remote merge (no egress on GET)."""
+    catalog_ids = {s.get("id") for s in (_load_catalog().get("servers") or [])}
+    out = []
+    for s in get_mcp_service().list_servers():
+        rec = dict(s)
+        rec["provenance"] = "oob" if rec.get("id") in catalog_ids else "user"
+        out.append(rec)
+    return out
 
 
 @router.post("/servers")

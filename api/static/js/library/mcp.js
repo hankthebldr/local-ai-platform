@@ -51,7 +51,8 @@ export const MCPPanel = (function () {
         title: s.name || s.id,
         meta: `${s.transport} · ${s.enabled ? 'enabled' : 'disabled'} · ${s.tools_count || 0} tools`,
         group: '',                            // flat list, as before
-        provenance: s.provenance,             // annotated by LB0-U3
+        provenance: s.provenance,             // 'oob' (catalog) | 'user' (manual) — LB0-U3
+        blocks: ['tools'],                    // MCP servers feed the tools building block
         tags: s.tags || [],
         icon: 'mcp',                          // canonical mcp glyph, purple tone
         dot: { cls: `mcp-row-dot ${s.tools_count > 0 ? 'up' : 'unknown'}`,

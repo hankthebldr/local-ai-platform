@@ -1,8 +1,8 @@
 // library/prompts.js — Prompts library panel (roles + templates), the FIRST
 // LibraryShell adapter (LB0-U1). Full CRUD + live render preview over
 // /api/prompts. Migration is endpoint-and-action-identical: every endpoint
-// call, action id (prompts.select/edit/cancel/save/remove/render/new/refresh/
-// create-close/create-submit), container id (#prompts-list/#prompts-detail/
+// call, action id (prompts.select/edit/cancel/save/remove/promote/render/new/
+// refresh/create-close/create-submit), container id (#prompts-list/#prompts-detail/
 // #prompts-detail-label/#prompts-count) and selector from the pre-shell panel
 // stays alive; the shell adds the uniform sidebar/subnav/actions grammar on
 // top (`.lib-row` added ALONGSIDE the retained `.mcp-row`).
@@ -59,7 +59,8 @@ export const PromptsLibrary = (function () {
             title: p.name || p.id,
             meta: `${kind} · ${vars}`,
             group: label,
-            provenance: p.provenance,          // rendered once LB0-U3 annotates it
+            provenance: p.provenance,          // 'oob'|'user' — layer-derived (LB0-U3)
+            blocks: ['context'],               // prompts feed the context building block
             tags: p.tags || [],
             dot: { cls: `prompts-kind-dot ${kind}`, title: kind },
           });
@@ -79,9 +80,15 @@ export const PromptsLibrary = (function () {
           { action: 'prompts.cancel', label: 'Cancel', verb: 'edit' },
         ];
       }
+      const p = _current();
+      const isOob = !!p && p.provenance === 'oob';
       return [
         { action: 'prompts.render', label: '▶ Render preview', verb: 'test', accent: true },
         { action: 'prompts.edit', label: 'Edit', verb: 'edit' },
+        // Physical promote — copies the shipped file into the user layer.
+        // Disabled (never hidden) on user-layer items so the verb row is stable.
+        { action: 'prompts.promote', label: 'Promote', verb: 'promote',
+          enabled: isOob, reason: isOob ? undefined : 'already user-layer' },
         { action: 'prompts.remove', label: 'Delete', verb: 'delete' },
       ];
     },
@@ -167,9 +174,33 @@ export const PromptsLibrary = (function () {
       const r = await Net.call(`/api/prompts/${encodeURIComponent(p.kind)}/${encodeURIComponent(p.id)}`, {
         init: { method: 'DELETE', headers: _headers() }
       });
-      if (!r.ok) { Toast.show(`Delete failed (${r.status})`, 'error'); return; }
+      if (!r.ok) {
+        // 403 on pure-oob carries an explanatory detail — surface it.
+        const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+        Toast.show(`Delete failed: ${detail}`, 'error'); return;
+      }
       LibraryShell.select('prompt', null);
       Toast.show('Prompt deleted', 'success');
+      await load();
+    } catch (e) { Toast.show(e.message, 'error'); }
+  }
+
+  async function promote(key) {
+    // Physical promote (LB0-U3): POST copies the oob file into the user
+    // layer server-side. Master-key gated; retries:0 — a retry after a
+    // slow success would surface a spurious 409.
+    const p = _current();
+    if (!p) return;
+    try {
+      const r = await Net.call(`/api/prompts/${encodeURIComponent(p.kind)}/${encodeURIComponent(p.id)}/promote`, {
+        retries: 0,
+        init: { method: 'POST', headers: _headers() }
+      });
+      if (!r.ok) {
+        const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+        Toast.show(`Promote failed: ${detail}`, 'error'); return;
+      }
+      Toast.show('Promoted to user layer', 'success');
       await load();
     } catch (e) { Toast.show(e.message, 'error'); }
   }
@@ -244,6 +275,7 @@ export const PromptsLibrary = (function () {
     'prompts.cancel': () => cancel(),
     'prompts.save':   el => save(el.dataset.key),
     'prompts.remove': el => remove(el.dataset.key),
+    'prompts.promote': el => promote(el.dataset.key),
     'prompts.render': el => renderPreview(el.dataset.key),
     'prompts.new':    () => showCreate(),
     'prompts.refresh': () => refresh(),
@@ -251,6 +283,6 @@ export const PromptsLibrary = (function () {
     'prompts.create-submit': () => submitCreate(),
   });
 
-  return { load, refresh, render, select, edit, cancel, save, remove,
+  return { load, refresh, render, select, edit, cancel, save, remove, promote,
            renderPreview, showCreate, closeCreate, submitCreate, adapter };
 })();

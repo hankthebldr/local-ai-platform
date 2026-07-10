@@ -133,6 +133,8 @@ data/config/api_keys.yaml
 data/config/first-run-key.txt
 # Discovery source config — may hold a GitHub token (raw value, mode 0600)
 data/config/discovery_sources.json
+# User-layer prompts (LB0-U3) — runtime-mutable, never commit
+data/prompts/
 # User-pinned memories and session summaries
 data/memory/sessions/
 data/memory/facts.yaml

@@ -132,7 +132,8 @@ class DmgDeployment:
 
     def ensure_user_storage(self) -> None:
         """Create user_storage_root subdirs with chmod 0700 if missing."""
-        for sub in ("plugins", "mcp/binaries", "cache", "workflows", "config"):
+        for sub in ("plugins", "mcp/binaries", "cache", "workflows", "config",
+                    "prompts/roles", "prompts/templates", "tasks"):
             p = self.user_storage_root / sub
             p.mkdir(parents=True, exist_ok=True, mode=0o700)
             try:

@@ -1,0 +1,16 @@
+{
+  "schema": "enclave.oob_manifest.v1",
+  "description": "Hand-curated shipped-seed ids for Library kinds WITHOUT a physical oob/user layer (LB0-U3). Ships in the COPY'd tree (api/config/) so it updates with the code on image upgrade. Agents listed here render provenance 'oob' in the Library; any agents/<id>.yaml not listed is operator-created ('user'). tests/test_library_provenance.py asserts every id resolves to a repo agents/<id>.yaml whose 'id' field matches.",
+  "agents": [
+    "agent-smith",
+    "mcp-curator",
+    "project-planner",
+    "skill-author",
+    "workflow-architect",
+    "xdm-schema-navigator",
+    "xql-data-model-engineer",
+    "xql-rules-reviewer",
+    "xql-snippet-curator",
+    "xsiam-analyst"
+  ]
+}
