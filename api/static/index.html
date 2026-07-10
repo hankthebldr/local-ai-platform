@@ -464,6 +464,13 @@
         <button class="action-btn" onclick="dfImportYaml()">Import YAML</button>
         <button class="action-btn" onclick="dfImportBundle()">Import Bundle</button>
         <button class="action-btn" onclick="dfAutoLayout()">Auto-Layout</button>
+        <!-- BU8b: wrap the whole canvas into an autonomous ralph loop —
+             steps become the loop body, the halt budgets open in the
+             Safety rails config. Wired via the Actions module
+             (data-action), no inline handler. Schedule (recurring cron)
+             is cut from v1: no host-side scheduler backend exists. -->
+        <button class="action-btn" data-action="composer.loop-wrap"
+                title="Wrap the current canvas into an autonomous Ralph loop — the steps become the loop body; halt budgets open in Safety rails">↻ Loop-wrap</button>
         <button class="action-btn cyan" onclick="dfExportYaml()">Export YAML</button>
         <button class="action-btn" onclick="composerExportBundle()" title="Export this workflow + linked agents as a portable bundle">Export Bundle</button>
         <button class="action-btn pull" onclick="dfSave()">Save</button>

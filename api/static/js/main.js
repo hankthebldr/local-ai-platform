@@ -6583,6 +6583,113 @@ function dfRalphRailEdit(el, e) {
 Actions.input({ 'composer.ralph-rail-edit': dfRalphRailEdit });
 Actions.change({ 'composer.ralph-rail-edit': dfRalphRailEdit });
 
+// ── BU8b: Loop wrap ─────────────────────────────────────────────────
+// Toolbar affordance: wrap the CURRENT canvas workflow into a kind:ralph
+// autonomous loop. Every real top-level step (sub-DAG proxies fold into
+// their composite parent via _dfCleanStep, never duplicated) becomes a
+// body step of ONE new ralph parent — the same nested-body semantics the
+// BU4 ralph scaffold spawns — pre-filled with the preset journal_path +
+// the active budget-preset halt caps, then the parent's Safety rails
+// config (BU8a) opens so the operator immediately sees the budgets.
+// goal_gate is deliberately NOT pre-filled: the wrapped body has no
+// verify step to reference, so the operator declares one in the rails.
+// (Schedule/recurring-cron is CUT from v1 — no host-side scheduler
+// backend exists; see the composer revamp design spec.)
+async function dfLoopWrapWorkflow() {
+  if (!dfEditor) return;
+  let home = {};
+  try { home = dfEditor.export().drawflow.Home.data || {}; } catch (_) { return; }
+  // Real steps only — the seed survives the wrap (it feeds the loop), and
+  // proxies serialize inside their composite parent, never as body steps.
+  const topIds = Object.keys(dfNodeData).map(Number).filter(nid => {
+    const d = dfNodeData[nid];
+    return d && !d.is_seed && d._sub_of == null;
+  });
+  if (!topIds.length) {
+    Toast.warn('Add steps first', 'Loop wrap needs at least one step on the canvas.');
+    return;
+  }
+  const ok = await Confirm.ask({
+    title: 'Wrap in Ralph loop',
+    body: `Restructure the canvas: the current ${topIds.length} step${topIds.length === 1 ? '' : 's'} become the body of one autonomous ralph loop, repeated until a halt rail fires. Wiring is preserved inside the body; the loop's budgets open for review.`,
+    okLabel: 'Wrap'
+  });
+  if (!ok) return;
+  const tpl = dfPatternTemplates.find(t => t.key === 'ralph_loop');
+  if (!tpl) return;
+  // Body steps = the cleaned engine-schema dicts (built BEFORE any node
+  // removal mutates dfNodeData), with the canvas edges preserved as
+  // body-level depends_on — the ralph executor runs the body in list
+  // order; the deps keep the wiring readable and re-drawable below.
+  const body = topIds.map(nid => {
+    const step = _dfCleanStep(dfNodeData[nid]);
+    const deps = [];
+    const info = home[nid];
+    if (info && info.inputs) Object.values(info.inputs).forEach(inp => (inp.connections || []).forEach(conn => {
+      let src = dfNodeData[parseInt(conn.node)];
+      if (src && src._sub_of != null) src = dfNodeData[src._sub_of];
+      if (src && !src.is_seed && src.id !== step.id && !deps.includes(src.id)) deps.push(src.id);
+    }));
+    delete step.depends_on;                       // canvas edges are the truth
+    if (deps.length) step.depends_on = deps;
+    return step;
+  });
+  // Parent contract (frozen RalphSpec semantics): outputs come from the
+  // body's terminal steps, so every declared output is produced by SOME
+  // body step — the kind:ralph output invariant, by construction.
+  const depended = new Set(body.flatMap(s => s.depends_on || []));
+  const terminals = body.filter(s => !depended.has(s.id));
+  let outputs = [...new Set(terminals.flatMap(s => s.outputs || []))];
+  if (!outputs.length) outputs = [...new Set(body.flatMap(s => s.outputs || []))];
+  const caps = (tpl.budget_presets && (tpl.budget_presets[dfRalphBudgetPreset] || tpl.budget_presets.standard)) || {};
+  const presetRalph = (tpl.steps && tpl.steps[0] && tpl.steps[0].ralph) || {};
+  const parent = {
+    id: 'ralph_wrap_' + (++dfNextId),
+    name: 'Ralph Loop',
+    kind: 'ralph',
+    inputs: [],   // the seed edge below re-pushes seed.* refs (dfOnConnectionCreated)
+    outputs,
+    ralph: {
+      journal_path: presetRalph.journal_path || 'data/ralph/composer-journal.jsonl',
+      halt: Object.assign({}, caps)
+    },
+    body
+  };
+  // Remove every wrapped node — their data now lives nested in parent.body.
+  // Sub-DAG proxies go too (their parent's clean step already carries the
+  // nested copy); only the seed pill stays on the canvas.
+  Object.keys(dfNodeData).map(Number).forEach(nid => {
+    const d = dfNodeData[nid];
+    if (d && !d.is_seed) { try { dfEditor.removeNodeId('node-' + nid); } catch (_) {} }
+  });
+  // Spawn parent + body proxies with the scaffold's linkage: the proxies'
+  // data objects ARE parent.body entries, so leaf edits serialize.
+  const parentNid = dfAddPatternNode(_dfDecoratePatternNodeData(parent, tpl), 260, 160);
+  dfAutoChain(parentNid);                         // seed (the only tail left) → parent
+  const nidByStep = {};
+  parent.body.forEach((c, i) => {
+    nidByStep[c.id] = dfAddPatternNode(_dfDecoratePatternNodeData(c, tpl, parentNid, 'body'), 520 + i * 240, 340);
+  });
+  // Re-draw the original wiring inside the body: parent → root steps,
+  // then each preserved depends_on edge between siblings.
+  parent.body.forEach(c => {
+    const deps = c.depends_on || [];
+    if (!deps.length) {
+      try { dfEditor.addConnection(parentNid, nidByStep[c.id], 'output_1', 'input_1'); } catch (_) {}
+      return;
+    }
+    deps.forEach(d => {
+      if (nidByStep[d] != null) { try { dfEditor.addConnection(nidByStep[d], nidByStep[c.id], 'output_1', 'input_1'); } catch (_) {} }
+    });
+  });
+  dfSelectedNodeId = parentNid;
+  dfRenderConfigPanel(parentNid);                 // renders the BU8a Safety rails section
+  openStepConfigPopup();                          // guaranteed open, even when docked
+  if (!_dfAnchorBusy) dfScheduleAnchorRefresh();
+  Toast.success('Wrapped in Ralph loop', `${body.length} step${body.length === 1 ? '' : 's'} → loop body · budgets in Safety rails`);
+}
+Actions.click({ 'composer.loop-wrap': () => { dfLoopWrapWorkflow(); } });
+
 function dfRenderConfigPanel(nodeId) {
   const data = dfNodeData[nodeId];
   // Two target surfaces share one HTML body: the popup (primary, auto-
