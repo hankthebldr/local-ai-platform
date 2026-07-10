@@ -5102,6 +5102,51 @@ button.ws-signal-chip { cursor: pointer; transition: border-color 0.15s, backgro
 .ws-signal-chip.sig-issue       { color: var(--amber); border-color: var(--amber-dim); }
 .ws-signal-chip.sig-issue:hover { background: var(--warn-ghost); }
 
+/* BU8c — feasibility signal band (composer toolbar). data-state drives
+   the dot + text color, reusing the run-signal palette: green feasible /
+   red feasibility_issues / issue (amber) deadlock-or-all-deferred /
+   unknown + unsaved (muted). "checking" pulses while the preview loads. */
+.composer-signal-band {
+  display: flex; align-items: center; gap: 8px;
+  max-width: max-content;
+  margin-top: 6px; padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--mono); font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.signal-band-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+.signal-band-refresh {
+  font-family: var(--mono); font-size: 0.54rem;
+  letter-spacing: 0.04em;
+  padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.signal-band-refresh:hover { border-color: var(--cyan); color: var(--cyan); }
+.composer-signal-band[data-state="green"]                   { border-color: var(--success-dim); }
+.composer-signal-band[data-state="green"] .signal-band-dot  { background: var(--success); }
+.composer-signal-band[data-state="green"] .signal-band-text { color: var(--success); }
+.composer-signal-band[data-state="red"]                     { border-color: var(--danger-dim); }
+.composer-signal-band[data-state="red"] .signal-band-dot    { background: var(--danger); }
+.composer-signal-band[data-state="red"] .signal-band-text   { color: var(--danger); }
+.composer-signal-band[data-state="issue"]                   { border-color: var(--amber-dim); }
+.composer-signal-band[data-state="issue"] .signal-band-dot  { background: var(--amber); }
+.composer-signal-band[data-state="issue"] .signal-band-text { color: var(--amber); }
+.composer-signal-band[data-state="checking"] .signal-band-dot {
+  background: var(--cyan);
+  animation: dfSegPulse 0.9s ease-in-out infinite;
+}
+/* unknown + unsaved stay on the muted defaults above — deliberately
+   quieter than green so a missing-sizes verdict never reads as healthy. */
+
 /* Zombie banner — pinned above the step strip when a "running"
    run has shipped no progress for > 10 min. */
 .runs-zombie-banner {

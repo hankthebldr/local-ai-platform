@@ -483,6 +483,20 @@
                 title="Stop the active run (the engine halts at the next step boundary; the in-flight step finishes first)"
                 style="border-color:var(--red,#ff5252);color:var(--red,#ff5252)" hidden>◼ Stop</button>
       </div>
+      <!-- BU8c: feasibility signal band — paints the schedule-preview
+           verdict for the SAVED copy of this workflow: green (feasible),
+           red (feasibility_issues), issue (deadlock / all-deferred notes),
+           unknown (run steps without est_size_gb — the endpoint cannot
+           tell all-sizes-absent from healthy, so we never fake green).
+           Muted "save to check feasibility" until a save lands. Refresh
+           is wired via the Actions module (data-action), no inline
+           handler. -->
+      <div class="composer-signal-band" id="composer-signal-band" data-state="unsaved">
+        <span class="signal-band-dot" aria-hidden="true"></span>
+        <span class="signal-band-text" id="composer-signal-text">save to check feasibility</span>
+        <button type="button" class="signal-band-refresh" data-action="composer.schedule-preview-refresh"
+                title="Re-run the engine schedule preview against the saved copy of this workflow">&#10227; check</button>
+      </div>
     </div>
     </details>
 

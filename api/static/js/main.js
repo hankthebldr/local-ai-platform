@@ -6690,6 +6690,77 @@ async function dfLoopWrapWorkflow() {
 }
 Actions.click({ 'composer.loop-wrap': () => { dfLoopWrapWorkflow(); } });
 
+/* ── BU8c: feasibility signal band ──────────────────────────────────
+   Paints #composer-signal-band from GET /api/workflows/{id}/schedule-preview:
+     green   — no feasibility_issues, no blocking notes
+     red     — feasibility_issues present (steps that can't fit the arch)
+     issue   — preview notes report deadlock / every-step-deferred
+     unknown — computed LOCALLY: some run step in dfNodeData has no
+               est_size_gb. The scheduler skips size-less steps, so a
+               clean payload only earns green when sizes are declared —
+               never fake green.
+   Refreshed on demand (composer.schedule-preview-refresh) and after a
+   successful dfSave(). The preview reads the SAVED yaml, so without a
+   workflow id the band stays muted ("save to check feasibility"). */
+function dfSignalBandPaint(state, text, title) {
+  const band  = document.getElementById('composer-signal-band');
+  const label = document.getElementById('composer-signal-text');
+  if (!band || !label) return;
+  band.dataset.state = state;
+  label.textContent = text;
+  band.title = title || text;
+}
+
+// True when any run step on the canvas lacks est_size_gb. Same set the
+// scheduler's feasibility pass walks: top-level steps only — seed pills
+// and sub-DAG proxies (their data nests inside the parent body) don't
+// carry their own schedule slot.
+function dfSignalBandSizesMissing() {
+  return Object.keys(dfNodeData || {}).some(nid => {
+    const d = dfNodeData[nid];
+    if (!d || d.is_seed || d._sub_of != null) return false;
+    return d.est_size_gb == null || d.est_size_gb === '';
+  });
+}
+
+async function dfRefreshSignalBand() {
+  const wfId = (document.getElementById('df-wf-id') || {}).value;
+  if (!wfId) { dfSignalBandPaint('unsaved', 'save to check feasibility'); return; }
+  dfSignalBandPaint('checking', 'checking feasibility…');
+  const resp = await Net.call(
+    '/api/workflows/' + encodeURIComponent(wfId) + '/schedule-preview',
+    { retries: 0, silent: true }
+  );
+  if (!resp.ok) {
+    // 404 = nothing saved under this id yet; anything else = preview down.
+    if (resp.status === 404) dfSignalBandPaint('unsaved', 'save to check feasibility');
+    else dfSignalBandPaint('issue', 'preview unavailable', String(resp.error || ('HTTP ' + resp.status)));
+    return;
+  }
+  const p      = resp.data || {};
+  const issues = p.feasibility_issues || [];
+  const notes  = p.notes || [];
+  if (issues.length) {
+    const items = issues.map(i =>
+      i.step_id + ': ' + (i.reason || (i.est_size_gb + ' GB > ' + i.arch_budget_gb + ' GB budget')));
+    dfSignalBandPaint('red', 'infeasible — ' + items.join(' · '), items.join('\n'));
+    return;
+  }
+  if (notes.length) {
+    dfSignalBandPaint('issue', 'issue — ' + notes.join(' · '), notes.join('\n'));
+    return;
+  }
+  if (dfSignalBandSizesMissing()) {
+    dfSignalBandPaint('unknown', 'unknown — set model sizes for a real feasibility check',
+      'The preview reports no issues, but steps without est_size_gb are skipped — this is not a real green.');
+    return;
+  }
+  const ticks = (p.ticks || []).length;
+  dfSignalBandPaint('green',
+    'feasible on ' + (p.arch_name || 'this arch') + ' · ' + ticks + ' tick' + (ticks === 1 ? '' : 's'));
+}
+Actions.click({ 'composer.schedule-preview-refresh': () => { dfRefreshSignalBand(); } });
+
 function dfRenderConfigPanel(nodeId) {
   const data = dfNodeData[nodeId];
   // Two target surfaces share one HTML body: the popup (primary, auto-
@@ -7558,6 +7629,8 @@ async function dfSave() {
       const result = resp.data;
       Toast.success('Saved', result.path);
       if (typeof refreshWorkflows === 'function') refreshWorkflows();
+      // BU8c: the saved yaml is what schedule-preview reads — re-check.
+      try { dfRefreshSignalBand(); } catch (_) {}
     } else {
       const err = (resp.data && typeof resp.data === 'object') ? resp.data : {};
       Toast.danger('Save failed', err.detail || JSON.stringify(err));
