@@ -5740,6 +5740,12 @@ function dfClearRunState() {
   });
   const chip = document.getElementById('df-run-progress');
   if (chip) chip.classList.remove('visible');
+  // BU7: wipe the segmented strip + the Logs-pane signal line so a fresh
+  // edit/run starts from a clean slate.
+  const segs = document.getElementById('df-run-progress-segments');
+  if (segs) segs.innerHTML = '';
+  const signals = document.getElementById('ws-logs-signals');
+  if (signals) { signals.hidden = true; signals.innerHTML = ''; }
   // No active run → hide the toolbar Stop control.
   _dfToggleStopBtn(false);
   window._composerActiveRunId = null;
@@ -5754,6 +5760,140 @@ function _dfToggleStopBtn(show) {
   if (show) { btn.disabled = false; btn.textContent = '◼ Stop'; }
 }
 
+// ── BU7: segmented per-step bar + actionable run signals ────────────
+// Both are painted ONLY from dfApplyRunState — the run chip and the
+// Logs-pane signal line have exactly one writer (the poller never
+// touches them directly).
+
+// Segment class for one planned step, mirroring the node status classes:
+// green (completed) / red (failed) / pulse (running) / amber (skipped or
+// deferred). Unreported steps read amber on a terminal run (they never
+// got to run) and neutral/queued while the run is still alive.
+function _dfSegClass(st, terminal) {
+  if (st === 'completed') return 'seg-completed';
+  if (st === 'failed' || st === 'error') return 'seg-failed';
+  if (st === 'running') return 'seg-running';
+  if (st === 'skipped' || st === 'deferred') return 'seg-skipped';
+  return terminal ? 'seg-skipped' : 'seg-queued';
+}
+
+function _dfPaintRunSegments(segClasses) {
+  const strip = document.getElementById('df-run-progress-segments');
+  if (!strip) return;
+  strip.innerHTML = (segClasses || []).map(c => `<span class="df-run-seg ${c}"></span>`).join('');
+}
+
+// First line of an error, hard-capped so a chip stays one line.
+function _dfShortError(err) {
+  const line = String(err || '').split('\n')[0].trim();
+  return line.length > 72 ? line.slice(0, 72) + '…' : line;
+}
+
+// Issues = actionable-but-not-red conditions:
+//   - an unresolved seed.<key> reference (engine: "input 'seed.x' has no
+//     producer") — the chip routes to the SEED node's config;
+//   - ralph/loop non-convergence: the step completed by exhausting its
+//     iteration cap without the goal gate firing. Detectable because both
+//     executors repurpose StepResult.retries as iterations-beyond-first,
+//     so retries+1 >= the node's configured max_iterations means the cap
+//     halted the loop, not the gate. (A loop that FAILED on its cap
+//     already surfaces as a red chip carrying the engine's error.)
+function _dfCollectRunIssues(run, resultById) {
+  const issues = [];
+  const seenSeedRefs = new Set();
+  const scanSeed = (text, sourceStep) => {
+    if (!text || !/no producer|unresolved|missing/i.test(text)) return;
+    (String(text).match(/\bseed\.[A-Za-z0-9_]+/g) || []).forEach(ref => {
+      if (seenSeedRefs.has(ref)) return;
+      seenSeedRefs.add(ref);
+      issues.push({
+        stepId: sourceStep || '',
+        seed: true,
+        label: (sourceStep ? 'step ' + sourceStep + ': ' : '') + ref + ' unresolved',
+        title: 'Unresolved seed input — opens the seed node config',
+      });
+    });
+  };
+  resultById.forEach((r, stepId) => { if (r && r.error) scanSeed(r.error, stepId); });
+  scanSeed(run.error, '');
+
+  resultById.forEach((r, stepId) => {
+    if (!r || r.status !== 'completed') return;
+    const dfId = dfFindNodeIdForStep(stepId);
+    const data = dfId != null ? dfNodeData[dfId] : null;
+    if (!data) return;
+    const cap = data.kind === 'ralph'
+      ? (data.ralph && data.ralph.halt && data.ralph.halt.max_iterations)
+      : data.kind === 'loop' ? data.max_iterations : null;
+    if (!cap) return;
+    if ((r.retries || 0) + 1 >= cap) {
+      issues.push({
+        stepId,
+        seed: false,
+        label: `step ${stepId}: max_iterations (${cap}) reached without goal_gate`,
+        title: 'Loop ran to its iteration cap without converging — opens the step config',
+      });
+    }
+  });
+  return issues;
+}
+
+// Paint the Logs-pane header signal line: 'N green · red (step X: err) ·
+// issue (…)'. Green/amber chips are counters; each red/issue chip is a
+// logs.focus-step button carrying data-step-id (+ data-seed for issues
+// that route to the seed node).
+function _dfRenderRunSignals(run, planned, status, resultById) {
+  const host = document.getElementById('ws-logs-signals');
+  if (!host) return;
+  if (!run || !(planned || []).length) { host.hidden = true; host.innerHTML = ''; return; }
+  let green = 0, amber = 0;
+  const reds = [];
+  planned.forEach(stepId => {
+    if (!stepId) return;
+    const st = status.get(stepId);
+    if (st === 'completed') green += 1;
+    else if (st === 'skipped' || st === 'deferred') amber += 1;
+    else if (st === 'failed' || st === 'error') {
+      const r = resultById.get(stepId) || {};
+      reds.push({ stepId, error: _dfShortError(r.error || 'failed') });
+    }
+  });
+  const issues = _dfCollectRunIssues(run, resultById);
+  const chips = [`<span class="ws-signal-chip sig-green">${green} green</span>`];
+  if (amber) chips.push(`<span class="ws-signal-chip sig-amber">${amber} skipped</span>`);
+  reds.forEach(r => chips.push(
+    `<button type="button" class="ws-signal-chip sig-red" data-action="logs.focus-step"
+             data-step-id="${esc(r.stepId)}" title="Focus this step's config">red (step ${esc(r.stepId)}: ${esc(r.error)})</button>`));
+  issues.forEach(i => chips.push(
+    `<button type="button" class="ws-signal-chip sig-issue" data-action="logs.focus-step"
+             data-step-id="${esc(i.stepId)}"${i.seed ? ' data-seed="1"' : ''} title="${esc(i.title)}">issue (${esc(i.label)})</button>`));
+  host.innerHTML = chips.join('');
+  host.hidden = false;
+}
+
+// Signal-chip click target: resolve the canvas node for a step id (seed-
+// sourced issues resolve to the seed node instead — the critic fix that
+// closes the edit-seed→run→watch→refine loop), render its config and
+// select it. Mirrors the nodeSelected contract without touching the
+// single-click path.
+function dfFocusStepFromSignal(stepId, toSeed) {
+  const dfId = toSeed ? dfFindSeedNodeId() : dfFindNodeIdForStep(stepId);
+  if (dfId == null || !dfNodeData[dfId]) {
+    if (window.Toast) Toast.info('Step not on canvas', stepId || 'seed');
+    return;
+  }
+  dfSelectedNodeId = dfId;
+  dfRenderConfigPanel(dfId);
+  if (window.ComposerWorkstream) {
+    try {
+      const data = dfNodeData[dfId];
+      ComposerWorkstream.focusStep((data && (data.id || data.name)) || dfId);
+    } catch (_) {}
+  }
+  const el = document.getElementById('node-' + dfId);
+  if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+}
+
 function dfApplyRunState(run) {
   if (!run) { dfClearRunState(); return; }
   const results = Array.isArray(run.step_results) ? run.step_results : [];
@@ -5761,6 +5901,10 @@ function dfApplyRunState(run) {
   // implicitly queued (the engine hasn't started them yet).
   const status = new Map();
   results.forEach(r => { if (r && r.step_id) status.set(r.step_id, r.status || ''); });
+  // BU7: full result per step — the signal line needs errors + retries,
+  // not just the status string.
+  const resultById = new Map();
+  results.forEach(r => { if (r && r.step_id) resultById.set(r.step_id, r); });
 
   // The run's `steps` field (if present) lists the planned step order
   // so we can mark un-started ones as queued.
@@ -5782,12 +5926,14 @@ function dfApplyRunState(run) {
   let completed = 0;
   let total = 0;
   let currentLabel = '';
+  const segClasses = [];  // BU7: one entry per planned step, in order
 
   // Tag every known canvas node.
   (planned || []).forEach(stepId => {
     if (!stepId) return;
     total += 1;
     const st = status.get(stepId);
+    segClasses.push(_dfSegClass(st, terminalRunStatus));
     const dfId = dfFindNodeIdForStep(stepId);
     if (!dfId) return;
     const el = document.getElementById('node-' + dfId);
@@ -5799,6 +5945,11 @@ function dfApplyRunState(run) {
     else if (st === 'skipped') { el.classList.add('is-skipped'); }
     else if (!terminalRunStatus) { el.classList.add('is-queued'); }
   });
+
+  // BU7: segmented strip + Logs-pane signal line — painted before the
+  // chip's early returns so terminal runs keep both current.
+  _dfPaintRunSegments(segClasses);
+  _dfRenderRunSignals(run, planned, status, resultById);
 
   // Update the floating chip.
   const chip = document.getElementById('df-run-progress');
@@ -8231,7 +8382,11 @@ Actions.click({
   // three tabs keep their inline onclicks as pre-existing debt.
   'ws.switch':            el => ComposerWorkstream.switch(el.dataset.wsTarget || 'logs', el),
   // Per-step Input/Output expanders inside the Logs pane.
-  'wslogs.output-toggle': el => ComposerWorkstream.toggleLogExpand(el)
+  'wslogs.output-toggle': el => ComposerWorkstream.toggleLogExpand(el),
+  // BU7 — signal chips: focus the offending step's config. Issues whose
+  // source is an unresolved seed.<key> input carry data-seed="1" and
+  // route to the SEED node's config instead.
+  'logs.focus-step':      el => dfFocusStepFromSignal(el.dataset.stepId, el.dataset.seed === '1')
 });
 
 // ── Chat Rating ───────────────────────────────────────────────────────────

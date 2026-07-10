@@ -5057,6 +5057,51 @@ textarea.composer-desc-area {
   to   { background-position: 32px 0; }
 }
 
+/* BU7 — segmented per-step strip inside the run chip. One segment per
+   planned step, colored from the same status classes the node overlay
+   computes: green completed / red failed / pulsing running / amber
+   skipped-or-deferred. Sits alongside the aggregate fill bar (kept). */
+.df-run-progress-segments {
+  display: flex; gap: 2px;
+  width: 80px; height: 6px;
+  flex-shrink: 0;
+}
+.df-run-progress-segments:empty { display: none; }
+.df-run-seg {
+  flex: 1 1 0; min-width: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.10);
+}
+.df-run-seg.seg-completed { background: var(--success); }
+.df-run-seg.seg-failed    { background: var(--danger); }
+.df-run-seg.seg-skipped   { background: var(--amber); }
+.df-run-seg.seg-running   { background: var(--cyan); animation: dfSegPulse 0.9s ease-in-out infinite; }
+@keyframes dfSegPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* BU7 — Logs-pane signal line: 'N green · red (step X: err) · issue (…)'.
+   Green/amber chips are counters; red/issue chips are logs.focus-step
+   buttons that open the offending step's (or the seed's) config. */
+.ws-logs-signals {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  align-items: center;
+  padding: 2px 0 8px;
+}
+.ws-signal-chip {
+  display: inline-flex; align-items: center;
+  font-family: var(--mono); font-size: 0.56rem;
+  letter-spacing: 0.04em;
+  padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim);
+}
+.ws-signal-chip.sig-green { color: var(--success); border-color: var(--success-dim); }
+.ws-signal-chip.sig-amber { color: var(--amber);   border-color: var(--amber-dim); }
+button.ws-signal-chip { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.ws-signal-chip.sig-red         { color: var(--danger); border-color: var(--danger-dim); }
+.ws-signal-chip.sig-red:hover   { background: var(--danger-ghost); }
+.ws-signal-chip.sig-issue       { color: var(--amber); border-color: var(--amber-dim); }
+.ws-signal-chip.sig-issue:hover { background: var(--warn-ghost); }
+
 /* Zombie banner — pinned above the step strip when a "running"
    run has shipped no progress for > 10 min. */
 .runs-zombie-banner {

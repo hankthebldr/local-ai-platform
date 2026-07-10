@@ -578,6 +578,10 @@
             <span class="df-run-progress-current" id="df-run-progress-current">—</span>
             <span class="df-run-progress-count" id="df-run-progress-count">0/0</span>
             <span class="df-run-progress-bar"><span class="df-run-progress-bar-fill" id="df-run-progress-bar-fill" style="width:0%"></span></span>
+            <!-- BU7: segmented per-step strip — one segment per planned
+                 step, colored from the same status classes the node
+                 overlay computes. Painted only by dfApplyRunState. -->
+            <span class="df-run-progress-segments" id="df-run-progress-segments" aria-hidden="true"></span>
           </div>
           <div id="drawflow-canvas"></div>
           <!-- Step Config popup — auto-opens on node select. Same body
@@ -696,6 +700,11 @@
              GET /api/workflows/runs/{run_id}; no new backend. -->
         <div class="ws-pane" id="ws-pane-logs" hidden style="max-height:340px;overflow:auto">
           <div class="panel-label">Step Logs</div>
+          <!-- BU7: actionable run-signal line — 'N green · red (step X:
+               err) · issue (…)'. Painted by dfApplyRunState (the sole
+               run-state writer); red/issue chips are logs.focus-step
+               buttons that open the offending step's config. -->
+          <div class="ws-logs-signals" id="ws-logs-signals" hidden></div>
           <div id="ws-logs-body">
             <div class="model-empty">Run the workflow to see per-step logs.</div>
           </div>
