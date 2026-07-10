@@ -1,111 +1,108 @@
-// library/prompts.js — Prompts library panel (roles + templates).
-// Full CRUD + live render preview over /api/prompts, mirroring MCPPanel's
-// list+detail shape. This is the Library-object promotion of the read-only
-// Role Library that lives in Research (loadRoles): here roles AND templates
-// are first-class, editable, and renderable through the frozen composer.
+// library/prompts.js — Prompts library panel (roles + templates), the FIRST
+// LibraryShell adapter (LB0-U1). Full CRUD + live render preview over
+// /api/prompts. Migration is endpoint-and-action-identical: every endpoint
+// call, action id (prompts.select/edit/cancel/save/remove/render/new/refresh/
+// create-close/create-submit), container id (#prompts-list/#prompts-detail/
+// #prompts-detail-label/#prompts-count) and selector from the pre-shell panel
+// stays alive; the shell adds the uniform sidebar/subnav/actions grammar on
+// top (`.lib-row` added ALONGSIDE the retained `.mcp-row`).
 import { esc } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
+import { LibraryShell } from './shell.js';
 
 export const PromptsLibrary = (function () {
   let _items = [];
-  let _selected = null;   // "kind/id"
   let _editing = false;
 
-  function _headers() {
-    return (window.AdminAuth && AdminAuth.authHeaders) ? AdminAuth.authHeaders() : {};
-  }
+  function _headers() { return LibraryShell.headers('prompt'); }
   function _key(p) { return `${p.kind}/${p.id}`; }
-  function _current() { return _items.find(p => _key(p) === _selected) || null; }
+  function _selected() { return (LibraryShell.state('prompt') || {}).selected; }
+  function _current() { return _items.find(p => _key(p) === _selected()) || null; }
 
-  async function load() {
-    const el = document.getElementById('prompts-list');
-    if (!el) return;
-    el.innerHTML = '<div class="model-empty">Loading…</div>';
-    try {
-      const r = await Net.call('/api/prompts', { init: { headers: _headers() } });
-      if (!r.ok) { el.innerHTML = `<div class="model-empty" style="color:var(--danger)">Load failed (${r.status})</div>`; return; }
+  // ── LibraryShell adapter ────────────────────────────────────────────
+  // auth 'optional': reads are open server-side; AdminAuth headers merge in
+  // when present. Deliberately NOT 'admin' — prompts must not be over-gated.
+  const adapter = LibraryShell.register({
+    kind: 'prompt',
+    tabId: 'prompts',
+    countBadgeId: 'prompts-count',
+    listElId: 'prompts-list',
+    detailElId: 'prompts-detail',
+    labelElId: 'prompts-detail-label',
+    auth: 'optional',
+    selectAction: 'prompts.select',   // legacy row action id kept alive
+    rowKeyAttr: 'data-key',
+    groupClass: 'prompts-group-label',
+    emptyText: 'No prompts. Click "+ New" to add a role or template.',
+    emptyDetailLabel: '// SELECT A PROMPT',
+    emptyDetailText: 'Select a role or template on the left to view, edit, or render it.',
+    title: 'Prompts',
+
+    async load() {
+      const r = await LibraryShell.fetch('prompt', '/api/prompts');
+      if (!r.ok) throw new Error(`Load failed (${r.status})`);
       _items = r.data || [];
-      _updateCount();
-      render();
-      if (_selected && _current()) renderDetail(); else _clearDetail();
-    } catch (e) {
-      el.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(e.message)}</div>`;
-    }
-  }
-  function refresh() { load(); }
+    },
 
-  function _updateCount() {
-    const c = document.getElementById('prompts-count');
-    if (c) c.textContent = _items.length ? String(_items.length) : '';
-  }
+    list() {
+      // Group roles then templates — same order + labels as the pre-shell panel.
+      const groups = [['role', 'Roles'], ['template', 'Templates']];
+      const rows = [];
+      groups.forEach(([kind, label]) => {
+        _items.filter(p => p.kind === kind).forEach(p => {
+          const vars = (p.variables || []).length
+            ? `${p.variables.length} var${p.variables.length > 1 ? 's' : ''}` : 'no vars';
+          rows.push({
+            id: _key(p),
+            title: p.name || p.id,
+            meta: `${kind} · ${vars}`,
+            group: label,
+            provenance: p.provenance,          // rendered once LB0-U3 annotates it
+            tags: p.tags || [],
+            dot: { cls: `prompts-kind-dot ${kind}`, title: kind },
+          });
+        });
+      });
+      return rows;
+    },
 
-  function render() {
-    const el = document.getElementById('prompts-list');
-    if (!el) return;
-    if (!_items.length) {
-      el.innerHTML = '<div class="model-empty">No prompts. Click "+ New" to add a role or template.</div>';
-      return;
-    }
-    // Group roles then templates, each under a small header.
-    const groups = [['role', 'Roles'], ['template', 'Templates']];
-    el.innerHTML = groups.map(([kind, label]) => {
-      const rows = _items.filter(p => p.kind === kind);
-      if (!rows.length) return '';
-      return `<div class="prompts-group-label">${label}</div>` + rows.map(p => {
-        const k = _key(p);
-        const vars = (p.variables || []).length ? `${p.variables.length} var${p.variables.length > 1 ? 's' : ''}` : 'no vars';
-        return `<button type="button" class="btn-unstyled mcp-row ${_selected === k ? 'selected' : ''}" style="width:100%" aria-pressed="${_selected === k}" data-action="prompts.select" data-key="${esc(k)}">
-          <span class="prompts-kind-dot ${esc(kind)}"></span>
-          <div style="flex:1;min-width:0">
-            <div class="mcp-row-title">${esc(p.name || p.id)}</div>
-            <div class="mcp-row-meta">${esc(kind)} · ${esc(vars)}</div>
-          </div>
-        </button>`;
-      }).join('');
-    }).join('');
-  }
+    detail(id) {
+      return { sections: { overview: (mountEl) => _renderOverview(mountEl) } };
+    },
 
-  function select(key) {
-    _selected = key;
-    _editing = false;
-    render();
-    // Fetch full body on demand (list only carries summaries).
-    const p = _current();
-    if (p) _loadDetail(p.kind, p.id);
-  }
+    actions(id) {
+      if (_editing) {
+        return [
+          { action: 'prompts.save', label: 'Save', verb: 'edit', accent: true },
+          { action: 'prompts.cancel', label: 'Cancel', verb: 'edit' },
+        ];
+      }
+      return [
+        { action: 'prompts.render', label: '▶ Render preview', verb: 'test', accent: true },
+        { action: 'prompts.edit', label: 'Edit', verb: 'edit' },
+        { action: 'prompts.remove', label: 'Delete', verb: 'delete' },
+      ];
+    },
+  });
 
-  async function _loadDetail(kind, id) {
-    const el = document.getElementById('prompts-detail');
-    if (el) el.innerHTML = '<div class="model-empty">Loading…</div>';
-    try {
-      const r = await Net.call(`/api/prompts/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { init: { headers: _headers() } });
-      if (!r.ok) { if (el) el.innerHTML = `<div class="model-empty" style="color:var(--danger)">Load failed (${r.status})</div>`; return; }
-      const p = r.data;
-      // Merge fetched body into the cached summary.
+  async function _renderOverview(el) {
+    const key = _selected();
+    if (!key) return;
+    const [kind, ...rest] = key.split('/');
+    const id = rest.join('/');
+    let p = _current();
+    // Fetch the full body on demand (list only carries summaries) unless the
+    // cache already holds it (post-save reload merges bodies back in).
+    if (!p || p.body == null) {
+      const r = await LibraryShell.fetch('prompt',
+        `/api/prompts/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`);
+      if (!r.ok) { el.innerHTML = `<div class="model-empty" style="color:var(--danger)">Load failed (${r.status})</div>`; return; }
+      p = r.data;
       const idx = _items.findIndex(x => _key(x) === _key(p));
-      if (idx >= 0) _items[idx] = p;
-      renderDetail();
-    } catch (e) {
-      if (el) el.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(e.message)}</div>`;
+      if (idx >= 0) _items[idx] = p; else _items.push(p);
     }
-  }
-
-  function _clearDetail() {
-    const label = document.getElementById('prompts-detail-label');
-    const el = document.getElementById('prompts-detail');
-    if (label) label.textContent = '// SELECT A PROMPT';
-    if (el) el.innerHTML = 'Select a role or template on the left to view, edit, or render it.';
-  }
-
-  function renderDetail() {
-    const label = document.getElementById('prompts-detail-label');
-    const el = document.getElementById('prompts-detail');
-    if (!el || !label) return;
-    const p = _current();
-    if (!p) { _clearDetail(); return; }
-    label.textContent = `// ${p.name || p.id}`;
     const vars = (p.variables || []).length
       ? p.variables.map(v => `<code class="prompts-var">${esc(v)}</code>`).join(' ')
       : '<span style="color:var(--text-muted)">none</span>';
@@ -114,11 +111,7 @@ export const PromptsLibrary = (function () {
         <div class="prompts-meta">
           <code class="prompts-var">${esc(p.kind)}</code> · <code style="color:var(--accent)">${esc(p.id)}</code>
         </div>
-        <textarea id="prompts-edit-body" class="prompts-textarea" spellcheck="false">${esc(p.body || '')}</textarea>
-        <div style="margin-top:8px;display:flex;gap:6px">
-          <button class="action-btn accent" data-action="prompts.save" data-key="${esc(_key(p))}">Save</button>
-          <button class="action-btn" data-action="prompts.cancel">Cancel</button>
-        </div>`;
+        <textarea id="prompts-edit-body" class="prompts-textarea" spellcheck="false">${esc(p.body || '')}</textarea>`;
       return;
     }
     el.innerHTML = `
@@ -127,15 +120,23 @@ export const PromptsLibrary = (function () {
         &nbsp;·&nbsp; variables: ${vars}
       </div>
       <pre class="prompts-body">${esc(p.body || '')}</pre>
-      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-        <button class="action-btn accent" data-action="prompts.render" data-key="${esc(_key(p))}">▶ Render preview</button>
-        <button class="action-btn" data-action="prompts.edit" data-key="${esc(_key(p))}">Edit</button>
-        <button class="action-btn" data-action="prompts.remove" data-key="${esc(_key(p))}">Delete</button>
-      </div>
       <div id="prompts-render-out" class="prompts-render" hidden></div>`;
   }
 
-  function edit(key) { if (key === _selected) { _editing = true; renderDetail(); } }
+  // ── Panel API (signature-identical to the pre-shell module) ─────────
+  function load() { return LibraryShell.reload('prompt'); }
+  function refresh() { load(); }
+  function render() { LibraryShell.renderSidebar('prompt'); }
+  function renderDetail() { LibraryShell.renderDetail('prompt'); }
+
+  function select(key) {
+    _editing = false;
+    LibraryShell.select('prompt', key);
+  }
+
+  function edit(key) {
+    if (key === _selected()) { _editing = true; renderDetail(); }
+  }
   function cancel() { _editing = false; renderDetail(); }
 
   async function save(key) {
@@ -156,14 +157,18 @@ export const PromptsLibrary = (function () {
   async function remove(key) {
     const p = _current();
     if (!p) return;
-    const ok = await Confirm.show(`Delete ${p.kind} "${p.id}"? This removes the file on disk.`);
+    const ok = await Confirm.ask({
+      title: 'Delete prompt',
+      body: `Delete ${p.kind} "${p.id}"? This removes the file on disk.`,
+      okLabel: 'Delete', danger: true,
+    });
     if (!ok) return;
     try {
       const r = await Net.call(`/api/prompts/${encodeURIComponent(p.kind)}/${encodeURIComponent(p.id)}`, {
         init: { method: 'DELETE', headers: _headers() }
       });
       if (!r.ok) { Toast.show(`Delete failed (${r.status})`, 'error'); return; }
-      _selected = null;
+      LibraryShell.select('prompt', null);
       Toast.show('Prompt deleted', 'success');
       await load();
     } catch (e) { Toast.show(e.message, 'error'); }
@@ -225,12 +230,14 @@ export const PromptsLibrary = (function () {
         Toast.show(`Create failed: ${detail}`, 'error'); return;
       }
       closeCreate();
-      _selected = `${kind}/${id}`;
       Toast.show('Prompt created', 'success');
       await load();
+      LibraryShell.select('prompt', `${kind}/${id}`);
     } catch (e) { Toast.show(e.message, 'error'); }
   }
 
+  // Legacy action ids — aliases over the shell-driven flows (migration
+  // contract: old ids stay registered and behavior-identical).
   Actions.click({
     'prompts.select': el => select(el.dataset.key),
     'prompts.edit':   el => edit(el.dataset.key),
@@ -245,5 +252,5 @@ export const PromptsLibrary = (function () {
   });
 
   return { load, refresh, render, select, edit, cancel, save, remove,
-           renderPreview, showCreate, closeCreate, submitCreate };
+           renderPreview, showCreate, closeCreate, submitCreate, adapter };
 })();

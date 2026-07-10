@@ -178,6 +178,50 @@
 .iw-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
 .iw-actions .action-btn.accent, .cmp-seed-row .action-btn.accent { background:var(--accent); color:var(--on-accent,#06201B); border-color:var(--accent); }
 </style>
+<style id="lib-shell-styles">
+/* ── LibraryShell — uniform Library master-detail grammar (LB0-U1) ────
+   Extends the .plugins-layout two-pane skeleton. `.lib-row` is ADDED
+   alongside the retained `.mcp-row` (classes are added, never renamed). */
+.lib-shell { margin-top: 0; }
+.lib-side-tabs { display:flex; gap:4px; margin:0 0 8px; }
+.lib-side-tab { font-family:var(--mono); font-size:var(--text-2xs,0.6rem); letter-spacing:0.08em; text-transform:uppercase; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius-pill,999px); background:transparent; color:var(--text-dim); cursor:pointer; }
+.lib-side-tab.active { color:var(--accent); border-color:var(--accent-dim); background:var(--accent-ghost); }
+.lib-filter { width:100%; box-sizing:border-box; margin:0 0 8px; padding:6px 9px; background:var(--surface-card,var(--bg)); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:var(--text-xs,0.7rem); }
+.lib-filter:focus { outline:none; border-color:var(--accent-dim); }
+.lib-group-label { display:flex; align-items:center; gap:6px; width:100%; text-align:left; background:none; border:none; cursor:pointer; padding:0; font-family:var(--mono); font-size:0.6rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:10px 0 4px; }
+.lib-group-label .lib-caret { font-size:0.55rem; color:var(--text-faint,var(--text-dim)); }
+.lib-group.collapsed .lib-group-rows { display:none; }
+.lib-row-main { flex:1; min-width:0; }
+.lib-chip, .lib-badge { display:inline-flex; align-items:center; font-family:var(--mono); font-size:0.55rem; padding:0 6px; border:1px solid var(--border); border-radius:var(--radius-pill,999px); color:var(--text-dim); margin-left:4px; vertical-align:middle; white-space:nowrap; }
+.lib-status { font-family:var(--mono); font-size:0.55rem; color:var(--text-dim); margin-left:6px; }
+.lib-dot { width:8px; height:8px; border-radius:50%; background:var(--text-muted); flex-shrink:0; }
+.lib-dot.fit-good { background:var(--success); } .lib-dot.fit-tight { background:var(--amber,#F5A623); } .lib-dot.fit-no { background:var(--danger); }
+.lib-prov-chip { font-family:var(--mono); font-size:0.55rem; padding:1px 6px; border:1px solid var(--border); border-radius:var(--radius-pill,999px); flex-shrink:0; text-transform:uppercase; letter-spacing:0.06em; }
+.lib-prov-chip.prov-oob { color:var(--cyan); border-color:var(--cyan-dim); background:rgba(87,196,210,0.06); }
+.lib-prov-chip.prov-user { color:var(--accent); border-color:var(--accent-dim); background:var(--accent-ghost); }
+.lib-blocks { display:inline-flex; gap:3px; flex-shrink:0; margin-left:6px; }
+.lib-block-dot { width:6px; height:6px; border-radius:2px; background:var(--border); }
+.lib-block-dot.on { background:var(--accent); }
+.lib-detail-head { display:flex; align-items:center; gap:8px; margin:0 0 8px; font-size:0.72rem; }
+.lib-subnav { display:flex; gap:4px; margin:0 0 10px; flex-wrap:wrap; }
+.lib-subnav-pill { font-family:var(--mono); font-size:var(--text-2xs,0.6rem); text-transform:uppercase; letter-spacing:0.08em; padding:3px 9px; border:1px solid var(--border); border-radius:var(--radius-pill,999px); background:transparent; color:var(--text-dim); cursor:pointer; }
+.lib-subnav-pill.active { color:var(--accent); border-color:var(--accent-dim); background:var(--accent-ghost); }
+.lib-section[hidden] { display:none; }
+.lib-actions-row { display:flex; gap:6px; margin-top:14px; flex-wrap:wrap; }
+.lib-actions-row:empty { display:none; }
+.lib-actions-row .action-btn.danger { color:var(--danger); border-color:var(--danger-dim,var(--danger)); }
+.lib-actions-row .action-btn[disabled] { opacity:.45; cursor:not-allowed; }
+/* ── LibraryWizard — 4-step modal (Source/Configure/Secrets/Confirm) ── */
+.lib-wiz-steps { display:flex; align-items:center; gap:8px; margin:2px 0 14px; }
+.lib-wiz-step { display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:var(--text-2xs,0.6rem); letter-spacing:0.1em; text-transform:uppercase; color:var(--text-faint,var(--text-dim)); white-space:nowrap; }
+.lib-wiz-step .n { width:20px; height:20px; border-radius:50%; border:1.5px solid var(--border-strong,var(--border)); display:inline-flex; align-items:center; justify-content:center; font-size:10px; flex:none; }
+.lib-wiz-step.done { color:var(--text-dim); }
+.lib-wiz-step.done .n { background:var(--accent); border-color:var(--accent); color:var(--on-accent,#06201B); }
+.lib-wiz-step.on { color:var(--accent); }
+.lib-wiz-step.on .n { border-color:var(--accent); color:var(--accent); }
+.lib-wiz-conn { flex:1; height:1px; background:var(--border); min-width:14px; }
+.lib-wiz-body { min-height:96px; }
+</style>
 <style id="enclave-runlens-styles">
 /* ── Run lens: scrub timeline + node-timing plates + as-executed inspector ── */
 .rl-scrub { display:flex; gap:2px; margin:6px 0 18px; height:30px; }

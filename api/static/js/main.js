@@ -24,6 +24,8 @@ import { Kanban } from './library/kanban.js';
 import { WorkflowIndex } from './library/workflow-index.js';
 import { AgentGen } from './library/agents.js';
 import { CatalogPage, CatalogModelsShare } from './library/models.js';
+import { LibraryShell } from './library/shell.js';
+import { LibraryWizard } from './library/wizard.js';
 import { MCPPanel } from './library/mcp.js';
 import { PromptsLibrary } from './library/prompts.js';
 import { RunsTab } from './runs/runs-tab.js';

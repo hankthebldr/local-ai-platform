@@ -1,79 +1,87 @@
-// library/mcp.js — MCP catalog panel (phase-2 U4 carve).
+// library/mcp.js — MCP catalog panel, the SECOND LibraryShell adapter
+// (LB0-U1; originally the phase-2 U4 carve). Migration is endpoint-and-
+// action-identical: every endpoint (/api/mcp/servers*, /api/mcp/discover*),
+// action id (mcp.select/test/discover/toggle/edit/remove/mkt-install/
+// mkt-close), container id (#mcp-list/#mcp-detail/#mcp-detail-label) and the
+// register/edit modal + marketplace overlay stay alive. Rows keep `.mcp-row`
+// with `.lib-row` added alongside. auth 'optional' — same merged-headers
+// posture as before, NOT a hard gate (test_top_level_promoted_tabs_not_locked
+// pins that this tab never renders the admin-lock).
 import { esc } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
+import { LibraryShell } from './shell.js';
 
 export const MCPPanel = (function () {
   let _servers = [];
-  let _selected = null;
   // Marketplace catalog entries from the last browseMarketplace() fetch —
   // install buttons reference them by data-idx instead of serializing the
   // whole entry object into an onclick attribute.
   let _catalogItems = [];
 
-  function _headers() {
-    return (window.AdminAuth && AdminAuth.authHeaders) ? AdminAuth.authHeaders() : {};
-  }
+  function _headers() { return LibraryShell.headers('mcp'); }
+  function _selected() { return (LibraryShell.state('mcp') || {}).selected; }
+  function _server(id) { return _servers.find(x => x.id === id) || null; }
 
-  async function load() {
-    const el = document.getElementById('mcp-list');
-    if (!el) return;
-    el.innerHTML = '<div class="model-empty">Loading…</div>';
-    try {
-      const r = await Net.call('/api/mcp/servers', { init: { headers: _headers() } });
-      if (!r.ok) { el.innerHTML = `<div class="model-empty" style="color:var(--danger)">Load failed (${r.status})</div>`; return; }
-      _servers = r.data;
-      render();
-    } catch (e) {
-      el.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(e.message)}</div>`;
-    }
-  }
+  // ── LibraryShell adapter ────────────────────────────────────────────
+  const adapter = LibraryShell.register({
+    kind: 'mcp',
+    tabId: 'admin-mcp',
+    countBadgeId: 'mcp-count',
+    listElId: 'mcp-list',
+    detailElId: 'mcp-detail',
+    labelElId: 'mcp-detail-label',
+    auth: 'optional',
+    selectAction: 'mcp.select',       // legacy row action id kept alive
+    emptyText: 'No MCP servers registered. Click "+ Register" to add one.',
+    emptyDetailLabel: '// SELECT A SERVER',
+    emptyDetailText: 'Select a server from the left to inspect its tools, test the handshake, or invoke a tool.',
+    title: 'MCP Servers',
 
-  function refresh() { load(); }
+    async load() {
+      const r = await LibraryShell.fetch('mcp', '/api/mcp/servers');
+      if (!r.ok) throw new Error(`Load failed (${r.status})`);
+      _servers = r.data || [];
+    },
 
-  function render() {
-    const el = document.getElementById('mcp-list');
-    if (!el) return;
-    if (!_servers.length) {
-      el.innerHTML = '<div class="model-empty">No MCP servers registered. Click "+ Register" to add one.</div>';
-      return;
-    }
-    el.innerHTML = _servers.map(s => {
-      // Persona icon — every MCP server gets the canonical mcp glyph
-      // with purple tone, matching the System-page Discover surface.
-      const icon = (window.AgentIcons ? AgentIcons.svg('mcp') : '');
-      const tone = (window.AgentIcons ? AgentIcons.tone('mcp') : 'purple');
-      return `<button type="button" class="btn-unstyled mcp-row ${_selected === s.id ? 'selected' : ''}" style="width:100%" aria-pressed="${_selected === s.id}" data-action="mcp.select" data-id="${esc(s.id)}">
-        <span class="admin-card-icon admin-card-icon-sm tone-${esc(tone)}">${icon}</span>
-        <span class="mcp-row-dot ${s.tools_count > 0 ? 'up' : 'unknown'}"></span>
-        <div style="flex:1;min-width:0">
-          <div class="mcp-row-title">${esc(s.name || s.id)}</div>
-          <div class="mcp-row-meta">${esc(s.transport)} · ${s.enabled ? 'enabled' : 'disabled'} · ${s.tools_count || 0} tools</div>
-        </div>
-      </button>`;
-    }).join('');
-  }
+    list() {
+      return _servers.map(s => ({
+        id: s.id,
+        title: s.name || s.id,
+        meta: `${s.transport} · ${s.enabled ? 'enabled' : 'disabled'} · ${s.tools_count || 0} tools`,
+        group: '',                            // flat list, as before
+        provenance: s.provenance,             // annotated by LB0-U3
+        tags: s.tags || [],
+        icon: 'mcp',                          // canonical mcp glyph, purple tone
+        dot: { cls: `mcp-row-dot ${s.tools_count > 0 ? 'up' : 'unknown'}`,
+               title: s.tools_count > 0 ? 'tools cached' : 'no tools cached' },
+      }));
+    },
 
-  function select(id) {
-    _selected = id;
-    render();
-    renderDetail();
-  }
+    detail(id) {
+      return { sections: { overview: () => _overviewHtml(id) } };
+    },
 
-  function renderDetail() {
-    const el = document.getElementById('mcp-detail');
-    const label = document.getElementById('mcp-detail-label');
-    if (!el || !label) return;
-    const s = _servers.find(x => x.id === _selected);
-    if (!s) {
-      label.textContent = '// SELECT A SERVER';
-      el.innerHTML = 'Select a server from the left.';
-      return;
-    }
-    label.textContent = `// ${s.name || s.id}`;
+    actions(id) {
+      const s = _server(id);
+      if (!s) return [];
+      return [
+        { action: 'mcp.test', label: 'Test handshake', verb: 'test' },
+        { action: 'mcp.discover', label: 'Discover tools', verb: 'test' },
+        { action: 'mcp.toggle', label: s.enabled ? 'Disable' : 'Enable', verb: 'edit',
+          data: { enabled: String(!s.enabled) } },
+        { action: 'mcp.edit', label: 'Edit', verb: 'edit' },
+        { action: 'mcp.remove', label: 'Delete', verb: 'delete', danger: true },
+      ];
+    },
+  });
+
+  function _overviewHtml(id) {
+    const s = _server(id);
+    if (!s) return '<div class="model-empty">Server not found.</div>';
     const envStr = Object.entries(s.env || {}).map(([k, v]) => `${k}=${v}`).join(', ') || '—';
-    el.innerHTML = `
+    return `
       <div style="display:grid;grid-template-columns:120px 1fr;gap:6px;font-size:0.74rem;line-height:1.6">
         <div style="color:var(--text-muted)">ID</div><code style="color:var(--accent)">${esc(s.id)}</code>
         <div style="color:var(--text-muted)">Transport</div><div>${esc(s.transport)}</div>
@@ -86,13 +94,6 @@ export const MCPPanel = (function () {
         <div style="color:var(--text-muted)">Enabled</div><div>${s.enabled ? '✓' : '✕'}</div>
         <div style="color:var(--text-muted)">Description</div><div>${esc(s.description || '')}</div>
       </div>
-      <div style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap">
-        <button class="action-btn" data-action="mcp.test" data-id="${esc(s.id)}">Test handshake</button>
-        <button class="action-btn" data-action="mcp.discover" data-id="${esc(s.id)}">Discover tools</button>
-        <button class="action-btn" data-action="mcp.toggle" data-id="${esc(s.id)}" data-enabled="${!s.enabled}">${s.enabled ? 'Disable' : 'Enable'}</button>
-        <button class="action-btn" data-action="mcp.edit" data-id="${esc(s.id)}">Edit</button>
-        <button class="action-btn" data-action="mcp.remove" data-id="${esc(s.id)}" style="color:var(--danger);border-color:var(--danger-dim)">Delete</button>
-      </div>
       <div id="mcp-detail-tools" style="margin-top:14px">
         <div class="panel-label" style="margin-bottom:6px">Tools (${(s.tools || []).length})</div>
         <div class="mcp-tools-list">
@@ -101,9 +102,15 @@ export const MCPPanel = (function () {
             <div class="mcp-tool-desc">${esc(t.description || '')}</div>
           </div>`).join('') || '<div style="color:var(--text-muted);font-size:0.66rem">No tools cached. Click "Discover tools" to query the server.</div>'}
         </div>
-      </div>
-    `;
+      </div>`;
   }
+
+  // ── Panel API (signature-identical to the pre-shell module) ─────────
+  function load() { return LibraryShell.reload('mcp'); }
+  function refresh() { load(); }
+  function render() { LibraryShell.renderSidebar('mcp'); }
+  function renderDetail() { LibraryShell.renderDetail('mcp'); }
+  function select(id) { LibraryShell.select('mcp', id); }
 
   async function test(id) {
     try {
@@ -123,7 +130,7 @@ export const MCPPanel = (function () {
       const r = await Net.call(`/api/mcp/servers/${encodeURIComponent(id)}/tools?refresh=true`, { retries: 0, init: { headers: _headers() } });
       if (!r.ok) { Toast.danger('Discover failed', typeof r.data === 'string' ? r.data : (r.error || '')); return; }
       await load();
-      _selected = id; renderDetail();
+      select(id);
     } catch (e) { Toast.danger('Discover error', e.message); }
   }
 
@@ -145,9 +152,8 @@ export const MCPPanel = (function () {
     if (!ok) return;
     try {
       await Net.call(`/api/mcp/servers/${encodeURIComponent(id)}`, { retries: 0, init: { method: 'DELETE', headers: _headers() } });
-      _selected = null;
+      LibraryShell.select('mcp', null);
       await load();
-      renderDetail();
     } catch (e) { Toast.danger('Delete error', e.message); }
   }
 
@@ -165,7 +171,7 @@ export const MCPPanel = (function () {
   }
 
   function edit(id) {
-    const s = _servers.find(x => x.id === id);
+    const s = _server(id);
     if (!s) return;
     document.getElementById('mcp-edit-title').textContent = `Edit ${s.id}`;
     document.getElementById('mcp-edit-id').value = s.id;
@@ -343,8 +349,8 @@ export const MCPPanel = (function () {
     if (e.detail && e.detail.panel === 'admin-mcp') load();
   });
 
-  // Delegated actions — server rows + detail buttons re-render on every
-  // select/load; marketplace install resolves its catalog entry from
+  // Delegated actions — legacy ids kept alive as aliases over the
+  // shell-driven flows; marketplace install resolves its catalog entry from
   // _catalogItems by data-idx (registered inside the module for state
   // access). data-enabled is a "true"/"false" string by dataset contract.
   Actions.click({
@@ -363,5 +369,5 @@ export const MCPPanel = (function () {
 
   return { load, refresh, render, select, test, discoverTools, toggleEnabled, remove,
            showCreate, edit, _onTransportChange, _closeModal, _submit,
-           browseMarketplace, _installFromCatalog };
+           browseMarketplace, _installFromCatalog, adapter };
 })();
