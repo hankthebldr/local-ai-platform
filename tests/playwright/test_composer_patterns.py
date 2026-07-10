@@ -1,0 +1,133 @@
+"""BU4 — Patterns bench: tab + cards, SIMPLE drop, COMPLEX scaffold.
+
+The 6th workbench tab (data-bench="patterns", Actions-wired — no inline
+onclick) renders dfPatternTemplates as draggable cards with SIMPLE/COMPLEX
+badges. Drops are simulated via page.evaluate against the window-bridged
+dfAddPatternFromTemplate / dfScaffoldPattern (HTML5 drag is flaky headless):
+a SIMPLE pattern spawns one node stamping data.kind; the ralph COMPLEX
+pattern scaffolds its wired sub-DAG (parent + plan/execute/verify/consolidate
+editing proxies sharing the parent's nested body objects).
+"""
+
+from __future__ import annotations
+
+PATTERNS_TAB = '.workbench-tab[data-bench="patterns"]'
+SEED_SEL = "#drawflow-canvas .df-seed-node"
+
+
+def _wait_canvas(page):
+    """Canvas booted = the seed pill has spawned (debounced ~150 ms) and the
+    bridge exposes the pattern spawners."""
+    page.wait_for_selector(SEED_SEL, state="visible", timeout=10_000)
+    page.wait_for_function(
+        "() => typeof window.dfAddPatternFromTemplate === 'function'"
+        " && typeof window.dfScaffoldPattern === 'function'",
+        timeout=10_000,
+    )
+
+
+def test_patterns_tab_exists_and_renders_cards(signed_in_page):
+    """The Patterns bench is the 6th tab, wired via data-action (no inline
+    onclick), and renders one card per dfPatternTemplates preset with a
+    SIMPLE/COMPLEX badge + a title tooltip."""
+    page = signed_in_page
+    _wait_canvas(page)
+    tab = page.locator(PATTERNS_TAB)
+    assert tab.count() == 1, "Patterns workbench tab missing"
+    assert tab.get_attribute("onclick") is None, "new tab must not use inline onclick"
+    assert tab.get_attribute("data-action") == "bench.switch"
+    tab.click()
+    pane = page.locator("#bench-patterns")
+    pane.wait_for(state="visible", timeout=5_000)
+    cards = page.locator("#patterns-palette .df-pattern-card")
+    expected = page.evaluate("() => (window.dfPatternTemplates || []).length")
+    assert expected >= 8, f"expected >=8 pattern presets, got {expected}"
+    assert cards.count() == expected
+    # Both complexity tiers are represented, and every card drags with the
+    # pattern MIME + carries a tooltip.
+    assert page.locator("#patterns-palette .df-pattern-badge.simple").count() >= 5
+    assert page.locator("#patterns-palette .df-pattern-badge.complex").count() >= 3
+    first = cards.first
+    assert first.get_attribute("data-drag-mime") == "application/df-pattern"
+    assert (first.get_attribute("title") or "").strip(), "card tooltip missing"
+    # The Ralph card carries the budget-preset toggle (one card, two presets).
+    ralph = page.locator('#patterns-palette [data-pattern="ralph_loop"]')
+    assert ralph.locator(".df-pattern-preset-btn").count() == 2
+
+
+def test_simple_pattern_drop_creates_one_kinded_node(signed_in_page):
+    """Dropping a SIMPLE pattern (code sandbox) creates exactly one new node
+    whose dfNodeData entry stamps data.kind + the kind config block and the
+    pattern provenance fields."""
+    page = signed_in_page
+    _wait_canvas(page)
+    before = page.evaluate("() => Object.keys(window.dfNodeData || {}).length")
+    page.evaluate("() => window.dfAddPatternFromTemplate('code_sandbox', 320, 220)")
+    page.wait_for_function(
+        "n => Object.keys(window.dfNodeData || {}).length === n + 1",
+        arg=before,
+        timeout=5_000,
+    )
+    node = page.evaluate(
+        "() => Object.values(window.dfNodeData || {})"
+        ".find(d => d && d.pattern === 'code_sandbox')"
+    )
+    assert node, "code_sandbox node not registered in dfNodeData"
+    assert node["kind"] == "code"
+    assert node["complexity"] == "SIMPLE"
+    assert node["code"]["language"] == "python"
+    assert node["code"]["source"] == "inline"
+
+
+def test_complex_ralph_pattern_scaffolds_wired_sub_dag(signed_in_page):
+    """Dropping the ralph COMPLEX pattern creates the composite parent plus
+    its four body proxies (plan/execute/verify/consolidate), wired
+    parent -> plan -> execute -> verify -> consolidate, with each proxy's
+    data object shared with the parent's nested body entry."""
+    page = signed_in_page
+    _wait_canvas(page)
+    page.evaluate("() => window.dfScaffoldPattern('ralph_loop', 380, 260)")
+    page.wait_for_function(
+        "() => Object.values(window.dfNodeData || {})"
+        ".some(d => d && d.kind === 'ralph')",
+        timeout=5_000,
+    )
+    result = page.evaluate(
+        """() => {
+            const entries = Object.entries(window.dfNodeData || {});
+            const parent = entries.find(([, d]) => d && d.kind === 'ralph');
+            if (!parent) return { ok: false, why: 'no ralph parent' };
+            const [pid, pdata] = parent;
+            const subs = entries.filter(([, d]) => d && d._sub_of === Number(pid));
+            // Proxy data objects ARE the parent's nested body entries.
+            const shared = subs.every(([, d]) => (pdata.body || []).includes(d));
+            // Wiring: parent -> body[0], then a sequential body chain.
+            const home = window.dfEditor.export().drawflow.Home.data;
+            const outEdges = (id) => Object.values((home[id] || {}).outputs || {})
+              .flatMap(o => (o.connections || []).map(c => Number(c.node)));
+            const subIds = subs.map(([id]) => Number(id));
+            let chained = outEdges(Number(pid)).includes(subIds[0]);
+            for (let i = 0; i + 1 < subIds.length; i++) {
+              chained = chained && outEdges(subIds[i]).includes(subIds[i + 1]);
+            }
+            return {
+              ok: true,
+              bodyIds: (pdata.body || []).map(b => b.id),
+              subCount: subs.length,
+              subRoles: subs.map(([, d]) => d._sub_role),
+              shared,
+              chained,
+              journal: pdata.ralph && pdata.ralph.journal_path,
+              maxIter: pdata.ralph && pdata.ralph.halt && pdata.ralph.halt.max_iterations,
+            };
+        }"""
+    )
+    assert result["ok"], result
+    assert result["bodyIds"] == ["plan", "execute", "verify", "consolidate"]
+    assert result["subCount"] == 4, f"expected 4 sub-DAG proxies: {result}"
+    assert set(result["subRoles"]) == {"body"}
+    assert result["shared"], "proxy data must share the parent's nested body objects"
+    assert result["chained"], "sub-DAG not wired parent -> plan -> ... -> consolidate"
+    assert result["journal"], "ralph.journal_path missing"
+    # Default budget preset (standard) stamps its halt caps.
+    assert result["maxIter"] == 25

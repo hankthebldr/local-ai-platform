@@ -4106,6 +4106,30 @@ textarea.composer-desc-area {
 .df-palette-label { font-size: 0.66rem; color: var(--text); font-weight: 600; line-height: 1.2; }
 .df-palette-role  { font-size: 0.5rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
 
+/* BU4 — Patterns bench: deployment-topology cards. SIMPLE = one engine
+   step; COMPLEX = a pre-wired, editable sub-DAG scaffold. */
+.df-pattern-card { align-items: flex-start; }
+.df-pattern-badge {
+  display: inline-block; font-size: 0.46rem; font-weight: 600;
+  padding: 0 5px; margin-left: 4px; border-radius: 2px;
+  border: 1px solid var(--accent-dim); color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.1em; vertical-align: 1px;
+}
+.df-pattern-badge.complex { color: var(--amber); border-color: var(--amber-dim); }
+.df-pattern-desc { font-size: 0.54rem; color: var(--text-muted); line-height: 1.45; }
+/* Ralph's budget-preset toggle — one card, two halt-cap presets. */
+.df-pattern-presets { display: inline-flex; gap: 4px; margin-top: 5px; }
+.df-pattern-preset-btn {
+  font-size: 0.5rem; font-family: var(--mono); cursor: pointer;
+  padding: 1px 7px; border-radius: 2px; letter-spacing: 0.06em;
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+.df-pattern-preset-btn.active { color: var(--accent); border-color: var(--accent-dim); }
+/* Scaffolded sub-DAG proxies read as children of their composite parent. */
+.drawflow-node.is-pattern-sub { border-style: dashed; }
+.drawflow-node.is-pattern-sub .df-node-body { opacity: 0.92; }
+
 /* Canvas node: persona icon block + meta column. Pairs with run-state
    classes below for the active-workflow visualization. */
 .df-node-body {

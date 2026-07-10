@@ -520,6 +520,8 @@
             <button type="button" class="workbench-tab"        data-bench="skills"  onclick="composerSwitchBench('skills', this)">Skills</button>
             <button type="button" class="workbench-tab"        data-bench="plugins" onclick="composerSwitchBench('plugins', this)">Plugins</button>
             <button type="button" class="workbench-tab"        data-bench="mcps"    onclick="composerSwitchBench('mcps', this)">MCPs</button>
+            <!-- BU4: wired via the Actions router (bench.switch), not inline -->
+            <button type="button" class="workbench-tab"        data-bench="patterns" data-action="bench.switch">Patterns</button>
           </div>
           <div class="workbench-body">
             <div class="workbench-pane" id="bench-steps">
@@ -543,6 +545,10 @@
                 MCP servers expose external tools. Register servers under <a href="#" onclick="AdminMenu.select('admin-mcp');return false">Admin → MCP</a>.
               </div>
               <div id="bench-mcps-list"><div class="skeleton skeleton-line short"></div></div>
+            </div>
+            <div class="workbench-pane" id="bench-patterns" hidden>
+              <div class="workbench-hint">A pattern is a deployment topology. Drag a SIMPLE card for one step of that kind; a COMPLEX card scaffolds a pre-wired, editable sub-DAG.</div>
+              <div class="df-palette" id="patterns-palette"></div>
             </div>
           </div>
         </div>

@@ -5217,6 +5217,322 @@ const dfStepTemplates = [
 const dfRoleColors = { reasoning: '#2BD4B4', coding: '#57C4D2', fast: '#E0A33C', general: '#1FB983', uncensored: '#E08A4C' };
 const dfFmtDescs = { raw: 'Full LLM text as-is', json: 'Parse as JSON object', json_array: 'Parse as JSON array', markdown_sections: 'Split by ## headings', key_value: 'Parse key: value lines', csv: 'Parse CSV/TSV', regex: 'Extract via regex' };
 
+// ── BU4: Pattern presets (deployment topologies) ────────────────────
+// A PATTERN is the shape work executes in — every card maps onto the
+// engine's closed 8-kind vocabulary. SIMPLE = one node emitting one
+// engine kind; COMPLEX = a pre-wired, editable sub-DAG scaffold.
+//
+// SINGLE SOURCE OF TRUTH — tests/test_pattern_presets.py parses the
+// strict-JSON block between the String.raw backticks below and
+// round-trips every preset's `steps` through the frozen
+// WorkflowDefinition model (api/models/workflow_models.py). Keep it
+// strict JSON: no comments, no trailing commas, no backticks, no ${.
+// String.raw so the \" escapes inside prompt strings survive for both
+// JSON.parse here and json.loads in the pytest.
+const dfPatternTemplatesJson = String.raw`
+[
+  {
+    "key": "llm_step",
+    "name": "LLM step",
+    "complexity": "SIMPLE",
+    "kind": "llm",
+    "desc": "One model call — the atomic unit. Exactly one prompt in, text out.",
+    "steps": [
+      {
+        "id": "llm_step",
+        "name": "LLM Step",
+        "kind": "llm",
+        "role": "general",
+        "system_prompt": "You are a capable assistant. Complete the task described by your inputs and reply with the result.",
+        "inputs": ["seed.query"],
+        "outputs": ["text"]
+      }
+    ]
+  },
+  {
+    "key": "orchestrator",
+    "name": "Orchestrator (dynamic)",
+    "complexity": "SIMPLE",
+    "kind": "orchestrator",
+    "desc": "A lead agent plans and spawns workers from a catalog at run time. Ships with one pre-filled worker; worker inputs are always seed.* refs.",
+    "steps": [
+      {
+        "id": "orchestrator",
+        "name": "Orchestrator",
+        "kind": "orchestrator",
+        "role": "reasoning",
+        "inputs": ["seed.query"],
+        "outputs": ["result"],
+        "planner": {
+          "role_inline": "You are the lead agent. Decompose the goal, spawn workers from the catalog, and integrate their results.",
+          "task": "Plan the work, dispatch workers, and emit the complete directive once the goal is met.",
+          "constraints": ["Spawn the fewest workers that cover the goal."]
+        },
+        "workers": {
+          "worker": {
+            "id": "worker",
+            "name": "Worker",
+            "kind": "llm",
+            "role": "reasoning",
+            "system_prompt": "You are a focused worker agent. Complete the assigned sub-task and reply with your findings.",
+            "inputs": ["seed.task"],
+            "outputs": ["findings"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "key": "remote_agent",
+    "name": "Remote agent",
+    "complexity": "SIMPLE",
+    "kind": "a2a",
+    "desc": "Delegate to an external A2A-protocol agent by agent card + skill. The remote agent owns its own model and prompt.",
+    "steps": [
+      {
+        "id": "remote_agent",
+        "name": "Remote Agent",
+        "kind": "a2a",
+        "agent_card_url": "http://localhost:9100/.well-known/agent.json",
+        "skill": "answer",
+        "inputs": ["seed.query"],
+        "outputs": ["result"]
+      }
+    ]
+  },
+  {
+    "key": "consolidate_learn",
+    "name": "Consolidate (learn)",
+    "complexity": "SIMPLE",
+    "kind": "consolidate",
+    "desc": "Distill upstream outputs into durable cross-run memory (playbook, semantic, or episodic store).",
+    "steps": [
+      {
+        "id": "consolidate_learn",
+        "name": "Consolidate",
+        "kind": "consolidate",
+        "inputs": [],
+        "outputs": ["lessons"],
+        "consolidate": {
+          "target": "playbook",
+          "target_name": "workflow-lessons",
+          "system_prompt": "Distill the inputs into concise, durable lessons worth keeping in the playbook."
+        }
+      }
+    ]
+  },
+  {
+    "key": "code_sandbox",
+    "name": "Code sandbox",
+    "complexity": "SIMPLE",
+    "kind": "code",
+    "desc": "Run Python in the sandboxed executor. Inline source — edit the code in the config panel.",
+    "steps": [
+      {
+        "id": "code_sandbox",
+        "name": "Code Sandbox",
+        "kind": "code",
+        "outputs": ["result"],
+        "code": {
+          "language": "python",
+          "source": "inline",
+          "code": "print('hello from the sandbox')"
+        }
+      }
+    ]
+  },
+  {
+    "key": "ralph_loop",
+    "name": "Ralph loop",
+    "complexity": "COMPLEX",
+    "kind": "ralph",
+    "desc": "Autonomous plan → execute → verify → consolidate loop with a journal and halt rails. Pick a budget preset before dropping — long-running raises the caps for overnight automation.",
+    "budget_presets": {
+      "standard": { "max_iterations": 25, "max_wall_seconds": 3600, "max_total_tokens": 1000000, "max_consecutive_failures": 3 },
+      "long_running": { "max_iterations": 200, "max_wall_seconds": 28800, "max_total_tokens": 5000000, "max_consecutive_failures": 5 }
+    },
+    "steps": [
+      {
+        "id": "ralph",
+        "name": "Ralph Loop",
+        "kind": "ralph",
+        "inputs": ["seed.query"],
+        "outputs": ["progress"],
+        "ralph": {
+          "journal_path": "data/ralph/composer-journal.jsonl",
+          "halt": {
+            "max_iterations": 25,
+            "max_wall_seconds": 3600,
+            "max_total_tokens": 1000000,
+            "max_consecutive_failures": 3,
+            "goal_gate": "verify.approved == True"
+          }
+        },
+        "body": [
+          {
+            "id": "plan",
+            "name": "Plan",
+            "kind": "llm",
+            "role": "reasoning",
+            "system_prompt": "You are the planner. Read the goal and the playbook lessons, then emit this iteration's plan as an ordered list of concrete actions.",
+            "inputs": ["seed.query", "$memory.playbook.workflow-lessons"],
+            "outputs": ["plan"]
+          },
+          {
+            "id": "execute",
+            "name": "Execute",
+            "kind": "llm",
+            "role": "general",
+            "system_prompt": "You are the executor. Carry out the plan and report exactly what you produced.",
+            "inputs": ["plan.plan"],
+            "outputs": ["work"]
+          },
+          {
+            "id": "verify",
+            "name": "Verify",
+            "kind": "llm",
+            "role": "reasoning",
+            "system_prompt": "You are the verifier. Check the work against the goal. Emit JSON: {\"approved\": true|false, \"progress\": \"<one-line status>\"}.",
+            "inputs": ["plan.plan", "execute.work"],
+            "outputs": ["approved", "progress"]
+          },
+          {
+            "id": "consolidate",
+            "name": "Consolidate",
+            "kind": "consolidate",
+            "inputs": ["verify.progress"],
+            "outputs": ["lessons"],
+            "consolidate": {
+              "target": "playbook",
+              "target_name": "workflow-lessons",
+              "system_prompt": "Record what worked and what failed this iteration as short playbook lessons."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": "research_fanout",
+    "name": "Research fan-out",
+    "complexity": "COMPLEX",
+    "kind": "parallel",
+    "desc": "Index splits the question into angles, three subagents research in parallel, gather synthesizes one report. Gather's outputs mirror the parent's contract exactly.",
+    "steps": [
+      {
+        "id": "index",
+        "name": "Index",
+        "kind": "llm",
+        "role": "reasoning",
+        "system_prompt": "Break the research question into three distinct, non-overlapping angles. Emit JSON: {\"angles\": [\"<angle 1>\", \"<angle 2>\", \"<angle 3>\"]}.",
+        "inputs": ["seed.query"],
+        "outputs": ["angles"]
+      },
+      {
+        "id": "fan_out",
+        "name": "Research Fan-out",
+        "kind": "parallel",
+        "depends_on": ["index"],
+        "outputs": ["report"],
+        "execution": { "mode": "auto", "failure_policy": "continue_on_partial" },
+        "branches": [
+          {
+            "id": "researcher_1",
+            "name": "Researcher 1",
+            "kind": "llm",
+            "role": "reasoning",
+            "system_prompt": "You are research subagent 1. Take the first angle from the index and research it thoroughly.",
+            "inputs": ["index.angles"],
+            "outputs": ["findings"]
+          },
+          {
+            "id": "researcher_2",
+            "name": "Researcher 2",
+            "kind": "llm",
+            "role": "reasoning",
+            "system_prompt": "You are research subagent 2. Take the second angle from the index and research it thoroughly.",
+            "inputs": ["index.angles"],
+            "outputs": ["findings"]
+          },
+          {
+            "id": "researcher_3",
+            "name": "Researcher 3",
+            "kind": "llm",
+            "role": "reasoning",
+            "system_prompt": "You are research subagent 3. Take the third angle from the index and research it thoroughly.",
+            "inputs": ["index.angles"],
+            "outputs": ["findings"]
+          }
+        ],
+        "gather": {
+          "id": "gather",
+          "name": "Gather",
+          "kind": "llm",
+          "role": "reasoning",
+          "system_prompt": "Synthesize the three researchers' findings into one coherent report.",
+          "inputs": ["researcher_1.findings", "researcher_2.findings", "researcher_3.findings"],
+          "outputs": ["report"]
+        }
+      }
+    ]
+  },
+  {
+    "key": "tdd_loop",
+    "name": "TDD loop",
+    "complexity": "COMPLEX",
+    "kind": "loop",
+    "desc": "Write → test (sandboxed) → critic, repeated until the critic approves. The critic is the last body step and produces every loop output.",
+    "steps": [
+      {
+        "id": "tdd",
+        "name": "TDD Loop",
+        "kind": "loop",
+        "inputs": ["seed.query"],
+        "outputs": ["code", "approved"],
+        "max_iterations": 5,
+        "until": { "type": "gate", "gate": "critic.approved == True" },
+        "body": [
+          {
+            "id": "write",
+            "name": "Write",
+            "kind": "llm",
+            "role": "coding",
+            "system_prompt": "You are the implementer. Write or revise the code to satisfy the requirements and fix any prior test failures.",
+            "inputs": ["seed.query"],
+            "outputs": ["code"]
+          },
+          {
+            "id": "test",
+            "name": "Test",
+            "kind": "code",
+            "inputs": ["write.code"],
+            "outputs": ["test_output"],
+            "code": {
+              "language": "python",
+              "source": "inline",
+              "code": "print('replace with the test harness for this loop')"
+            }
+          },
+          {
+            "id": "critic",
+            "name": "Critic",
+            "kind": "llm",
+            "role": "reasoning",
+            "system_prompt": "You are the critic. Review the code against the test output. Emit JSON: {\"approved\": true|false, \"code\": \"<the final code>\"}.",
+            "inputs": ["write.code", "test.test_output"],
+            "outputs": ["code", "approved"]
+          }
+        ]
+      }
+    ]
+  }
+]
+`;
+const dfPatternTemplates = JSON.parse(dfPatternTemplatesJson);
+// Ralph card's budget-preset toggle state (standard | long_running) —
+// applied to ralph.halt on the NEXT drop. Module-scoped, no window global.
+let dfRalphBudgetPreset = 'standard';
+
 // S1 (G5 quarantine): legacy Catalog runner mode toggle. The compose/run
 // chrome it drove (#wf-mode-run, #wf-mode-compose, #wf-composer-controls,
 // #wf-composer) left the DOM when the Composer became the sole authoring
@@ -5239,7 +5555,7 @@ function setWfMode(mode) {
   if (wfComposer) wfComposer.style.display = mode === 'compose' ? 'block' : 'none';
   const detail = $id('wf-detail');
   if (detail) detail.style.display = mode === 'run' ? detail.dataset.wasVisible || 'none' : 'none';
-  if (mode === 'compose') { dfInitEditor(); dfInitPalette(); }
+  if (mode === 'compose') { dfInitEditor(); dfInitPalette(); dfInitPatterns(); }
 }
 
 function dfInitEditor() {
@@ -5295,6 +5611,13 @@ function dfInitEditor() {
     const tmplKey = e.dataTransfer.getData('application/df-template');
     if (tmplKey) {
       dfAddNodeFromTemplate(tmplKey, canvasX, canvasY);
+      return;
+    }
+    // Pattern cards (BU4): SIMPLE spawns one kinded node; COMPLEX routes
+    // through dfScaffoldPattern for the pre-wired sub-DAG.
+    const patternKey = e.dataTransfer.getData('application/df-pattern');
+    if (patternKey) {
+      dfAddPatternFromTemplate(patternKey, canvasX, canvasY);
       return;
     }
     // Agent drop: fetch the agent's full definition, then spawn a step
@@ -5515,6 +5838,9 @@ window.dfApplyRunState = dfApplyRunState;
 window.dfClearRunState = dfClearRunState;
 
 function dfInitPalette() {
+  // The Patterns bench boots alongside the Task palette (its own
+  // idempotence guard) so both ComposerView.init and setWfMode cover it.
+  dfInitPatterns();
   const palette = document.getElementById('df-palette');
   if (!palette || palette.dataset.initialized) return;
   palette.dataset.initialized = '1';
@@ -5606,6 +5932,181 @@ function dfAutoChain(newNodeId) {
   const terminals = realIds.filter(id => !hasRealDownstream(id));
   const tail = (terminals.length ? terminals : realIds).reduce((a, b) => Math.max(a, b));
   try { dfEditor.addConnection(tail, newNodeId, 'output_1', 'input_1'); } catch (_) {}
+}
+
+// ── BU4: Patterns bench + scaffolds ─────────────────────────────────
+// Cards render from dfPatternTemplates into #patterns-palette and drag
+// with MIME application/df-pattern (drop branch in dfInitEditor).
+function dfInitPatterns() {
+  const palette = document.getElementById('patterns-palette');
+  if (!palette || palette.dataset.initialized) return;
+  palette.dataset.initialized = '1';
+  palette.innerHTML = dfPatternTemplates.map(tpl => {
+    const badge = `<span class="df-pattern-badge ${tpl.complexity === 'COMPLEX' ? 'complex' : 'simple'}">${esc(tpl.complexity)}</span>`;
+    // Ralph ships ONE card with a budget-preset toggle (standard vs
+    // long-running automation) instead of a duplicate card.
+    const budgetToggle = tpl.budget_presets
+      ? `<span class="df-pattern-presets" title="Budget preset stamped onto the halt caps on the next drop">${
+          Object.keys(tpl.budget_presets).map(p =>
+            `<button type="button" class="df-pattern-preset-btn${p === dfRalphBudgetPreset ? ' active' : ''}"
+              data-action="pattern.budget-preset" data-preset="${esc(p)}">${esc(p.replace('_', '-'))}</button>`).join('')
+        }</span>`
+      : '';
+    return `
+      <div class="df-palette-item df-pattern-card" draggable="true"
+           data-action="bench.drag" data-drag-mime="application/df-pattern" data-drag-value="${esc(tpl.key)}"
+           data-pattern="${esc(tpl.key)}" title="${esc(tpl.name)} — ${esc(tpl.desc)}">
+        <span class="df-palette-titleblock">
+          <span class="df-palette-label">${esc(tpl.name)} ${badge}</span>
+          <span class="df-pattern-desc">${esc(tpl.desc)}</span>
+          ${budgetToggle}
+        </span>
+      </div>`;
+  }).join('');
+}
+
+// Budget-preset toggle on the Ralph card. Module-scoped state; repaints
+// every toggle button so the active choice reads across re-renders.
+Actions.click({
+  'pattern.budget-preset': el => {
+    dfRalphBudgetPreset = el.dataset.preset === 'long_running' ? 'long_running' : 'standard';
+    document.querySelectorAll('.df-pattern-preset-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.preset === dfRalphBudgetPreset));
+  }
+});
+
+// Decorate an engine-schema preset step into canvas node data: the UI
+// fields dfNodeHtml/dfRenderConfigPanel expect, plus the pattern
+// provenance (data.pattern / data.complexity) and — for sub-DAG editing
+// proxies — the parent linkage the composite serializer keys off.
+// MUTATES the given step object on purpose: a proxy node's data IS the
+// parent's nested body/branch/gather entry, so leaf edits serialize.
+function _dfDecoratePatternNodeData(step, tpl, parentNid, subRole) {
+  step.name = step.name || step.id;
+  step.role = step.role || 'general';
+  step.inputs = step.inputs || [];
+  step.outputs = (step.outputs && step.outputs.length) ? step.outputs : ['result'];
+  if (!step.system_prompt) step.system_prompt = '';
+  step.output_format = 'raw';
+  step.quality_gates = [];
+  step.persona = (window.AgentIcons ? AgentIcons.resolve({ role: step.role, name: step.name }) : 'general');
+  step.pattern = tpl.key;
+  step.complexity = tpl.complexity;
+  if (parentNid != null) { step._sub_of = parentNid; step._sub_role = subRole; }
+  return step;
+}
+
+// Shared spawn for pattern nodes (composite parents + sub-DAG proxies).
+// Mirrors dfAddNodeFromTemplate's registration without the dfStepTemplates
+// lookup; selection/wiring stays with the callers.
+function dfAddPatternNode(data, x, y) {
+  const nodeId = dfEditor.addNode(data.id, 1, 1, x, y, data.id, {}, dfNodeHtml(data));
+  dfNodeData[nodeId] = data;
+  const wrap = document.getElementById('node-' + nodeId);
+  if (wrap) {
+    if (data._sub_of != null) wrap.classList.add('is-pattern-sub');
+    if (data.kind && data.kind !== 'llm') wrap.classList.add('is-pattern-composite');
+  }
+  return nodeId;
+}
+
+// SIMPLE pattern drop → one node stamping data.kind + its kind config
+// block. COMPLEX keys route through dfScaffoldPattern.
+function dfAddPatternFromTemplate(patternKey, x, y) {
+  const tpl = dfPatternTemplates.find(t => t.key === patternKey);
+  if (!tpl || !dfEditor) return;
+  if (tpl.complexity === 'COMPLEX') return dfScaffoldPattern(patternKey, x, y);
+  const step = JSON.parse(JSON.stringify(tpl.steps[0]));
+  step.id = step.id + '_' + (++dfNextId);
+  const nodeId = dfAddPatternNode(_dfDecoratePatternNodeData(step, tpl), x, y);
+  dfSelectedNodeId = nodeId;
+  dfRenderConfigPanel(nodeId);
+  dfAutoChain(nodeId);  // native wire onto the current tail (seed included)
+  if (!_dfAnchorBusy) dfScheduleAnchorRefresh();
+  return nodeId;
+}
+
+// COMPLEX pattern drop → the preset's pre-wired, editable sub-DAG.
+// Top-level steps become canvas nodes; a composite's body/branches/gather
+// entries ALSO become canvas nodes (placeholder personas per the
+// composition rule) whose data objects are the SAME nested objects the
+// parent serializes — editing a leaf edits the emitted nested step.
+function dfScaffoldPattern(patternKey, x, y) {
+  const tpl = dfPatternTemplates.find(t => t.key === patternKey);
+  if (!tpl || !dfEditor) return;
+  if (tpl.complexity !== 'COMPLEX') return dfAddPatternFromTemplate(patternKey, x, y);
+  const steps = JSON.parse(JSON.stringify(tpl.steps));
+  // Top-level ids get the same uniqueness suffix other spawns use; nested
+  // body/branch/gather ids stay preset-scoped (the engine namespaces them
+  // under the parent). Rewrite cross-references to the renamed ids.
+  const suffix = '_' + (++dfNextId);
+  const rename = {};
+  steps.forEach(s => { rename[s.id] = s.id + suffix; });
+  const rewrite = (s) => {
+    if (!s) return;
+    if (Array.isArray(s.inputs)) s.inputs = s.inputs.map(ref => {
+      const head = String(ref).split('.')[0];
+      return rename[head] ? rename[head] + String(ref).slice(head.length) : ref;
+    });
+    if (Array.isArray(s.depends_on)) s.depends_on = s.depends_on.map(d => rename[d] || d);
+    (s.body || []).forEach(rewrite);
+    (s.branches || []).forEach(rewrite);
+    rewrite(s.gather);
+    Object.values(s.workers || {}).forEach(rewrite);
+  };
+  steps.forEach(s => { s.id = rename[s.id]; rewrite(s); });
+  // Ralph's budget-preset toggle (standard / long-running) stamps the
+  // selected caps onto the halt block — one card, two presets.
+  if (tpl.budget_presets) {
+    const caps = tpl.budget_presets[dfRalphBudgetPreset] || tpl.budget_presets.standard;
+    steps.forEach(s => { if (s.kind === 'ralph' && s.ralph) s.ralph.halt = Object.assign({}, s.ralph.halt || {}, caps); });
+  }
+
+  const nodeIdByStep = {};
+  let firstNid = null;
+  let cursorX = x;
+  steps.forEach(step => {
+    const nid = dfAddPatternNode(_dfDecoratePatternNodeData(step, tpl), cursorX, y);
+    nodeIdByStep[step.id] = nid;
+    if (firstNid == null) {
+      firstNid = nid;
+      dfAutoChain(nid);  // chain the scaffold's head onto the current tail
+    }
+    const childX = cursorX + 240;
+    // Sequential body chain (ralph / loop): parent → first → … → last.
+    if (Array.isArray(step.body)) {
+      let prev = nid;
+      step.body.forEach((c, i) => {
+        const cnid = dfAddPatternNode(_dfDecoratePatternNodeData(c, tpl, nid, 'body'), childX + i * 240, y + 180);
+        try { dfEditor.addConnection(prev, cnid, 'output_1', 'input_1'); } catch (_) {}
+        prev = cnid;
+      });
+      cursorX = childX + step.body.length * 240;
+    }
+    // Parallel fan: parent → every branch → gather.
+    if (Array.isArray(step.branches)) {
+      const branchNids = step.branches.map((c, i) =>
+        dfAddPatternNode(_dfDecoratePatternNodeData(c, tpl, nid, 'branch'), childX, y - 160 + i * 160));
+      branchNids.forEach(bnid => { try { dfEditor.addConnection(nid, bnid, 'output_1', 'input_1'); } catch (_) {} });
+      if (step.gather) {
+        const gnid = dfAddPatternNode(_dfDecoratePatternNodeData(step.gather, tpl, nid, 'gather'), childX + 250, y);
+        branchNids.forEach(bnid => { try { dfEditor.addConnection(bnid, gnid, 'output_1', 'input_1'); } catch (_) {} });
+        cursorX = childX + 500;
+      }
+    }
+    cursorX += 280;
+  });
+  // Wire the preset's declared top-level deps (e.g. index → fan-out).
+  steps.forEach(step => (step.depends_on || []).forEach(dep => {
+    const src = nodeIdByStep[dep], dst = nodeIdByStep[step.id];
+    if (src != null && dst != null) { try { dfEditor.addConnection(src, dst, 'output_1', 'input_1'); } catch (_) {} }
+  }));
+  if (firstNid != null) {
+    dfSelectedNodeId = firstNid;
+    dfRenderConfigPanel(firstNid);
+  }
+  if (!_dfAnchorBusy) dfScheduleAnchorRefresh();
+  return firstNid;
 }
 
 function dfNodeHtml(data) {
@@ -6304,6 +6805,12 @@ function dfOnConnectionCreated(conn) {
   const fromId = parseInt(conn.output_id), toId = parseInt(conn.input_id);
   const from = dfNodeData[fromId], to = dfNodeData[toId];
   if (from && to) {
+    // BU4 scaffold wiring: a composite parent's edge into its OWN sub-DAG
+    // proxy is visual topology only — the nested steps already carry their
+    // preset input refs, and a parent's outputs are never its children's
+    // inputs. Sibling proxy edges (write→test, branch→gather) still push
+    // refs and dedup against the preset via the includes() check below.
+    if (to._sub_of != null && to._sub_of === fromId) return;
     from.outputs.forEach(out => { const ref = `${from.id}.${out}`; if (!to.inputs.includes(ref)) to.inputs.push(ref); });
     if (dfSelectedNodeId === toId) dfRenderConfigPanel(toId);
   }
@@ -6420,6 +6927,78 @@ function dfScheduleAnchorRefresh() {
   _dfAnchorTimer = setTimeout(() => { try { dfRefreshAnchors(); } catch (_) {} }, 150);
 }
 
+// ── BU4: composite-kind serializer helpers ──────────────────────────
+// Strip a canvas node's data down to the engine-schema step dict,
+// recursively for body/branches/gather/workers. Emission is keyed off
+// data.kind with cross-field exclusivity: only kind=llm may carry
+// system_prompt/prompt at step level; kind=a2a never carries model/role
+// (the remote agent owns both). UI decoration (persona, output_format,
+// quality_gates, pattern provenance, _sub_* linkage) never leaks out.
+function _dfCleanStep(src) {
+  if (!src) return null;
+  const kind = src.kind || 'llm';
+  const out = { id: src.id, name: src.name || src.id };
+  if (kind !== 'llm') out.kind = kind;
+  if (kind !== 'a2a') {
+    if (src.role) out.role = src.role;
+    if (src.model) out.model = src.model;
+  }
+  if (kind === 'llm') {
+    if (src.prompt) out.prompt = src.prompt;
+    else if (src.system_prompt) out.system_prompt = src.system_prompt;
+  }
+  if (Array.isArray(src.inputs) && src.inputs.length) out.inputs = src.inputs.slice();
+  out.outputs = (src.outputs || []).slice();
+  if (Array.isArray(src.depends_on) && src.depends_on.length) out.depends_on = src.depends_on.slice();
+  if (kind === 'parallel') {
+    if (src.execution) out.execution = src.execution;
+    out.branches = (src.branches || []).map(_dfCleanStep);
+    if (src.gather) out.gather = _dfCleanStep(src.gather);
+  }
+  if (kind === 'loop') {
+    out.body = (src.body || []).map(_dfCleanStep);
+    if (src.until) out.until = src.until;
+    if (src.max_iterations) out.max_iterations = src.max_iterations;
+  }
+  if (kind === 'ralph') {
+    if (src.ralph) out.ralph = src.ralph;
+    out.body = (src.body || []).map(_dfCleanStep);
+  }
+  if (kind === 'a2a') {
+    if (src.agent_card_url) out.agent_card_url = src.agent_card_url;
+    if (src.skill) out.skill = src.skill;
+    if (src.auth) out.auth = src.auth;
+    if (src.streaming) out.streaming = true;
+    if (src.timeout) out.timeout = src.timeout;
+  }
+  if (kind === 'orchestrator') {
+    if (src.planner) out.planner = src.planner;
+    if (src.workers) {
+      out.workers = {};
+      Object.keys(src.workers).forEach(k => { out.workers[k] = _dfCleanStep(src.workers[k]); });
+    }
+    if (src.budget) out.budget = src.budget;
+  }
+  if (kind === 'consolidate' && src.consolidate) out.consolidate = src.consolidate;
+  if (kind === 'code' && src.code) out.code = src.code;
+  return out;
+}
+
+// One `- ` sequence item of `steps:` for a composite (kind != llm) node.
+// jsyaml.dump handles the arbitrary nesting (ralph body, parallel
+// branches/gather, orchestrator workers) far more safely than the
+// hand-concatenated llm emitter in dfExportYaml.
+function _dfCompositeStepYaml(data, deps) {
+  const step = _dfCleanStep(data);
+  delete step.depends_on;                       // canvas edges are the truth
+  if (deps && deps.length) step.depends_on = deps.slice();
+  let dumped = '';
+  try { dumped = jsyaml.dump(step, { indent: 2, lineWidth: 100, noRefs: true }); }
+  catch (_) { dumped = JSON.stringify(step); }  // JSON is valid YAML flow
+  const lines = dumped.replace(/\n+$/, '').split('\n');
+  return '  - ' + lines[0] + '\n' + lines.slice(1).map(l => '    ' + l).join('\n') + '\n\n';
+}
+
 function dfExportYaml() {
   if (!dfEditor) return;
   const exported = dfEditor.export();
@@ -6455,11 +7034,26 @@ function dfExportYaml() {
     // The seed is not an engine step — it compiled to context.inputs above,
     // and its edges live on as the targets' seed.<key> input refs.
     if (data.is_seed) return;
+    // Sub-DAG editing proxies (BU4 pattern scaffolds) serialize NESTED
+    // inside their composite parent, never as top-level steps.
+    if (data._sub_of != null) return;
     const nodeInfo = homeData[nid];
     const deps = [];
     // A seed source never becomes depends_on — the connection already
-    // serialized as seed.<key> inputs (dfOnConnectionCreated).
-    if (nodeInfo.inputs) Object.values(nodeInfo.inputs).forEach(inp => (inp.connections||[]).forEach(conn => { const src = dfNodeData[parseInt(conn.node)]; if (src && !src.is_seed && !deps.includes(src.id)) deps.push(src.id); }));
+    // serialized as seed.<key> inputs (dfOnConnectionCreated). An edge from
+    // a sub-DAG proxy resolves to its composite PARENT's id: nested step
+    // outputs aren't addressable at the top level.
+    if (nodeInfo.inputs) Object.values(nodeInfo.inputs).forEach(inp => (inp.connections||[]).forEach(conn => {
+      let src = dfNodeData[parseInt(conn.node)];
+      if (src && src._sub_of != null) src = dfNodeData[src._sub_of];
+      if (src && !src.is_seed && !deps.includes(src.id) && src.id !== data.id) deps.push(src.id);
+    }));
+    // Composite kinds (BU4) emit via the kind-keyed serializer: per-kind
+    // config blocks, never a step-level prompt.
+    if (data.kind && data.kind !== 'llm') {
+      yaml += _dfCompositeStepYaml(data, deps);
+      return;
+    }
     yaml += `  - id: ${data.id}\n    name: "${data.name}"\n    role: ${data.role}\n    system_prompt: |\n`;
     data.system_prompt.split('\n').forEach(line => { yaml += `      ${line}\n`; });
     if (data.inputs.length) { yaml += `    inputs:\n`; data.inputs.forEach(i => { yaml += `      - ${i}\n`; }); }
@@ -9746,6 +10340,7 @@ export {
   dfAddNodeFromImportedStep,
   dfAddNodeFromTemplate,
   dfAddOutput,
+  dfAddPatternFromTemplate,
   dfAddSkill,
   dfAddTool,
   dfAutoChain,
@@ -9763,11 +10358,13 @@ export {
   dfImportYaml,
   dfInitEditor,
   dfInitPalette,
+  dfInitPatterns,
   dfNextId,
   dfNodeData,
   dfNodeHtml,
   dfOnConnectionCreated,
   dfOnConnectionRemoved,
+  dfPatternTemplates,
   dfRefreshAnchors,
   dfRemoveGate,
   dfRemoveOutput,
@@ -9778,6 +10375,7 @@ export {
   dfRunWorkflowFromComposer,
   dfRunWorkflowLive,
   dfSave,
+  dfScaffoldPattern,
   dfScheduleAnchorRefresh,
   dfToggleFullscreen,
   dfUpdateDecisionBranch,
