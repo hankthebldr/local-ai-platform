@@ -6168,6 +6168,74 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .composer-canvas-empty-sub { font-size: 0.7rem; line-height: 1.5; }
 .composer-canvas-panel.has-nodes .composer-canvas-empty { display: none; }
 
+/* BU8d: guidance — starter chooser + best-practice card. The empty-state
+   overlay is pointer-events:none so the canvas stays draggable; the
+   starter CTA re-enables hit-testing for itself only. */
+.composer-empty-starter { pointer-events: auto; margin-top: 14px; font-size: 0.6rem; }
+.df-starter-chooser {
+  position: absolute;
+  top: 54px; left: 50%; transform: translateX(-50%);
+  width: min(440px, calc(100% - 32px));
+  z-index: 26;                             /* above the run chip, beside the popup */
+  display: flex; flex-direction: column;
+  background: rgba(6, 10, 16, 0.96);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  font-family: var(--mono);
+}
+.df-starter-chooser[hidden] { display: none; }
+.df-starter-chooser-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(87, 196, 210, 0.04);
+  border-radius: 7px 7px 0 0;
+}
+.df-starter-chooser-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+.df-starter-item {
+  display: flex; flex-direction: column; gap: 3px;
+  text-align: left;
+  background: var(--bg-panel, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.df-starter-item:hover { border-color: var(--accent); }
+.df-starter-example { font-size: 0.52rem; color: var(--text-muted); font-style: italic; line-height: 1.4; }
+
+/* Best-practice card (left rail, below the workbench panel) — same
+   .workbench-hint reading voice, dismissal persisted to localStorage. */
+.composer-bp-card { flex: 0 0 auto; padding: 8px 10px; }
+.composer-bp-card[hidden] { display: none; }
+.composer-bp-head { display: flex; align-items: center; gap: 6px; }
+.composer-bp-head .panel-label { margin: 0; flex: 1; }
+.composer-bp-dismiss { color: var(--text-muted); cursor: pointer; font-size: 0.62rem; line-height: 1; padding: 2px 4px; }
+.composer-bp-dismiss:hover { color: var(--text-dim); }
+.composer-bp-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.composer-bp-list li {
+  font-size: 0.58rem; color: var(--text-muted); line-height: 1.4;
+  position: relative; padding-left: 13px;
+}
+.composer-bp-list li::before { content: '✦'; position: absolute; left: 0; top: 1px; color: var(--accent); font-size: 0.5rem; }
+.composer-bp-reopen {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.composer-bp-reopen:hover { border-color: var(--accent); color: var(--accent); }
+.composer-bp-reopen[hidden] { display: none; }
+
 .composer-config-body { font-size: 0.72rem; color: var(--text-dim); padding: 0 6px; }
 /* Step Config inputs — every text/select/textarea inside the config
    panel fills its container's width. Inline styles in dfRenderConfigPanel

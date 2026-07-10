@@ -471,6 +471,12 @@
              is cut from v1: no host-side scheduler backend exists. -->
         <button class="action-btn" data-action="composer.loop-wrap"
                 title="Wrap the current canvas into an autonomous Ralph loop — the steps become the loop body; halt budgets open in Safety rails">↻ Loop-wrap</button>
+        <!-- BU8d: starter suggestions — opens a compact chooser of full
+             best-practice starters (Ralph / TDD / Research fan-out); a
+             pick instantiates seed + scaffold end-to-end. Wired via the
+             Actions module (data-action), no inline handler. -->
+        <button class="action-btn" data-action="composer.suggest-starter"
+                title="Suggest a starter — instantiate a complete best-practice workflow (seed + pre-wired scaffold) in one click">✦ Starter</button>
         <button class="action-btn cyan" onclick="dfExportYaml()">Export YAML</button>
         <button class="action-btn" onclick="composerExportBundle()" title="Export this workflow + linked agents as a portable bundle">Export Bundle</button>
         <button class="action-btn pull" onclick="dfSave()">Save</button>
@@ -573,6 +579,21 @@
             </div>
           </div>
         </div>
+        <!-- BU8d: dismissible best-practice card — tips render from the
+             static dfWorkflowTips list (main.js); dismissal persists to
+             localStorage. Both the ✕ and the reopen chip toggle through
+             the same Actions registration (composer.best-practice). -->
+        <div class="panel composer-bp-card" id="composer-bp-card" hidden>
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="composer-bp-head">
+            <span class="panel-label">Best practices</span>
+            <button type="button" class="btn-unstyled composer-bp-dismiss" data-action="composer.best-practice"
+                    title="Dismiss — the ✦ best practices chip brings it back" aria-label="Dismiss best practices">✕</button>
+          </div>
+          <ul class="composer-bp-list" id="composer-bp-list"></ul>
+        </div>
+        <button type="button" class="composer-bp-reopen" id="composer-bp-reopen" data-action="composer.best-practice" hidden
+                title="Show workflow best practices">✦ best practices</button>
       </div>
 
       <!-- CENTER: Drawflow canvas -->
@@ -630,7 +651,23 @@
             <div class="composer-canvas-empty-inner">
               <div class="composer-canvas-empty-title">Compose a workflow</div>
               <div class="composer-canvas-empty-sub">Drag steps from the palette on the left, then connect their outputs to downstream inputs.</div>
+              <!-- BU8d: one-click starter for a new operator — the overlay
+                   is pointer-events:none so the canvas stays draggable;
+                   the CTA re-enables hit-testing for itself only (CSS). -->
+              <button type="button" class="action-btn accent composer-empty-starter" data-action="composer.suggest-starter"
+                      title="Pick a best-practice starter — seed + pre-wired scaffold, ready to run">✦ Suggest a starter</button>
             </div>
+          </div>
+          <!-- BU8d: compact starter chooser — items render from the static
+               dfStarterWorkflows list (main.js); toggled by
+               composer.suggest-starter, a pick seeds the canvas end-to-end
+               via dfAddSeedNode + dfScaffoldPattern. -->
+          <div class="df-starter-chooser" id="df-starter-chooser" hidden role="dialog" aria-label="Suggest a starter">
+            <div class="df-starter-chooser-head">
+              <span class="panel-label" style="margin:0;flex:1">Suggest a starter</span>
+              <button type="button" class="df-config-popup-btn" data-action="composer.suggest-starter" title="Close">✕</button>
+            </div>
+            <div class="df-starter-chooser-list" id="df-starter-chooser-list"></div>
           </div>
         </div>
         <div class="panel" id="df-yaml-panel" style="display:none;margin-top:10px">

@@ -6095,6 +6095,7 @@ function dfAutoChain(newNodeId) {
 // Cards render from dfPatternTemplates into #patterns-palette and drag
 // with MIME application/df-pattern (drop branch in dfInitEditor).
 function dfInitPatterns() {
+  dfInitGuidance();  // BU8d card boots with the bench (own idempotence guard)
   const palette = document.getElementById('patterns-palette');
   if (!palette || palette.dataset.initialized) return;
   palette.dataset.initialized = '1';
@@ -6760,6 +6761,128 @@ async function dfRefreshSignalBand() {
     'feasible on ' + (p.arch_name || 'this arch') + ' · ' + ticks + ' tick' + (ticks === 1 ? '' : 's'));
 }
 Actions.click({ 'composer.schedule-preview-refresh': () => { dfRefreshSignalBand(); } });
+
+/* ── BU8d: guidance — starter suggestions + best-practice card ──────
+   Three affordances for the new operator:
+     (a) pattern-card tooltips — title attrs already render from
+         dfPatternTemplates desc in dfInitPatterns;
+     (b) "suggest a starter" — a compact chooser (empty-state CTA + a
+         toolbar button share one Actions registration) whose pick
+         instantiates a COMPLETE runnable shape in one click: seed with
+         an example query + the pattern's full pre-wired scaffold.
+         Reuses dfAddSeedNode + dfScaffoldPattern — no parallel
+         scaffold logic;
+     (c) a dismissible best-practice card in the left rail, rendered
+         from the static dfWorkflowTips list, dismissal persisted to
+         localStorage. */
+
+// Starters pair a COMPLEX pattern with an example seed query. The
+// scaffold topology, personas and halt/until presets all come from
+// dfPatternTemplates — this list only adds the seed text.
+const dfStarterWorkflows = [
+  {
+    pattern: 'ralph_loop',
+    name: 'Ralph autonomous loop',
+    example: 'Refactor the report module: split parsing, rendering and writing into separate functions, keeping behaviour identical.'
+  },
+  {
+    pattern: 'tdd_loop',
+    name: 'TDD-driven build',
+    example: 'Write a Python function slugify(text) that lowercases, strips punctuation, and joins words with hyphens.'
+  },
+  {
+    pattern: 'research_fanout',
+    name: 'Research fan-out',
+    example: 'What are the trade-offs between GGUF quantization levels (Q4_K_M vs Q5_K_M vs Q8_0) for local CPU inference?'
+  }
+];
+
+// Static best-practice tips for the dismissible guidance card.
+const dfWorkflowTips = [
+  'Give ralph a goal_gate — without one, only the budget caps stop the loop.',
+  'Cap max_iterations — every loop needs a worst-case budget.',
+  "gather.outputs must equal the parent's outputs — the fan-out contract.",
+  'The seed feeds step one — keep it editable and specific.'
+];
+
+// Chooser items render lazily on first open (dfPatternTemplates supplies
+// the topology desc so the chooser copy can't drift from the cards).
+function dfToggleStarterChooser(force) {
+  const chooser = document.getElementById('df-starter-chooser');
+  if (!chooser) return;
+  const show = force != null ? force : chooser.hidden;
+  if (show && !chooser.dataset.initialized) {
+    chooser.dataset.initialized = '1';
+    const list = document.getElementById('df-starter-chooser-list');
+    if (list) list.innerHTML = dfStarterWorkflows.map(st => {
+      const tpl = dfPatternTemplates.find(t => t.key === st.pattern) || {};
+      return `<button type="button" class="df-starter-item" data-action="composer.starter-pick" data-starter="${esc(st.pattern)}"
+          title="${esc(st.name)} — ${esc(tpl.desc || '')}">
+        <span class="df-palette-label">${esc(st.name)}</span>
+        <span class="df-pattern-desc">${esc(tpl.desc || '')}</span>
+        <span class="df-starter-example">e.g. ${esc(st.example)}</span>
+      </button>`;
+    }).join('');
+  }
+  chooser.hidden = !show;
+}
+
+// One-click starter: the seed pill (stamped with the example query when
+// the operator hasn't typed one) + the pattern's full best-practice
+// scaffold. dfScaffoldPattern's dfAutoChain wires seed → scaffold head,
+// so the result is a complete runnable shape — edit the seed, then Run.
+function dfInstantiateStarter(patternKey) {
+  const starter = dfStarterWorkflows.find(s => s.pattern === patternKey);
+  if (!starter) return;
+  dfInitEditor();  // idempotent — boots the canvas if it hasn't mounted yet
+  if (!dfEditor) return;
+  const seedNid = dfAddSeedNode(40, 200);  // exactly-once: reuses an existing seed
+  const seed = seedNid != null ? dfNodeData[seedNid] : null;
+  if (seed && !(seed.query || '').trim()) {
+    dfUpdateNodeData(seedNid, 'query', starter.example);  // repaint the pill
+  }
+  dfScaffoldPattern(patternKey, 320, 200);
+  try { ComposerView.updateCanvasEmptyState(); } catch (_) {}
+  Toast.success('Starter ready', starter.name + ' — edit the seed query, then Run ▶');
+}
+
+// Best-practice card boot: render the tips once, then honor a persisted
+// dismissal (card hidden, reopen chip shown) before first paint.
+const DF_BP_DISMISS_KEY = 'enclave.composer.tipsDismissed';
+function dfInitGuidance() {
+  const card = document.getElementById('composer-bp-card');
+  if (!card || card.dataset.initialized) return;
+  card.dataset.initialized = '1';
+  const list = document.getElementById('composer-bp-list');
+  if (list) list.innerHTML = dfWorkflowTips.map(t => `<li>${esc(t)}</li>`).join('');
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(DF_BP_DISMISS_KEY) === '1'; } catch (_) {}
+  card.hidden = dismissed;
+  const reopen = document.getElementById('composer-bp-reopen');
+  if (reopen) reopen.hidden = !dismissed;
+}
+
+Actions.click({
+  'composer.suggest-starter': () => dfToggleStarterChooser(),
+  'composer.starter-pick': el => {
+    dfToggleStarterChooser(false);
+    dfInstantiateStarter(el.dataset.starter);
+  },
+  // One registration toggles both ways: the card's ✕ dismisses (persisted),
+  // the reopen chip restores (dismissal cleared).
+  'composer.best-practice': () => {
+    const card = document.getElementById('composer-bp-card');
+    if (!card) return;
+    const dismiss = !card.hidden;
+    card.hidden = dismiss;
+    const reopen = document.getElementById('composer-bp-reopen');
+    if (reopen) reopen.hidden = !dismiss;
+    try {
+      if (dismiss) localStorage.setItem(DF_BP_DISMISS_KEY, '1');
+      else localStorage.removeItem(DF_BP_DISMISS_KEY);
+    } catch (_) { /* localStorage disabled — session-only toggle */ }
+  }
+});
 
 function dfRenderConfigPanel(nodeId) {
   const data = dfNodeData[nodeId];
