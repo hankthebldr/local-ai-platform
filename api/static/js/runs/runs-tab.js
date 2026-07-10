@@ -1166,16 +1166,16 @@ export const RunsTab = (function () {
 
   function pivotContextGraph() {
     closeStepDetail();
-    // The knowledge graph (#graph-svg) lives in the research / Skill-Lab
-    // tab — there is no standalone 'graph' tab anymore, so switchTab('graph')
-    // null-threw on getElementById('tab-graph') and the pivot did nothing.
-    // Route to the tab that actually hosts the graph (matching pivotResearch),
-    // then (re)load the graph data and bring the panel into view.
-    switchTab('research');
+    // S4 graph fork (I10/D13): run/provenance nodes render in the Context
+    // tab's OWN #context-graph-svg — Research keeps #graph-svg for the
+    // knowledge view — so a run step's "Context Graph" pivot lands on
+    // Context, diverging from pivotResearch. switchTab's ladder calls
+    // ContextView.init(), which loads/renders the run graph; we just
+    // bring the panel into view once it has had a beat to mount.
+    switchTab('context');
     setTimeout(() => {
-      try { if (typeof loadGraphData === 'function') loadGraphData(); } catch (_) {}
-      const g = document.querySelector('#tab-research .graph-panel')
-        || document.getElementById('graph-svg');
+      const g = document.querySelector('#tab-context .graph-panel')
+        || document.getElementById('context-graph-svg');
       if (g && g.scrollIntoView) {
         try { g.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
       }

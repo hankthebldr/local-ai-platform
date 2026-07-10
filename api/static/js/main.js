@@ -40,6 +40,7 @@ import { ComposerSplit } from './workspace-legacy/composer-split.js';
 import { BootSequence } from './workspace-legacy/boot-sequence.js';
 import { ComposerView } from './workspace-legacy/composer-view.js';
 import { ChatView } from './workspace-legacy/chat-view.js';
+import { ContextView } from './runs/context-view.js';
 import { DfSeedSchema } from './workspace-legacy/df-seed-schema.js';
 import { Projects } from './shell/projects.js';
 import { SkillsBuilder, WorkflowBuilder } from './library/builders.js';
@@ -190,6 +191,11 @@ function switchTab(name, el) {
       try { loadDocumentsTab(); } catch (_) {}
     }
   }
+  // Context (S4): run/provenance observability under Operate — the
+  // run-filtered view of the one /api/graph build + the /api/context
+  // session store. ContextView keeps its OWN load flag, so the
+  // researchLoaded single-shot guard can't starve this pane (R3).
+  if (name === 'context') ContextView.init();
   if (name === 'workflows') {
     // Legacy loader still runs (writes to the hidden mounts under
     // the Catalog page so refreshWorkflows + loadWorkflowDetail
@@ -2504,6 +2510,81 @@ let graphSim = null;
 let selectedNode = null;
 let researchLoaded = false;
 
+// ── S4 graph fork (P4/G4) ──────────────────────────────────────────
+// ONE /api/graph build renders TWO filtered views by node type:
+//   research — the knowledge graph (session/topic/source/agent) in the
+//              Research tab's #graph-svg (id preserved — runs-tab and
+//              the Research chrome pin it);
+//   context  — the run/provenance graph (workflow_run/response + their
+//              grounding sources) in the Context tab's OWN
+//              #context-graph-svg.
+// Cross-type edges are assigned PER-EDGE: any edge touching a
+// run/provenance node belongs to Context (its foreign endpoint rides
+// along as an anchor); everything else stays in Research. Each pane
+// keeps its own zoom/sim/selection state in _graphPaneState — the
+// legacy window._graphState / window.graphSim / window._graphZoomBehavior
+// names stay mirrored to the RESEARCH pane so the existing inline chrome
+// and parity surface keep resolving unchanged.
+const _GRAPH_PANES = {
+  research: {
+    svgId: 'graph-svg',
+    detailId: 'session-detail',
+    emptyMsg: 'No sessions exported yet. Export a chat to build the graph.',
+  },
+  context: {
+    svgId: 'context-graph-svg',
+    detailId: 'context-detail',
+    emptyMsg: 'No workflow runs or provenance recorded yet. Run a workflow to build the run graph.',
+  },
+};
+const _GRAPH_CONTEXT_NODE_TYPES = new Set(['workflow_run', 'response']);
+// Grounding satellites (RAG chunks, web sources, skills, tools) belong to
+// whichever pane owns their edges — they ride along as anchors instead of
+// littering the other pane as isolated dots.
+const _GRAPH_SATELLITE_NODE_TYPES = new Set(['chunk', 'skill', 'tool', 'source']);
+const _graphPaneState = { research: {}, context: {} };
+let _selectedGraphPane = 'research';
+
+function graphPaneView(data, paneKey) {
+  // Filter the single /api/graph dataset down to one pane's view.
+  // Ownership: an edge is Context's iff either endpoint is a
+  // run/provenance node; a node is in a pane if its type is one of the
+  // pane's primaries OR it anchors one of the pane's owned edges.
+  if (!data || !data.nodes) return data;
+  const pane = paneKey || 'research';
+  const wantCtx = pane === 'context';
+  const typeById = new Map(data.nodes.map(n => [n.id, n.type]));
+  const isCtxNode = id => _GRAPH_CONTEXT_NODE_TYPES.has(typeById.get(id));
+  const keep = new Set();
+  data.nodes.forEach(n => {
+    if (_GRAPH_SATELLITE_NODE_TYPES.has(n.type)) return; // edge-pulled only
+    if (_GRAPH_CONTEXT_NODE_TYPES.has(n.type) === wantCtx) keep.add(n.id);
+  });
+  const links = [];
+  (data.links || []).forEach(l => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    if ((isCtxNode(s) || isCtxNode(t)) !== wantCtx) return;
+    keep.add(s); keep.add(t);
+    links.push(l);
+  });
+  return Object.assign({}, data, {
+    nodes: data.nodes.filter(n => keep.has(n.id)),
+    links,
+  });
+}
+
+// Re-render every pane that has painted at least once (the svg carries a
+// data-rendered stamp set by renderGraph — a DOM flag, not a global).
+// Config-panel / legend-toggle changes route through here so both views
+// stay in sync off the one cached dataset.
+function _rerenderGraphPanes() {
+  if (!window.graphData) return;
+  renderGraph(window.graphData);
+  const ctxSvg = document.getElementById('context-graph-svg');
+  if (ctxSvg && ctxSvg.dataset.rendered === '1') renderGraph(window.graphData, 'context');
+}
+
 function initResearch() {
   // Rehydrate the last research result every time the tab is shown.
   // This is what makes tab-switch-and-back keep the result visible.
@@ -2564,10 +2645,13 @@ async function populateResModelSelect() {
 async function loadGraphData() {
   try {
     graphData = await Net.getJson('/api/graph');
-    // Expose the dataset to window so the legend toggle handlers can
-    // re-render without a network round-trip.
-    window.graphData = graphData;
-    renderGraph(graphData);
+    // The dataset reaches window.graphData through the legacy bridge's
+    // LIVE getter on the module binding — assigning window.graphData
+    // directly here THREW (getter-only property, strict mode) and
+    // killed every render since the phase-2 split. One fetch feeds
+    // BOTH panes — _rerenderGraphPanes repaints the Context run-graph
+    // too once it has mounted (S4 fork).
+    _rerenderGraphPanes();
     updateResCount();
   } catch (e) {
     console.error('Graph load failed', e);
@@ -2589,11 +2673,14 @@ function updateResCount() {
   el.textContent = (graphData && graphData.session_count) || '';
 }
 
-function resetGraphZoom() {
-  if (!graphSim || !window._graphZoomBehavior) return;
-  const svg = d3.select('#graph-svg');
+function resetGraphZoom(paneKey) {
+  // No-arg call = Research (the inline chrome there passes nothing);
+  // the Context chrome passes 'context' via its data-action handlers.
+  const pane = _graphPaneState[paneKey || 'research'] || {};
+  if (!pane.sim || !pane.zoom) return;
+  const svg = d3.select('#' + _GRAPH_PANES[paneKey || 'research'].svgId);
   svg.transition().duration(400).call(
-    window._graphZoomBehavior.transform,
+    pane.zoom.transform,
     d3.zoomIdentity
   );
 }
@@ -2601,13 +2688,14 @@ function resetGraphZoom() {
 // the graph is disabled (it was capturing page scroll); these are
 // the only way to change zoom programmatically along with the
 // reset button.
-function graphZoomIn()  { _stepGraphZoom(1.3); }
-function graphZoomOut() { _stepGraphZoom(1 / 1.3); }
-function _stepGraphZoom(factor) {
-  if (!window._graphZoomBehavior) return;
-  const svg = d3.select('#graph-svg');
+function graphZoomIn(paneKey)  { _stepGraphZoom(1.3, paneKey); }
+function graphZoomOut(paneKey) { _stepGraphZoom(1 / 1.3, paneKey); }
+function _stepGraphZoom(factor, paneKey) {
+  const pane = _graphPaneState[paneKey || 'research'] || {};
+  if (!pane.zoom) return;
+  const svg = d3.select('#' + _GRAPH_PANES[paneKey || 'research'].svgId);
   svg.transition().duration(200).call(
-    window._graphZoomBehavior.scaleBy, factor
+    pane.zoom.scaleBy, factor
   );
 }
 window.graphZoomIn = graphZoomIn;
@@ -2720,16 +2808,16 @@ function toggleGraphLinkKind(kind) {
   const s = window.graphConfig.linkKinds;
   if (s.has(kind)) s.delete(kind);
   else s.add(kind);
-  if (window.graphData) renderGraph(window.graphData);
+  _rerenderGraphPanes();
 }
 function resetGraphLinkFilter() {
   window.graphConfig.linkKinds = new Set();
-  if (window.graphData) renderGraph(window.graphData);
+  _rerenderGraphPanes();
 }
 function setGraphSizingMode(mode) {
   window.graphConfig.sizingMode = mode;
   _saveGraphConfig();
-  if (window.graphData) renderGraph(window.graphData);
+  _rerenderGraphPanes();
 }
 window.toggleGraphLinkKind   = toggleGraphLinkKind;
 window.resetGraphLinkFilter  = resetGraphLinkFilter;
@@ -2802,7 +2890,7 @@ function setGraphConfigValue(key, value) {
   if (['charge', 'linkDistance', 'linkStrength', 'centerStrength'].includes(key)) {
     _applyGraphForces();
   } else if (window.graphData) {
-    renderGraph(window.graphData);
+    _rerenderGraphPanes();
   }
 }
 
@@ -2823,18 +2911,20 @@ Actions.input({
 });
 
 function _applyGraphForces() {
-  const sim = window.graphSim;
   const cfg = window.graphConfig;
-  if (!sim) return;
-  const linkF = sim.force('link');
-  const chargeF = sim.force('charge');
-  const centerF = sim.force('center');
-  if (linkF)   linkF.distance(cfg.linkDistance).strength(cfg.linkStrength);
-  if (chargeF) chargeF.strength(cfg.charge);
-  // forceCenter doesn't have its own strength; emulate via a forceX/forceY
-  // gravity term if needed. For simplicity nudge alpha so the existing
-  // center force re-engages.
-  sim.alpha(0.4).restart();
+  // Both pane simulations (S4 fork) pick up the shared force config.
+  Object.keys(_graphPaneState).forEach(k => {
+    const sim = _graphPaneState[k].sim;
+    if (!sim) return;
+    const linkF = sim.force('link');
+    const chargeF = sim.force('charge');
+    if (linkF)   linkF.distance(cfg.linkDistance).strength(cfg.linkStrength);
+    if (chargeF) chargeF.strength(cfg.charge);
+    // forceCenter doesn't have its own strength; emulate via a forceX/forceY
+    // gravity term if needed. For simplicity nudge alpha so the existing
+    // center force re-engages.
+    sim.alpha(0.4).restart();
+  });
 }
 
 function toggleGraphConfigPanel(force) {
@@ -2861,32 +2951,42 @@ function resetGraphConfigDefaults() {
   });
   _saveGraphConfig();
   _renderGraphConfigPanel();
-  if (window.graphData) renderGraph(window.graphData);
+  _rerenderGraphPanes();
 }
 
 window.toggleGraphConfigPanel  = toggleGraphConfigPanel;
 window.setGraphConfigValue     = setGraphConfigValue;
 window.resetGraphConfigDefaults = resetGraphConfigDefaults;
 
-function renderGraph(data) {
-  const svgEl = document.getElementById('graph-svg');
+function renderGraph(data, paneKey) {
+  // S4 fork: default pane is 'research' so every legacy call site keeps
+  // rendering the knowledge view into #graph-svg unchanged; the Context
+  // tab renders the run/provenance view via renderGraph(data, 'context').
+  const pane = _GRAPH_PANES[paneKey] ? paneKey : 'research';
+  const paneCfg = _GRAPH_PANES[pane];
+  const svgEl = document.getElementById(paneCfg.svgId);
+  if (!svgEl) return;
+  // The stamp marks this pane as painted — _rerenderGraphPanes uses it
+  // (a DOM flag, not a window global) to keep both views in sync.
+  svgEl.dataset.rendered = '1';
+  data = graphPaneView(data, pane);
   const W = svgEl.clientWidth || 600;
   const H = svgEl.clientHeight || 400;
 
-  d3.select('#graph-svg').selectAll('*').remove();
+  d3.select('#' + paneCfg.svgId).selectAll('*').remove();
 
   if (!data || !data.nodes || data.nodes.length === 0) {
-    d3.select('#graph-svg').append('text')
+    d3.select('#' + paneCfg.svgId).append('text')
       .attr('x', W / 2).attr('y', H / 2)
       .attr('text-anchor', 'middle')
       .attr('font-family', 'JetBrains Mono, monospace')
       .attr('font-size', '12px')
       .attr('fill', '#556677')
-      .text('No sessions exported yet. Export a chat to build the graph.');
+      .text(paneCfg.emptyMsg);
     return;
   }
 
-  const svg = d3.select('#graph-svg');
+  const svg = d3.select('#' + paneCfg.svgId);
   const g = svg.append('g');
 
   // Zoom + pan. The zoom level also drives label fade-out — session
@@ -2915,9 +3015,11 @@ function renderGraph(data) {
     });
   svg.call(zoom);
   // Expose the zoom behavior so the explicit +/− buttons can call
-  // .scaleBy / .transform against it. Stored on window so it
-  // survives across renderGraph() invocations.
-  window._graphZoomBehavior = zoom;
+  // .scaleBy / .transform against it. Stored per pane so it survives
+  // across renderGraph() invocations; the legacy window name mirrors
+  // the research pane (existing chrome + parity surface).
+  _graphPaneState[pane].zoom = zoom;
+  if (pane === 'research') window._graphZoomBehavior = zoom;
 
   const nodeColor = (d) => {
     if (d.type === 'session')      return 'var(--cyan)';
@@ -2925,6 +3027,11 @@ function renderGraph(data) {
     if (d.type === 'source')       return 'var(--purple)';
     if (d.type === 'agent')        return 'var(--accent)';
     if (d.type === 'workflow_run') return 'var(--cyan)';
+    // Provenance node types (Context pane, S4 fork).
+    if (d.type === 'response')     return 'var(--amber)';
+    if (d.type === 'chunk')        return 'var(--purple)';
+    if (d.type === 'skill')        return 'var(--accent)';
+    if (d.type === 'tool')         return 'var(--accent)';
     return 'var(--text-dim)';
   };
 
@@ -2996,11 +3103,15 @@ function renderGraph(data) {
   }
 
   // Build the toggleable legend FIRST so the filter set is ready before
-  // we filter the working links array.
-  _renderGraphLegendToggles(data);
+  // we filter the working links array. The chip legend + link-kind
+  // filter are Research chrome — the Context pane carries its own
+  // static legend, and its (few) provenance link kinds are never
+  // silently hidden by the Research filter selection.
+  if (pane === 'research') _renderGraphLegendToggles(data);
 
   const nodes = data.nodes.map(d => ({ ...d }));
-  const links = data.links.map(d => ({ ...d })).filter(_linkVisible);
+  const links = data.links.map(d => ({ ...d }))
+    .filter(l => pane !== 'research' || _linkVisible(l));
 
   // Build an id → node map + a neighbor index so click highlight is O(1).
   // Links may carry source/target as strings (post-clone) until the sim
@@ -3030,10 +3141,14 @@ function renderGraph(data) {
     .force('charge', d3.forceManyBody().strength(cfg.charge))
     .force('center', d3.forceCenter(W / 2, H / 2))
     .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 6));
-  graphSim = sim;
-  // Expose for the detail-expand handler so it can nudge the
-  // force-center when the SVG viewport resizes.
-  window.graphSim = sim;
+  _graphPaneState[pane].sim = sim;
+  if (pane === 'research') {
+    // The detail-expand handler reads window.graphSim to nudge the
+    // force-center on viewport resize — that resolves through the
+    // bridge's LIVE getter on this module binding (assigning
+    // window.graphSim directly throws: getter-only, strict mode).
+    graphSim = sim;
+  }
 
   // Links — width scales with both the link's own weight AND the
   // global linkWidth multiplier so the user can fatten lines until
@@ -3093,7 +3208,7 @@ function renderGraph(data) {
     .on('mouseover', (e, d) => showTooltip(e, d))
     .on('mousemove', (e) => moveTooltip(e))
     .on('mouseout', () => hideTooltip())
-    .on('click', (e, d) => { e.stopPropagation(); selectNode(d); });
+    .on('click', (e, d) => { e.stopPropagation(); selectNode(d, pane); });
 
   // Labels for session nodes only
   const label = g.append('g').selectAll('text')
@@ -3115,14 +3230,17 @@ function renderGraph(data) {
     label.attr('x', d => d.x).attr('y', d => d.y);
   });
 
-  // Stash live d3 selections + indexes for the click handler.
-  window._graphState = {
+  // Stash live d3 selections + indexes for the click handler — per pane;
+  // the legacy window name mirrors the research pane.
+  const state = {
     nodeSel: node, linkSel: link, labelSel: label,
     nodeById, neighborMap, linkPairs,
   };
+  _graphPaneState[pane].state = state;
+  if (pane === 'research') window._graphState = state;
 
   // Deselect on background click
-  svg.on('click', () => clearGraphSelection());
+  svg.on('click', () => clearGraphSelection(pane));
 }
 
 // Expand toggle for the session-detail panel. Flips classes on both
@@ -3161,31 +3279,34 @@ window._connExpand = window._connExpand || new Set();
 function toggleConnGroupExpand(kind) {
   if (window._connExpand.has(kind)) window._connExpand.delete(kind);
   else window._connExpand.add(kind);
-  // Re-render the current selection so the expand state takes effect.
-  if (window.selectedNode) selectNode(window.selectedNode);
+  // Re-render the current selection so the expand state takes effect
+  // (in whichever pane the selection lives — S4 fork).
+  if (window.selectedNode) selectNode(window.selectedNode, _selectedGraphPane);
 }
 window.toggleConnGroupExpand = toggleConnGroupExpand;
 
-function clearGraphSelection() {
+function clearGraphSelection(paneKey) {
+  const pane = _GRAPH_PANES[paneKey] ? paneKey : 'research';
   selectedNode = null;
-  const panel = document.getElementById('session-detail');
+  const panel = document.getElementById(_GRAPH_PANES[pane].detailId);
   if (panel) {
     panel.classList.remove('open');
     // Also drop the expand state — otherwise the panel stays large
-    // and empty when the user clicks away.
-    if (panel.classList.contains('is-expanded')) {
+    // and empty when the user clicks away. (Expand chrome is a
+    // Research-pane feature.)
+    if (pane === 'research' && panel.classList.contains('is-expanded')) {
       toggleSessionDetailExpand(false);
     }
   }
-  const st = window._graphState;
+  const st = _graphPaneState[pane].state;
   if (!st) return;
   st.nodeSel.attr('fill-opacity', 0.85).attr('stroke-width', 1.5).attr('stroke-opacity', 0.4);
   st.linkSel.attr('stroke-opacity', 1);
   st.labelSel.attr('fill-opacity', 1);
 }
 
-function highlightNeighborhood(d) {
-  const st = window._graphState;
+function highlightNeighborhood(d, paneKey) {
+  const st = _graphPaneState[_GRAPH_PANES[paneKey] ? paneKey : 'research'].state;
   if (!st) return;
   const neighbors = st.neighborMap.get(d.id) || new Set();
   const inSet = (id) => id === d.id || neighbors.has(id);
@@ -3213,6 +3334,10 @@ function showTooltip(e, d) {
     html += `<div class="tt-meta">Topic · ${d.session_count || 1} sessions</div>`;
   } else if (d.type === 'source') {
     html += `<div class="tt-meta">Source · ${d.citation_count || 1} citations</div>`;
+  } else if (d.type === 'workflow_run') {
+    html += `<div class="tt-meta">Run · ${d.status || ''}${d.tokens ? ` · ${d.tokens} tok` : ''}</div>`;
+  } else if (d.type === 'response') {
+    html += `<div class="tt-meta">Response · ${d.model || ''}</div>`;
   }
   tt.innerHTML = html;
   tt.style.display = 'block';
@@ -3227,32 +3352,38 @@ function hideTooltip() {
   document.getElementById('graph-tooltip').style.display = 'none';
 }
 
-function selectNode(d) {
+function selectNode(d, paneKey) {
+  // S4 fork: each pane writes into its OWN detail panel — Research keeps
+  // the session-detail-* ids; the Context pane mirrors the structure
+  // under context-detail-*. No-arg calls stay Research (back-compat).
+  const pane = _GRAPH_PANES[paneKey] ? paneKey : 'research';
+  const did = _GRAPH_PANES[pane].detailId;
   selectedNode = d;
   window.selectedNode = d;  // expose so re-render helpers can re-call selectNode
-  const panel = document.getElementById('session-detail');
+  _selectedGraphPane = pane;
+  const panel = document.getElementById(did);
   if (!panel) return;
   panel.classList.add('open');
-  highlightNeighborhood(d);
+  highlightNeighborhood(d, pane);
 
   // ── Kind chip + title (every node type) ────────────────────────
-  const chip = document.getElementById('session-detail-kind');
+  const chip = document.getElementById(did + '-kind');
   if (chip) {
     chip.textContent = d.type || 'node';
     chip.className = `detail-kind-chip kind-${esc(d.type || 'node')}`;
   }
-  document.getElementById('session-detail-title').textContent =
+  document.getElementById(did + '-title').textContent =
     d.label || d.filename || d.id;
-  document.getElementById('session-detail-meta').textContent =
+  document.getElementById(did + '-meta').textContent =
     _detailMetaFor(d);
 
   // Topics chips reused for whichever node type has list-y data:
   //   session.topics, topic siblings, source citations.
-  const topicsEl = document.getElementById('session-detail-topics');
+  const topicsEl = document.getElementById(did + '-topics');
   topicsEl.innerHTML = _detailChipsFor(d);
 
   // Preview body (only sessions have a transcript preview).
-  const previewEl = document.getElementById('session-detail-preview');
+  const previewEl = document.getElementById(did + '-preview');
   if (d.type === 'session') {
     previewEl.textContent = (d.preview || '').slice(0, 300)
       .replace(/^#+[^\n]*\n?/gm, '').trim();
@@ -3283,8 +3414,8 @@ function selectNode(d) {
 
   // ── Connections drilldown — group by link kind, show shared
   //    attributes inline (tag/role/workflow), expand for >5. ─────────
-  const connEl = document.getElementById('session-detail-connections');
-  const st = window._graphState;
+  const connEl = document.getElementById(did + '-connections');
+  const st = _graphPaneState[pane].state;
   if (connEl && st) {
     const neighbors = Array.from(st.neighborMap.get(d.id) || []);
     if (!neighbors.length) {
@@ -3323,7 +3454,7 @@ function selectNode(d) {
             .map(s => `<span class="conn-shared-chip">${esc(String(s).slice(0, 20))}</span>`)
             .join('');
           return `<button type="button" class="detail-conn-row" data-node-id="${esc(n.id)}"
-                          data-action="graph.node-select"
+                          data-action="graph.node-select" data-pane="${esc(pane)}"
                           title="Drill into ${esc(n.label || n.id)} — connected by ${esc(kind)}">
             <span class="detail-conn-dot kind-${esc(n.type)}"></span>
             <span class="detail-conn-label">${esc((n.label || n.id).slice(0, 60))}</span>
@@ -3350,9 +3481,14 @@ function selectNode(d) {
   }
 
   // ── Action footer — actions vary by node type ──────────────────
-  const actEl = document.getElementById('session-detail-actions');
+  const actEl = document.getElementById(did + '-actions');
   if (actEl) {
-    if (d.type === 'session') {
+    if (d.type === 'workflow_run' || d.type === 'response') {
+      // Run/provenance nodes (Context pane): pivot to the Runs surface
+      // where the full step detail + context trace live.
+      actEl.innerHTML =
+        `<button class="action-btn" data-action="graph.open-runs" style="font-size:0.65rem;padding:4px 10px">Open Runs</button>`;
+    } else if (d.type === 'session') {
       actEl.innerHTML =
         `<button class="action-btn" data-action="graph.session-chat" style="font-size:0.65rem;padding:4px 10px">Open in Chat</button>
          <button class="action-btn" data-action="graph.session-deep-dive" style="font-size:0.65rem;padding:4px 10px;border-color:var(--amber);color:var(--amber)">Deep Dive</button>`;
@@ -3383,6 +3519,14 @@ function _detailMetaFor(d) {
     const n = d.citation_count || 0;
     return `Source · cited ${n} time${n === 1 ? '' : 's'}`;
   }
+  if (d.type === 'workflow_run') {
+    return ['Run', d.status, d.duration ? `${d.duration}s` : null,
+      d.tokens ? `${d.tokens} tok` : null].filter(Boolean).join(' · ');
+  }
+  if (d.type === 'response') {
+    return ['Response', d.model, d.edge_count ? `${d.edge_count} grounding edge${d.edge_count === 1 ? '' : 's'}` : null]
+      .filter(Boolean).join(' · ');
+  }
   return d.type || '';
 }
 
@@ -3397,13 +3541,15 @@ function _detailChipsFor(d) {
 }
 
 // Click-through from the Connections list — re-runs selectNode against
-// the picked neighbor so you can hop session → topic → session.
-function selectNodeById(id) {
-  const st = window._graphState;
+// the picked neighbor so you can hop session → topic → session. Pane-
+// aware (S4): rows carry data-pane so the hop stays inside its graph.
+function selectNodeById(id, paneKey) {
+  const pane = _GRAPH_PANES[paneKey] ? paneKey : 'research';
+  const st = _graphPaneState[pane].state;
   if (!st) return;
   const target = st.nodeById.get(id);
   if (!target) return;
-  selectNode(target);
+  selectNode(target, pane);
 }
 
 function loadSessionIntoChat() {
@@ -3434,11 +3580,18 @@ function deepDiveFromNode() {
 // expanders, and the per-node-type action footer all re-render on every
 // node selection. Rows reuse their existing data-node-id attr.
 Actions.click({
-  'graph.node-select':       el => selectNodeById(el.dataset.nodeId),
+  'graph.node-select':       el => selectNodeById(el.dataset.nodeId, el.dataset.pane),
   'graph.conn-group':        el => toggleConnGroupExpand(el.dataset.kind),
   'graph.session-chat':      () => loadSessionIntoChat(),
   'graph.session-deep-dive': () => deepDiveFromSession(),
-  'graph.node-deep-dive':    () => deepDiveFromNode()
+  'graph.node-deep-dive':    () => deepDiveFromNode(),
+  // Context pane (S4): run/response detail pivot + the pane's own graph
+  // chrome — data-action only (no inline handlers on new markup).
+  'graph.open-runs':         () => switchTab('runs'),
+  'ctxgraph.rebuild':        () => rebuildGraph(),
+  'ctxgraph.zoom-in':        () => graphZoomIn('context'),
+  'ctxgraph.zoom-out':       () => graphZoomOut('context'),
+  'ctxgraph.zoom-reset':     () => resetGraphZoom('context')
 });
 
 /* ── Deep Research ──────────────────────────────────────────────── */

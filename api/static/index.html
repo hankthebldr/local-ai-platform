@@ -287,6 +287,11 @@
     <div class="nav-section" aria-hidden="true">Operate</div>
     <button class="tab-btn" data-tab="projects" onclick="switchTab('projects', this)">Projects<span class="tab-count" id="projects-tab-count"></span></button>
     <button class="tab-btn" data-tab="runs" onclick="switchTab('runs', this)">Runs<span class="tab-count" id="runs-tab-count"></span></button>
+    <!-- S4: Context — run/provenance OBSERVABILITY (the run-filtered view
+         of the knowledge graph + the /api/context session store). Distinct
+         from the retired Library "Context" (documents), whose RAG surface
+         now lives in Research under Build. -->
+    <button class="tab-btn" data-tab="context" data-action="switch-tab" data-tab-target="context">Context</button>
     <div class="nav-section" aria-hidden="true">Library</div>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <!-- Skill Lab folded into the Skills tab + Research tab. The
@@ -1579,6 +1584,94 @@
          placeholder below renders before the relocator runs to avoid
          a flash of empty space on first paint. -->
     <div id="projects-tab-placeholder" class="model-empty" style="font-size:0.72rem">Loading projects…</div>
+  </div>
+
+  <!-- ═══ TAB: CONTEXT (Operate) ════════════════════════════════════
+       S4: run/provenance OBSERVABILITY. NEW UI (G3) over two existing
+       backends:
+         · the run-filtered view of the SINGLE /api/graph build (G4
+           fork — workflow_run + response nodes with their grounding
+           sources; produced / grounded_on / activated_skill /
+           invoked_tool edges). Research keeps the knowledge view in
+           #graph-svg; this pane renders into its OWN
+           #context-graph-svg because runs-tab.js pivots pin the
+           #graph-svg id to the Research pane.
+         · the /api/context conversation-context store (list / inspect
+           tool calls / close / cleanup) — previously endpoint-only.
+       All chrome is data-action delegated (no inline handlers); the
+       detail panel mirrors Research's session-detail structure under
+       context-detail-* ids so selectNode(d,'context') writes here. -->
+  <div class="tab-content" id="tab-context" style="display:none">
+    <div class="research-layout">
+
+      <!-- LEFT: Run/Provenance Graph + Node Detail -->
+      <div class="research-left">
+        <div class="graph-panel panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">Run / Provenance Graph</div>
+          <div class="graph-controls">
+            <button type="button" data-action="ctxgraph.rebuild" title="Rebuild from exports + run/provenance stores">Rebuild</button>
+            <button type="button" data-action="ctxgraph.zoom-out" title="Zoom out">−</button>
+            <button type="button" data-action="ctxgraph.zoom-reset" title="Reset zoom + re-center">⟲</button>
+            <button type="button" data-action="ctxgraph.zoom-in" title="Zoom in">+</button>
+          </div>
+          <svg id="context-graph-svg"></svg>
+          <div class="graph-legend" id="context-graph-legend">
+            <!-- Node-type swatches for the run/provenance view -->
+            <span><span class="legend-dot" style="background:var(--cyan)"></span>Run</span>
+            <span><span class="legend-dot" style="background:var(--amber)"></span>Response</span>
+            <span><span class="legend-dot" style="background:var(--purple)"></span>Source</span>
+            <span><span class="legend-dot" style="background:var(--accent)"></span>Skill / Tool</span>
+          </div>
+        </div>
+        <div class="session-detail-panel" id="context-detail">
+          <div class="detail-head">
+            <span class="detail-kind-chip" id="context-detail-kind">node</span>
+            <div class="panel-label" id="context-detail-title">Run</div>
+          </div>
+          <div class="session-meta" id="context-detail-meta"></div>
+          <div class="session-topics" id="context-detail-topics"></div>
+          <div class="session-preview" id="context-detail-preview"></div>
+          <div class="detail-connections" id="context-detail-connections"></div>
+          <div id="context-detail-actions" style="margin-top:8px"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Active context sessions (/api/context) + Runs pointer -->
+      <div class="research-right">
+        <div class="panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label" style="display:flex;align-items:center;gap:8px">
+            Active Context Sessions
+            <span class="tab-count" id="context-session-count"></span>
+            <span style="flex:1"></span>
+            <button type="button" class="action-btn xs ghost" data-action="context.refresh" title="Reload the session list">Refresh</button>
+            <button type="button" class="action-btn xs ghost" data-action="context.cleanup" title="Close sessions idle for 5+ minutes">Cleanup stale</button>
+          </div>
+          <div style="font-size:0.68rem;color:var(--text-dim);margin:6px 0 10px;line-height:1.5">
+            Live per-conversation context held by the server — message counts,
+            injected skills, and tool-call records. Sessions clear on close or
+            stale cleanup; summaries flow into Memory and the graph on export.
+          </div>
+          <div id="context-session-list" style="max-height:340px;overflow-y:auto"></div>
+        </div>
+        <div class="panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label">Per-run Context Trace</div>
+          <div style="font-size:0.68rem;color:var(--text-dim);margin:6px 0 10px;line-height:1.5">
+            Step → workspace-key handoffs (the context trace producer graph)
+            stay co-located with each run's step detail in Runs — open a run
+            and expand its Context section.
+          </div>
+          <!-- graph.open-runs (not switch-tab): the delegated switch-tab
+               handler passes the clicked element as the active .tab-btn —
+               this in-panel button isn't one, so route through the pivot
+               action that lets switchTab resolve the real nav button. -->
+          <button type="button" class="action-btn" data-action="graph.open-runs">Open Runs</button>
+        </div>
+      </div>
+
+    </div>
   </div>
 
   <!-- ═══ TAB: RESEARCH (Build) ═════════════════════════════════════
