@@ -5214,10 +5214,14 @@ textarea.composer-desc-area {
 .composer-split > .composer-workstream  { grid-row: 2; grid-column: 1; min-width: 0; max-height: 150px; overflow-y: auto; }
 .composer-split > #composer-spine-dormant { grid-row: 1 / 3; grid-column: 1; }
 
-/* Dormant vs primed */
-.composer-split:not(.is-primed) > .composer-grid,
+/* Node-led composer: the palette + canvas stay available even on an EMPTY
+   canvas, so you can drag a role/agent/skill/plugin/mcp block to add the first
+   step. The canvas carries its own empty state (#composer-canvas-empty — "Drag
+   steps from the palette"); the older chat-led "start in chat" ghost is retired
+   (chat now lives in its own tab). The workstream (Step Config/Run/History)
+   still waits until there's a node to talk about. */
 .composer-split:not(.is-primed) > .composer-workstream { display: none; }
-.composer-split.is-primed > #composer-spine-dormant { display: none; }
+.composer-split > #composer-spine-dormant { display: none; }
 
 /* CRITICAL for the vertical split: .composer-grid + .composer-canvas-panel
    carry 520px+ min-height floors from when the canvas was a whole tab. Inside
