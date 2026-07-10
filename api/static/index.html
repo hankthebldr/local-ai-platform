@@ -759,26 +759,77 @@
         </div>
         <!-- S0: the in-dock Chat/Canvas/Focus pivot is retired — the dock
              now lives in its own Chat tab; the Composer canvas is reached
-             via the tab nav. -->
+             via the tab nav.
+             S2: the launch controls (agent/model/role/search) moved out of
+             this row into the Config Header below — only the dock-level
+             chrome (collapse, export) stays up here. -->
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <label for="agent-select" style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Agent</label>
-          <select class="model-select" id="agent-select" onchange="onAgentSelectionChanged()">
-            <option value="">— none (use model directly) —</option>
-          </select>
-          <label for="model-select" style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase">Model</label>
-          <select class="model-select" id="model-select" onchange="onChatModelChanged()"><option>loading…</option></select>
-          <button class="action-btn ghost" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)">System</button>
           <button class="action-btn ghost" onclick="toggleAgentDock()" title="Collapse / expand the agent chat dock">▾</button>
           <button class="action-btn ghost" id="export-btn" onclick="exportSession()" title="Export chat as Markdown" hidden>EXPORT</button>
         </div>
       </div>
 
+      <!-- ── S2 CONFIG HEADER — the launchpad ─────────────────────────
+           One strip that composes the chat's launch state: agent · model ·
+           role→system-prompt · web-search (all MOVED here verbatim, inline
+           handlers intact) + net-new data-action pickers (tools/skills,
+           MCP, context docs) and pivots that carry the composed state into
+           the supporting workflows (agent library / Composer / Research).
+           New controls are data-action-delegated — no inline handlers. -->
+      <div class="chat-config-header" id="chat-config-header">
+        <div class="ccfg-group">
+          <label for="agent-select" class="ccfg-label">Agent</label>
+          <select class="model-select" id="agent-select" onchange="onAgentSelectionChanged()">
+            <option value="">— none (use model directly) —</option>
+          </select>
+        </div>
+        <div class="ccfg-group">
+          <label for="model-select" class="ccfg-label">Model</label>
+          <select class="model-select" id="model-select" onchange="onChatModelChanged()"><option>loading…</option></select>
+        </div>
+        <div class="ccfg-group">
+          <label for="sysprompt-role-select" class="ccfg-label">Role</label>
+          <select id="sysprompt-role-select" class="model-select" aria-label="Load system prompt from role library" style="min-width:150px;font-size:0.7rem" onchange="applyRoleAsSystemPrompt()">
+            <option value="">— load from role library —</option>
+          </select>
+          <button class="action-btn ghost" id="sysprompt-btn" onclick="toggleSystemPrompt()" title="Set a system prompt (applied to every turn)">System</button>
+        </div>
+        <div class="ccfg-group">
+          <button class="search-toggle" id="search-toggle" onclick="toggleSearch()" title="Toggle web search">
+            <span class="toggle-label" id="search-label">Search: OFF</span>
+            &#x1F310;
+          </button>
+          <button class="action-btn ghost" onclick="toggleSettings()" title="Search settings" style="padding:0 10px;font-size:0.9rem">&#x2699;</button>
+        </div>
+        <span class="ccfg-divider" aria-hidden="true"></span>
+        <div class="ccfg-group">
+          <button type="button" class="action-btn ghost ccfg-picker" id="chat-pick-tools"
+                  data-action="chat.pick-tools" aria-haspopup="dialog"
+                  title="Attach plugin tools / skills to this chat config (loaded over /api/plugins)">Tools <span class="ccfg-count" id="chat-count-tools"></span></button>
+          <button type="button" class="action-btn ghost ccfg-picker" id="chat-pick-mcp"
+                  data-action="chat.pick-mcp" aria-haspopup="dialog"
+                  title="Attach MCP servers to this chat config (loaded over /api/mcp/servers)">MCP <span class="ccfg-count" id="chat-count-mcp"></span></button>
+          <button type="button" class="action-btn ghost ccfg-picker" id="chat-pick-context"
+                  data-action="chat.pick-context" aria-haspopup="dialog"
+                  title="Attach context documents to this chat config (loaded over /api/documents)">Context <span class="ccfg-count" id="chat-count-context"></span></button>
+        </div>
+        <span class="ccfg-spacer" aria-hidden="true"></span>
+        <div class="ccfg-group ccfg-pivots">
+          <button type="button" class="action-btn ccfg-pivot" data-action="chat.save-agent"
+                  title="Persist this launch config (model · system prompt · tools · MCP · context) as a reusable agent">Save as agent</button>
+          <button type="button" class="action-btn ccfg-pivot" data-action="chat.to-composer"
+                  title="Append this agent onto the Composer canvas as a workflow step">&rarr; Composer step</button>
+          <button type="button" class="action-btn ccfg-pivot" data-action="chat.to-research"
+                  title="Capture the latest answer as a durable Research artifact">&rarr; Research</button>
+        </div>
+        <div class="ccfg-picker-pop" id="chat-picker-pop" hidden></div>
+      </div>
+
       <div class="system-prompt-row" id="system-prompt-row" style="display:none">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <label for="system-prompt" style="font-size:0.6rem;color:var(--text-muted);letter-spacing:0.15em;text-transform:uppercase">System Prompt</label>
-          <select id="sysprompt-role-select" class="model-select" aria-label="Load system prompt from role library" style="min-width:180px;font-size:0.7rem" onchange="applyRoleAsSystemPrompt()">
-            <option value="">— load from role library —</option>
-          </select>
+          <!-- S2: #sysprompt-role-select moved up into the Config Header
+               (role → system prompt is launch state, not row chrome). -->
           <span style="flex:1"></span>
           <button class="action-btn" onclick="saveSystemPrompt()" style="padding:3px 10px;font-size:0.65rem">Save</button>
           <button class="action-btn" onclick="clearSystemPrompt()" style="padding:3px 10px;font-size:0.65rem;border-color:var(--border);color:var(--text-dim)">Clear</button>
@@ -839,12 +890,9 @@
         <button type="button" class="pm-convert" id="pm-convert" onclick="Pins.openScaffold()" disabled>Pin 2+ to convert</button>
       </div>
       <div class="chat-input-row">
-        <button class="search-toggle" id="search-toggle" onclick="toggleSearch()" title="Toggle web search">
-          <span class="toggle-label" id="search-label">Search: OFF</span>
-          &#x1F310;
-        </button>
+        <!-- S2: #search-toggle + the search-settings gear moved up into the
+             Config Header (web-search is launch state, not input chrome). -->
         <textarea class="chat-input" id="prompt" rows="1" aria-label="Chat message" placeholder="Talk to your agents… (Enter to send, Shift+Enter for newline)" autocomplete="off" spellcheck="false"></textarea>
-        <button class="action-btn" onclick="toggleSettings()" title="Search settings" style="padding:0 12px;font-size:1rem;border-color:var(--border)">&#x2699;</button>
         <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
       </div>
     </div>

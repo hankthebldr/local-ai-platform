@@ -6059,8 +6059,91 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .agent-chat-dock.collapsed .chat-messages,
 .agent-chat-dock.collapsed .chat-input-row,
 .agent-chat-dock.collapsed .system-prompt-row,
+.agent-chat-dock.collapsed .chat-config-header,
 .agent-chat-dock.collapsed #step-engage-badge,
 .agent-chat-dock.collapsed .search-settings { display: none !important; }
+
+/* ── S2 CHAT CONFIG HEADER (launchpad) ─────────────────────────────
+   One strip above #messages that composes the launch state (agent ·
+   model · role→system prompt · web search · tools/MCP/context) and
+   hosts the pivots into the supporting workflows. */
+.chat-config-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #ffffff04, transparent);
+}
+.chat-config-header .ccfg-group { display: flex; align-items: center; gap: 6px; }
+.chat-config-header .ccfg-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.chat-config-header select.model-select { max-width: 220px; min-width: 110px; }
+.chat-config-header .search-toggle { height: 28px; width: 36px; font-size: 0.95rem; }
+.ccfg-divider { width: 1px; align-self: stretch; background: var(--border); flex: none; }
+.ccfg-spacer { flex: 1 1 auto; }
+.ccfg-picker { position: relative; }
+.ccfg-picker .ccfg-count {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  margin-left: 3px;
+}
+.ccfg-picker.has-sel { border-color: var(--accent-dim); color: var(--accent); }
+.ccfg-pivots .ccfg-pivot { font-size: 0.62rem; padding: 4px 10px; }
+/* Selection popover — anchored under the header strip. */
+.ccfg-picker-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 80;
+  min-width: 320px;
+  max-width: 520px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px #00000080;
+}
+.ccfg-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+.ccfg-pop-body { max-height: 260px; overflow: auto; padding: 6px 0; }
+.ccfg-pop-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+.ccfg-pop-row:hover { background: #ffffff06; }
+.ccfg-pop-row input[type="checkbox"] { flex: none; accent-color: var(--accent); }
+.ccfg-pop-name { color: var(--text); }
+.ccfg-pop-meta {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.ccfg-pop-empty { padding: 18px 14px; text-align: center; color: var(--text-muted); font-size: 0.66rem; }
 
 /* Composer workstream collapse — same grammar as chat dock. The tab
    strip stays visible so the operator can re-open by clicking the

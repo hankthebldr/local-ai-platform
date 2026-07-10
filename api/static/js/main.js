@@ -834,6 +834,272 @@ document.addEventListener('DOMContentLoaded', () => {
   if (ta) ta.addEventListener('input', updateSystemPromptStatus);
 });
 
+/* ── S2 CHAT LAUNCH CONFIG (Config Header + pivots) ─────────────────
+   The Chat tab is the LAUNCHPAD: the Config Header above #messages
+   composes a launch state — agent · model · role→system prompt ·
+   web-search (all pre-existing controls, moved) plus net-new
+   tools/skills, MCP, and context-document selections — and the pivots
+   carry that composed state into the supporting workflows:
+
+     Save as agent      → POST /api/agents           (agent library)
+     → Composer step    → dfAddNodeFromAgent append  (canvas, no wipe)
+     → Research         → POST /api/feedback/artifacts
+
+   Strictly additive: sendMessage() and the frozen engine are untouched;
+   the selections only influence the pivots (e.g. Save-as-agent persists
+   them onto the AgentDefinition as tools/context sources). Module-scoped
+   (no new window global); all wiring is data-action delegation. */
+const ChatLaunch = (function () {
+  const state = { tools: [], mcp: [], context: [] };  // selected rows per kind
+  const cache = {};                                    // kind → fetched payload
+  let openKind = null;
+
+  const KINDS = {
+    tools: {
+      label: 'Plugin tools & skills',
+      url: '/api/plugins',
+      empty: 'No plugin tools discovered — install plugins from the Library.',
+      rows(data) {
+        const plugins = Array.isArray(data) ? data : ((data && data.plugins) || []);
+        const out = [];
+        for (const p of plugins) {
+          for (const t of (p.tools || [])) {
+            out.push({
+              key: p.id + '::' + t.id,
+              name: (p.name || p.id) + ' · ' + (t.name || t.id),
+              meta: t.description || '',
+              ref: { plugin_id: p.id, tool_id: t.id },
+            });
+          }
+        }
+        return out;
+      },
+    },
+    mcp: {
+      label: 'MCP servers',
+      url: '/api/mcp/servers',
+      empty: 'No MCP servers registered — add one under Library › MCP.',
+      rows(data) {
+        const servers = Array.isArray(data) ? data : ((data && data.servers) || []);
+        return servers.map(s => ({
+          key: s.id,
+          name: s.name || s.id,
+          meta: s.description || s.transport || '',
+          ref: { mcp_server: s.id, tool_id: '*' },
+        }));
+      },
+    },
+    context: {
+      label: 'Context documents',
+      url: '/api/documents',
+      empty: 'No documents ingested yet — upload under Context.',
+      rows(data) {
+        const docs = Array.isArray(data) ? data : ((data && data.documents) || []);
+        return docs.map(d => ({
+          key: d.id,
+          name: d.filename || d.id,
+          meta: d.status || '',
+          ref: { doc_id: d.id, filename: d.filename || d.id },
+        }));
+      },
+    },
+  };
+
+  function _pop() { return document.getElementById('chat-picker-pop'); }
+
+  async function openPicker(kind) {
+    const pop = _pop();
+    if (!pop || !KINDS[kind]) return;
+    if (openKind === kind && !pop.hidden) { close(); return; }  // second click toggles
+    openKind = kind;
+    pop.hidden = false;
+    pop.innerHTML = '<div class="ccfg-pop-empty">loading…</div>';
+    let rows;
+    try {
+      if (!cache[kind]) cache[kind] = await Net.getJson(KINDS[kind].url, { silent: true });
+      rows = KINDS[kind].rows(cache[kind]);
+    } catch (e) {
+      pop.innerHTML = `<div class="ccfg-pop-empty" style="color:var(--red)">Failed to load: ${esc(e.message)}</div>`;
+      return;
+    }
+    const selected = new Set(state[kind].map(r => r.key));
+    const body = rows.length
+      ? rows.map(r => `
+        <label class="ccfg-pop-row">
+          <input type="checkbox" data-action="chat.picker-item" data-kind="${esc(kind)}" data-key="${esc(r.key)}"${selected.has(r.key) ? ' checked' : ''}>
+          <span class="ccfg-pop-name">${esc(r.name)}</span>
+          ${r.meta ? `<span class="ccfg-pop-meta">${esc(r.meta)}</span>` : ''}
+        </label>`).join('')
+      : `<div class="ccfg-pop-empty">${esc(KINDS[kind].empty)}</div>`;
+    pop.innerHTML = `
+      <div class="ccfg-pop-head">
+        <span>${esc(KINDS[kind].label)}</span>
+        <button type="button" class="strip-models-pop-close" data-action="chat.picker-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="ccfg-pop-body">${body}</div>`;
+  }
+
+  function toggleItem(el) {
+    const kind = el.dataset.kind;
+    const key = el.dataset.key;
+    if (!KINDS[kind]) return;
+    const rows = KINDS[kind].rows(cache[kind] || []);
+    const row = rows.find(r => r.key === key);
+    const kept = state[kind].filter(r => r.key !== key);
+    if (el.checked && row) kept.push(row);
+    state[kind] = kept;
+    updateCounts();
+  }
+
+  function updateCounts() {
+    for (const kind of Object.keys(KINDS)) {
+      const n = state[kind].length;
+      const badge = document.getElementById('chat-count-' + kind);
+      if (badge) badge.textContent = n ? String(n) : '';
+      const btn = document.getElementById('chat-pick-' + kind);
+      if (btn) btn.classList.toggle('has-sel', n > 0);
+    }
+  }
+
+  function close() {
+    const pop = _pop();
+    if (pop) { pop.hidden = true; pop.innerHTML = ''; }
+    openKind = null;
+  }
+
+  function selections() {
+    return { tools: state.tools.slice(), mcp: state.mcp.slice(), context: state.context.slice() };
+  }
+
+  return { openPicker, toggleItem, close, selections };
+})();
+
+// Pivot 1 — persist the composed launch state as a reusable agent.
+// Web-search / plugin-tool / MCP selections land as AgentTool entries;
+// context-document selections land as ContextSource entries. Returns the
+// new agent id (null on cancel/failure) so chatSendToComposer can chain.
+async function chatSaveAsAgent() {
+  const name = window.prompt('Save this chat config as an agent — name:', '');
+  if (name == null || !name.trim()) return null;
+  const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!id) { Toast.warn('Invalid name', 'Use letters or digits.'); return null; }
+  const modelSel = document.getElementById('model-select');
+  const model = (modelSel && modelSel.value && modelSel.value !== 'loading…') ? modelSel.value : null;
+  const sysTa = document.getElementById('system-prompt');
+  const system_prompt = (sysTa && sysTa.value.trim()) || `You are ${name.trim()}.`;
+  const sel = ChatLaunch.selections();
+  const tools = [];
+  if (webSearchEnabled) tools.push({ type: 'web_search' });
+  for (const t of sel.tools) tools.push({ plugin_id: t.ref.plugin_id, tool_id: t.ref.tool_id });
+  for (const s of sel.mcp) tools.push({ mcp_server: s.ref.mcp_server, tool_id: s.ref.tool_id || '*' });
+  const context = sel.context.map(d => ({
+    type: 'text',
+    value: `Grounding document (RAG store): "${d.ref.filename}" — document id ${d.ref.doc_id}. `
+         + `Full content retrievable via GET /api/documents/${d.ref.doc_id}.`,
+    label: d.ref.filename,
+  }));
+  const defn = {
+    id,
+    name: name.trim(),
+    description: 'Saved from the Chat launchpad',
+    model,
+    system_prompt,
+    tools,
+    context,
+    tags: ['chat-launchpad'],
+  };
+  const r = await Net.call('/api/agents', {
+    retries: 0,
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(defn),
+    },
+  });
+  if (!r.ok) {
+    const detail = (r.data && (r.data.detail || (r.data.error && r.data.error.message))) || `HTTP ${r.status}`;
+    Toast.danger('Save failed', String(detail));
+    return null;
+  }
+  Toast.success('Agent saved', id);
+  // Refresh the selector and scope the chat to the new agent so the
+  // launchpad state visibly becomes the active persona.
+  try { await loadAgentsForSelector(); } catch (_) {}
+  const agentSel = document.getElementById('agent-select');
+  if (agentSel) {
+    agentSel.value = id;
+    if (agentSel.value === id) onAgentSelectionChanged();
+  }
+  return id;
+}
+
+// Pivot 2 — append this agent onto the Composer canvas as a step.
+// composerAddAgentAtCenter switches to the Composer tab itself and
+// APPENDS via dfAutoChain — it never clears the canvas, so an
+// in-progress DAG survives the pivot. An unsaved config becomes an
+// agent first (launchpad flow), then lands as a step.
+async function chatSendToComposer() {
+  const agentSel = document.getElementById('agent-select');
+  let agentId = agentSel ? agentSel.value : '';
+  if (!agentId) {
+    Toast.info('No agent selected', 'Saving the current config as an agent first…');
+    agentId = await chatSaveAsAgent();
+    if (!agentId) return;
+  }
+  await composerAddAgentAtCenter(agentId);
+}
+
+// Pivot 3 — capture the latest exchange as a durable Research artifact
+// (POST /api/feedback/artifacts; server best-effort ingests into RAG).
+async function chatSendToResearch() {
+  let lastAssistant = null;
+  let lastUser = null;
+  for (let i = chatMetadata.length - 1; i >= 0; i--) {
+    const m = chatMetadata[i];
+    if (!lastAssistant && m.role === 'assistant') { lastAssistant = m; continue; }
+    if (lastAssistant && m.role === 'user') { lastUser = m; break; }
+  }
+  if (!lastAssistant) {
+    Toast.info('Nothing to capture', 'Get an assistant reply first — the latest answer is what pivots to Research.');
+    return;
+  }
+  const title = String((lastUser && lastUser.content) || lastAssistant.content).slice(0, 120);
+  const payload = {
+    source: 'chat',
+    title,
+    body: lastAssistant.content,
+    tags: ['chat', 'launchpad'],
+    context: {
+      agent: window._chatAgent || null,
+      model: lastAssistant.model || null,
+      web_search: !!lastAssistant.web_search,
+    },
+  };
+  const r = await Net.call('/api/feedback/artifacts', {
+    retries: 0,
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  });
+  if (!r.ok) { Toast.danger('Capture failed', `HTTP ${r.status}`); return; }
+  const art = (r.data && typeof r.data === 'object') ? r.data : {};
+  Toast.success('Sent to Research', `Artifact ${art.id || 'saved'}${art.rag_ingested ? ' · RAG-ingested' : ''}`);
+}
+
+// Config-header wiring — registered ONCE, data-action delegation only.
+Actions.click({
+  'chat.pick-tools': () => ChatLaunch.openPicker('tools'),
+  'chat.pick-mcp': () => ChatLaunch.openPicker('mcp'),
+  'chat.pick-context': () => ChatLaunch.openPicker('context'),
+  'chat.picker-close': () => ChatLaunch.close(),
+  'chat.save-agent': () => { chatSaveAsAgent(); },
+  'chat.to-composer': () => { chatSendToComposer(); },
+  'chat.to-research': () => { chatSendToResearch(); },
+});
+Actions.change({ 'chat.picker-item': el => ChatLaunch.toggleItem(el) });
+
 // When a composer node is selected, the dashboard chat input engages
 // THAT step instead of the general chat — useful for iterating on a
 // single step's prompt + model before saving the workflow. Wired via
