@@ -347,6 +347,41 @@ class StepTestRequest(BaseModel):
     user_message: str
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    # LB1-U1 — explicit skill refs ("<plugin_id>.<skill_id>") injected
+    # router-side before the model call, mirroring the skill_injector
+    # builtin's explicit-mode semantics. Optional and additive: absent or
+    # empty leaves test-step behavior byte-identical to before.
+    skills: Optional[List[str]] = None
+
+
+def _apply_skill_injection(
+    system_prompt: str, user_message: str, skill_refs: List[str]
+) -> tuple[str, str, List[Dict[str, Any]]]:
+    """Router-side skill injection for test-step (engine files untouched).
+
+    Delegates to the SkillInjectorHook builtin itself (explicit mode) on a
+    synthetic HookContext, so the injected text can never drift from what a
+    real workflow run produces — parity is pinned by
+    tests/parity/test_skill_injection_parity.py. Returns the augmented
+    (system, user) pair plus the SkillActivation records as dicts. Never
+    raises: the builtin swallows its own failures (action=continue).
+    """
+    from types import SimpleNamespace
+
+    from ..hooks.builtins.skill_injector import SkillInjectorHook
+    from ..services.hook_bus import HookContext
+    from ..services.prompt_composer import ComposedPrompt
+
+    prompt = ComposedPrompt(system=system_prompt, user=user_message)
+    result_handle = SimpleNamespace(skills_activated=[], extension_overhead_ms=0.0)
+    ctx = HookContext(
+        step=SimpleNamespace(id="test-step", skills=list(skill_refs)),
+        prompt=prompt,
+        step_result=result_handle,
+    )
+    SkillInjectorHook(mode="explicit")(ctx)
+    activations = [a.model_dump() for a in result_handle.skills_activated]
+    return prompt.system, prompt.user, activations
 
 
 @router.post("/test-step")
@@ -373,9 +408,16 @@ async def test_step(req: StepTestRequest):
     except APIError:
         raise
 
+    user_message = req.user_message
+    skills_activated: List[Dict[str, Any]] = []
+    if req.skills:
+        system_prompt, user_message, skills_activated = _apply_skill_injection(
+            system_prompt, user_message, req.skills
+        )
+
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": req.user_message},
+        {"role": "user", "content": user_message},
     ]
     temperature = req.temperature if req.temperature is not None else 0.7
     max_tokens = req.max_tokens if req.max_tokens is not None else 2048
@@ -402,6 +444,10 @@ async def test_step(req: StepTestRequest):
             ),
         },
     }
+    # Only-add: the key appears only when the caller asked for injection, so
+    # pre-existing test-step consumers see an unchanged payload.
+    if req.skills:
+        response["skills_activated"] = skills_activated
     # Surface model_fallback when the pinned model wasn't found (mirrors
     # /api/agents/{id}/chat shape so the dashboard can reuse its banner).
     pinned = step.get("model") or None

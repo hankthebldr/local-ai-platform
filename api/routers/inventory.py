@@ -15,11 +15,12 @@ from typing import Optional
 import psutil
 import requests
 import yaml
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 from ..logging_config import logger
+from ..middleware import require_master_key
 from ..services.discovery_service import (
     get_cached_or_discover,
     is_cache_fresh,
@@ -820,6 +821,60 @@ async def unload_model(req: UnloadRequest):
         return {"status": "error", "model": req.model, "detail": str(e)}
 
 
+# ── Explicit warm (LB1-U1) ─────────────────────────────────────────────────
+
+
+class WarmRequest(BaseModel):
+    model: str = Field(..., description="Model id to pre-warm into memory")
+
+
+def _warm_runner_for(model_id: str):
+    """Pick the runner that serves ``model_id``: vLLM when the id is in its
+    served set, else Ollama (the universal fallback). Raises
+    RunnerNotConfigured / RuntimeError upward for the route to translate."""
+    from ..services.runner import RunnerKind
+    from ..services.runner_registry import get_current_registry
+
+    reg = get_current_registry()
+    if RunnerKind.VLLM in reg.kinds():
+        vllm = reg.get(RunnerKind.VLLM)
+        try:
+            if model_id in {m.id for m in vllm.list_models()}:
+                return vllm
+        except Exception as e:  # noqa: BLE001 — unreachable vLLM ≠ warm failure
+            logger.debug(f"warm: vLLM model listing failed: {e}")
+    return reg.get(RunnerKind.OLLAMA)
+
+
+@router.post("/warm", dependencies=[Depends(require_master_key)])
+async def warm_model(req: WarmRequest):
+    """Explicitly load a model via the runner-service load path
+    (Runner.load(): Ollama pre-warms with a zero-token generate; a pinned
+    vLLM server is a documented no-op — its weights loaded at server start).
+
+    ``noop`` is the capability signal the Test pane uses to disable the Warm
+    button with a reason instead of showing a dead control on the flagship
+    NVFP4/vLLM models.
+    """
+    try:
+        runner = _warm_runner_for(req.model)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:  # RunnerNotConfigured
+        raise HTTPException(status_code=503, detail=str(e))
+
+    result = runner.load(req.model)
+    noop = not getattr(runner, "supports_hot_swap", True)
+    return {
+        "model": req.model,
+        "runner": runner.name.value,
+        "loaded": result.loaded,
+        "load_duration_ms": round(result.load_seconds * 1000, 1),
+        "noop": noop,
+        "reason": result.reason,
+    }
+
+
 # ── Discovery Endpoints ───────────────────────────────────────────────────
 
 
@@ -898,9 +953,12 @@ class SearchSettingsRequest(BaseModel):
     )
 
 
-@router.post("/settings/search")
+@router.post("/settings/search", dependencies=[Depends(require_master_key)])
 async def update_settings_search(req: SearchSettingsRequest):
-    """Update search configuration. Only provided fields are updated."""
+    """Update search configuration. Only provided fields are updated.
+
+    Master-key gated (LB1-U1): this route persists brave_api_key — a secrets
+    write — and the Test pane's promote path writes through it."""
     current = get_search_config()
 
     # Merge: only update fields that were explicitly provided

@@ -165,6 +165,92 @@ def _annotate(skills: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return result
 
 
+# ── Trigger dry-run (LB1-U1) ────────────────────────────────────────────
+
+
+class SkillTestRequest(BaseModel):
+    """Dry-run skill matching for the Library Test pane.
+
+    message-only → keyword matching over every installed skill (the chat
+    path's plugin_service.get_skills). plugin_id + skill_id → explicit
+    lookup, mirroring a step's ``skills:`` list. Nothing is injected
+    anywhere — the response reports exactly WHAT WOULD BE injected.
+    """
+
+    message: str = ""
+    plugin_id: Optional[str] = None
+    skill_id: Optional[str] = None
+
+
+def _dry_run_record(
+    plugin_id: str, skill: Dict[str, Any], trigger: str, matched_keyword: Optional[str]
+) -> Dict[str, Any]:
+    """Shape one matched skill exactly as skill_injector would inject it:
+    body stripped, site from frontmatter ``inject`` (system prepends
+    ``body + "\\n\\n"``, messages appends ``"\\n\\n" + body``)."""
+    body = (skill.get("content") or "").strip()
+    inject_site = (skill.get("inject") or "system").lower()
+    site = "system" if inject_site != "messages" else "messages"
+    injected_text = (body + "\n\n") if site == "system" else ("\n\n" + body)
+    keywords = [
+        t.get("keyword")
+        for t in (skill.get("triggers") or [])
+        if isinstance(t, dict) and t.get("keyword")
+    ]
+    return {
+        "plugin_id": plugin_id,
+        "skill_id": skill.get("id"),
+        "name": skill.get("name") or skill.get("id"),
+        "trigger": trigger,
+        "trigger_match": matched_keyword,
+        "keywords": keywords,
+        "injected_into": site,
+        "injected_text": injected_text if body else "",
+        "injected_chars": len(body),
+        "would_inject": bool(body),
+    }
+
+
+@router.post("/test", dependencies=[Depends(require_master_key)])
+async def test_skill_triggers(req: SkillTestRequest) -> Dict[str, Any]:
+    """Dry-run over plugin_service.get_skills/get_skill: matched skills,
+    matched keywords, and the exact text the injector would add."""
+    from api.hooks.builtins.skill_injector import (
+        _find_plugin_id_for_skill,
+        _first_matching_keyword,
+    )
+
+    from .plugins import plugin_service
+
+    matched: List[Dict[str, Any]] = []
+    if req.plugin_id and req.skill_id:
+        skill = plugin_service.get_skill(req.plugin_id, req.skill_id)
+        if skill is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"skill {req.plugin_id}.{req.skill_id} not found",
+            )
+        matched.append(
+            _dry_run_record(
+                req.plugin_id,
+                skill,
+                "explicit",
+                _first_matching_keyword(skill, req.message),
+            )
+        )
+    else:
+        for skill in plugin_service.get_skills(req.message):
+            pid = _find_plugin_id_for_skill(plugin_service, skill.get("id"))
+            if pid is None:
+                continue
+            matched.append(
+                _dry_run_record(
+                    pid, skill, "keyword", _first_matching_keyword(skill, req.message)
+                )
+            )
+    return {"message": req.message, "matched": matched, "count": len(matched)}
+
+
 @router.get("/discover", dependencies=[Depends(require_master_key)])
 async def discover() -> Dict[str, Any]:
     """List every skill in the curated discovery catalog with install state."""

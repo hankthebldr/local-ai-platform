@@ -9,12 +9,16 @@ otherwise both layers are resolved from the active Deployment.
 """
 
 import os
+import re
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel, Field
 
+from ..logging_config import logger
 from ..middleware import require_master_key
 from ..services.plugin_service import PluginService
 
@@ -127,6 +131,117 @@ async def uninstall_plugin(plugin_id: str):
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"deleted": plugin_id}
+
+
+# ── Tool test harness (LB1-U1) ──────────────────────────────────────────
+
+
+_SECRETISH_RE = re.compile(r"key|token|secret|password|credential", re.IGNORECASE)
+
+
+def _mask_secretish(d: dict) -> dict:
+    """Mask values whose key names look secret-bearing. The test route must
+    never echo API keys back to the pane — the operator already has them."""
+    return {k: ("***" if _SECRETISH_RE.search(k) else v) for k, v in d.items()}
+
+
+def _saved_tool_settings() -> dict:
+    """The platform's persisted tool-settings store.
+
+    Today that is the search settings document (data/config/search_settings.json)
+    — the websearch worked example promotes overrides back through the (now
+    master-key-gated) POST /api/inventory/settings/search route. The LB5
+    management plane generalizes per-plugin settings later; this helper is the
+    single seam it will replace. Computed/masked display fields are stripped so
+    the merge operates on raw setting keys only.
+    """
+    try:
+        from ..services.search_service import get_config
+
+        cfg = dict(get_config())
+        cfg.pop("brave_api_key_masked", None)
+        cfg.pop("active_backend", None)
+        return cfg
+    except Exception as e:  # noqa: BLE001 — settings store is optional context
+        logger.debug(f"tool test: saved settings unavailable: {e}")
+        return {}
+
+
+class ToolTestRequest(BaseModel):
+    """One dry-run tool invocation from the Library Test pane.
+
+    ``config_overrides`` is merged over the saved settings for THIS call only
+    — nothing persists (promote is a separate, Confirm-gated write through the
+    settings route). Merged config keys that match the tool's declared
+    parameters fill in call params the operator didn't set explicitly.
+    """
+
+    params: dict = Field(default_factory=dict)
+    config_overrides: dict = Field(default_factory=dict)
+
+
+@router.post(
+    "/{plugin_id}/tools/{tool_id}/test",
+    dependencies=[Depends(require_master_key)],
+)
+async def test_tool(plugin_id: str, tool_id: str, req: ToolTestRequest):
+    """Test-run a plugin tool with session-local config overrides.
+
+    Returns {status, result, latency_ms, meta}. Execution failures come back
+    as status="error" (the harness wants to display them, not 500). The
+    sandbox divergence is surfaced in meta, never hidden: this route invokes
+    the tool in-process with sandbox=None, while chat-path tool calls may run
+    under the profile's sandbox (tool_executor.py).
+    """
+    plugin = plugin_service.get_plugin(plugin_id)
+    if plugin is None:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    tool = next((t for t in plugin.get("tools", []) if t.get("id") == tool_id), None)
+    if tool is None or not plugin_service.has_tool(plugin_id, tool_id):
+        raise HTTPException(status_code=404, detail="Tool not found")
+
+    # Effective config: session overrides win over saved settings. Never
+    # persisted — the saved store is read-only in this path.
+    saved = _saved_tool_settings()
+    effective = {**saved, **(req.config_overrides or {})}
+
+    # Fill declared tool params from the effective config where the operator
+    # didn't pass an explicit value (e.g. websearch max_results).
+    call_params = dict(req.params or {})
+    injected_from_config = {}
+    for name in tool.get("parameters", {}):
+        if name not in call_params and name in effective:
+            call_params[name] = effective[name]
+            injected_from_config[name] = effective[name]
+
+    started = time.perf_counter()
+    status, result, error = "ok", None, None
+    try:
+        result = plugin_service.call_tool(plugin_id, tool_id, call_params, sandbox=None)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        status, error = "error", str(e)
+    latency_ms = round((time.perf_counter() - started) * 1000, 1)
+
+    response = {
+        "status": status,
+        "result": result,
+        "latency_ms": latency_ms,
+        "meta": {
+            "sandbox": None,
+            "sandbox_divergence": (
+                "tool executed in-process with sandbox=None; chat-path tool "
+                "calls may run under the active profile's sandbox"
+            ),
+            "overrides_applied": sorted((req.config_overrides or {}).keys()),
+            "params_from_config": _mask_secretish(injected_from_config),
+            "persisted": False,
+        },
+    }
+    if error is not None:
+        response["error"] = error
+    return response
 
 
 @router.post("/{plugin_id}/tools/{tool_id}", dependencies=[Depends(require_master_key)])
