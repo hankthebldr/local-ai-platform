@@ -17,6 +17,25 @@ supersedes-detail: extends 2026-06-28-composer-dominant-workspace-design.md with
 
 ---
 
+## Superseded direction: Composer/Chat are separate tabs
+
+> **Update (2026-07-09) — the prompt-first spine below is revised.** This document's
+> core premise is the `ComposerSplit` *selection machine*: one thread pivoting between
+> chat / canvas / focus modes in a single surface, where "selection is engagement" and
+> BootSequence crystallizes a conversation into a scaffold *in place*. Henry has since
+> revised that: **chat and canvas are now two separate top-level tabs.** The Composer
+> becomes a canvas-DOMINANT builder with the chat dock removed; a new **Chat** tab is a
+> configurable launchpad / persona workbench; and the conflated Context tab splits into
+> **Research** (artifact-building) + **Context** (run observability). The `setMode` mode
+> machine is retired in favor of tab nav, and BootSequence / node-bound chat become
+> explicit **cross-tab** bridges rather than in-surface modes. Everything else here —
+> the additive `test-step` `messages[]` field, palette-as-objects, `Promote`, the
+> local-sandbox operation model, and the unified object model — is reused unchanged. See
+> **[Composer / Chat Separation + Context Split — Implementation Plan](2026-07-09-composer-chat-separation-implementation.md)**
+> for the authoritative, file-by-file, phased execution plan.
+
+---
+
 ## Related: Unified Object Model
 
 This Composer design has a companion: **[ENCLAVE Unified Object Model & Library Alignment](2026-07-09-unified-object-model-library-alignment.md)**. Where this document governs *how you build a workflow* (the selection machine wrapped around the DAG), that one governs *what the pieces are* — a single `EntityMeta` envelope, one `ObjectShell`/`EntityCard`, and a generalized `AssetPeek` deep-dive that make all ten platform kinds (agent · model · prompt · skill · plugin · mcp · workflow · project · context · workspace) one family. The two meet at one seam: **every Library object is a Composer palette object, and Promote is the gesture that turns it into a step.** Concretely, the palette (`loadWorkbenches`) becomes `ObjectShell` in chip-mode over the same `GET /api/objects/{kind}` endpoint, `renderRightPane(selection={kind:'palette'})` shares the object's `DeepDiveSpec` + live bench, and Promote maps each kind to its engine slot (Prompt→`StepPrompt.role_ref`, Agent→node `system_prompt`, Skill/Plugin/MCP→`ToolRef`, Model→step `model`). It ships behind the same frozen-engine / `data-action` / no-new-global constraints and does not alter anything below.
