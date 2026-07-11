@@ -23,6 +23,15 @@
 // so the worked example (Plugins > websearch) keeps working unchanged. The
 // old inline-onclick AssetPeek button is replaced on newly rendered rows by a
 // delegated `plugins.peek` action (no inline handlers).
+//
+// Management plane (LB5-U2): user-layer plugins get a Files detail tab (async
+// section renderer) over GET /api/plugins/{id}/files + GET/PUT .../files/{path}
+// — system plugins are read-only image content (403 server-side, tab hidden
+// here). Saves are atomic and version-bumped server-side (plugin.yaml is the
+// source of truth); the PUT response {version, reload_required} raises a
+// Reload badge whose button fires the existing POST /api/plugins/reload
+// (in-process rescan — chat + tester pick the edit up next call). Delete
+// stays Confirm-gated.
 import { esc, renderMarkdown } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
@@ -36,6 +45,9 @@ export const PluginsPanel = (function () {
   let _plugins = [];      // GET /api/plugins summaries (layer-annotated)
   let _digest = null;     // last GET /api/discover/claude-marketplaces read
   let _forgeSeed = null;  // staged seed for the LB5-U3 creation wizard
+  // Plugin ids edited since the last reload — drives the Reload badge
+  // (server truth is the PUT response's reload_required flag).
+  const _reloadNeeded = new Set();
 
   const DISC_PREFIX = 'disc::';
 
@@ -109,19 +121,23 @@ export const PluginsPanel = (function () {
     // Installed — layer chip (origin: system|user) + version badge ride the
     // LB0 row contract; selection is data-id (title matching retired).
     list() {
-      return _plugins.map(p => ({
-        id: p.id,
-        title: p.name || p.id,
-        meta: `${(p.skills || []).length} skill${(p.skills || []).length === 1 ? '' : 's'} · ${(p.tools || []).length} tool${(p.tools || []).length === 1 ? '' : 's'}`,
-        group: '',
-        provenance: (p.layer || p.origin) === 'user' ? 'user' : 'oob',
-        blocks: ['tools', 'context'],
-        tags: [],
-        icon: 'plugin',
-        chips: [{ label: p.layer || p.origin || 'system', cls: 'plugin-layer-chip' }],
-        badges: p.version ? [{ label: `v${p.version}`, cls: 'plugin-version-badge' }] : [],
-        dot: { cls: p.error ? 'err' : 'up', title: p.error || 'registered' },
-      }));
+      return _plugins.map(p => {
+        const badges = p.version ? [{ label: `v${p.version}`, cls: 'plugin-version-badge' }] : [];
+        if (_reloadNeeded.has(p.id)) badges.push({ label: 'reload', cls: 'plugin-reload-badge' });
+        return {
+          id: p.id,
+          title: p.name || p.id,
+          meta: `${(p.skills || []).length} skill${(p.skills || []).length === 1 ? '' : 's'} · ${(p.tools || []).length} tool${(p.tools || []).length === 1 ? '' : 's'}`,
+          group: '',
+          provenance: (p.layer || p.origin) === 'user' ? 'user' : 'oob',
+          blocks: ['tools', 'context'],
+          tags: [],
+          icon: 'plugin',
+          chips: [{ label: p.layer || p.origin || 'system', cls: 'plugin-layer-chip' }],
+          badges: badges,
+          dot: { cls: p.error ? 'err' : 'up', title: p.error || 'registered' },
+        };
+      });
     },
 
     // Discovered — pointer-only records from the persisted digest, grouped
@@ -163,11 +179,29 @@ export const PluginsPanel = (function () {
       if (_isDisc(id)) {
         return { sections: { overview: (el) => _renderDiscOverview(el, id) } };
       }
-      return { sections: { overview: (el) => _renderOverview(el, id) } };
+      const p = _pluginRec(id);
+      const sections = { overview: (el) => _renderOverview(el, id) };
+      // Files tab: user layer only — system plugins are read-only image
+      // content (the backend 403s them; no tab beats a dead tab).
+      if (p && (p.layer || p.origin) === 'user') {
+        sections.files = (el) => _renderFiles(el, id);
+      }
+      return { sections };
     },
 
     actions(id) {
-      if (!_isDisc(id)) return [];   // installed verbs (files/reload/delete) land in LB5-U2
+      if (!_isDisc(id)) {
+        const p = _pluginRec(id);
+        const isUser = !!p && (p.layer || p.origin) === 'user';
+        const dirty = _reloadNeeded.has(id);
+        return [
+          { action: 'plugins.reload', verb: 'install', accent: dirty,
+            label: dirty ? 'Reload required' : 'Reload plugins' },
+          { action: 'plugins.delete', verb: 'delete', label: 'Delete',
+            enabled: isUser,
+            reason: isUser ? undefined : 'system-layer plugin — read-only image content' },
+        ];
+      }
       const rec = _discRecord(id);
       const nSkills = rec ? ((rec.install || {}).skills || []).length : 0;
       return [
@@ -219,6 +253,131 @@ export const PluginsPanel = (function () {
     // saved settings / L1 skills / L3 schema form).
     const paneHost = el.querySelector('#plugin-test-pane');
     if (paneHost) TestPane.mount('plugin-tool', p.id, paneHost, { plugin: p });
+  }
+
+  // ── Files tab — management plane over the LB5-U2 file routes ────────
+  // User layer only; async section renderer (invoked on first activation).
+  async function _renderFiles(el, id) {
+    const r = await LibraryShell.fetch('plugin', `/api/plugins/${encodeURIComponent(id)}/files`);
+    if (!r.ok) {
+      const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+      el.innerHTML = `<div class="model-empty" style="color:var(--danger)">Files failed: ${esc(detail)}</div>`;
+      return;
+    }
+    const d = r.data || {};
+    const files = d.files || [];
+    const badge = _reloadNeeded.has(id)
+      ? ' <span class="lib-badge plugin-reload-badge">reload required</span>' : '';
+    el.innerHTML = `
+      <div class="skills-tree-meta" style="margin:0 0 6px;display:block">
+        ${files.length} file${files.length === 1 ? '' : 's'} · user layer ·
+        v${esc(d.version || '?')}${badge} — saves are atomic; plugin.yaml version
+        auto-bumps on the first save per reload cycle</div>
+      <div class="skills-tree">${files.map(f => `
+        <button type="button" class="btn-unstyled skills-tree-file" data-action="plugins.file-open"
+          data-plugin="${esc(id)}" data-path="${esc(f.path)}">
+          ${esc(f.path)} <span class="skills-tree-meta">${esc(String(f.size || 0))}b</span>
+        </button>`).join('')}
+      </div>
+      <div id="plugin-file-editor" class="plugin-file-editor" hidden></div>`;
+  }
+
+  async function openFile(pluginId, path) {
+    const box = document.getElementById('plugin-file-editor');
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = '<div class="model-empty">Loading…</div>';
+    const url = `/api/plugins/${encodeURIComponent(pluginId)}/files/` +
+      String(path).split('/').map(encodeURIComponent).join('/');
+    const r = await LibraryShell.fetch('plugin', url);
+    if (!r.ok) {
+      const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+      box.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(detail)}</div>`;
+      return;
+    }
+    const d = r.data || {};
+    box.innerHTML = `
+      <div class="skills-tree-meta" style="margin:8px 0 2px;display:block">
+        <code>${esc(d.path || path)}</code> · ${esc(String(d.size || 0))}b</div>
+      <textarea id="plugin-file-body" rows="14" spellcheck="false"
+        aria-label="File body">${esc(d.body || '')}</textarea>
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px">
+        <button type="button" class="action-btn accent" data-action="plugins.file-save"
+          data-plugin="${esc(pluginId)}" data-path="${esc(d.path || path)}">Save</button>
+      </div>`;
+  }
+
+  async function saveFile(pluginId, path) {
+    const ta = document.getElementById('plugin-file-body');
+    if (!ta) return;
+    const url = `/api/plugins/${encodeURIComponent(pluginId)}/files/` +
+      String(path).split('/').map(encodeURIComponent).join('/');
+    // retries:0 — a save is a write; never double-fire.
+    const r = await LibraryShell.fetch('plugin', url, {
+      retries: 0,
+      init: {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: ta.value }),
+      },
+    });
+    if (!r.ok) {
+      const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+      Toast.danger('Save failed', detail);
+      return;
+    }
+    const d = r.data || {};
+    if (d.reload_required) _reloadNeeded.add(pluginId);
+    Toast.success(`Saved — v${d.version || '?'}`, 'Reload to activate the change.');
+    // Reload badge on the actions row + sidebar row (editor stays open).
+    LibraryShell.renderActions('plugin');
+    LibraryShell.renderRows('plugin');
+  }
+
+  // Reload — existing POST /api/plugins/reload (in-process rescan; chat and
+  // the tool tester read the same live singleton). Toast carries the counts;
+  // the current plugin is re-selected so the detail reflects the rescan.
+  async function reloadPlugins() {
+    const cur = _selected();
+    const r = await LibraryShell.fetch('plugin', '/api/plugins/reload', {
+      retries: 0,
+      init: { method: 'POST' },
+    });
+    if (!r.ok) {
+      const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+      Toast.danger('Reload failed', detail);
+      return;
+    }
+    _reloadNeeded.clear();
+    const d = r.data || {};
+    Toast.success('Plugins reloaded',
+      `${d.plugins ?? '?'} plugins · ${d.skills ?? '?'} skills · ${d.tools ?? '?'} tools`);
+    await load();
+    if (cur && !_isDisc(cur)) select(cur);
+  }
+
+  // Delete — Confirm-gated (kept); user layer only (backend 403s system).
+  async function deletePlugin(id) {
+    const ok = await Confirm.ask({
+      title: 'Delete plugin',
+      body: `Delete user-layer plugin "${id}"? Its files under plugins/${id}/ are removed. This cannot be undone.`,
+      okLabel: 'Delete', danger: true,
+    });
+    if (!ok) return;
+    const r = await LibraryShell.fetch('plugin', `/api/plugins/${encodeURIComponent(id)}`, {
+      retries: 0,
+      init: { method: 'DELETE' },
+    });
+    if (!r.ok) {
+      const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+      Toast.danger('Delete failed', detail);
+      return;
+    }
+    _reloadNeeded.delete(id);
+    const st = LibraryShell.state('plugin');
+    if (st && st.selected === id) st.selected = null;
+    Toast.success('Plugin deleted', id);
+    await load();
   }
 
   // ── Discovered detail (Overview) ────────────────────────────────────
@@ -521,6 +680,11 @@ export const PluginsPanel = (function () {
     'plugins.seed-wizard': el => seedWizard(el.dataset.id),
     'plugins.goto-mcp': () => LibraryShell.open('mcp'),
     'plugins.peek': el => AssetPeek.open('plugin', el.dataset.id),
+    // LB5-U2 management plane
+    'plugins.file-open': el => openFile(el.dataset.plugin, el.dataset.path),
+    'plugins.file-save': el => saveFile(el.dataset.plugin, el.dataset.path),
+    'plugins.reload': () => reloadPlugins(),
+    'plugins.delete': el => deletePlugin(el.dataset.id),
   });
   Actions.on('submit', {
     'plugins.run-tool': (el, e) => {
@@ -532,5 +696,6 @@ export const PluginsPanel = (function () {
   return { load, refresh, select, renderDetail, renderToolAccordion,
            runTool, renderToolForm, _collectParams,
            refreshDigest, importSkills, seedWizard, viewManifest, forgeSeed,
+           openFile, saveFile, reloadPlugins, deletePlugin,
            adapter };
 })();

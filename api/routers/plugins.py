@@ -14,6 +14,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
@@ -107,7 +108,14 @@ async def install_plugin(plugin: UploadFile = File(...)):
     finally:
         if tmp and tmp.exists():
             tmp.unlink()
-    return {"installed": installed["id"], "plugin": _with_layer(installed)}
+    # Reinstall stays a silent replace (only-add), but the previous version
+    # rides the response so the UI can surface a downgrade (LB5-U2).
+    replaced_version = installed.pop("replaced_version", None)
+    return {
+        "installed": installed["id"],
+        "plugin": _with_layer(installed),
+        "replaced_version": replaced_version,
+    }
 
 
 @router.get("/{plugin_id}", dependencies=[Depends(require_master_key)])
@@ -131,6 +139,117 @@ async def uninstall_plugin(plugin_id: str):
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"deleted": plugin_id}
+
+
+# ── File management plane (LB5-U2) ──────────────────────────────────────
+# GET  /{id}/files            relative file paths + current version
+# GET  /{id}/files/{path}     single file body
+# PUT  /{id}/files/{path}     atomic write + version policy + reload flag
+#
+# User layer only — system plugins 403 (mirroring uninstall). Every path is
+# charset-allowlisted per segment AND containment-checked in the service
+# (prompts.py _path / skills.py file-route discipline: this repo had a real
+# glob-traversal incident, so belt AND suspenders).
+
+_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
+# "." and ".." both match the charset, so they are rejected explicitly below.
+_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+_VERSION_RE = re.compile(r"^[A-Za-z0-9.+-]{1,32}$")
+_FILE_BYTES_MAX = 1_000_000  # single-file read cap for the Files tab
+
+
+def _checked_plugin_id(plugin_id: str) -> str:
+    if not _ID_RE.match(plugin_id or ""):
+        raise HTTPException(status_code=400, detail="invalid plugin id")
+    return plugin_id
+
+
+def _checked_rel_path(path: str) -> str:
+    path = (path or "").strip()
+    if not path or len(path) > 512 or "\\" in path or path.startswith("/"):
+        raise HTTPException(status_code=400, detail="invalid path")
+    for segment in path.split("/"):
+        if segment in ("", ".", "..") or not _SEGMENT_RE.match(segment):
+            raise HTTPException(status_code=400, detail="invalid path segment")
+    return path
+
+
+def _user_files_errors(exc: Exception) -> HTTPException:
+    """Map service errors onto the management-plane status contract."""
+    if isinstance(exc, KeyError):
+        return HTTPException(status_code=404, detail="Plugin not found")
+    if isinstance(exc, PermissionError):
+        return HTTPException(status_code=403, detail=str(exc))
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail="file not found")
+    if isinstance(exc, ValueError):
+        return HTTPException(status_code=400, detail=str(exc))
+    return HTTPException(status_code=500, detail=str(exc))
+
+
+class PluginFileWrite(BaseModel):
+    """One file save from the Files tab editor. ``version`` (optional) is
+    honored verbatim as the new plugin.yaml version; when absent the first
+    save since the last reload patch-bumps it (dirty flag)."""
+
+    content: str
+    version: Optional[str] = None
+
+
+@router.get("/{plugin_id}/files", dependencies=[Depends(require_master_key)])
+async def list_plugin_files(plugin_id: str):
+    """Relative file paths of a user-layer plugin (403 for system layer)."""
+    _checked_plugin_id(plugin_id)
+    try:
+        files = plugin_service.list_files(plugin_id)
+    except Exception as exc:  # noqa: BLE001 — mapped onto the status contract
+        raise _user_files_errors(exc)
+    plugin = plugin_service.get_plugin(plugin_id) or {}
+    return {
+        "plugin_id": plugin_id,
+        "layer": plugin.get("origin"),
+        "version": plugin.get("version"),
+        "files": files,
+    }
+
+
+@router.get(
+    "/{plugin_id}/files/{path:path}", dependencies=[Depends(require_master_key)]
+)
+async def read_plugin_file(plugin_id: str, path: str):
+    """Single file body for the Files tab editor (user layer only)."""
+    _checked_plugin_id(plugin_id)
+    path = _checked_rel_path(path)
+    try:
+        rec = plugin_service.read_file(plugin_id, path)
+    except Exception as exc:  # noqa: BLE001
+        raise _user_files_errors(exc)
+    if rec["size"] > _FILE_BYTES_MAX:
+        raise HTTPException(status_code=413, detail="file too large to edit inline")
+    return {"plugin_id": plugin_id, **rec}
+
+
+@router.put(
+    "/{plugin_id}/files/{path:path}", dependencies=[Depends(require_master_key)]
+)
+async def write_plugin_file(plugin_id: str, path: str, req: PluginFileWrite):
+    """Save one file into a user-layer plugin (atomic tmp+replace).
+
+    plugin.yaml saves are YAML-validated (400 on malformed) so scan_plugins
+    cannot be broken by a bad edit. Responds {version, reload_required:true}
+    — the edit activates on the next POST /api/plugins/reload.
+    """
+    _checked_plugin_id(plugin_id)
+    path = _checked_rel_path(path)
+    if req.version is not None and not _VERSION_RE.match(req.version):
+        raise HTTPException(status_code=400, detail="invalid version string")
+    try:
+        result = plugin_service.write_file(
+            plugin_id, path, req.content, explicit_version=req.version
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise _user_files_errors(exc)
+    return {"saved": True, "plugin_id": plugin_id, "path": path, **result}
 
 
 # ── Tool test harness (LB1-U1) ──────────────────────────────────────────

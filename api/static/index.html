@@ -299,6 +299,13 @@
 .models-prompt-score { font-family:var(--mono); font-size:0.62rem; color:var(--accent); margin-left:auto; }
 .models-prompt-factors { margin-top:4px; display:flex; gap:4px; flex-wrap:wrap; }
 .models-prompt-factors .lib-chip { margin-left:0; }
+/* ── LB5-U2 — Plugins management plane: Files editor + reload badge ──
+   User-layer file list rides the .skills-tree grammar; the editor is a
+   plain mono textarea (atomic PUT, version-bumped server-side). The
+   amber reload badge mirrors the PUT response's reload_required flag. */
+.plugin-reload-badge { color:var(--amber,#F5A623); border-color:var(--amber,#F5A623); }
+.plugin-file-editor textarea { width:100%; box-sizing:border-box; margin-top:4px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:0.7rem; line-height:1.5; padding:8px 10px; min-height:220px; resize:vertical; }
+.plugin-file-editor textarea:focus { outline:none; border-color:var(--accent-dim,var(--accent)); }
 </style>
 <style id="test-pane-styles">
 /* ── TestPane — layered test harness in the shell Test tab (LB1-U2) ────
