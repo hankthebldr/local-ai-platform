@@ -22,7 +22,7 @@ import { SkillsPanel } from './library/skills.js';
 import { PluginsPanel } from './library/plugins.js';
 import { Kanban } from './library/kanban.js';
 import { WorkflowIndex } from './library/workflow-index.js';
-import { AgentGen } from './library/agents.js';
+import { AgentGen, AgentsPanel } from './library/agents.js';
 import { CatalogPage, CatalogModelsShare } from './library/models.js';
 import { ModelsPanel } from './library/models-panel.js';
 import { LibraryShell } from './library/shell.js';
@@ -8129,8 +8129,15 @@ function dfAddNodeFromImportedStep(step, x, y) {
 }
 
 /* ── AGENTS TAB ─────────────────────────────────────────────────── */
+// MS-5: the Agents tab is migrated onto the LibraryShell (AgentsPanel adapter
+// in library/agents.js). The chat lifecycle below is REUSED verbatim against
+// the same element ids, but the chat panel now lives in the shell's detail
+// `chat` slot — openAgentChat first focuses that slot (mounts the skeleton)
+// then populates it. A pending-starter latch carries a starter chip click
+// through the async populate without racing the greeting.
 let _activeAgentId = null;
 let _agentHistory = [];
+let _pendingStarter = null;
 
 // ── Chat persistence ────────────────────────────────────────────────
 // User feedback (post-#71): "change tabs and the chat has been cleared
@@ -8169,6 +8176,9 @@ function _restoreAgentChat() {
     if (!parsed.activeAgentId || !Array.isArray(parsed.history)) return false;
     _activeAgentId = parsed.activeAgentId;
     _agentHistory = parsed.history;
+    // MS-5: the chat slot lives in the shell detail pane — focus it first so
+    // the panel skeleton (below) exists to repaint into.
+    try { AgentsPanel.focusChat(_activeAgentId); } catch (_) {}
     // Rebuild the chat panel UI without re-fetching the agent. The
     // header model/name we cached at last persist is good enough; if
     // the agent has been edited since, openAgentChat will refresh on
@@ -8234,77 +8244,23 @@ function _renderActiveChatPill() {
   list.prepend(pill);
 }
 
+// MS-5: the Agents tab is the LibraryShell now — loadAgentsTab delegates to
+// the AgentsPanel adapter (list rows + subnav detail) and then restores any
+// persisted chat into the detail chat slot.
 async function loadAgentsTab() {
-  // Try to restore a persisted chat BEFORE rendering the agents grid
-  // so the active-chat pill can show up at the top of the list.
-  _restoreAgentChat();
-
-  const listEl = document.getElementById('agents-list');
-  const emptyEl = document.getElementById('agents-empty');
-  listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">Loading…</div>';
-  emptyEl.style.display = 'none';
-
-  let agents = [];
   try {
-    agents = await Net.getJson('/api/agents');
-  } catch (e) {
-    listEl.innerHTML = '<div style="color:var(--red,#f44);font-size:0.8rem;padding:8px;">Failed to load agents.</div>';
-    return;
-  }
-
-  const countEl = document.getElementById('agents-count');
-  if (countEl) countEl.textContent = agents.length || '';
-
-  if (!agents.length) {
-    listEl.innerHTML = '';
-    emptyEl.style.display = 'block';
-    return;
-  }
-  emptyEl.style.display = 'none';
-
-  listEl.innerHTML = agents.map(a => {
-    const persona  = (window.AgentIcons ? AgentIcons.resolve(a) : 'general');
-    const iconSvg  = (window.AgentIcons ? AgentIcons.svg(persona) : '');
-    const tone     = (window.AgentIcons ? AgentIcons.tone(persona) : 'accent');
-    const subtitle = (a.description || '').split('\n')[0].trim().slice(0, 90);
-    return `
-    <div class="agent-tile" role="button" tabindex="0" aria-label="Open chat with ${esc(a.name)}" data-action="agents.chat" data-agent-id="${esc(a.id)}">
-      <div class="agent-tile-head">
-        <span class="agent-tile-icon tone-${esc(tone)}" data-persona="${esc(persona)}">${iconSvg}</span>
-        <div class="agent-tile-titleblock">
-          <div class="agent-tile-title">${esc(a.name)}</div>
-          <div class="agent-tile-subtitle">${esc(subtitle || (a.role ? 'Role · ' + a.role : ''))}</div>
-        </div>
-        <div class="agent-tile-actions">
-          <button onclick="event.stopPropagation();AssetPeek.open('agent','${esc(a.id)}')"
-                  class="agent-tile-action" title="Deep dive — binding, starters, persona">⌕</button>
-          <button data-action="agents.edit"
-                  class="agent-tile-action" title="Edit agent">✎</button>
-          <button data-action="agents.delete"
-                  class="agent-tile-action" title="Delete agent">✕</button>
-        </div>
-      </div>
-      <div class="agent-tile-meta">
-        ${(a.tags||[]).map(t=>`<span class="agent-tile-tag">${esc(t)}</span>`).join('')}
-        ${a.role ? `<span class="agent-tile-tag tag-role">${esc(a.role)}</span>` : ''}
-        ${a.model ? `<span class="agent-tile-tag tag-model">${esc(a.model)}</span>` : ''}
-      </div>
-      ${a.starters && a.starters.length ? `
-        <div class="agent-tile-starters">
-          ${a.starters.slice(0,2).map(s=>`
-            <button data-action="agents.starter" data-starter="${esc(s)}"
-                    class="agent-tile-starter">
-              <span class="starter-arrow">↗</span> ${esc(s)}
-            </button>`).join('')}
-        </div>` : ''}
-    </div>`;
-  }).join('');
-  // After the grid renders, surface the "active chat" jump pill so a
-  // restored conversation is visually obvious at the top of the page.
-  _renderActiveChatPill();
+    await AgentsPanel.load();
+  } catch (_) { /* the shell renders its own error panel */ }
+  _restoreAgentChat();
 }
 
 async function openAgentChat(agentId) {
+  // Bring the shell to this agent's Chat slot so the panel skeleton exists,
+  // THEN populate it. The slot is a static STRING section, so focusChat mounts
+  // it SYNCHRONOUSLY — #agent-chat-panel is in the DOM the instant this
+  // returns (no recursion: the slot renderer never calls back here).
+  try { AgentsPanel.focusChat(agentId); } catch (_) {}
+  if (!document.getElementById('agent-chat-panel')) return;
   _activeAgentId = agentId;
   _agentHistory = [];
   _persistAgentChat();
@@ -8327,17 +8283,24 @@ async function openAgentChat(agentId) {
   document.getElementById('agent-chat-model').textContent = agent.role ? `role:${agent.role}` : (agent.model || '');
   document.getElementById('agent-chat-messages').innerHTML = `
     <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;">
-      Chat with <strong style="color:var(--cyan)">${esc(agent.name)}</strong> — type a message below
+      Chat with <strong style="color:var(--accent)">${esc(agent.name)}</strong> — type a message below
     </div>`;
   document.getElementById('agent-chat-panel').style.display = 'block';
   document.getElementById('agent-chat-input').focus();
+  // A starter chip click latched _pendingStarter — send it now that the
+  // greeting is painted (avoids clobbering the sent message).
+  if (_pendingStarter) {
+    const s = _pendingStarter;
+    _pendingStarter = null;
+    const inp = document.getElementById('agent-chat-input');
+    if (inp) { inp.value = s; sendAgentMessage(); }
+  }
 }
 
 function openAgentChatWithStarter(agentId, starter) {
-  openAgentChat(agentId).then(() => {
-    document.getElementById('agent-chat-input').value = starter;
-    sendAgentMessage();
-  });
+  // Latch the starter; openAgentChat consumes it after the greeting renders.
+  _pendingStarter = starter;
+  openAgentChat(agentId);
 }
 
 // Delegated actions shared by BOTH agent-grid render paths (the Agents tab

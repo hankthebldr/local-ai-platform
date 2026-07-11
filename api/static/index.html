@@ -2470,34 +2470,35 @@
        links, bookmarks, and the g-c shortcut keep landing somewhere
        real. -->
 
-  <!-- AGENTS TAB -->
+  <!-- AGENTS TAB — LibraryShell grammar (MS-5). Migrated off the bespoke
+       card grid + inline chat panel onto the shared two-pane master/detail
+       grammar the other six Library kinds use: uniform .lib-row list on the
+       left, subnav detail on the right with the agent chat living in the
+       detail chat slot. TestPane / provenance / re-sync / runtime execution
+       stay OUT (grammar-only; the engine is frozen — Library f/u #2). The
+       #agents-list / #agents-detail panels are adopted by the AgentsPanel
+       adapter (library/agents.js); the chat panel is rendered into the
+       detail chat slot at runtime (no static inline on*= handlers). -->
   <div class="tab-content" id="tab-agents" style="display:none">
-    <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
-      <h3 style="color:var(--cyan);font-size:0.9rem;margin:0;flex:1">Custom Agents</h3>
-      <button class="action-btn" onclick="showCreateAgentModal()" style="background:var(--cyan);color:#000;border-color:var(--cyan);font-weight:600;">+ New Agent</button>
-      <button class="action-btn" onclick="loadAgentsTab()" title="Refresh">&#x21bb;</button>
-    </div>
-
-    <!-- Agent list -->
-    <div id="agents-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px;"></div>
-    <div id="agents-empty" style="display:none;text-align:center;padding:40px;color:var(--text-muted);font-size:0.85rem;">
-      No agents yet. Create one to get started.
-    </div>
-
-    <!-- Agent chat panel (shown when an agent is selected) -->
-    <div id="agent-chat-panel" style="display:none;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
-      <div style="background:var(--bg-panel);padding:10px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);">
-        <span id="agent-chat-icon" class="agent-chat-icon-block"></span>
-        <strong id="agent-chat-name" style="color:var(--text);font-size:0.9rem;flex:1"></strong>
-        <span id="agent-chat-model" style="font-size:0.72rem;color:var(--text-muted);"></span>
-        <button onclick="closeAgentChat()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;">&times;</button>
+    <div class="plugins-layout">
+      <div class="panel plugins-list-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">// AGENTS
+          <span style="float:right">
+            <button class="action-btn accent" data-action="agents.new">+ New Agent</button>
+            <button class="action-btn" data-action="agents.refresh" title="Refresh">&#x21bb;</button>
+          </span>
+        </div>
+        <div id="agents-list" style="margin-top:10px;font-size:0.78rem"></div>
       </div>
-      <div id="agent-chat-messages" style="padding:14px;min-height:200px;max-height:400px;overflow-y:auto;font-size:0.82rem;display:flex;flex-direction:column;gap:10px;"></div>
-      <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:8px;">
-        <input type="text" id="agent-chat-input" aria-label="Message the agent" placeholder="Message the agent…"
-          style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:4px;font-family:var(--mono);font-size:0.82rem;"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentMessage();}">
-        <button onclick="sendAgentMessage()" style="background:var(--cyan);color:#000;border:none;padding:7px 16px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Send</button>
+
+      <div class="panel plugins-detail-panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label" id="agents-detail-label">// SELECT AN AGENT</div>
+        <div id="agents-detail" style="margin-top:10px;color:var(--text-muted);font-size:0.78rem">
+          Select an agent on the left to read its persona and starters, or
+          chat with it in the detail pane.
+        </div>
       </div>
     </div>
   </div>

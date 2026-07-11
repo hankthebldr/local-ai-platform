@@ -2,9 +2,9 @@
   "_meta": {
     "source": "static markup of api/static/index.html (<script>/<style> stripped)",
     "purpose": "Every symbol here is invoked by an inline on*= handler. After the ES-module split each MUST be reachable as a window global (legacy-bridge.js), or the handler silently no-ops. 'must_bridge' lists symbols reachable today ONLY via a classic-script global lexical const/let/function \u2014 these break under modules unless explicitly assigned to window.",
-    "handler_count": 215,
-    "symbol_count": 94,
-    "must_bridge_count": 61,
+    "handler_count": 211,
+    "symbol_count": 90,
+    "must_bridge_count": 57,
     "unknown_count": 0
   },
   "symbols": [
@@ -40,7 +40,6 @@
     "applyRoleAsSystemPrompt",
     "cleanupStaleSessions",
     "clearSystemPrompt",
-    "closeAgentChat",
     "closeStepConfigPopup",
     "composerClearWithConfirm",
     "composerExitStepEngage",
@@ -67,7 +66,6 @@
     "graphZoomIn",
     "graphZoomOut",
     "loadActiveSessions",
-    "loadAgentsTab",
     "loadStatus",
     "markSettingsDirty",
     "onAgentSelectionChanged",
@@ -86,11 +84,9 @@
     "saveSystemPrompt",
     "searchDocuments",
     "searchMemory",
-    "sendAgentMessage",
     "sendMessage",
     "setDiscFilter",
     "setFilter",
-    "showCreateAgentModal",
     "switchTab",
     "toggleAgentDock",
     "toggleComposerWorkstream",
@@ -136,7 +132,6 @@
     "applyRoleAsSystemPrompt": "lexical",
     "cleanupStaleSessions": "lexical",
     "clearSystemPrompt": "lexical",
-    "closeAgentChat": "lexical",
     "closeStepConfigPopup": "window",
     "composerClearWithConfirm": "lexical",
     "composerExitStepEngage": "lexical",
@@ -163,7 +158,6 @@
     "graphZoomIn": "window",
     "graphZoomOut": "window",
     "loadActiveSessions": "lexical",
-    "loadAgentsTab": "lexical",
     "loadStatus": "lexical",
     "markSettingsDirty": "lexical",
     "onAgentSelectionChanged": "lexical",
@@ -182,11 +176,9 @@
     "saveSystemPrompt": "lexical",
     "searchDocuments": "lexical",
     "searchMemory": "lexical",
-    "sendAgentMessage": "lexical",
     "sendMessage": "lexical",
     "setDiscFilter": "lexical",
     "setFilter": "lexical",
-    "showCreateAgentModal": "lexical",
     "switchTab": "lexical",
     "toggleAgentDock": "lexical",
     "toggleComposerWorkstream": "lexical",
@@ -207,7 +199,6 @@
     "applyRoleAsSystemPrompt",
     "cleanupStaleSessions",
     "clearSystemPrompt",
-    "closeAgentChat",
     "composerClearWithConfirm",
     "composerExitStepEngage",
     "composerExportBundle",
@@ -230,7 +221,6 @@
     "exportSession",
     "filterCatalog",
     "loadActiveSessions",
-    "loadAgentsTab",
     "loadStatus",
     "markSettingsDirty",
     "onAgentSelectionChanged",
@@ -248,11 +238,9 @@
     "saveSystemPrompt",
     "searchDocuments",
     "searchMemory",
-    "sendAgentMessage",
     "sendMessage",
     "setDiscFilter",
     "setFilter",
-    "showCreateAgentModal",
     "switchTab",
     "toggleAgentDock",
     "toggleComposerWorkstream",
@@ -367,9 +355,6 @@
     "clearSystemPrompt": [
       "click"
     ],
-    "closeAgentChat": [
-      "click"
-    ],
     "closeStepConfigPopup": [
       "click"
     ],
@@ -448,9 +433,6 @@
     "loadActiveSessions": [
       "click"
     ],
-    "loadAgentsTab": [
-      "click"
-    ],
     "loadStatus": [
       "click"
     ],
@@ -506,9 +488,6 @@
     "searchMemory": [
       "input"
     ],
-    "sendAgentMessage": [
-      "click"
-    ],
     "sendMessage": [
       "click"
     ],
@@ -516,9 +495,6 @@
       "click"
     ],
     "setFilter": [
-      "click"
-    ],
-    "showCreateAgentModal": [
       "click"
     ],
     "switchTab": [

@@ -1,8 +1,11 @@
-// library/agents.js — Agent generator/catalog (phase-2 U4 carve).
+// library/agents.js — Agent generator/catalog (phase-2 U4 carve) + the
+// AgentsPanel LibraryShell adapter (MS-5: the Agents tab migrated onto the
+// uniform master/detail grammar the other six Library kinds share).
 import { esc } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
+import { LibraryShell } from './shell.js';
 
 export const AgentGen = (function () {
   let _draft = null;
@@ -272,4 +275,204 @@ export const AgentGen = (function () {
   });
 
   return { openFromDocument, openFromText, generate, save, saveAndEvaluate, addCase, close, _showStep };
+})();
+
+
+// ── AgentsPanel — the Agents tab on the LibraryShell (MS-5) ────────────────
+//
+// Grammar-only migration: the bespoke agent card grid + inline chat panel are
+// replaced by the shared two-pane shell (uniform `.lib-row` list, subnav
+// detail). auth:'none' — /api/agents is an unguarded read. The chat lives in
+// a `chat` detail subnav slot; the existing main.js chat lifecycle
+// (openAgentChat / sendAgentMessage / closeAgentChat / persist / restore)
+// is REUSED verbatim against the same element ids — this module only renders
+// the skeleton those functions populate, and drives selection/subnav focus.
+// No backend change, no TestPane/provenance/re-sync (frozen engine — Library
+// f/u #2). No new window globals: the chat verbs call the pre-existing globals
+// main.js already bridges (openAgentChat, showEditAgentModal, deleteAgent,
+// showCreateAgentModal, sendAgentMessage, closeAgentChat, AssetPeek).
+//
+// NOTE (finding #40 — CatalogPage agent-tile dedup): DEFERRED. The Admin →
+// Catalog → Agents section still renders the legacy read-only tile grid
+// (models.js `_renderAgentsList`, its own `agents.chat/edit/delete`); that
+// surface has no shell and is a browse-only preview. Folding it onto the shell
+// is left to a Library follow-up so this unit stays grammar-only for the tab.
+export const AgentsPanel = (function () {
+  let _agents = [];
+
+  function _agent(id) { return _agents.find(a => a.id === id) || null; }
+  function _selected() { return (LibraryShell.state('agent') || {}).selected; }
+  function _oneLine(text, max) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    const cap = max || 90;
+    return t.length > cap ? t.slice(0, cap - 1) + '…' : t;
+  }
+
+  const adapter = LibraryShell.register({
+    kind: 'agent',
+    tabId: 'agents',
+    countBadgeId: 'agents-count',
+    listElId: 'agents-list',
+    detailElId: 'agents-detail',
+    labelElId: 'agents-detail-label',
+    rowClass: 'agent-card',
+    auth: 'none',                       // /api/agents is an unguarded read
+    title: 'Agents',
+    emptyText: 'No agents yet — + New Agent to author one.',
+    emptyDetailLabel: '// SELECT AN AGENT',
+    emptyDetailText: 'Select an agent on the left to read its persona and starters, or chat with it in the detail pane.',
+    sectionOrder: ['overview', 'chat'],
+    sectionLabels: { overview: 'Overview', chat: 'Chat' },
+
+    async load() {
+      const r = await LibraryShell.fetch('agent', '/api/agents');
+      if (!r.ok) throw new Error(`Load failed (${r.status})`);
+      _agents = Array.isArray(r.data) ? r.data : [];
+    },
+
+    list() {
+      return _agents.map(a => {
+        const chips = [];
+        if (a.role) chips.push({ label: a.role, cls: 'tag-role' });
+        if (a.model) chips.push({ label: a.model, cls: 'tag-model' });
+        const blocks = ['model'];
+        if (a.context && a.context.length) blocks.push('context');
+        if (a.tools && a.tools.length) blocks.push('tools');
+        return {
+          id: a.id,
+          title: a.name || a.id,
+          meta: _oneLine(a.description) || (a.role ? 'Role · ' + a.role : ''),
+          icon: (window.AgentIcons ? AgentIcons.resolve(a) : 'general'),
+          tags: (a.tags || []),
+          chips,
+          blocks,
+        };
+      });
+    },
+
+    detail(id) {
+      return {
+        sections: {
+          overview: (el) => _renderOverview(el, id),
+          // A plain HTML STRING (not a fn) so the shell mounts it
+          // SYNCHRONOUSLY — openAgentChat (which focuses this slot then
+          // populates it in the same tick) needs #agent-chat-panel to exist
+          // the instant focusChat returns. Function-sections mount on a
+          // microtask, which would race the populate.
+          chat: _CHAT_SKELETON,
+        },
+      };
+    },
+
+    // Chat / Edit / Deep dive / Delete — delegated ids read data-id (the shell
+    // stamps it on each action button); delete routes through the shell's
+    // lib.action Confirm gate is NOT used here so we keep the single
+    // deleteAgent() Confirm (no double prompt).
+    actions() {
+      return [
+        { action: 'agents.chat-open', label: 'Chat', verb: 'test', accent: true },
+        { action: 'agents.edit-open', label: 'Edit', verb: 'edit' },
+        { action: 'agents.peek', label: 'Deep dive', verb: 'test' },
+        { action: 'agents.remove', label: 'Delete', verb: 'delete', danger: true },
+      ];
+    },
+  });
+
+  // ── Detail: overview ────────────────────────────────────────────────
+  function _kvGrid(rows) {
+    return `<div style="display:grid;grid-template-columns:96px 1fr;gap:6px 12px;font-size:0.72rem;margin-bottom:10px">
+      ${rows.map(([k, v]) => `<div style="color:var(--text-muted)">${esc(k)}</div><div>${v}</div>`).join('')}
+    </div>`;
+  }
+
+  function _renderOverview(el, id) {
+    const a = _agent(id);
+    if (!a) { el.innerHTML = '<div class="model-empty">Agent not found — Refresh.</div>'; return; }
+    const tags = (a.tags || []).map(t => `<span class="lib-chip">${esc(t)}</span>`).join(' ') || '—';
+    const starters = (a.starters || []).map(s =>
+      `<button type="button" class="action-btn sm" style="margin:2px 4px 2px 0"
+         data-action="agents.starter-open" data-starter="${esc(s)}">↗ ${esc(_oneLine(s, 60))}</button>`).join('')
+      || '<span style="color:var(--text-muted)">none declared</span>';
+    el.innerHTML = `
+      ${_kvGrid([
+        ['Role', a.role ? `<code>${esc(a.role)}</code>` : '<span style="color:var(--text-muted)">—</span>'],
+        ['Model', a.model ? `<code>${esc(a.model)}</code>` : '<span style="color:var(--text-muted)">role default</span>'],
+        ['Temperature', esc(String(a.temperature != null ? a.temperature : 0.7))],
+        ['Tags', tags],
+        ['Tools', `${(a.tools || []).length} bound`],
+        ['Context', `${(a.context || []).length} source${(a.context || []).length === 1 ? '' : 's'}`],
+      ])}
+      ${a.description ? `<div style="font-size:0.74rem;margin-bottom:10px">${esc(a.description)}</div>` : ''}
+      <div style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">System prompt</div>
+      <pre class="prompts-body" style="max-height:220px;white-space:pre-wrap">${esc(a.system_prompt || '(none)')}</pre>
+      <div style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin:10px 0 4px">Conversation starters</div>
+      <div>${starters}</div>`;
+  }
+
+  // ── Detail: chat slot ───────────────────────────────────────────────
+  // Static skeleton (exact ids reused by main.js). openAgentChat() fills the
+  // header + greeting; sendAgentMessage/closeAgentChat/_restoreAgentChat
+  // operate on these same ids. Kept id-independent so it can be a synchronous
+  // string section (see detail()).
+  const _CHAT_SKELETON = `
+    <div id="agent-chat-panel" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div style="background:var(--bg-panel);padding:10px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);">
+        <span id="agent-chat-icon" class="agent-chat-icon-block"></span>
+        <strong id="agent-chat-name" style="color:var(--text);font-size:0.9rem;flex:1"></strong>
+        <span id="agent-chat-model" style="font-size:0.72rem;color:var(--text-muted);"></span>
+        <button data-action="agents.chat-close" title="Close chat"
+          style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;">&times;</button>
+      </div>
+      <div id="agent-chat-messages" style="padding:14px;min-height:200px;max-height:400px;overflow-y:auto;font-size:0.82rem;display:flex;flex-direction:column;gap:10px;"></div>
+      <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:8px;">
+        <input type="text" id="agent-chat-input" aria-label="Message the agent" placeholder="Message the agent…"
+          data-action="agents.chat-input"
+          style="flex:1;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:4px;font-family:var(--mono);font-size:0.82rem;">
+        <button data-action="agents.chat-send"
+          style="background:var(--accent);color:var(--bg-deep);border:none;padding:7px 16px;border-radius:4px;cursor:pointer;font-weight:600;font-size:0.8rem;">Send</button>
+      </div>
+    </div>`;
+
+  // ── Panel API + focus helper ────────────────────────────────────────
+  function load() { return LibraryShell.reload('agent'); }
+
+  // Bring the shell to this agent's Chat slot so #agent-chat-panel exists.
+  // Synchronous: the skeleton is in the DOM by the time this returns, so the
+  // caller (openAgentChat) can populate it immediately. Idempotent when the
+  // agent is already selected on the Chat subnav.
+  function focusChat(id) {
+    const st = LibraryShell.state('agent');
+    if (!st) return;
+    if (st.selected === id && st.subnav === 'chat' && document.getElementById('agent-chat-panel')) return;
+    if (st.selected !== id) LibraryShell.select('agent', id);
+    st.subnav = 'chat';
+    delete st.rendered['chat'];
+    LibraryShell.setSubnav('agent', 'chat');
+  }
+
+  // ── Delegated actions (agents.* — detail + toolbar) ─────────────────
+  // The row select rides the shell's default `lib.select`; these are the
+  // detail action row + panel-label toolbar + chat-slot verbs. Each resolves
+  // the target from the shell selection (or the button's data-id).
+  Actions.click({
+    'agents.new': () => { if (window.showCreateAgentModal) showCreateAgentModal(); },
+    'agents.refresh': () => load(),
+    'agents.chat-open': el => { const id = (el && el.dataset.id) || _selected(); if (id && window.openAgentChat) openAgentChat(id); },
+    'agents.edit-open': el => { const id = (el && el.dataset.id) || _selected(); if (id && window.showEditAgentModal) showEditAgentModal(id); },
+    'agents.peek': el => { const id = (el && el.dataset.id) || _selected(); if (id && window.AssetPeek) AssetPeek.open('agent', id); },
+    'agents.remove': el => { const id = (el && el.dataset.id) || _selected(); if (id && window.deleteAgent) deleteAgent(id); },
+    'agents.starter-open': el => { const id = _selected(); if (id && window.openAgentChatWithStarter) openAgentChatWithStarter(id, el.dataset.starter); },
+    'agents.chat-send': () => { if (window.sendAgentMessage) sendAgentMessage(); },
+    'agents.chat-close': () => { if (window.closeAgentChat) closeAgentChat(); },
+  });
+  // Enter-to-send in the chat input (replaces the retired inline onkeydown).
+  Actions.on('keydown', {
+    'agents.chat-input': (el, e) => {
+      if (e.key !== 'Enter' || e.shiftKey) return;
+      e.preventDefault();
+      if (window.sendAgentMessage) sendAgentMessage();
+    },
+  });
+
+  return { load, focusChat, adapter };
 })();
