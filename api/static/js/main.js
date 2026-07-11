@@ -28,6 +28,7 @@ import { LibraryShell } from './library/shell.js';
 import { LibraryWizard } from './library/wizard.js';
 import { MCPPanel } from './library/mcp.js';
 import { PromptsLibrary } from './library/prompts.js';
+import { TestPane } from './library/test-pane.js';
 import { RunsTab } from './runs/runs-tab.js';
 import { WorkflowMemory } from './runs/workflow-memory.js';
 import { ResearchArtifacts } from './runs/research-artifacts.js';
@@ -1174,6 +1175,11 @@ async function _sendStepMessage(text, stepData) {
               (window.AgentTuning ? AgentTuning.guidance(window._composerEngagedNodeId) : ''),
           },
           user_message: text,
+          // LB1-U2 — the UI finally sends explicit sampling params. Node
+          // overrides win; the fallbacks mirror the server defaults so the
+          // behavior of untouched nodes is unchanged.
+          temperature: stepData.temperature != null ? Number(stepData.temperature) : 0.7,
+          max_tokens: stepData.max_tokens != null ? Number(stepData.max_tokens) : 2048,
         }),
       },
     });

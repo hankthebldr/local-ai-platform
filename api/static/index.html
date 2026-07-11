@@ -222,6 +222,61 @@
 .lib-wiz-conn { flex:1; height:1px; background:var(--border); min-width:14px; }
 .lib-wiz-body { min-height:96px; }
 </style>
+<style id="test-pane-styles">
+/* ── TestPane — layered test harness in the shell Test tab (LB1-U2) ────
+   L0–L3 collapsible layers with diff chips + per-field/layer reset,
+   normalized result strip, last-5 history with snapshot restore. */
+.test-pane { font-size:0.74rem; }
+.test-tool-row { display:flex; align-items:center; gap:8px; margin:0 0 10px; flex-wrap:wrap; }
+.test-tool-row select { background:var(--surface-card,var(--bg)); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:0.7rem; padding:4px 8px; }
+.test-tool-desc { color:var(--text-muted); font-size:0.64rem; }
+.test-layer { border:1px solid var(--border); border-radius:var(--radius-sm,4px); margin:0 0 8px; }
+.test-layer-head { display:flex; align-items:center; gap:8px; padding:6px 9px; }
+.test-layer-toggle { display:flex; align-items:center; gap:6px; flex:1; min-width:0; background:none; border:none; cursor:pointer; padding:0; text-align:left; font-family:var(--mono); font-size:0.62rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); }
+.test-caret { font-size:0.55rem; color:var(--text-faint,var(--text-dim)); }
+.test-layer-tag { color:var(--accent); font-weight:600; }
+.test-layer-label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.test-diff-chip, .test-ovr-chip, .test-ovr-total { font-family:var(--mono); font-size:0.55rem; padding:1px 7px; border:1px solid var(--accent-dim); border-radius:var(--radius-pill,999px); color:var(--accent); background:var(--accent-ghost); white-space:nowrap; }
+.test-layer-reset, .test-field-reset { background:none; border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text-dim); font-family:var(--mono); font-size:0.6rem; cursor:pointer; padding:1px 7px; }
+.test-layer-reset:hover, .test-field-reset:hover { color:var(--accent); border-color:var(--accent-dim); }
+.test-layer-body { padding:8px 10px 10px; border-top:1px solid var(--border); }
+.test-layer.collapsed .test-layer-body { display:none; }
+.test-field { margin:0 0 8px; }
+.test-field.changed > .admin-modal-label, .test-field.changed label { color:var(--accent); }
+.test-field-row { display:flex; align-items:flex-start; gap:6px; }
+.test-field-row input[type="text"], .test-field-row input[type="number"], .test-field-row textarea, .test-msg-input { flex:1; width:100%; box-sizing:border-box; background:var(--surface-card,var(--bg)); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:0.7rem; padding:5px 8px; }
+.test-field.changed .test-field-row input, .test-field.changed .test-field-row textarea { border-color:var(--accent-dim); }
+.test-masked-tag { font-size:0.55rem; color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius-pill,999px); padding:0 5px; }
+.test-layer-lock { display:flex; align-items:center; gap:8px; color:var(--text-muted); font-size:0.68rem; padding:4px 0; }
+.test-attach-chips { display:flex; gap:6px; flex-wrap:wrap; }
+.test-attach-chip { display:inline-flex; align-items:center; gap:4px; font-family:var(--mono); font-size:0.62rem; padding:2px 8px; border:1px solid var(--border); border-radius:var(--radius-pill,999px); color:var(--text-dim); }
+.test-chip-x { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:0.7rem; padding:0 2px; }
+.test-chip-x:hover { color:var(--danger); }
+.test-attach-row { display:flex; gap:6px; margin-top:8px; }
+.test-attach-input { flex:1; background:var(--surface-card,var(--bg)); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:0.66rem; padding:4px 8px; }
+.test-warm-row { display:flex; align-items:center; gap:8px; margin-top:4px; }
+.test-warm-badge { font-family:var(--mono); font-size:0.55rem; text-transform:uppercase; letter-spacing:0.08em; padding:1px 7px; border-radius:var(--radius-pill,999px); border:1px solid var(--border); color:var(--text-dim); }
+.test-warm-badge.warm { color:var(--accent); border-color:var(--accent-dim); background:var(--accent-ghost); }
+.test-warm-reason { color:var(--text-muted); font-size:0.62rem; }
+.test-run-row { display:flex; align-items:center; gap:8px; margin:10px 0; flex-wrap:wrap; }
+.test-result-strip { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:0.66rem; color:var(--text-dim); margin:6px 0; flex-wrap:wrap; }
+.test-strip-sep { color:var(--text-faint,var(--text-dim)); }
+.test-strip-model { color:var(--text-muted); }
+.test-status { font-weight:600; letter-spacing:0.08em; }
+.test-status.ok { color:var(--accent); }
+.test-status.err { color:var(--danger); }
+.test-fallback { background:rgba(255,200,0,0.07); border:1px solid rgba(255,200,0,0.35); border-radius:4px; padding:4px 8px; font-size:0.62rem; color:var(--text-muted); margin:4px 0; }
+.test-result-body { font-size:0.72rem; max-height:280px; overflow:auto; }
+.test-raw summary { font-family:var(--mono); font-size:0.62rem; color:var(--text-muted); cursor:pointer; margin-top:6px; }
+.test-skill-match { border:1px solid var(--border); border-radius:var(--radius-sm,4px); padding:8px 10px; margin:6px 0; }
+.test-skill-match-head { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px; }
+.test-skill-kw { color:var(--text-muted); font-size:0.64rem; margin-bottom:4px; }
+.test-history-label { font-size:0.62rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.1em; margin-top:10px; }
+.test-history-row { display:flex; align-items:center; gap:10px; font-size:0.66rem; color:var(--text-dim); padding:3px 0; border-bottom:1px dashed var(--border); }
+.test-hist-ts { color:var(--text-muted); min-width:80px; }
+.test-hist-ms { min-width:52px; }
+.test-hist-sum { flex:1; min-width:0; opacity:0.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+</style>
 <style id="enclave-runlens-styles">
 /* ── Run lens: scrub timeline + node-timing plates + as-executed inspector ── */
 .rl-scrub { display:flex; gap:2px; margin:6px 0 18px; height:30px; }

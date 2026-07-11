@@ -12,6 +12,8 @@ import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
 import { LibraryShell } from './shell.js';
+import { LibraryWizard } from './wizard.js';
+import { TestPane } from './test-pane.js';
 
 export const MCPPanel = (function () {
   let _servers = [];
@@ -62,6 +64,13 @@ export const MCPPanel = (function () {
 
     detail(id) {
       return { sections: { overview: () => _overviewHtml(id) } };
+    },
+
+    // Test subnav slot (LB1-U2) — the pre-shell tool tester moves into the
+    // shell's Test tab as the mcp-tool TestPane: pick a cached tool, fill
+    // the JSON-Schema-driven form, invoke statelessly (retries:0).
+    testPane(id) {
+      return (mountEl) => TestPane.mount('mcp-tool', id, mountEl, { server: _server(id) });
     },
 
     actions(id) {
@@ -315,14 +324,7 @@ export const MCPPanel = (function () {
     }
   }
 
-  async function _installFromCatalog(entry, btn) {
-    // Collect required credentials up front; abort if any are skipped.
-    const env = {};
-    for (const e of (entry.env_required || [])) {
-      const val = prompt(`${entry.name}: enter ${e.key}\n${e.hint || ''}`);
-      if (val === null) return;           // operator cancelled
-      if (val.trim()) env[e.key] = val.trim();
-    }
+  async function _submitCatalogInstall(entry, env, btn) {
     if (btn) { btn.disabled = true; btn.textContent = '…'; }
     try {
       // retries:0 — install registers a server; don't double-register.
@@ -339,10 +341,43 @@ export const MCPPanel = (function () {
       if (window.Toast) Toast.success('MCP server registered', `${entry.id} — test the handshake from its detail panel.`);
       await load();
       select(entry.id);
+      return { ok: true };
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
-      Toast.danger('Install failed', e.message);
+      return { ok: false, detail: e.message };
     }
+  }
+
+  async function _installFromCatalog(entry, btn) {
+    const envReq = entry.env_required || [];
+    if (!envReq.length) {
+      // No secrets to collect — one-click register as before.
+      const res = await _submitCatalogInstall(entry, {}, btn);
+      if (!res.ok) Toast.danger('Install failed', res.detail);
+      return;
+    }
+    // Secrets ride the LibraryWizard Secrets step (LB1-U2 — window.prompt()
+    // retired): password inputs, never prefilled, never echoed, masked in
+    // the confirm summary. Endpoint + payload byte-identical.
+    LibraryWizard.open({
+      title: `Install ${entry.name || entry.id}`,
+      steps: {
+        secrets: {
+          fields: envReq.map(e => ({
+            key: e.key, label: e.key, hint: e.hint || '', placeholder: e.hint || '',
+          })),
+        },
+      },
+      submitLabel: 'Install',
+      onSubmit: async (state) => {
+        const env = {};
+        envReq.forEach(e => {
+          const v = (state.secrets[e.key] || '').trim();
+          if (v) env[e.key] = v;
+        });
+        return _submitCatalogInstall(entry, env, btn);
+      },
+    });
   }
 
   // Refresh when the panel becomes visible.

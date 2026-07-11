@@ -1,16 +1,20 @@
 // library/plugins.js — Plugins catalog panel (phase-2 U4 carve).
+//
+// LB1-U2: the schema form kit (renderToolForm/_collectParams/_renderHistory)
+// moved into library/test-pane.js as ToolFormKit — this module re-exports the
+// same names over the kit, so the tool-tester DOM ids (tool-form-*,
+// tool-param-*, tool-tester-run-*, tool-result-*, tool-history-*) and the
+// public surface stay byte-compatible. The local esc() shadow is deleted
+// (the core/dom.js import is the one implementation). The plugin detail also
+// gains a Test section — the plugin-tool TestPane live mount (worked
+// example: Plugins > websearch).
 import { esc, renderMarkdown } from '../core/dom.js';
 import { Actions } from '../shell/actions.js';
 import { AssetPeek } from './asset-peek.js';
+import { TestPane, ToolFormKit } from './test-pane.js';
 
 export const PluginsPanel = (function () {
   let _selectedId = null;
-
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
 
   async function load() {
     if (!AdminAuth.isSignedIn()) {
@@ -108,7 +112,13 @@ export const PluginsPanel = (function () {
       </div>
       ${(p.skills || []).length ? `<div class="plugin-section-h">Skills</div>${skillsHtml}` : ''}
       ${(p.tools || []).length ? `<div class="plugin-section-h">Tools</div>${toolsHtml}` : ''}
+      ${(p.tools || []).length ? '<div class="plugin-section-h">Test</div><div id="plugin-test-pane"></div>' : ''}
     `;
+    // plugin-tool TestPane live mount (LB1-U2) — the layered harness (L0
+    // saved settings / L1 skills / L3 schema form) alongside the retained
+    // per-tool accordions above.
+    const paneHost = document.getElementById('plugin-test-pane');
+    if (paneHost) TestPane.mount('plugin-tool', p.id, paneHost, { plugin: p });
   }
 
   // Per-tool last-5 invocations kept in memory for this panel session.
@@ -137,63 +147,14 @@ export const PluginsPanel = (function () {
     `;
   }
 
+  // Extracted to ToolFormKit (test-pane.js) — same names, same behavior,
+  // default idPrefix 'tool-param-' keeps the tester DOM ids intact.
   function renderToolForm(tool) {
-    const params = tool.parameters || {};
-    if (typeof params !== 'object' || Array.isArray(params)) {
-      return '<div style="color:var(--text-muted);font-size:0.7rem">No parameter schema declared.</div>';
-    }
-    return Object.entries(params).map(([name, spec]) => {
-      const required = spec && spec.required === true;
-      const type = (spec && spec.type) || 'string';
-      const def = spec && spec.default;
-      const id = `tool-param-${name}`;
-      const label = `<label class="admin-modal-label">${esc(name)}${required ? ' *' : ''}
-        <span style="color:var(--text-muted);font-size:0.62rem">(${esc(type)})</span></label>`;
-      let input;
-      if (type === 'boolean') {
-        input = `<input type="checkbox" id="${id}" ${def === true ? 'checked' : ''}>`;
-      } else if (type === 'integer' || type === 'number') {
-        input = `<input type="number" id="${id}" value="${esc(def ?? '')}" ${type === 'integer' ? 'step="1"' : ''}>`;
-      } else if (Array.isArray(spec.enum)) {
-        input = `<select id="${id}">${spec.enum.map(o =>
-          `<option value="${esc(o)}" ${o === def ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
-      } else if (type === 'array' || type === 'object') {
-        input = `<textarea id="${id}" rows="3" placeholder="JSON or one item per line"></textarea>`;
-      } else {
-        input = `<input type="text" id="${id}" value="${esc(def ?? '')}">`;
-      }
-      return label + input;
-    }).join('');
+    return ToolFormKit.renderToolForm(tool);
   }
 
   function _collectParams(tool) {
-    const out = {};
-    const params = tool.parameters || {};
-    for (const [name, spec] of Object.entries(params)) {
-      const el = document.getElementById('tool-param-' + name);
-      if (!el) continue;
-      const type = (spec && spec.type) || 'string';
-      let v;
-      if (type === 'boolean') v = el.checked;
-      else if (type === 'integer') v = el.value === '' ? null : parseInt(el.value, 10);
-      else if (type === 'number') v = el.value === '' ? null : parseFloat(el.value);
-      else if (type === 'array' || type === 'object') {
-        const raw = el.value.trim();
-        if (!raw) { v = type === 'array' ? [] : {}; }
-        else if (raw[0] === '[' || raw[0] === '{') {
-          try { v = JSON.parse(raw); } catch (e) { throw new Error(`${name}: invalid JSON`); }
-        } else {
-          v = raw.split(/\n/).map(s => s.trim()).filter(Boolean);
-        }
-      } else {
-        v = el.value;
-      }
-      if (spec && spec.required && (v === null || v === undefined || v === '')) {
-        throw new Error(`${name} is required`);
-      }
-      if (v !== null && v !== undefined && v !== '') out[name] = v;
-    }
-    return out;
+    return ToolFormKit.collectParams(tool);
   }
 
   async function runTool(pluginId, toolId) {
@@ -258,21 +219,9 @@ export const PluginsPanel = (function () {
   }
 
   function _renderHistory(key) {
-    const host = document.getElementById('tool-history-' + key);
-    if (!host) return;
-    const hist = _runHistory.get(key) || [];
-    if (!hist.length) { host.innerHTML = ''; return; }
-    host.innerHTML = `
-      <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:8px">Last invocations</div>
-      ${hist.slice().reverse().map(h => `
-        <div style="display:flex;gap:10px;font-size:0.66rem;color:var(--text-dim);padding:2px 0">
-          <span style="color:var(--text-muted);min-width:130px">${new Date(h.ts).toLocaleTimeString()}</span>
-          <span style="color:${h.status >= 200 && h.status < 300 ? 'var(--accent)' : 'var(--danger,#e54b4b)'};min-width:40px">${h.status}</span>
-          <span style="min-width:50px">${h.ms} ms</span>
-          <span style="opacity:0.85">${esc(h.summary)}…</span>
-        </div>
-      `).join('')}
-    `;
+    // Extracted to ToolFormKit.renderHistory — markup unchanged.
+    ToolFormKit.renderHistory(
+      document.getElementById('tool-history-' + key), _runHistory.get(key) || []);
   }
 
   function refresh() { load(); }
