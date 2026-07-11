@@ -2640,11 +2640,27 @@ function initResearch() {
     } else if (window._researchInFlight) {
       _renderResearchInFlight(window._researchInFlight);
     }
+    // RX-1 — keep the session reading surface alive across tab switches.
+    if (window._researchSession) {
+      try { renderResearchSession(window._researchSession); } catch (_) {}
+    }
     return;
   }
   researchLoaded = true;
   loadGraphData();
   populateResModelSelect();
+  // RX-1 — follow-up input: Enter sends, Shift+Enter newlines. Wired here
+  // (not inline) to honor the no-new-inline-handlers rule.
+  const fuInput = document.getElementById('research-followup-input');
+  if (fuInput && !fuInput._rxBound) {
+    fuInput._rxBound = true;
+    fuInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submitResearchFollowup();
+      }
+    });
+  }
   document.getElementById('res-depth').addEventListener('input', function() {
     document.getElementById('depth-hint').textContent = this.value + ' sub-questions';
   });
@@ -3804,9 +3820,174 @@ function renderResearchResults(data) {
     </div>
   `;
 
+  // RX-1 — when the deep-dive minted a session, open the conversational
+  // reading surface seeded with this synthesis as turn 0. Additive: the legacy
+  // #research-output above is untouched.
+  if (data.session_id) {
+    try {
+      renderResearchSession({
+        id: data.session_id,
+        topic: data.topic,
+        model: data.model,
+        source_ids: (data.sources || []).map(s => s && s.url).filter(Boolean),
+        turns: [{
+          kind: 'synthesis',
+          question: data.topic,
+          answer: data.synthesis || '',
+          sources: data.sources || [],
+          web_search: true,
+        }],
+      });
+    } catch (e) { /* reading surface is additive — never break results */ }
+  }
+
   // Store for export AND for tab-switch rehydration.
   window._lastResearch = data;
 }
+
+/* ── RX-1: stateful research session (thread + reading surface) ──────────
+   The two-column session view. LEFT: a thread of turns + a sticky follow-up
+   input. RIGHT: a full-width reading surface where the synthesis and each
+   follow-up answer render as markdown reading cards. Egress is operator-
+   initiated only (the follow-up 'web search' opt-in, OFF by default). */
+
+function _researchTurnLabel(turn, idx) {
+  if (turn.kind === 'synthesis') return 'SYNTHESIS';
+  return 'FOLLOW-UP ' + idx;
+}
+
+// One turn as a compact thread bubble (question + answer preview).
+function _researchThreadTurnHtml(turn, idx) {
+  const q = turn.kind === 'synthesis'
+    ? (turn.question || '')
+    : (turn.question || '');
+  const answerPreview = String(turn.answer || '').slice(0, 260);
+  const more = String(turn.answer || '').length > 260 ? '…' : '';
+  const web = turn.web_search
+    ? '<span class="research-turn-flag" title="operator-initiated web search">web</span>'
+    : '';
+  const grounded = turn.grounded
+    ? '<span class="research-turn-flag grounded" title="grounded on your local knowledge store">grounded</span>'
+    : '';
+  return `
+    <div class="research-turn" data-idx="${idx}">
+      <div class="research-turn-head">
+        <span class="research-turn-label">${_researchTurnLabel(turn, idx)}</span>
+        ${web}${grounded}
+      </div>
+      ${q ? `<div class="research-turn-q">${esc(q)}</div>` : ''}
+      <div class="research-turn-a">${esc(answerPreview)}${more}</div>
+    </div>`;
+}
+
+// One turn as a full-width reading card on the surface (markdown, no letterbox).
+function _researchReadingCardHtml(turn, idx) {
+  const body = window.renderMarkdown
+    ? window.renderMarkdown(turn.answer || '', { chat: false })
+    : esc(turn.answer || '');
+  const srcs = (turn.sources || []).map(s => {
+    if (!s) return '';
+    if (s.kind === 'rag') {
+      return `<span class="res-source-chip rag" title="local knowledge · score ${esc(String(s.score ?? ''))}">${esc(s.title || s.doc_id || 'local')}</span>`;
+    }
+    const url = s.url || '#';
+    return `<a class="res-source-chip" href="${esc(url)}" target="_blank" rel="noopener">${esc((s.title || url || '').slice(0, 80))}</a>`;
+  }).join('');
+  const heading = turn.kind === 'synthesis'
+    ? esc(turn.question || 'Synthesis')
+    : esc(turn.question || 'Follow-up');
+  return `
+    <div class="research-reading-card ${turn.kind === 'synthesis' ? 'synthesis' : ''}" data-idx="${idx}">
+      <div class="research-reading-head">
+        <span class="research-reading-kind">${_researchTurnLabel(turn, idx)}</span>
+        <span class="research-reading-q">${heading}</span>
+      </div>
+      <div class="research-reading-body synthesis-block">${body}</div>
+      ${srcs ? `<div class="research-reading-sources res-sources">${srcs}</div>` : ''}
+    </div>`;
+}
+
+// Render (or re-render) the whole session view from a session object.
+function renderResearchSession(session) {
+  if (!session || !session.id) return;
+  window._researchSession = session;
+  const wrap = document.getElementById('research-session');
+  const thread = document.getElementById('research-thread');
+  const surface = document.getElementById('research-surface');
+  if (!wrap || !thread || !surface) return;
+  const turns = session.turns || [];
+  thread.innerHTML = turns.map((t, i) => _researchThreadTurnHtml(t, i)).join('')
+    || '<div class="research-empty" style="padding:20px">No turns yet.</div>';
+  surface.innerHTML = turns.map((t, i) => _researchReadingCardHtml(t, i)).join('');
+  wrap.hidden = false;
+  // Keep the newest turn in view in both columns.
+  thread.scrollTop = thread.scrollHeight;
+}
+
+// Append a single freshly-answered follow-up turn to both columns without a
+// full re-render (keeps scroll + avoids re-parsing the synthesis markdown).
+function _appendResearchTurn(turn) {
+  const session = window._researchSession;
+  if (!session) return;
+  session.turns = session.turns || [];
+  const idx = session.turns.length;
+  session.turns.push(turn);
+  const thread = document.getElementById('research-thread');
+  const surface = document.getElementById('research-surface');
+  if (thread) {
+    thread.insertAdjacentHTML('beforeend', _researchThreadTurnHtml(turn, idx));
+    thread.scrollTop = thread.scrollHeight;
+  }
+  if (surface) {
+    surface.insertAdjacentHTML('beforeend', _researchReadingCardHtml(turn, idx));
+    const card = surface.lastElementChild;
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+// Submit the follow-up: POST /api/research/followup, append the answered turn.
+async function submitResearchFollowup() {
+  const session = window._researchSession;
+  const input = document.getElementById('research-followup-input');
+  const btn = document.getElementById('research-followup-btn');
+  const webEl = document.getElementById('research-followup-web');
+  if (!session || !input) return;
+  const question = input.value.trim();
+  if (!question) return;
+  const web_search = !!(webEl && webEl.checked);
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Thinking…'; }
+  try {
+    // retries:0 — a follow-up runs a local model (and maybe a web search); a
+    // 504-retry would double-answer.
+    const resp = await Net.call('/api/research/followup', {
+      retries: 0,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: session.id, question, web_search }),
+      },
+    });
+    const data = (resp.data && typeof resp.data === 'object') ? resp.data : {};
+    if (!resp.ok) throw new Error(data.detail || resp.error || `HTTP ${resp.status}`);
+    _appendResearchTurn({
+      kind: 'followup',
+      question,
+      answer: data.answer || '',
+      sources: data.sources || [],
+      web_search: !!data.web_search,
+      grounded: !!data.grounded,
+    });
+    input.value = '';
+    if (webEl) webEl.checked = false;
+  } catch (e) {
+    if (window.Toast) window.Toast.danger('Follow-up failed', String(e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Ask'; }
+  }
+}
+
+Actions.click({ 'research.followup': () => submitResearchFollowup() });
 
 // ── Research artifact capture ────────────────────────────────────────────
 // Wraps POST /api/feedback/artifacts. Each click captures the finding as

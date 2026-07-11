@@ -2110,6 +2110,39 @@
 
     </div>
 
+    <!-- RX-1 — stateful research session. Once a deep-dive mints a session
+         this two-column surface opens: LEFT a conversational thread with a
+         sticky follow-up input (data-action, no inline handler); RIGHT a
+         full-width reading view (renderMarkdown, no letterbox) whose synthesis
+         + follow-up answers stack as reading cards. The legacy #research-output
+         above stays alive as the per-sub-question thinking detail. -->
+    <div class="research-session" id="research-session" hidden>
+      <div class="research-thread-col panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">Research Thread</div>
+        <div class="research-thread" id="research-thread"></div>
+        <div class="research-followup">
+          <textarea id="research-followup-input" rows="2"
+            aria-label="Ask a follow-up question"
+            placeholder="Ask a follow-up — grounded on this session + your local knowledge…"
+            autocomplete="off" spellcheck="false"></textarea>
+          <div class="research-followup-row">
+            <label class="research-followup-web"
+                   title="Operator-initiated web search for THIS question. Off = local-only, no egress.">
+              <input type="checkbox" id="research-followup-web"> web search
+            </label>
+            <button class="action-btn accent" id="research-followup-btn"
+                    data-action="research.followup">Ask</button>
+          </div>
+        </div>
+      </div>
+      <div class="research-surface-col panel">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">Reading</div>
+        <div class="research-surface" id="research-surface"></div>
+      </div>
+    </div>
+
     <!-- ── Documents + RAG (S3) ──────────────────────────────────────
          Moved verbatim from the retired Context tab (#tab-documents):
          upload/ingest drop zone, document list, semantic search, and

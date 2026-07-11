@@ -347,6 +347,9 @@ app.include_router(_tasks_router.router)
 from .routers import projects as _projects_router  # noqa: E402
 
 app.include_router(_projects_router.router)
+from .routers import research as _research_router  # noqa: E402 — RX-1 sessions
+
+app.include_router(_research_router.router)
 
 
 # ── Public Endpoints ───────────────────────────────────────────────────────

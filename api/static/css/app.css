@@ -3296,6 +3296,73 @@ textarea.composer-desc-area {
   text-decoration: none; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .res-source-chip:hover { border-color: var(--cyan-dim); color: var(--cyan); }
+.res-source-chip.rag { border-color: var(--accent-dim); color: var(--accent); background: var(--accent-ghost); }
+
+/* ── RX-1: stateful research session (thread + reading surface) ──────────
+   Opens below the graph/deep-dive layout once a deep-dive mints a session.
+   LEFT thread column is fixed-width; RIGHT reading surface takes the rest and
+   renders synthesis + follow-up answers as full-width markdown cards. */
+.research-session {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 16px;
+  margin-top: 18px;
+  min-height: 420px;
+  max-height: calc(100vh - 200px);
+}
+.research-thread-col, .research-surface-col {
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+}
+.research-thread {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+  padding-right: 4px; margin-bottom: 10px;
+}
+.research-turn {
+  border: 1px solid var(--border); border-left: 2px solid var(--accent-dim);
+  background: var(--bg); padding: 8px 10px;
+}
+.research-turn-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.research-turn-label { font-size: 0.55rem; letter-spacing: 0.08em; color: var(--text-muted); }
+.research-turn-flag {
+  font-size: 0.52rem; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 1px 5px; border: 1px solid var(--cyan-dim); color: var(--cyan);
+}
+.research-turn-flag.grounded { border-color: var(--accent-dim); color: var(--accent); }
+.research-turn-q { font-size: 0.68rem; color: var(--text); margin-bottom: 4px; font-weight: 600; }
+.research-turn-a { font-size: 0.64rem; color: var(--text-dim); line-height: 1.5; }
+.research-followup {
+  border-top: 1px dashed var(--border); padding-top: 10px;
+  position: sticky; bottom: 0; background: var(--panel);
+}
+.research-followup textarea {
+  width: 100%; resize: vertical; min-height: 44px;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  font-family: inherit; font-size: 0.68rem; padding: 7px 9px; line-height: 1.5;
+}
+.research-followup textarea:focus { outline: none; border-color: var(--accent-dim); }
+.research-followup-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px;
+}
+.research-followup-web {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 0.6rem; color: var(--text-muted); cursor: pointer;
+}
+.research-surface {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 6px;
+}
+.research-reading-card { border: 1px solid var(--border); background: var(--bg); padding: 14px 16px; }
+.research-reading-card.synthesis { border-left: 2px solid var(--accent); }
+.research-reading-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.research-reading-kind { font-size: 0.55rem; letter-spacing: 0.08em; color: var(--text-muted); flex-shrink: 0; }
+.research-reading-q { font-size: 0.78rem; color: var(--text); font-weight: 600; }
+/* Reading body: full width, no letterbox — the report reads like a page. */
+.research-reading-body { max-width: none; font-size: 0.74rem; line-height: 1.65; }
+.research-reading-sources { margin-top: 10px; }
+
+@media (max-width: 1024px) {
+  .research-session { grid-template-columns: 1fr; max-height: none; }
+  .research-thread { max-height: 320px; }
+}
 
 /* Session detail panel (opens on node click) */
 .session-detail-panel {
