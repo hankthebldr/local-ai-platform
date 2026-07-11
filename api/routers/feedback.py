@@ -24,12 +24,21 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..logging_config import logger
+from ..services.rag_ingest import ingest_markdown
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
 _FEEDBACK_DIR = Path(os.getenv("DATA_FEEDBACK_DIR", "data/feedback"))
 _MESSAGES_LOG = _FEEDBACK_DIR / "messages.jsonl"
 _ARTIFACTS_LOG = _FEEDBACK_DIR / "artifacts.jsonl"
+
+# Artifact-capture normalization limits. The model constraints are intentionally
+# lenient (a long title or empty synthesis must NOT 422 — that was the research
+# capture bug); the server clamps/substitutes here instead so capture always
+# succeeds and stays consistent with the client's captureRaw guard.
+_MAX_ARTIFACT_TITLE = 200
+_MAX_ARTIFACT_BODY = 200_000
+_EMPTY_BODY_SENTINEL = "(no synthesis was generated for this angle)"
 # Per-agent tuning is an aggregate (counters + prefer/avoid examples), so it's
 # a keyed JSON map rather than an append-only log: read-modify-write per agent.
 _TUNING_FILE = _FEEDBACK_DIR / "agent_tuning.json"
@@ -38,6 +47,17 @@ _MAX_TUNING_EXAMPLES = 3
 
 def _ensure_dir() -> None:
     _FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _clamp_title(title: str) -> str:
+    """Clamp a title to <=200 chars, cutting at a word boundary when possible
+    (hard slice fallback). Mirrors the client's captureRaw truncation."""
+    t = (title or "").strip()
+    if len(t) <= _MAX_ARTIFACT_TITLE:
+        return t
+    hard = t[:_MAX_ARTIFACT_TITLE]
+    cut = hard.rfind(" ")
+    return (hard[:cut] if cut >= int(_MAX_ARTIFACT_TITLE * 0.8) else hard).strip()
 
 
 def _append(path: Path, payload: Dict[str, Any]) -> None:
@@ -113,8 +133,10 @@ class ArtifactCapture(BaseModel):
         ...,
         description="Where the artifact came from: 'chat' | 'research' | 'workflow' | 'manual'",
     )
-    title: str = Field(..., min_length=1, max_length=200)
-    body: str = Field(..., min_length=1, description="The full text being captured")
+    # No max_length / min_length on body: a long title or an empty synthesis
+    # is clamped/substituted server-side rather than rejected with a 422.
+    title: str = Field(..., min_length=1)
+    body: str = Field("", description="The full text being captured")
     tags: List[str] = Field(default_factory=list)
     context: Dict[str, Any] = Field(
         default_factory=dict,
@@ -130,7 +152,15 @@ async def capture_artifact(body: ArtifactCapture) -> Dict[str, Any]:
     """Capture a research finding / agent output / workflow result as a
     durable context artifact. Returns the artifact id; the SPA can show
     a link to it for later retrieval."""
+    # Server-side normalization mirrors the client's captureRaw guard so a long
+    # title or an empty synthesis body never 422s (was the research-capture bug).
+    title = _clamp_title(body.title)
+    text = body.body if (body.body and body.body.strip()) else _EMPTY_BODY_SENTINEL
+    text = text[:_MAX_ARTIFACT_BODY]
+
     payload = body.model_dump()
+    payload["title"] = title
+    payload["body"] = text
     artifact_id = f"art_{int(datetime.utcnow().timestamp() * 1000):x}"
     payload["id"] = artifact_id
     payload["captured_at"] = datetime.utcnow().isoformat() + "Z"
@@ -140,22 +170,13 @@ async def capture_artifact(body: ArtifactCapture) -> Dict[str, Any]:
         logger.warning("Failed to write artifact capture: %s", e)
         raise HTTPException(status_code=500, detail="Could not persist artifact")
 
-    # Best-effort: also ingest into the RAG store so the artifact becomes
-    # searchable. Falls back silently if RAG isn't wired (rag dependencies
-    # not installed, or the document service is disabled).
-    try:
-        from ..services import document_service  # type: ignore
-
-        if hasattr(document_service, "upload"):
-            doc_filename = f"{artifact_id}-{body.title[:80]}.md".replace("/", "_")
-            md = f"# {body.title}\n\n{body.body}\n"
-            if body.tags:
-                md += "\n\n_tags: " + ", ".join(body.tags) + "_\n"
-            document_service.upload(doc_filename, md.encode("utf-8"))
-            payload["rag_ingested"] = True
-    except Exception as e:
-        logger.debug("Artifact RAG ingestion skipped: %s", e)
-        payload["rag_ingested"] = False
+    # Also ingest into the RAG store so the artifact becomes searchable. This is
+    # the real wire-up (the prior best-effort block gated on a module attribute
+    # that never existed). ingest_markdown is a graceful no-op when the backend
+    # is down, so we report rag_ingested truthfully.
+    payload["rag_ingested"] = ingest_markdown(
+        title, text, tags=body.tags, doc_id=artifact_id
+    )
 
     return payload
 

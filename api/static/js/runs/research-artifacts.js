@@ -11,6 +11,37 @@ export const ResearchArtifacts = (function () {
   function resetPayloads() { _payloads = []; }
   function addPayload(p) { return _payloads.push(p) - 1; }
 
+  // Sentinel used when an angle produced no synthesis body — keeps the capture
+  // from 422ing (empty body) while making the gap explicit in the record.
+  const EMPTY_BODY_SENTINEL = '(no synthesis was generated for this angle)';
+
+  // True when a payload has no real synthesis text — RX-2 gates promote on this.
+  function isEmptyBody(payload) {
+    const b = payload && payload.body;
+    return !(typeof b === 'string' ? b.trim() : b);
+  }
+
+  // Truncate a title to <=200 chars at a word boundary (hard slice fallback),
+  // mirroring the server clamp so the ONE capture path can't 422 on length.
+  function _truncateTitle(title) {
+    const t = String(title == null ? '' : title).trim();
+    if (t.length <= 200) return t || '(untitled)';
+    const hard = t.slice(0, 200);
+    const cut = hard.lastIndexOf(' ');
+    return (cut >= 160 ? hard.slice(0, cut) : hard).trim();
+  }
+
+  // Normalize a capture payload: bounded title + full-text body with an empty
+  // body substituted by the sentinel. This is the ONE guard Research + (later)
+  // Operate U14 promote share before POSTing.
+  function _normalizeArtifact(payload) {
+    const p = (payload && typeof payload === 'object') ? { ...payload } : {};
+    p.title = _truncateTitle(p.title);
+    const body = typeof p.body === 'string' ? p.body : (p.body == null ? '' : String(p.body));
+    p.body = body.trim() ? body : EMPTY_BODY_SENTINEL;
+    return p;
+  }
+
   async function captureRaw(payloadJson) {
     let payload;
     try {
@@ -19,6 +50,7 @@ export const ResearchArtifacts = (function () {
       if (window.Toast) Toast.danger('Capture failed', 'Could not parse payload: ' + e.message);
       return;
     }
+    payload = _normalizeArtifact(payload);
     if (window.Toast) Toast.info('Capturing…', payload.title || 'artifact', { ttl: 1500 });
     try {
       // retries:0 — artifact capture writes a record.
@@ -95,7 +127,10 @@ export const ResearchArtifacts = (function () {
   // Delegated actions — the research output re-renders per run; buttons
   // resolve their payload from _payloads by data-idx (module state).
   Actions.click({
-    'research.capture': el => {
+    'research.capture': (el, e) => {
+      // Capture buttons now live in the always-visible <summary> row; suppress
+      // the native <details> toggle so a capture click doesn't collapse it.
+      if (e) e.preventDefault();
       const p = _payloads[Number(el.dataset.idx)];
       if (p) captureRaw(p);
     },
@@ -107,5 +142,5 @@ export const ResearchArtifacts = (function () {
     }
   });
 
-  return { captureRaw, openLibrary, resetPayloads, addPayload };
+  return { captureRaw, openLibrary, resetPayloads, addPayload, isEmptyBody };
 })();

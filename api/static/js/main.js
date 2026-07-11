@@ -3749,13 +3749,13 @@ function renderResearchResults(data) {
           <span class="thinking-step-num">${idx + 1}</span>
           <span class="thinking-step-q">${safeQ}</span>
           <span class="thinking-step-meta">${qSrcs.length} source${qSrcs.length === 1 ? '' : 's'}</span>
+          <span class="thinking-step-actions">
+            <button class="action-btn xs cyan" data-action="research.capture" data-idx="${payloadIdx}">+ Capture as artifact</button>
+          </span>
         </summary>
         <div class="thinking-step-body">
           <div class="thinking-step-context">${ctxPreview ? esc(ctxPreview) + (sec.context && sec.context.length > 320 ? '…' : '') : '<em style="color:var(--text-muted)">no context gathered</em>'}</div>
           <div class="thinking-step-sources">${srcHtml}</div>
-          <div class="thinking-step-actions">
-            <button class="action-btn xs cyan" data-action="research.capture" data-idx="${payloadIdx}">+ Capture as artifact</button>
-          </div>
         </div>
       </details>
     `;
