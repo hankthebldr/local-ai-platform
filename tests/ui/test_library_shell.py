@@ -382,7 +382,7 @@ def test_fixture_adapter_actions_row_and_confirm_gated_delete(shell_page):
 
 
 @requires_server
-def test_open_navigates_cross_kind_and_prompts_has_no_test_tab(shell_page):
+def test_open_navigates_cross_kind_and_prompts_test_tab(shell_page):
     page = shell_page
     ok = page.evaluate(
         """async () => {
@@ -400,9 +400,47 @@ def test_open_navigates_cross_kind_and_prompts_has_no_test_tab(shell_page):
     # migrated prompts detail keeps its pre-shell selectors alive
     page.wait_for_selector(
         '#prompts-detail [data-action="prompts.render"]', timeout=5_000)
-    # prompts adapter has no testPane → Test tab hidden
+    # LB2-U2 wired the prompt TestPane (prompts.test-run → render→test-step,
+    # labeled model+prompt only) → the Test tab is now LIVE for prompts. The
+    # "Test hidden when testPane absent" shell invariant moved to the
+    # dedicated no-testPane fixture test below.
     pills = page.locator("#tab-prompts .lib-subnav-pill")
     labels = [pills.nth(i).inner_text().strip().upper() for i in range(pills.count())]
+    assert "TEST" in labels
+
+
+@requires_server
+def test_test_tab_hidden_when_adapter_has_no_testpane(shell_page):
+    """The shell contract: adapters WITHOUT a testPane never grow a Test tab
+    (previously proven via the prompts adapter, which gained its live
+    TestPane mount in LB2-U2)."""
+    page = shell_page
+    page.evaluate(
+        """async () => {
+            const { LibraryShell } = await import('/static/js/library/shell.js');
+            let host = document.getElementById('libtest2-host');
+            if (!host) {
+              host = document.createElement('div');
+              host.id = 'libtest2-host';
+              host.style.cssText =
+                'position:fixed;inset:0;z-index:150;background:var(--bg,#111);overflow:auto;padding:20px';
+              document.body.appendChild(host);
+            }
+            LibraryShell.register({
+              kind: 'libtest2', tabId: 'prompts', auth: 'none', title: 'Fixture2',
+              async load() {},
+              list: () => [{ id: 'solo', title: 'Solo', meta: '', group: '' }],
+              detail: () => ({ sections: { overview: '<div>ov</div>' } }),
+              actions: () => [],
+            });
+            await LibraryShell.mount('libtest2', 'libtest2-host');
+            LibraryShell.select('libtest2', 'solo');
+        }"""
+    )
+    page.wait_for_selector("#lib-libtest2-detail .lib-subnav-pill", timeout=5_000)
+    pills = page.locator("#lib-libtest2-detail .lib-subnav-pill")
+    labels = [pills.nth(i).inner_text().strip().upper() for i in range(pills.count())]
+    assert "OVERVIEW" in labels
     assert "TEST" not in labels
 
 

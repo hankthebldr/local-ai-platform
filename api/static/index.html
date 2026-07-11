@@ -240,6 +240,18 @@
 .prompts-ctx-select { background:var(--surface-card,var(--bg)); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text-dim); font-family:var(--mono); font-size:0.6rem; padding:1px 4px; }
 .prompts-hook-test { margin-top:12px; }
 .prompts-hook-fail { color:var(--danger); border-color:var(--danger); background:transparent; }
+/* LB2-U2 — Discovered diff badges + recommend rail */
+.lib-diff-new { color:var(--success); border-color:var(--success); }
+.lib-diff-update { color:var(--amber,#F5A623); border-color:var(--amber,#F5A623); }
+.lib-diff-installed { color:var(--text-muted); }
+.prompts-recommend { margin-top:14px; padding-top:10px; border-top:1px solid var(--border); font-size:0.72rem; }
+.prompts-recommend input { width:100%; box-sizing:border-box; margin-top:6px; padding:5px 8px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:0.7rem; }
+.prompts-rec-note { color:var(--text-muted); font-size:0.62rem; margin:2px 0 6px; }
+.prompts-rec-row { display:flex; align-items:baseline; gap:8px; width:100%; text-align:left; padding:4px 6px; border-radius:var(--radius-sm,4px); cursor:pointer; }
+.prompts-rec-row:hover { background:var(--surface-card,var(--bg)); }
+.prompts-rec-score { font-family:var(--mono); font-size:0.62rem; color:var(--accent); min-width:34px; flex-shrink:0; }
+.prompts-rec-name { color:var(--text); }
+.prompts-rec-reason { color:var(--text-muted); font-size:0.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 <style id="test-pane-styles">
 /* ── TestPane — layered test harness in the shell Test tab (LB1-U2) ────
@@ -2512,6 +2524,8 @@
           <span style="float:right">
             <button class="action-btn accent" data-action="prompts.new">+ New</button>
             <button class="action-btn" data-action="prompts.refresh">Refresh</button>
+            <button class="action-btn" data-action="prompts.discover-refresh"
+              title="Operator-triggered fetch of the allowlisted prompt digest sources (Admin ▸ Sources governs the allowlist; reads never touch the network)">⟳ Digest</button>
           </span>
         </div>
         <p style="margin:6px 0 4px;color:var(--text-muted);font-size:0.72rem">
@@ -2519,6 +2533,23 @@
           render a live preview through the composer, or add new ones.
         </p>
         <div id="prompts-list" style="margin-top:10px;font-size:0.78rem"></div>
+
+        <!-- LB2-U2: hybrid recommend rail — deterministic scorer always on,
+             optional local-LLM "Ask Enclave" on demand (nothing leaves the box) -->
+        <div id="prompts-recommend" class="prompts-recommend">
+          <div class="prompts-render-label">// RECOMMEND</div>
+          <input id="prompts-recommend-task" type="text" autocomplete="off"
+            placeholder="task — e.g. review an XQL rule" aria-label="Task to recommend prompts for">
+          <input id="prompts-recommend-model" type="text" autocomplete="off" list="prompts-model-options"
+            placeholder="model (optional)" aria-label="Target model for fit scoring">
+          <datalist id="prompts-model-options"></datalist>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="action-btn accent" data-action="prompts.recommend">Score</button>
+            <button class="action-btn" data-action="prompts.ask-enclave"
+              title="On-demand local-model explanations — nothing leaves the box">Ask Enclave</button>
+          </div>
+          <div id="prompts-recommend-out" style="margin-top:8px"></div>
+        </div>
       </div>
 
       <div class="panel plugins-detail-panel">

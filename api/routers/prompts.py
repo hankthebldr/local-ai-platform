@@ -40,6 +40,7 @@ PromptComposer as a pure library, so the frozen workflow engine is untouched.
 from __future__ import annotations
 
 import inspect
+import json
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -105,6 +106,11 @@ class PromptSummary(BaseModel):
     stage: Optional[str] = None
     target: Optional[str] = None
     always_on: bool = False  # custom api/hooks/custom entry
+    # Digest-install provenance (LB2-U2) — set when the sidecar carries a
+    # provenance block from POST /discover/{id}/install, so the Discovered
+    # tab can diff installed sha vs digest sha (badge: installed/update).
+    source_id: Optional[str] = None
+    source_sha: Optional[str] = None
 
 
 class Prompt(PromptSummary):
@@ -405,6 +411,12 @@ def _summary(kind: str, p: Path, layer: str) -> PromptSummary:
             rec.intended_output = io if isinstance(io, str) else None
             if isinstance(meta.get("token_estimate"), int):
                 rec.token_estimate = meta["token_estimate"]
+            prov = meta.get("provenance")
+            if isinstance(prov, dict):
+                sid = prov.get("digest_id")
+                sha = prov.get("content_sha")
+                rec.source_id = sid if isinstance(sid, str) else None
+                rec.source_sha = sha if isinstance(sha, str) else None
     return rec
 
 
@@ -724,3 +736,287 @@ async def render_prompt(kind: PromptKind, pid: str, req: RenderRequest):
     except Exception as e:  # bad template / missing var -> 400, not 500
         raise HTTPException(status_code=400, detail=f"render failed: {e}")
     return {"system": composed.system, "user": composed.user, "params": composed.params}
+
+
+# ── LB2-U2: discovery (refresh-only egress) + hybrid recommender ────────────
+#
+# Route-shape note: /discover and /recommend are single-segment GETs and
+# /discover/refresh is a two-segment POST — neither collides with the
+# two-segment GET/PATCH /{kind}/{pid} family or the literal-tailed
+# three-segment POSTs (promote/render/test/install), so registration order
+# here is safe. GET routes below are READ-OPEN and NEVER fetch: they serve
+# the persisted digest / pure scoring only. The sole egress lives in
+# POST /discover/refresh (master-key, wired to a visible operator button).
+
+
+class InstallDigestRequest(BaseModel):
+    """POST /discover/{digest_id}/install — optional target id override."""
+
+    target_id: Optional[str] = None
+
+
+class ExplainRequest(BaseModel):
+    """POST /recommend/explain — the on-demand 'Ask Enclave' layer. Runs
+    the deterministic top hits through a LOCAL model (ModelResolver +
+    OllamaService); nothing leaves the box."""
+
+    task: str = ""
+    model: Optional[str] = None  # target model the prompts are ranked FOR
+    llm_model: Optional[str] = None  # explicit local model for the explanation
+    role: str = "fast"  # operator-selectable resolver role
+    limit: int = Field(default=8, ge=1, le=12)
+
+
+@router.get("/discover")
+async def discover_prompts():
+    """Read-open: the PERSISTED prompt digest + `fetched_at` staleness stamp.
+    Never touches the network — refresh is a separate operator-triggered
+    POST (privacy-first appliance: no egress on read/tab-activation)."""
+    from ..services import prompt_digest
+
+    return prompt_digest.read()
+
+
+@router.post("/discover/refresh", dependencies=[Depends(require_master_key)])
+async def refresh_prompt_discovery():
+    """Operator-triggered digest refresh — the ONLY call site that reaches
+    the network (via services/discovery_fetch through prompt_digest.refresh).
+    Fail-soft: rate limits / dead sources degrade to a partial digest."""
+    from ..services import prompt_digest
+
+    doc = prompt_digest.refresh()
+    logger.info(
+        "prompt digest refreshed: %d records (+%d ~%d -%d)",
+        len(doc.get("records", [])),
+        len(doc["diff"]["added"]),
+        len(doc["diff"]["changed"]),
+        len(doc["diff"]["removed"]),
+    )
+    return doc
+
+
+@router.post(
+    "/discover/{digest_id}/install",
+    response_model=Prompt,
+    status_code=201,
+    dependencies=[Depends(require_master_key)],
+)
+async def install_discovered_prompt(digest_id: str, req: InstallDigestRequest):
+    """Copy a discovered record's body into the USER prompt layer.
+
+    License-gated: proprietary/unknown licenses and pointer-only records are
+    hard-blocked with an explanation (403). Provenance (repo/path/sha) is
+    written into the sidecar so the Discovered tab can diff digest sha vs
+    installed sha. 409 when the target id already has a user copy."""
+    if not _ID_RE.match(digest_id or ""):
+        raise HTTPException(status_code=400, detail="invalid digest id")
+    from ..services import prompt_digest
+    from ..services.discovery_fetch import license_allows_body
+
+    rec = prompt_digest.find_record(digest_id)
+    if rec is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"digest record '{digest_id}' not found — refresh the digest",
+        )
+    src = rec.get("source") or {}
+    lic = rec.get("license")
+    if not license_allows_body(lic, src.get("provenance", "curated")):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"license '{lic or 'unknown'}' does not permit a body copy — "
+                "this record is pointer-only; open the source instead: "
+                f"{src.get('url', '')}"
+            ),
+        )
+    body = rec.get("body")
+    if not body:
+        raise HTTPException(
+            status_code=403,
+            detail="record carries no body (pointer-only) — open the source "
+            f"instead: {src.get('url', '')}",
+        )
+    kind = rec.get("prompt_kind") or "role"
+    if kind not in ("role", "template"):
+        raise HTTPException(status_code=400, detail=f"uninstallable kind {kind!r}")
+    pid = (req.target_id or "").strip() or rec.get("id") or digest_id
+    if not _ID_RE.match(pid):
+        raise HTTPException(
+            status_code=400, detail="invalid target id (alnum/_/-, <=80)"
+        )
+    user_p = _path(kind, pid, "user", must_exist=False)
+    if user_p.is_file():
+        raise HTTPException(
+            status_code=409, detail=f"{kind} '{pid}' already exists in the user layer"
+        )
+    _write_atomic(user_p, body)
+    sidecar = {
+        "tags": [t for t in (rec.get("tags") or []) if isinstance(t, str)],
+        "intended_output": rec.get("intended_output"),
+        "token_estimate": prompt_meta.estimate_tokens(body),
+        "provenance": {
+            "origin": "digest",
+            "digest_id": rec.get("id"),
+            "repo": src.get("repo"),
+            "path": src.get("path"),
+            "ref": src.get("ref"),
+            "url": src.get("url"),
+            "content_sha": rec.get("content_sha"),
+        },
+    }
+    prompt_meta.write_meta(user_p, {k: v for k, v in sidecar.items() if v is not None})
+    logger.info("digest prompt installed: %s -> %s/%s", digest_id, kind, pid)
+    return await get_prompt(kind, pid)
+
+
+def _recommend_corpus() -> List[Dict[str, Any]]:
+    """Installed roles+templates with their classification meta — the
+    scorer's input. Hooks are engine presets, not composable prompts."""
+    out: List[Dict[str, Any]] = []
+    for kind in ("role", "template"):
+        merged: Dict[str, Tuple[Path, str]] = {}
+        for layer in ("oob", "user"):
+            base = _base(layer, kind)
+            if not base.exists():
+                continue
+            for p in sorted(base.glob(f"*{_EXT[kind]}")):
+                merged[p.stem] = (p, layer)
+        for pid, (p, _layer) in merged.items():
+            meta = prompt_meta.read_meta(p) or {}
+            try:
+                body_len = p.stat().st_size
+            except OSError:
+                body_len = 0
+            est = meta.get("token_estimate")
+            out.append(
+                {
+                    "id": pid,
+                    "kind": kind,
+                    "name": _name_from_id(pid),
+                    "tags": meta.get("tags") or [],
+                    "category": meta.get("category"),
+                    "technique": meta.get("technique") or [],
+                    "model_fit": meta.get("model_fit") or [],
+                    "token_estimate": est
+                    if isinstance(est, int)
+                    else prompt_meta.estimate_tokens(" " * body_len),
+                }
+            )
+    return out
+
+
+@router.get("/recommend")
+async def recommend_prompts(
+    task: str = "", model: Optional[str] = None, limit: int = 8
+):
+    """Read-open deterministic scorer (the hybrid's always-on layer): ranks
+    installed prompts for a task and/or model with a per-factor breakdown
+    (tags∩task, model_fit vs role classes, size-fit vs context window).
+    Pure + instant — no model call, no network."""
+    from ..services import prompt_digest
+
+    return prompt_digest.score_prompts(
+        _recommend_corpus(), task=task, model=model, limit=max(1, min(limit, 24))
+    )
+
+
+_EXPLAIN_SYSTEM_PROMPT = """You rank prompt-library entries for a task on a LOCAL AI platform.
+Given a TASK and CANDIDATE prompts (id, name, tags), return ONLY a JSON array,
+no prose: [{"id": "<candidate id>", "reason": "<one short line why it fits>"}]
+ordered best-first. Use ONLY the given candidate ids."""
+
+
+@router.post("/recommend/explain", dependencies=[Depends(require_master_key)])
+async def explain_recommendations(req: ExplainRequest):
+    """'Ask Enclave' — the hybrid's on-demand LLM layer. Sends the
+    deterministic top candidates + the task to a LOCAL model and returns
+    ranked ids with one-line explanations. Tolerant by design: resolver or
+    model failure degrades to the deterministic order (explained=false)
+    rather than 5xx-ing the pane. Nothing leaves the box."""
+    from ..services import prompt_digest
+
+    scored = prompt_digest.score_prompts(
+        _recommend_corpus(), task=req.task, model=req.model, limit=req.limit
+    )
+    candidates = scored["results"]
+    by_id = {c["id"]: c for c in candidates}
+
+    def _fallback_items() -> List[Dict[str, Any]]:
+        items = []
+        for c in candidates:
+            f = c["factors"]
+            bits = []
+            if f["task_tags"]["matched"]:
+                bits.append("tags: " + ", ".join(f["task_tags"]["matched"]))
+            if f["model_fit"]["matched"]:
+                bits.append("fits " + ", ".join(f["model_fit"]["matched"]))
+            bits.append(f"size-fit {f['size_fit']['score']:g}")
+            items.append(
+                {"id": c["id"], "kind": c["kind"], "name": c["name"],
+                 "score": c["score"], "reason": "; ".join(bits)}
+            )
+        return items
+
+    from ..services.model_resolver import ModelResolver
+    from ..services.ollama_service import OllamaService
+
+    ollama = OllamaService()
+    try:
+        resolved = ModelResolver(ollama).resolve(
+            model=req.llm_model, role=req.role, default_role="fast"
+        )
+    except Exception as exc:  # noqa: BLE001 — degrade, never 5xx the pane
+        logger.info("recommend/explain resolver unavailable: %s", exc)
+        return {
+            "task": req.task, "model": req.model, "llm_model": None,
+            "explained": False, "items": _fallback_items(),
+        }
+    listing = "\n".join(
+        f"- id={c['id']} name={c['name']} "
+        f"tags={','.join(c['factors']['task_tags']['matched']) or '-'}"
+        for c in candidates
+    )
+    items: List[Dict[str, Any]] = []
+    try:
+        result = ollama.chat(
+            model=resolved,
+            messages=[
+                {"role": "system", "content": _EXPLAIN_SYSTEM_PROMPT},
+                {"role": "user", "content": f"TASK: {req.task}\n\nCANDIDATES:\n{listing}"},
+            ],
+            temperature=0.2,
+            max_tokens=768,
+        )
+        content = (result or {}).get("content", "") or ""
+        match = re.search(r"\[[\s\S]*\]", content)
+        parsed = json.loads(match.group(0)) if match else []
+        seen = set()
+        for entry in parsed if isinstance(parsed, list) else []:
+            if not isinstance(entry, dict):
+                continue
+            cid = entry.get("id")
+            if cid in by_id and cid not in seen:
+                seen.add(cid)
+                c = by_id[cid]
+                items.append(
+                    {"id": cid, "kind": c["kind"], "name": c["name"],
+                     "score": c["score"],
+                     "reason": str(entry.get("reason") or "").strip()[:200]}
+                )
+        for c in candidates:  # keep every deterministic hit — model omissions append
+            if c["id"] not in seen:
+                items.append(
+                    {"id": c["id"], "kind": c["kind"], "name": c["name"],
+                     "score": c["score"], "reason": "deterministic rank"}
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.info("recommend/explain model call failed: %s", exc)
+        return {
+            "task": req.task, "model": req.model, "llm_model": resolved,
+            "explained": False, "items": _fallback_items(),
+        }
+    return {
+        "task": req.task, "model": req.model, "llm_model": resolved,
+        "explained": bool(items), "items": items or _fallback_items(),
+    }

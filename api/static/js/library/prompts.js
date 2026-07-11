@@ -11,12 +11,17 @@ import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
 import { LibraryShell } from './shell.js';
+import { LibraryWizard } from './wizard.js';
+import { TestPane } from './test-pane.js';
 
 export const PromptsLibrary = (function () {
   let _items = [];
   let _editing = false;
   let _metaEditing = false;    // meta sidecar editor (LB2-U1)
   let _ctxTokens = 8192;       // context window the token chip compares against
+  let _digest = null;          // persisted prompt digest (LB2-U2) — read-GET only
+  let _modelsLoaded = false;   // recommend-rail model datalist, populated lazily
+  const DIGEST_PREFIX = 'digest/';
 
   // Shared taxonomy — keep in lockstep with api/services/prompt_meta.py
   // (one vocabulary across LB2 prompts / LB4 model tags / LB6 task schemas).
@@ -54,6 +59,14 @@ export const PromptsLibrary = (function () {
       const r = await LibraryShell.fetch('prompt', '/api/prompts');
       if (!r.ok) throw new Error(`Load failed (${r.status})`);
       _items = r.data || [];
+      // Discovered tab data: the PERSISTED digest + staleness stamp. This is
+      // a local read-GET — the server never fetches on it (privacy: egress
+      // only rides the operator's ⟳ Digest button). Fail-soft: a dead route
+      // leaves the Installed experience untouched.
+      try {
+        const d = await LibraryShell.fetch('prompt', '/api/prompts/discover');
+        if (d.ok && d.data && Array.isArray(d.data.records)) _digest = d.data;
+      } catch (_) { /* digest stays as-was */ }
     },
 
     list() {
@@ -88,11 +101,73 @@ export const PromptsLibrary = (function () {
       return rows;
     },
 
+    // Discovered sidebar tab (LB2-U2): rows from the persisted digest with
+    // diff badges — digest content_sha vs installed sidecar provenance sha.
+    discovered() {
+      const recs = (_digest && _digest.records) || [];
+      const diff = (_digest && _digest.diff) || {};
+      const installed = {};   // digest record id -> installed source_sha
+      _items.forEach(p => { if (p.source_id) installed[p.source_id] = p.source_sha; });
+      return recs.map(rec => {
+        const badges = [];
+        if (rec.id in installed) {
+          badges.push(installed[rec.id] === rec.content_sha
+            ? { label: 'installed', cls: 'lib-diff-installed' }
+            : { label: 'update', cls: 'lib-diff-update' });
+        } else if ((diff.added || []).indexOf(rec.id) !== -1) {
+          badges.push({ label: 'new', cls: 'lib-diff-new' });
+        } else if ((diff.changed || []).indexOf(rec.id) !== -1) {
+          badges.push({ label: 'changed', cls: 'lib-diff-update' });
+        }
+        if (rec.license) badges.push({ label: rec.license });
+        return {
+          id: DIGEST_PREFIX + rec.id,
+          title: rec.title || rec.id,
+          meta: `${rec.subkind || 'prompt'} · ${rec.prompt_kind || 'role'}`,
+          group: (rec.source && rec.source.repo) || 'digest',
+          tags: rec.tags || [],
+          badges,
+          blocks: ['context'],
+        };
+      });
+    },
+
     detail(id) {
+      if (id && id.indexOf(DIGEST_PREFIX) === 0) {
+        return { sections: { overview: (mountEl) => _renderDigestOverview(mountEl, id) } };
+      }
       return { sections: { overview: (mountEl) => _renderOverview(mountEl) } };
     },
 
+    // LB1 prompt TestPane in the shell Test slot — runs render → test-step
+    // (labeled model+prompt only). Hooks keep their own HOOK TEST in
+    // Overview; digest records must be installed before they can run.
+    testPane(id) {
+      return (mountEl) => {
+        if (id && id.indexOf(DIGEST_PREFIX) === 0) {
+          mountEl.innerHTML = '<div class="model-empty">Install this discovered prompt first — the test harness runs installed prompts only.</div>';
+          return;
+        }
+        const p = _current();
+        if (p && p.kind === 'hook') {
+          mountEl.innerHTML = '<div class="model-empty">Hooks test via the HOOK TEST box in Overview (factory instantiation + validate_output dry-run).</div>';
+          return;
+        }
+        return TestPane.mount('prompt', id, mountEl);
+      };
+    },
+
     actions(id) {
+      if (id && id.indexOf(DIGEST_PREFIX) === 0) {
+        const rec = _digestRecord(id);
+        const can = !!(rec && rec.body);
+        return [{
+          action: 'prompts.install', label: 'Install…', verb: 'install',
+          accent: true, enabled: can,
+          reason: can ? undefined
+            : 'pointer-only record — license does not permit a body copy',
+        }];
+      }
       if (_editing) {
         return [
           { action: 'prompts.save', label: 'Save', verb: 'edit', accent: true },
@@ -114,6 +189,9 @@ export const PromptsLibrary = (function () {
                     verb: 'install', accent: true });
       } else {
         acts.push({ action: 'prompts.render', label: '▶ Render preview', verb: 'test', accent: true });
+        // Jump to the Test tab — render → POST /api/workflows/test-step
+        // (labeled model+prompt only: tools/skills/parsers not exercised).
+        acts.push({ action: 'prompts.test-run', label: 'Test', verb: 'test' });
       }
       acts.push(
         { action: 'prompts.edit', label: 'Edit', verb: 'edit' },
@@ -491,6 +569,218 @@ export const PromptsLibrary = (function () {
     } else { fail(); }
   }
 
+  // ── LB2-U2: discovery (digest read + operator refresh + wizard install)
+  //    and the hybrid recommend rail (deterministic + Ask Enclave) ────────
+
+  function _digestRecord(rowId) {
+    const rid = (rowId || '').slice(DIGEST_PREFIX.length);
+    return (((_digest || {}).records) || []).find(r => r.id === rid) || null;
+  }
+
+  function _staleness() {
+    const at = _digest && _digest.fetched_at;
+    if (!at) return 'never fetched';
+    const mins = Math.max(0, Math.round((Date.now() / 1000 - at) / 60));
+    if (mins < 60) return `fetched ${mins}m ago`;
+    if (mins < 60 * 48) return `fetched ${Math.round(mins / 60)}h ago`;
+    return `fetched ${Math.round(mins / 1440)}d ago`;
+  }
+
+  function _renderDigestOverview(el, rowId) {
+    const rec = _digestRecord(rowId);
+    if (!rec) { el.innerHTML = '<div class="model-empty">Record not in the persisted digest — refresh it.</div>'; return; }
+    const src = rec.source || {};
+    const kv = [
+      ['source', `${src.repo || '?'} · ${src.path || ''}`],
+      ['pinned sha', (src.ref || '').slice(0, 12)],
+      ['license', rec.license || 'unknown'],
+      ['provenance', src.provenance || ''],
+      ['installs as', rec.prompt_kind || 'role'],
+      ['digest', _staleness()],
+    ].filter(([, v]) => v)
+      .map(([k, v]) => `<div class="prompts-kv"><span class="prompts-kv-key">${esc(k)}</span>${esc(String(v))}</div>`)
+      .join('');
+    const tags = (rec.tags || []).map(t => `<span class="lib-chip">${esc(t)}</span>`).join('');
+    const body = rec.body
+      ? `<div class="prompts-render-label">BODY (~${esc(String(rec.token_estimate || 0))} tok)</div>
+         <pre class="prompts-body" style="max-height:260px">${esc(rec.body.slice(0, 4000))}${rec.body.length > 4000 ? '\n…' : ''}</pre>`
+      : `<p style="color:var(--text-muted);font-size:0.72rem;margin:8px 0">
+           Pointer-only record — the license does not permit a body copy.
+           ${src.url ? `Open the source: <a href="${esc(src.url)}" target="_blank" rel="noopener">${esc(src.url)}</a>` : ''}
+         </p>`;
+    el.innerHTML = `
+      <div class="prompts-meta"><code class="prompts-var">${esc(rec.subkind || 'prompt')}</code>
+        · <code style="color:var(--accent)">${esc(rec.id)}</code></div>
+      ${tags ? `<div class="prompts-meta-chips">${tags}</div>` : ''}
+      ${kv}${body}`;
+  }
+
+  async function discoverRefresh() {
+    // The ONLY egress path — a visible operator button firing a master-key
+    // gated POST against the allowlisted sources (Admin ▸ Sources governs).
+    Toast.show('Refreshing prompt digest…', 'info');
+    try {
+      const r = await Net.call('/api/prompts/discover/refresh', {
+        retries: 0,
+        init: { method: 'POST', headers: _headers() },
+      });
+      if (!r.ok) {
+        const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+        Toast.show(`Digest refresh failed: ${detail}`, 'error'); return;
+      }
+      _digest = r.data;
+      const d = (r.data && r.data.diff) || {};
+      Toast.show(`Digest refreshed — +${(d.added || []).length} ~${(d.changed || []).length} −${(d.removed || []).length}`, 'success');
+      const st = LibraryShell.state('prompt');
+      if (st) { st.side = 'discovered'; st.chromeBuilt = false; }
+      LibraryShell.renderSidebar('prompt');
+    } catch (e) { Toast.show(e.message, 'error'); }
+  }
+
+  function installWizard() {
+    const key = _selected();
+    const rec = key ? _digestRecord(key) : null;
+    if (!rec) return;
+    if (!rec.body) {
+      Toast.show('Pointer-only record — license does not permit a body copy', 'error');
+      return;
+    }
+    const src = rec.source || {};
+    LibraryWizard.open({
+      title: 'Install prompt',
+      submitLabel: 'Install',
+      steps: {
+        source: (el) => {
+          el.innerHTML = `
+            <div class="admin-modal-sub">From the persisted digest (${esc(_staleness())}).</div>
+            <div class="prompts-kv"><span class="prompts-kv-key">title</span>${esc(rec.title || rec.id)}</div>
+            <div class="prompts-kv"><span class="prompts-kv-key">source</span>${esc(src.repo || '')} · ${esc(src.path || '')}</div>
+            <div class="prompts-kv"><span class="prompts-kv-key">pinned sha</span><code class="prompts-var">${esc((src.ref || '').slice(0, 12))}</code></div>
+            <div class="prompts-kv"><span class="prompts-kv-key">license</span>${esc(rec.license || 'unknown')}</div>`;
+        },
+        configure: (el, state) => {
+          el.innerHTML = `
+            <div class="admin-modal-sub">Installs as a user-layer <b>${esc(rec.prompt_kind || 'role')}</b>; provenance sha lands in the sidecar.</div>
+            <label class="admin-modal-label" for="prompts-install-id">Target id</label>
+            <input id="prompts-install-id" type="text" data-wiz-key="target_id"
+              autocomplete="off" placeholder="${esc(rec.id)}">`;
+          const inp = el.querySelector('#prompts-install-id');
+          if (inp) inp.value = state.values.target_id || rec.id;
+        },
+      },
+      validate: (stepId, state) => {
+        if (stepId !== 'configure') return true;
+        const tid = (state.values.target_id || '').trim();
+        return (!tid || /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(tid))
+          ? true : 'Invalid id — use alnum, _ or -, max 80 chars';
+      },
+      onSubmit: async (state, { post }) => {
+        const tid = (state.values.target_id || '').trim() || null;
+        const r = await post(
+          `/api/prompts/discover/${encodeURIComponent(rec.id)}/install`,
+          { target_id: tid }, _headers());
+        if (!r.ok) {
+          const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+          return { ok: false, detail };
+        }
+        await load();
+        return { ok: true, message: `Installed as ${rec.prompt_kind || 'role'} '${(r.data && r.data.id) || tid || rec.id}'` };
+      },
+    });
+  }
+
+  function testRun() {
+    // Test tab = the LB1 prompt TestPane (render → test-step, labeled
+    // model+prompt only). The action just navigates the shell subnav.
+    if (_selected()) LibraryShell.setSubnav('prompt', 'test');
+  }
+
+  async function _fillModelOptions() {
+    if (_modelsLoaded) return;
+    _modelsLoaded = true;
+    const dl = document.getElementById('prompts-model-options');
+    if (!dl) return;
+    try {
+      const r = await Net.call('/api/models');
+      const opts = ((r.data && r.data.options) || [])
+        .map(o => `<option value="${esc(o.model || o.value || '')}"></option>`).join('');
+      if (r.ok && opts) dl.innerHTML = opts;
+    } catch (_) { /* datalist stays empty — plain text entry still works */ }
+  }
+
+  function _recInputs() {
+    return {
+      task: (document.getElementById('prompts-recommend-task') || {}).value || '',
+      model: (document.getElementById('prompts-recommend-model') || {}).value || '',
+    };
+  }
+
+  function _factorTitle(f) {
+    return `tags ${f.task_tags.score}${f.task_tags.matched.length ? ` (${f.task_tags.matched.join(', ')})` : ''}`
+      + ` · model-fit ${f.model_fit.score}${f.model_fit.matched.length ? ` (${f.model_fit.matched.join(', ')})` : ''}`
+      + ` · size-fit ${f.size_fit.score} (~${f.size_fit.token_estimate} tok${f.size_fit.context_tokens ? ` vs ${f.size_fit.context_tokens}` : ''})`;
+  }
+
+  function _renderRecRows(out, items, note) {
+    out.innerHTML = (note ? `<div class="prompts-rec-note">${esc(note)}</div>` : '') +
+      (items.map(it => `
+        <button type="button" class="btn-unstyled prompts-rec-row" data-action="prompts.select"
+          data-key="${esc(`${it.kind}/${it.id}`)}" ${it.title ? `title="${esc(it.title)}"` : ''}>
+          <span class="prompts-rec-score">${esc(String(it.score))}</span>
+          <span class="prompts-rec-name">${esc(it.name || it.id)}</span>
+          ${it.reason ? `<span class="prompts-rec-reason">${esc(it.reason)}</span>` : ''}
+        </button>`).join('') || '<div class="model-empty">No hits.</div>');
+  }
+
+  async function recommend() {
+    const out = document.getElementById('prompts-recommend-out');
+    if (!out) return;
+    _fillModelOptions();
+    const { task, model } = _recInputs();
+    out.innerHTML = '<div class="model-empty">Scoring…</div>';
+    try {
+      const qs = `task=${encodeURIComponent(task)}${model ? `&model=${encodeURIComponent(model)}` : ''}`;
+      const r = await Net.call(`/api/prompts/recommend?${qs}`);
+      if (!r.ok) { out.innerHTML = `<div class="model-empty" style="color:var(--danger)">HTTP ${r.status}</div>`; return; }
+      const items = ((r.data && r.data.results) || []).map(x => ({
+        id: x.id, kind: x.kind, name: x.name, score: x.score,
+        title: _factorTitle(x.factors),
+      }));
+      _renderRecRows(out, items, 'deterministic scorer — hover a row for the per-factor breakdown');
+    } catch (e) {
+      out.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(e.message)}</div>`;
+    }
+  }
+
+  async function askEnclave() {
+    const out = document.getElementById('prompts-recommend-out');
+    if (!out) return;
+    const { task, model } = _recInputs();
+    out.innerHTML = '<div class="model-empty">Asking the local model… (nothing leaves the box)</div>';
+    try {
+      const r = await Net.call('/api/prompts/recommend/explain', {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ..._headers() },
+          body: JSON.stringify({ task, model: model || null }),
+        },
+      });
+      if (!r.ok) {
+        const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+        out.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(detail)}</div>`;
+        return;
+      }
+      const d = r.data || {};
+      const note = d.explained
+        ? `Ask Enclave — ${d.llm_model || 'local model'} (local only)`
+        : 'local model unavailable — deterministic ranking';
+      _renderRecRows(out, d.items || [], note);
+    } catch (e) {
+      out.innerHTML = `<div class="model-empty" style="color:var(--danger)">${esc(e.message)}</div>`;
+    }
+  }
+
   function showCreate() {
     const modal = document.getElementById('prompts-create-modal');
     if (modal) {
@@ -546,6 +836,19 @@ export const PromptsLibrary = (function () {
     'prompts.meta-save': () => metaSave(),
     'prompts.hook-test': () => hookTest(),
     'prompts.copy-hook-yaml': () => copyHookYaml(),
+    // LB2-U2 — discovery + hybrid recommender.
+    'prompts.tab': el => {   // alias over the shell's Installed|Discovered switch
+      const st = LibraryShell.state('prompt');
+      if (!st) return;
+      st.side = el.dataset.side === 'discovered' ? 'discovered' : 'installed';
+      st.chromeBuilt = false;
+      LibraryShell.renderSidebar('prompt');
+    },
+    'prompts.discover-refresh': () => discoverRefresh(),
+    'prompts.install': () => installWizard(),
+    'prompts.test-run': () => testRun(),
+    'prompts.recommend': () => recommend(),
+    'prompts.ask-enclave': () => askEnclave(),
   });
   Actions.change({
     'prompts.ctx-model': el => _ctxChange(el),
@@ -553,5 +856,7 @@ export const PromptsLibrary = (function () {
 
   return { load, refresh, render, select, edit, cancel, save, remove, promote,
            renderPreview, showCreate, closeCreate, submitCreate,
-           metaEditToggle, metaSave, hookTest, copyHookYaml, adapter };
+           metaEditToggle, metaSave, hookTest, copyHookYaml,
+           discoverRefresh, installWizard, testRun, recommend, askEnclave,
+           adapter };
 })();
