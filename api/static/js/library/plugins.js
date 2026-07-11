@@ -770,8 +770,9 @@ export const PluginsPanel = (function () {
       if (!r.ok) {
         const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
         Toast.warn('Digest refresh degraded', detail);
+        return;   // MS-4: a degraded refresh must NOT fall through to success
       }
-    } catch (e) { Toast.warn('Digest refresh degraded', e.message); }
+    } catch (e) { Toast.warn('Digest refresh degraded', e.message); return; }
     await load();
     const st = LibraryShell.state('plugin');
     if (st) { st.side = 'discovered'; st.chromeBuilt = false; }
@@ -906,6 +907,8 @@ export const PluginsPanel = (function () {
       LibraryShell.renderSidebar('plugin');
     },
     'plugins.refresh-digest': () => refreshDigest(),
+    // Plain Refresh — migrated off inline onclick (MS-4); reload, no fetch.
+    'plugins.refresh': () => refresh(),
     'plugins.view-manifest': el => viewManifest(el.dataset.id),
     'plugins.import-skills': el => importSkills(el.dataset.id),
     'plugins.seed-wizard': el => seedWizard(el.dataset.id),

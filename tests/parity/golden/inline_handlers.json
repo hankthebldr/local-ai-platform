@@ -1,10 +1,10 @@
 {
   "_meta": {
     "source": "static markup of api/static/index.html (<script>/<style> stripped)",
-    "purpose": "Every symbol here is invoked by an inline on*= handler. After the ES-module split each MUST be reachable as a window global (legacy-bridge.js), or the handler silently no-ops. 'must_bridge' lists symbols reachable today ONLY via a classic-script global lexical const/let/function — these break under modules unless explicitly assigned to window.",
-    "handler_count": 224,
-    "symbol_count": 97,
-    "must_bridge_count": 62,
+    "purpose": "Every symbol here is invoked by an inline on*= handler. After the ES-module split each MUST be reachable as a window global (legacy-bridge.js), or the handler silently no-ops. 'must_bridge' lists symbols reachable today ONLY via a classic-script global lexical const/let/function \u2014 these break under modules unless explicitly assigned to window.",
+    "handler_count": 215,
+    "symbol_count": 94,
+    "must_bridge_count": 61,
     "unknown_count": 0
   },
   "symbols": [
@@ -23,7 +23,6 @@
     "Kanban",
     "MCPPanel",
     "Pins",
-    "PluginsPanel",
     "Projects",
     "ResearchFlow",
     "RunLens",
@@ -32,7 +31,6 @@
     "Shortcuts",
     "SkillsBuilder",
     "SkillsDiscover",
-    "SkillsPanel",
     "Theme",
     "Threads",
     "WorkflowBuilder",
@@ -70,7 +68,6 @@
     "graphZoomOut",
     "loadActiveSessions",
     "loadAgentsTab",
-    "loadInstalledLocal",
     "loadStatus",
     "markSettingsDirty",
     "onAgentSelectionChanged",
@@ -122,7 +119,6 @@
     "Kanban": "window",
     "MCPPanel": "window",
     "Pins": "window",
-    "PluginsPanel": "window",
     "Projects": "lexical",
     "ResearchFlow": "window",
     "RunLens": "window",
@@ -131,7 +127,6 @@
     "Shortcuts": "window",
     "SkillsBuilder": "window",
     "SkillsDiscover": "window",
-    "SkillsPanel": "window",
     "Theme": "window",
     "Threads": "window",
     "WorkflowBuilder": "window",
@@ -169,7 +164,6 @@
     "graphZoomOut": "window",
     "loadActiveSessions": "lexical",
     "loadAgentsTab": "lexical",
-    "loadInstalledLocal": "lexical",
     "loadStatus": "lexical",
     "markSettingsDirty": "lexical",
     "onAgentSelectionChanged": "lexical",
@@ -237,7 +231,6 @@
     "filterCatalog",
     "loadActiveSessions",
     "loadAgentsTab",
-    "loadInstalledLocal",
     "loadStatus",
     "markSettingsDirty",
     "onAgentSelectionChanged",
@@ -318,9 +311,6 @@
     "Pins": [
       "click"
     ],
-    "PluginsPanel": [
-      "click"
-    ],
     "Projects": [
       "change",
       "click"
@@ -348,10 +338,6 @@
       "change",
       "click",
       "input"
-    ],
-    "SkillsPanel": [
-      "change",
-      "click"
     ],
     "Theme": [
       "click"
@@ -463,9 +449,6 @@
       "click"
     ],
     "loadAgentsTab": [
-      "click"
-    ],
-    "loadInstalledLocal": [
       "click"
     ],
     "loadStatus": [

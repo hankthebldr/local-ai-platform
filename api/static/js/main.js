@@ -234,15 +234,14 @@ function switchTab(name, el) {
   // on the `adminPanelActivated` event. Re-emit that event from switchTab
   // so first-class top-level entry to those tabs triggers the same load
   // path the dropdown route used to fire.
-  // Standalone Skills tab — bring the shared discovery/catalog panel into
-  // this tab (relocate-on-activate) and load it, so the homepage Skills tab
-  // exposes the same discovery surface as Admin → Catalog → Skills.
-  if (name === 'admin-skills') {
-    if (window.SkillsDiscoverShare) SkillsDiscoverShare.showInSkillsTab();
-    if (window.SkillsDiscover && typeof SkillsDiscover.load === 'function') {
-      try { SkillsDiscover.load(); } catch (_) {}
-    }
-  }
+  // Standalone Skills tab — the LibraryShell adapter's own Discovered
+  // side-tab now OWNS discovery on this tab (its load() reads
+  // /api/skills/discover). The legacy relocate-in + SkillsDiscover.load()
+  // was a SECOND discovery surface stacked above the shell list — the
+  // double-discovery MS-4 collapses. We deliberately no longer relocate the
+  // panel here; #skills-tab-discover-mount stays in the DOM (only-add) but
+  // empty on admin-skills. Catalog's showInCatalog() relocation is untouched
+  // (the Catalog page has no shell), so that discovery home is unchanged.
   if (name === 'admin-plugins' || name === 'admin-skills' || name === 'admin-mcp'
       || name === 'admin-cloud' || name === 'admin-exports' || name === 'admin-keys'
       || name === 'admin-sources') {

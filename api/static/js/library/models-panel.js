@@ -736,6 +736,13 @@ export const ModelsPanel = (function () {
     'models.tags-save': el => saveTags(el.dataset.id),
     'models.tags-cancel': () => cancelTags(),
     'models.refresh-discover': () => refreshDiscover(),
+    // Installed-Locally memory-residency panel refresh — migrated off inline
+    // onclick (MS-4); bridges the existing main.js loader (no new global).
+    'models.refresh-local': () => {
+      if (typeof window.loadInstalledLocal === 'function') {
+        try { window.loadInstalledLocal(); } catch (_) {}
+      }
+    },
     'models.open-prompt': el => LibraryShell.open('prompt', el.dataset.prompt),
   });
   Actions.change({

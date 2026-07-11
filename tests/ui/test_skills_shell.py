@@ -156,12 +156,14 @@ def test_composer_drag_payload_unchanged():
 
 
 def test_index_containers_toolbar_and_relocators_intact(index_soup):
-    # only-add: every pre-shell container id + the DOM-relocator mount and
-    # the legacy filter selects stay alive.
+    # only-add: every pre-shell container id + the DOM-relocator mount stay
+    # alive. MS-4 retired the duplicate legacy #skills-filter-plugin/role
+    # selects (the shell's own .lib-filter is now the ONE filter) — the
+    # relocator MOUNT stays (empty on admin-skills), the panel + catalog
+    # home are untouched.
     for el_id in ["tab-admin-skills", "skills-list", "skill-detail",
                   "skill-detail-label", "skills-count",
-                  "skills-tab-discover-mount", "skills-filter-plugin",
-                  "skills-filter-role", "skills-discover-panel",
+                  "skills-tab-discover-mount", "skills-discover-panel",
                   "catalog-skills-mount"]:
         assert index_soup.find(id=el_id) is not None, f"#{el_id} regressed"
     tab = index_soup.find(id="tab-admin-skills")
@@ -172,11 +174,75 @@ def test_index_containers_toolbar_and_relocators_intact(index_soup):
         )
 
 
-def test_relocation_wiring_survives_in_main_js():
-    # switchTab('admin-skills') still relocates the shared discovery panel
-    # and loads it; Catalog entry pulls it back.
-    assert "SkillsDiscoverShare.showInSkillsTab()" in MAIN_JS
-    assert "SkillsDiscoverShare.showInCatalog()" in MAIN_JS
+def test_double_discovery_collapsed_shell_owns_skills_discovery():
+    # MS-4: switchTab('admin-skills') NO LONGER relocates+loads the legacy
+    # SkillsDiscover panel — that was a second discovery surface stacked
+    # above the shell's own Discovered side-tab. The Catalog relocation
+    # (showInCatalog, no shell on that page) is untouched.
+    assert "SkillsDiscoverShare.showInSkillsTab()" not in MAIN_JS, (
+        "the legacy relocate-into-skills-tab must be gone (double-discovery collapse)"
+    )
+    assert "SkillsDiscoverShare.showInCatalog()" in MAIN_JS, (
+        "the Catalog discovery home must stay wired"
+    )
+    # the shell adapter's OWN load reads discovery — the single surface
+    assert "/api/skills/discover" in SKILLS_JS
+    m = re.search(r"async load\(\)(.*?)\n    },", SKILLS_JS, re.S)
+    assert m and "/api/skills/discover" in m.group(1), (
+        "shell adapter.load must own the discovery read"
+    )
+
+
+def test_list_no_longer_reads_the_retired_filter_selects():
+    # MS-4: the legacy plugin/role select reads are deleted; the shell
+    # .lib-filter search is the sole filter.
+    assert "skills-filter-plugin" not in SKILLS_JS
+    assert "skills-filter-role" not in SKILLS_JS
+    assert "_populatePluginFilter" not in SKILLS_JS
+
+
+def test_refresh_discovery_no_false_success_on_degraded_refresh():
+    # MS-4: a non-ok (non-404) refresh or a thrown error must early-return
+    # BEFORE the success toast — a degraded refresh never claims success.
+    m = re.search(r"async function refreshDiscovery\(\)(.*?)\n  }", SKILLS_JS, re.S)
+    assert m, "refreshDiscovery missing"
+    body = m.group(1)
+    warn = body.index("Marketplace refresh degraded")
+    success = body.index("Skills discovery refreshed")
+    # the first degraded branch returns before ever reaching success
+    assert re.search(r"Toast\.warn\('Marketplace refresh degraded'[^;]*;\s*return;", body), (
+        "the non-ok branch must early-return, not fall through to success"
+    )
+    assert "e.message); return;" in body, "the catch branch must early-return too"
+    assert warn < success
+
+
+def test_legacy_toolbars_migrated_to_data_action(index_soup):
+    # MS-4: MCP + Plugins-plain-Refresh + Models Installed-Locally toolbars
+    # move off inline onclick to data-action delegation. Window globals stay
+    # exported for parity (checked in JS below).
+    mcp_tab = index_soup.find(id="tab-admin-mcp")
+    for action in ["mcp.create", "mcp.browse", "mcp.refresh"]:
+        assert mcp_tab.find(attrs={"data-action": action}) is not None, (
+            f"MCP toolbar button data-action={action} missing"
+        )
+    plugins_tab = index_soup.find(id="tab-admin-plugins")
+    assert plugins_tab.find(attrs={"data-action": "plugins.refresh"}) is not None, (
+        "plain Plugins Refresh must be delegated"
+    )
+    models_tab = index_soup.find(id="tab-inventory")
+    assert models_tab.find(attrs={"data-action": "models.refresh-local"}) is not None, (
+        "Installed-Locally Refresh must be delegated"
+    )
+    # the migrated toolbars carry no inline handler for these verbs
+    for tab in (mcp_tab, plugins_tab, models_tab):
+        for btn in tab.find_all("button"):
+            for handler in ("MCPPanel.showCreate", "MCPPanel.browseMarketplace",
+                            "PluginsPanel.refresh", "loadInstalledLocal()"):
+                onclick = btn.get("onclick") or ""
+                assert handler not in onclick, (
+                    f"migrated toolbar still carries inline onclick {handler!r}"
+                )
 
 
 def test_skills_css_grammar_present(index_html_text):
@@ -333,16 +399,22 @@ def test_wizard_replaces_prompt_flows(shell_page):
 
 
 @requires_server
-def test_catalog_page_discover_relocation_still_binds(shell_page):
+def test_admin_skills_shows_single_discovery_surface(shell_page):
+    # MS-4: the shell's Discovered side-tab OWNS discovery on admin-skills.
+    # The legacy panel must NOT be relocated into #skills-tab-discover-mount
+    # anymore (that was the double-discovery), and the mount stays empty.
     page = shell_page
     _open_skills_tab(page)
-    in_skills = page.evaluate(
+    empty_mount = page.evaluate(
         """() => {
-            const p = document.getElementById('skills-discover-panel');
-            return !!(p && p.closest('#skills-tab-discover-mount'));
+            const m = document.getElementById('skills-tab-discover-mount');
+            return !!m && m.children.length === 0;
         }"""
     )
-    assert in_skills, "discover panel must relocate into the Skills tab mount"
+    assert empty_mount, "skills-tab-discover-mount must stay empty (no double-discovery)"
+    # exactly ONE discovery surface — the shell Discovered side-tab
+    assert page.locator('#skills-list .lib-side-tab[data-side="discovered"]').count() == 1
+    # the Catalog home still receives the panel (relocation untouched there)
     page.evaluate("window.switchTab('workflows')")
     in_catalog = page.evaluate(
         """() => {
@@ -350,7 +422,7 @@ def test_catalog_page_discover_relocation_still_binds(shell_page):
             return !!(p && p.closest('#catalog-skills-mount'));
         }"""
     )
-    assert in_catalog, "discover panel must relocate back to the Catalog mount"
+    assert in_catalog, "discover panel must stay at the Catalog mount"
 
 
 @requires_server

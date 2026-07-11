@@ -1331,7 +1331,7 @@
       <span class="corner-tr"></span><span class="corner-bl"></span>
       <div class="panel-label">Installed Locally
         <span class="tab-count" id="installed-local-count"></span>
-        <button class="action-btn xs" style="float:right" onclick="loadInstalledLocal()">↻ Refresh</button>
+        <button class="action-btn xs" style="float:right" data-action="models.refresh-local">↻ Refresh</button>
       </div>
       <div id="installed-local-body">
         <div class="model-empty">Loading local models…</div>
@@ -2547,7 +2547,7 @@
                     title="Forge a new plugin with the local model — skills-only by default, mandatory per-file review before install">+ Forge</button>
             <button class="action-btn" data-action="plugins.refresh-digest"
                     title="Operator-triggered: fetch the pinned Claude marketplaces and persist the plugin digest (reads never fetch)">⟳ Digest</button>
-            <button class="action-btn" onclick="PluginsPanel.refresh()">Refresh</button>
+            <button class="action-btn" data-action="plugins.refresh">Refresh</button>
           </span>
         </div>
         <div id="plugins-list" style="margin-top:10px"></div>
@@ -2584,24 +2584,7 @@
     <div class="plugins-layout">
       <div class="panel plugins-list-panel">
         <span class="corner-tr"></span><span class="corner-bl"></span>
-        <div class="panel-label">// SKILLS
-          <span style="float:right">
-            <select id="skills-filter-plugin" class="model-select" aria-label="Filter skills by plugin" style="font-size:0.62rem;padding:2px 6px;min-width:140px"
-                    onchange="SkillsPanel.refresh()" title="Filter by plugin">
-              <option value="">— all plugins —</option>
-            </select>
-            <select id="skills-filter-role" class="model-select" aria-label="Filter skills by role" style="font-size:0.62rem;padding:2px 6px;min-width:120px;margin-left:4px"
-                    onchange="SkillsPanel.refresh()" title="Filter by role (matches the workflow step role each skill applies to)">
-              <option value="">— all roles —</option>
-              <option value="general">general</option>
-              <option value="reasoning">reasoning</option>
-              <option value="coding">coding</option>
-              <option value="fast">fast</option>
-              <option value="uncensored">uncensored</option>
-            </select>
-            <button class="action-btn" onclick="SkillsPanel.refresh()" style="margin-left:4px">Refresh</button>
-          </span>
-        </div>
+        <div class="panel-label">// SKILLS</div>
         <!-- LB3-U2 — Skills library toolbar on the shell: creation, wizard-backed
              install/import, repo browsing, and the operator-triggered discovery
              refresh (reads never fetch; only this button re-fires the
@@ -2729,9 +2712,9 @@
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="panel-label">// MCP SERVERS
           <span style="float:right">
-            <button class="action-btn accent" onclick="MCPPanel.showCreate()">+ Register</button>
-            <button class="action-btn" onclick="MCPPanel.browseMarketplace()" title="Browse a catalog of well-known MCP servers">⌗ Marketplace</button>
-            <button class="action-btn" onclick="MCPPanel.refresh()">Refresh</button>
+            <button class="action-btn accent" data-action="mcp.create">+ Register</button>
+            <button class="action-btn" data-action="mcp.browse" title="Browse a catalog of well-known MCP servers">⌗ Marketplace</button>
+            <button class="action-btn" data-action="mcp.refresh">Refresh</button>
           </span>
         </div>
         <div id="mcp-list" style="margin-top:10px;font-size:0.78rem"></div>

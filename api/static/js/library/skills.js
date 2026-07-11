@@ -91,7 +91,6 @@ export const SkillsPanel = (function () {
       const r = await LibraryShell.fetch('skill', '/api/plugins');
       if (!r.ok) throw new Error(`Load failed (${r.status})`);
       _items = flattenSkills(Array.isArray(r.data) ? r.data : []);
-      _populatePluginFilter();
       // Discovered tab data — fail-soft: a dead catalog read leaves the
       // Installed experience untouched.
       try {
@@ -100,19 +99,11 @@ export const SkillsPanel = (function () {
       } catch (_) { /* discover stays as-was */ }
     },
 
-    // Installed — calm cards, grouped per plugin. The legacy plugin/role
-    // filter selects stay wired (only-add): they narrow this list exactly
-    // as the pre-shell panel did.
+    // Installed — calm cards, grouped per plugin. The shell's own
+    // `.lib-filter` search is now the ONE filter (MS-4 retired the duplicate
+    // legacy plugin/role selects that used to narrow this list).
     list() {
-      const pluginFilter = (document.getElementById('skills-filter-plugin') || {}).value || '';
-      const roleFilter = (document.getElementById('skills-filter-role') || {}).value || '';
       return _items
-        .filter(it => {
-          if (pluginFilter && it.plugin_id !== pluginFilter) return false;
-          if (roleFilter && Array.isArray(it.roles) && it.roles.length &&
-              !(it.roles.includes(roleFilter) || it.roles.includes('*'))) return false;
-          return true;
-        })
         .map(it => ({
           id: skillKey(it.plugin_id, it.skill_id),
           title: it.name,
@@ -400,16 +391,6 @@ export const SkillsPanel = (function () {
     LibraryShell.select('skill', id);
   }
 
-  function _populatePluginFilter() {
-    const sel = document.getElementById('skills-filter-plugin');
-    if (!sel) return;
-    const cur = sel.value;
-    const ids = Array.from(new Set(_items.map(it => it.plugin_id))).sort();
-    sel.innerHTML = ['<option value="">— all plugins —</option>']
-      .concat(ids.map(pid => `<option value="${esc(pid)}"${cur === pid ? ' selected' : ''}>${esc(pid)}</option>`))
-      .join('');
-  }
-
   // ── Actions ──────────────────────────────────────────────────────────
 
   function edit(id) {
@@ -524,8 +505,10 @@ export const SkillsPanel = (function () {
       if (!r.ok && r.status !== 404) {
         const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
         Toast.warn('Marketplace refresh degraded', detail);
+        return;   // MS-4: a degraded refresh must NOT fall through to success
+        //         (404 = no provider registered, tolerated — read the cache)
       }
-    } catch (e) { Toast.warn('Marketplace refresh degraded', e.message); }
+    } catch (e) { Toast.warn('Marketplace refresh degraded', e.message); return; }
     await load();
     const st = LibraryShell.state('skill');
     if (st) { st.side = 'discovered'; st.chromeBuilt = false; }

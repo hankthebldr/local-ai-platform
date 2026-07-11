@@ -390,6 +390,11 @@ export const MCPPanel = (function () {
   // _catalogItems by data-idx (registered inside the module for state
   // access). data-enabled is a "true"/"false" string by dataset contract.
   Actions.click({
+    // Toolbar — migrated off inline onclick to data-action delegation
+    // (MS-4). The window.MCPPanel global stays exported for parity.
+    'mcp.create':   () => showCreate(),
+    'mcp.browse':   () => browseMarketplace(),
+    'mcp.refresh':  () => refresh(),
     'mcp.select':   el => select(el.dataset.id),
     'mcp.test':     el => test(el.dataset.id),
     'mcp.discover': el => discoverTools(el.dataset.id),
