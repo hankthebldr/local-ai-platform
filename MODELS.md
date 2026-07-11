@@ -255,7 +255,7 @@ du -sh ~/.ollama/models/
 
 ## Full Model Catalog
 
-Complete reference for all 18 models in the registry. Coding agents should update this table when `MODEL_REGISTRY` in `models/download.py` is modified.
+Complete reference for every model in the registry. Coding agents should update this table when `MODEL_REGISTRY` in `models/download.py` is modified.
 
 ### Tier 1 — Daily Drivers (8–9B) · Fast interactive / API serving
 
@@ -295,6 +295,44 @@ Complete reference for all 18 models in the registry. Coding agents should updat
 | `deepseek-coder-33b` | DeepSeek Coder 33B | 20.0 GB | 16K | 3–5 t/s | 8–12 t/s | Best-in-class coding — 86 languages (not uncensored) |
 | `mythomax` | MythoMax L2 13B | 7.4 GB | 4K | 8–12 t/s | 25–30 t/s | Creative writing and roleplay — narrative generation |
 | `dolphin-phi` | Dolphin Phi 2.7B | 1.6 GB | 2K | 40–55 t/s | 70–90 t/s | Smallest uncensored — edge/embedded/low-latency use |
+
+---
+
+## Registry Intrinsic Metadata
+
+Machine-readable fields carried by every `MODEL_REGISTRY` entry (added for the Library fit/recommendation scoring — keep this table in sync with `models/download.py`):
+
+- **quant** — GGUF quantization level (`Q4_K_M` default per repo conventions).
+- **params_b** — parameter count in billions (MoE = total, not active).
+- **arch_family** — base architecture family (feeds the Weights-architecture detail pane).
+- **context_tokens** — context window in tokens (numeric twin of the display `context` string).
+- **size_gb** — quantized weight footprint in GB (numeric twin of `size`; load-fit adds 15% KV-cache headroom on top).
+- **min_arch** — minimum architecture class, or `None` for run-anywhere GGUF. NVFP4/safetensors entries would declare `gpu_nvidia_single` plus `min_compute_capability` (e.g. `10.0` = Blackwell); such a model is a hard no-fit on CPU-only hosts.
+- **task_tags** — Composer task keys (`dfStepTemplates` vocabulary) the model is curated for. Operator overrides live in `data/config/model_tags.json` (runtime, via `PATCH /api/inventory/model/{name}/tags`) and win over these.
+
+| Registry ID | Quant | Params (B) | Arch family | Context (tokens) | Size (GB) | Min arch | Task tags |
+|-------------|-------|-----------|-------------|------------------|-----------|----------|-----------|
+| `dolphin3` | Q4_K_M | 8.0 | llama | 131072 | 4.9 | — | fast_extract, retriever, uncensored |
+| `dolphin3-abliterated` | Q4_K_M | 8.0 | llama | 131072 | 4.9 | — | uncensored, fast_extract |
+| `qwen3.5-uncensored-9b` | Q4_K_M | 9.0 | qwen3 | 131072 | 7.4 | — | analyzer, classifier, uncensored |
+| `qwen2.5-7b-abliterated` | Q4_K_M | 7.6 | qwen2 | 131072 | 4.7 | — | analyzer, classifier, uncensored |
+| `qwen2.5-coder-7b-abliterated` | Q4_K_M | 7.6 | qwen2 | 131072 | 4.7 | — | code_gen, rule_writer, uncensored |
+| `llama3.3-8b-abliterated` | Q4_K_M | 8.0 | llama | 131072 | 4.9 | — | analyzer, reviewer, uncensored |
+| `qwen2.5-14b-abliterated` | Q4_K_M | 14.7 | qwen2 | 131072 | 9.0 | — | analyzer, planner, validator, uncensored |
+| `wizardlm-uncensored-13b` | Q4_K_M | 13.0 | llama | 4096 | 7.4 | — | composer, uncensored |
+| `dolphin-mixtral` | Q4_K_M | 46.7 | mixtral | 32768 | 26.0 | — | composer, analyzer, uncensored |
+| `qwen3.5-uncensored-35b` ⭐ | Q4_K_M | 35.0 | qwen3 | 131072 | 22.0 | — | analyzer, planner, reviewer, uncensored |
+| `gemma3-27b-abliterated` | Q4_K_M | 27.0 | gemma3 | 131072 | 17.0 | — | analyzer, validator, uncensored |
+| `llama3.2-moe-18b` | Q4_K_M | 18.4 | llama | 131072 | 12.0 | — | composer, uncensored |
+| `dolphin-mistral` | Q4_K_M | 7.0 | mistral | 32768 | 4.1 | — | code_gen, fast_extract, uncensored |
+| `nous-hermes2-mixtral` | Q4_K_M | 46.7 | mixtral | 32768 | 26.0 | — | composer, validator, uncensored |
+| `qwen3-8b-hivemind` | Q4_K_M | 8.2 | qwen3 | 262144 | 5.0 | — | retriever, analyzer, uncensored |
+| `deepseek-r1-32b` | Q4_K_M | 32.0 | qwen2 | 131072 | 20.0 | — | planner, reviewer, decision |
+| `deepseek-coder-33b` | Q4_K_M | 33.0 | llama | 16384 | 20.0 | — | code_gen, rule_writer |
+| `mythomax` | Q4_K_M | 13.0 | llama | 4096 | 7.4 | — | composer |
+| `dolphin-phi` | Q4_0 | 2.7 | phi2 | 2048 | 1.6 | — | fast_extract, uncensored |
+
+Curated per-arch-class performance expectations (tok/s per size class for Blackwell NVFP4 / Apple unified / x86 CPU), VRAM notes, and per-intent configs ship in `api/config/model_meta.json`, surfaced under the `model_meta` key of `GET /api/inventory/enrichment`.
 
 ---
 

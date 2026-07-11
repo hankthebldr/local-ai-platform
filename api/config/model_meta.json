@@ -1,0 +1,67 @@
+{
+  "_meta": {
+    "source": "Curated per-arch-class performance expectations, seeded from the BD790i 24GB Blackwell NVFP4 catalog plus the MS-01 / Mac M4 CPU baselines. Repo-shipped (COPY'd tree) — privacy-first, no runtime phone-home. Merged additively into GET /api/inventory/enrichment under the 'model_meta' key.",
+    "updated": "2026-07-10",
+    "scales": {
+      "tok_s": "generation tokens/second, order-of-magnitude expectation per size class",
+      "size_class": "quantized weight footprint in GB"
+    }
+  },
+  "arch_class_perf": {
+    "gpu_nvidia_single": {
+      "label": "NVIDIA single GPU (Blackwell class)",
+      "notes": "24GB Blackwell reference (BD790i RTX PRO): NVFP4 weights via vLLM, continuous batching. KV cache competes with weights in the same VRAM pool — budget against the largest per-pool figure, not host RAM.",
+      "expectations": [
+        { "size_class": "4-8B", "tok_s": "120-200", "example": "Qwen3-8B-NVFP4" },
+        { "size_class": "14-32B", "tok_s": "45-90", "example": "Qwen3-Coder-30B NVFP4" },
+        { "size_class": "70B+", "tok_s": "no-fit on 24GB — offload or smaller quant" }
+      ]
+    },
+    "gpu_nvidia_multi": {
+      "label": "NVIDIA multi-GPU",
+      "notes": "Per-pool placement; a model must fit its assigned pool. Tensor-parallel serving is a vLLM concern, not a catalog one.",
+      "expectations": [
+        { "size_class": "4-8B", "tok_s": "120-200" },
+        { "size_class": "14-32B", "tok_s": "60-110" }
+      ]
+    },
+    "apple_unified": {
+      "label": "Apple Silicon unified memory",
+      "notes": "Mac M4 Pro 48GB reference. Unified pool — weights and KV share DRAM; swap-thrash, not hard OOM, is the failure mode.",
+      "expectations": [
+        { "size_class": "4-8B", "tok_s": "35-60" },
+        { "size_class": "13-14B", "tok_s": "18-30" },
+        { "size_class": "26-35B", "tok_s": "6-12" }
+      ]
+    },
+    "cpu_x86": {
+      "label": "x86 CPU-only",
+      "notes": "MS-01 (20T DDR5-5200) and BD790i CPU path (32T DDR5-5600) references. Memory bandwidth bound; GGUF Q4_K_M baseline.",
+      "expectations": [
+        { "size_class": "4-8B", "tok_s": "15-55" },
+        { "size_class": "13-14B", "tok_s": "8-30" },
+        { "size_class": "18-26B", "tok_s": "5-22" },
+        { "size_class": "32-35B", "tok_s": "3-12" }
+      ]
+    }
+  },
+  "vram_notes": {
+    "kv_headroom_pct": 0.15,
+    "notes": "Load-fit adds 15% KV-cache headroom on top of the quantized weight size (co_scheduler KV_HEADROOM_PCT). NVFP4 weights require Blackwell-class compute capability (>= 10.0); they are a hard no-fit on CPU-only hosts."
+  },
+  "intent_configs": {
+    "code_gen": { "preferred_role": "coding", "temperature": 0.2, "notes": "Pin coding-role models; low temperature for deterministic synthesis." },
+    "rule_writer": { "preferred_role": "coding", "temperature": 0.2, "notes": "Schema-bound output — pair with a json format parser." },
+    "analyzer": { "preferred_role": "reasoning", "temperature": 0.4, "notes": "Findings extraction; mid-size reasoning models earn their latency here." },
+    "planner": { "preferred_role": "reasoning", "temperature": 0.4, "notes": "Decomposition favors CoT-strong models (deepseek-r1 class)." },
+    "retriever": { "preferred_role": "fast", "temperature": 0.2, "notes": "Latency-sensitive; smallest model that holds the context window wins." },
+    "fast_extract": { "preferred_role": "fast", "temperature": 0.1, "notes": "Single-shot extraction; 8B class or below." },
+    "composer": { "preferred_role": "reasoning", "temperature": 0.7, "notes": "Synthesis/creative; MoE creative models rank well." },
+    "validator": { "preferred_role": "reasoning", "temperature": 0.2, "notes": "Adversarial checking; prefer a different family than the producer step." },
+    "reviewer": { "preferred_role": "reasoning", "temperature": 0.4, "notes": "Peer-review persona; benefits from long context." },
+    "classifier": { "preferred_role": "reasoning", "temperature": 0.1, "notes": "Closed-vocabulary output; small reasoning models suffice." },
+    "decision": { "preferred_role": "reasoning", "temperature": 0.1, "notes": "Branch routing; deterministic JSON output required." },
+    "uncensored": { "preferred_role": "uncensored", "temperature": 0.7, "notes": "Abliterated-first ranking; refusal-free output is the selection criterion." },
+    "custom": { "preferred_role": "general", "temperature": 0.5, "notes": "General-purpose default." }
+  }
+}
