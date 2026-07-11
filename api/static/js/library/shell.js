@@ -12,7 +12,7 @@
 // Adapter contract (per-kind, implemented inside the kind's module):
 //   { kind, tabId, countBadgeId,
 //     listElId?, detailElId?, labelElId?,   // adopt existing panel DOM (Prompts/MCP)
-//     selectAction?, rowKeyAttr?,           // legacy row action id kept alive as alias
+//     selectAction?, rowKeyAttr?, rowClass?, // legacy row action id / row class kept alive
 //     auth: 'none'|'optional'|'admin',      // enforced in the shell's fetch paths
 //     load(): Promise,                      // refresh backing data (uses LibraryShell.fetch)
 //     list(): [{id, title, meta, group, status?, provenance?:'oob'|'user', blocks?:[],
@@ -288,8 +288,10 @@ export const LibraryShell = (function () {
   function _buildRow(a, item, st) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    // .mcp-row RETAINED (pinned by pre-shell tests/CSS); .lib-row added alongside.
-    btn.className = `btn-unstyled mcp-row lib-row${st.selected === item.id ? ' selected' : ''}`;
+    // .mcp-row RETAINED (pinned by pre-shell tests/CSS); .lib-row added
+    // alongside. adapter.rowClass lets a migrating kind keep ITS legacy row
+    // class alive too (plugins: .plugin-card selectors, LB5-U1 only-add).
+    btn.className = `btn-unstyled mcp-row lib-row${a.rowClass ? ' ' + a.rowClass : ''}${st.selected === item.id ? ' selected' : ''}`;
     btn.style.width = '100%';
     btn.setAttribute('aria-pressed', String(st.selected === item.id));
     btn.dataset.action = a.selectAction || 'lib.select';

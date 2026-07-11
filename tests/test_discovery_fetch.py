@@ -233,13 +233,19 @@ _API_DIR = Path(__file__).resolve().parents[1] / "api"
 
 def test_network_primitives_used_only_by_prompt_digest_service():
     """The new module's network surface (api_get/repo_head/repo_tree/
-    fetch_raw) must be reachable only through services/prompt_digest.py —
-    scoped to the modules THIS unit introduces (pre-existing skills/mcp/HF
-    read-fetches are named follow-up #15)."""
+    fetch_raw) must be reachable only through the digest normalizers —
+    services/prompt_digest.py (LB2-U2) and the claude-marketplaces plugin
+    digest (LB5-U1), both invoked solely from operator-triggered POST
+    .../refresh call sites. Pre-existing skills/mcp/HF read-fetches are
+    named follow-up #15."""
     offenders = []
     for py in _API_DIR.rglob("*.py"):
         rel = py.relative_to(_API_DIR).as_posix()
-        if rel in ("services/discovery_fetch.py", "services/prompt_digest.py"):
+        if rel in (
+            "services/discovery_fetch.py",
+            "services/prompt_digest.py",
+            "services/discovery_providers/claude_marketplaces.py",
+        ):
             continue
         text = py.read_text(encoding="utf-8")
         if "discovery_fetch" not in text:

@@ -8,6 +8,10 @@ Wired providers (real ingestion):
   - mcp_registry        : Official MCP Registry (modelcontextprotocol.io/registry)
   - skills_marketplace  : skills.sh, ingested via its backing public GitHub repos
                           (its own API is Vercel-OIDC gated; we crawl the source)
+  - claude_marketplaces : Claude Code plugin marketplaces (LB5-U1) — digest-
+                          backed: fetch() reads data/discovery/plugin_digest.json
+                          (zero network); ingestion runs only via the provider
+                          refresh hook on POST /api/discover/claude-marketplaces/refresh
 
 Stub providers (registered, surfaced in UI, not yet wired):
   - smithery        : community MCP registry (smithery.ai)
@@ -16,7 +20,6 @@ Stub providers (registered, surfaced in UI, not yet wired):
   - github_prompts  : GitHub .prompt.yaml / .prompt.yml ingestion
   - x1xhlol_prompts : x1xhlol/system-prompts-and-models-of-ai-tools
   - claude_code_prompts : Piebald-AI/claude-code-system-prompts
-  - claude_marketplaces : claudemarketplaces.com aggregator
   - composio        : Composio tool definitions (OpenAPI/Swagger)
   - openai_archives : historical ai-plugin.json scrape
 
@@ -28,4 +31,5 @@ DiscoveryFeed.
 
 from . import mcp_registry  # noqa: F401  (real, registers on import)
 from . import skills_marketplace  # noqa: F401  (real, registers on import)
+from . import claude_marketplaces  # noqa: F401  (real, digest-backed, registers on import)
 from . import stubs  # noqa: F401  (all stubs in one file, registers on import)

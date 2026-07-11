@@ -176,12 +176,14 @@ def repo_tree(repo: str, sha: str) -> Tuple[List[Dict[str, Any]], Optional[int]]
 
 def _check_path(path: str) -> str:
     """Repo-relative path allowlist for raw fetches: no absolute paths, no
-    dot segments, conservative charset — it gets spliced into a URL."""
+    dot segments, conservative charset — it gets spliced into a URL. A
+    leading dot is allowed for dot-DIRECTORY manifests ('.claude-plugin/…',
+    LB5-U1); '.'/'..' segments stay hard-rejected."""
     path = (path or "").strip()
     if (
         not path
         or len(path) > 400
-        or not re.match(r"^[A-Za-z0-9][A-Za-z0-9_. /()+-]*$", path)
+        or not re.match(r"^[A-Za-z0-9.][A-Za-z0-9_. /()+-]*$", path)
         or any(seg in _DOT_SEGMENTS for seg in path.split("/"))
     ):
         raise ValueError(f"invalid repo path {path!r}")

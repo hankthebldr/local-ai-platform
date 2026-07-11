@@ -148,9 +148,14 @@ async def one_feed(source: str, force: bool = False):
 
 @router.post("/{source}/refresh", dependencies=[Depends(require_master_key)])
 async def refresh(source: str):
-    """Bypass cache and re-fetch one provider."""
+    """Bypass cache and re-fetch one provider.
+
+    Digest-backed providers (claude-marketplaces, LB5-U1) run their network
+    ingestion inside this operator-gated POST only — their GET reads serve
+    the persisted digest and never touch the network.
+    """
     try:
-        feed = ad.get_feed(source, force=True)
+        feed = ad.refresh_feed(source)
     except KeyError:
         raise HTTPException(
             status_code=404, detail=f"unknown discovery provider '{source}'"

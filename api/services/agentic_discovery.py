@@ -266,6 +266,7 @@ class _ProviderEntry:
         kinds: List[str],
         fetch: Callable[[], DiscoveryFeed],
         implemented: bool = True,
+        refresh: Optional[Callable[[], Any]] = None,
     ):
         self.source = source
         self.name = name
@@ -274,6 +275,11 @@ class _ProviderEntry:
         self.kinds = kinds
         self.fetch = fetch
         self.implemented = implemented
+        # Optional operator-refresh hook (LB5-U1): digest-backed providers
+        # register fetch() as a persisted-digest READ (zero network) and put
+        # their network ingestion here — invoked ONLY from the master-key
+        # gated POST /api/discover/{source}/refresh route via refresh_feed().
+        self.refresh = refresh
         self._cached: Optional[DiscoveryFeed] = None
         self._fetched_at: float = 0.0
 
@@ -317,6 +323,7 @@ def register_provider(
     kinds: List[str],
     fetch: Callable[[], DiscoveryFeed],
     implemented: bool = True,
+    refresh: Optional[Callable[[], Any]] = None,
 ) -> None:
     if source in RESERVED_SOURCES:
         raise ValueError(
@@ -331,6 +338,7 @@ def register_provider(
         kinds=kinds,
         fetch=fetch,
         implemented=implemented,
+        refresh=refresh,
     )
 
 
@@ -355,6 +363,23 @@ def get_feed(source: str, *, force: bool = False) -> DiscoveryFeed:
     if source not in _REGISTRY:
         raise KeyError(source)
     return _REGISTRY[source].get(force=force)
+
+
+def refresh_feed(source: str) -> DiscoveryFeed:
+    """Operator-triggered refresh (the POST .../refresh route's one entry
+    point). Digest-backed providers run their network refresh hook first —
+    fail-soft, the hook persists what it can — then the feed is rebuilt
+    bypassing the cache (for hook providers that re-read is a digest read,
+    zero network). Providers without a hook keep force-refetch semantics."""
+    if source not in _REGISTRY:
+        raise KeyError(source)
+    entry = _REGISTRY[source]
+    if entry.refresh is not None:
+        try:
+            entry.refresh()
+        except Exception as exc:  # noqa: BLE001 — refresh must never 500
+            logger.warning("Discovery provider %s refresh failed: %s", source, exc)
+    return entry.get(force=True)
 
 
 def get_all_feeds(*, force: bool = False) -> List[Dict[str, Any]]:

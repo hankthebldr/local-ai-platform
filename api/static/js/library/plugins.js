@@ -1,96 +1,196 @@
-// library/plugins.js — Plugins catalog panel (phase-2 U4 carve).
+// library/plugins.js — Plugins library panel on the LibraryShell (LB5-U1).
 //
-// LB1-U2: the schema form kit (renderToolForm/_collectParams/_renderHistory)
-// moved into library/test-pane.js as ToolFormKit — this module re-exports the
-// same names over the kit, so the tool-tester DOM ids (tool-form-*,
-// tool-param-*, tool-tester-run-*, tool-result-*, tool-history-*) and the
-// public surface stay byte-compatible. The local esc() shadow is deleted
-// (the core/dom.js import is the one implementation). The plugin detail also
-// gains a Test section — the plugin-tool TestPane live mount (worked
-// example: Plugins > websearch).
+// #tab-admin-plugins keeps its skeleton; the panel adopts the shell with
+// adapter auth 'admin' (AdminAuth hard gate preserved — every backend read is
+// master-key gated). Sidebar: Installed (layer chip origin:system|user +
+// version badge — metadata, not an action) | Discovered (the persisted
+// claude-marketplaces plugin digest: pointer-only records with license,
+// component counts and diff badges). Selection rides data-id — the old
+// title-text `.includes()` matching is retired. Discovered reads NEVER fetch
+// (the provider feed is digest-backed); network runs only behind the visible
+// ⟳ Digest button → POST /api/discover/claude-marketplaces/refresh.
+//
+// Plugin-vs-MCP split (the Claude Code strategy): the detail header carries a
+// LOCAL CAPABILITY BUNDLE kind banner — plugins add LOCAL functionality
+// (filesystem, local tools, skills, hooks) executed in-process; MCP
+// EXTENDS/INTEGRATES external functionality. "External integration? → MCP"
+// cross-links via LibraryShell.open — cross-link, never merged.
+//
+// LB1-U2 heritage kept intact: ToolFormKit re-exports (renderToolForm/
+// _collectParams/_renderHistory names + tool-form-*/tool-param-*/
+// tool-tester-run-*/tool-result-*/tool-history-* DOM ids) and the plugin-tool
+// TestPane live mount (#plugin-test-pane) render inside the Overview section
+// so the worked example (Plugins > websearch) keeps working unchanged. The
+// old inline-onclick AssetPeek button is replaced on newly rendered rows by a
+// delegated `plugins.peek` action (no inline handlers).
 import { esc, renderMarkdown } from '../core/dom.js';
+import { Net } from '../core/net.js';
+import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
 import { AssetPeek } from './asset-peek.js';
+import { LibraryShell } from './shell.js';
+import { LibraryWizard } from './wizard.js';
 import { TestPane, ToolFormKit } from './test-pane.js';
 
 export const PluginsPanel = (function () {
-  let _selectedId = null;
+  let _plugins = [];      // GET /api/plugins summaries (layer-annotated)
+  let _digest = null;     // last GET /api/discover/claude-marketplaces read
+  let _forgeSeed = null;  // staged seed for the LB5-U3 creation wizard
 
-  async function load() {
-    if (!AdminAuth.isSignedIn()) {
-      AdminAuth.renderLock('admin-plugins');
-      return;
-    }
-    const list = document.getElementById('plugins-list');
-    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem">Loading…</div>';
+  const DISC_PREFIX = 'disc::';
 
-    const r = await AdminAuth.fetch('/api/plugins', {}, 'admin-plugins');
-    if (!r.ok) {
-      list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
-      return;
-    }
-    const plugins = await r.json();
-    if (!Array.isArray(plugins) || plugins.length === 0) {
-      list.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem">No plugins found in plugins/ directory.</div>';
-      return;
-    }
-
-    list.innerHTML = plugins.map(p => {
-      // Use the unified AgentIcons grammar so admin tab plugin cards
-      // pick up the same icon-block visual as the composer workbench
-      // and the System-page Discover sections.
-      const icon = (window.AgentIcons ? AgentIcons.svg('plugin') : '');
-      const tone = (window.AgentIcons ? AgentIcons.tone('plugin') : 'green');
-      return `<button type="button" class="btn-unstyled plugin-card ${p.id === _selectedId ? 'selected' : ''}"
-           style="width:100%" aria-pressed="${p.id === _selectedId}"
-           data-action="plugins.select" data-id="${esc(p.id)}">
-        <div class="plugin-card-head">
-          <span class="admin-card-icon tone-${esc(tone)}">${icon}</span>
-          <div class="plugin-card-head-text">
-            <div class="plugin-card-title">
-              <span class="plugin-status-pip ${p.error ? 'error' : ''}"></span>${esc(p.name || p.id)}
-              <span style="color:var(--text-muted);font-size:0.66rem;margin-left:6px">${esc(p.version || '')}</span>
-            </div>
-            <div class="plugin-card-meta">
-              ${(p.skills || []).length} skill${(p.skills || []).length === 1 ? '' : 's'}
-              · ${(p.tools || []).length} tool${(p.tools || []).length === 1 ? '' : 's'}
-              <button class="agent-tile-action" style="margin-left:6px"
-                      onclick="event.stopPropagation();AssetPeek.open('plugin','${esc(p.id)}')"
-                      title="Deep dive — tools, skills, identity">⌕</button>
-            </div>
-          </div>
-        </div>
-        <div class="plugin-card-desc">${esc(p.description || '')}</div>
-      </button>`;
-    }).join('');
-
-    // Auto-select first if none selected.
-    if (!_selectedId && plugins.length) select(plugins[0].id);
+  function _headers() { return LibraryShell.headers('plugin'); }
+  function _selected() { return (LibraryShell.state('plugin') || {}).selected; }
+  function _pluginRec(id) { return _plugins.find(p => p.id === id) || null; }
+  function _isDisc(id) { return !!id && id.indexOf(DISC_PREFIX) === 0; }
+  function _discRecord(id) {
+    const rid = (id || '').slice(DISC_PREFIX.length);
+    return ((_digest && _digest.items) || []).find(r => r.id === rid) || null;
+  }
+  function _oneLine(text, max) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    const cap = max || 96;
+    return t.length > cap ? t.slice(0, cap - 1) + '…' : t;
   }
 
-  async function select(id) {
-    _selectedId = id;
-    document.querySelectorAll('.plugin-card').forEach(c => c.classList.remove('selected'));
-    const cards = document.querySelectorAll('.plugin-card');
-    const r = await AdminAuth.fetch(`/api/plugins/${encodeURIComponent(id)}`, {}, 'admin-plugins');
-    if (!r.ok) {
-      document.getElementById('plugin-detail').innerHTML =
-        `<div class="admin-modal-error" style="margin:0">Failed to load plugin (HTTP ${r.status})</div>`;
-      return;
-    }
-    const p = await r.json();
-    renderDetail(p);
-    // mark the matching card.
-    cards.forEach(c => {
-      if (c.querySelector('.plugin-card-title').textContent.includes(p.name || p.id)) {
-        c.classList.add('selected');
+  // The Claude Code plugin-vs-MCP separation, stated on every detail.
+  function _kindBanner() {
+    return `
+      <div class="plugin-kind-banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+           border:1px solid var(--border);border-left:2px solid var(--accent);
+           padding:6px 10px;margin-bottom:10px;font-size:0.62rem;letter-spacing:0.06em">
+        <span style="font-family:var(--mono);color:var(--accent);text-transform:uppercase">Local capability bundle</span>
+        <span style="color:var(--text-muted)">runs in-process — filesystem, local tools, skills, hooks</span>
+        <button type="button" class="btn-unstyled" data-action="plugins.goto-mcp"
+          style="margin-left:auto;color:var(--accent);font-size:0.62rem;cursor:pointer"
+          title="MCP servers EXTEND/INTEGRATE external functionality — separate surface, cross-linked">
+          External integration? → MCP</button>
+      </div>`;
+  }
+
+  function _kvGrid(rows) {
+    return `<div style="display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:0.72rem;margin-bottom:10px">
+      ${rows.map(([k, v]) => `<div style="color:var(--text-muted)">${esc(k)}</div><div>${v}</div>`).join('')}
+    </div>`;
+  }
+
+  // ── LibraryShell adapter ────────────────────────────────────────────
+  const adapter = LibraryShell.register({
+    kind: 'plugin',
+    tabId: 'admin-plugins',
+    lockPanelId: 'admin-plugins',
+    countBadgeId: 'plugins-count',
+    listElId: 'plugins-list',
+    detailElId: 'plugin-detail',
+    labelElId: 'plugin-detail-label',
+    auth: 'admin',                    // AdminAuth hard gate preserved
+    selectAction: 'plugins.select',   // legacy row action id kept alive
+    rowClass: 'plugin-card',          // legacy row class kept alive (only-add)
+    emptyText: 'No plugins found in plugins/ directory.',
+    emptyDiscoveredText: 'No digest yet — hit ⟳ Digest to fetch the pinned Claude marketplaces.',
+    emptyDetailLabel: '// SELECT A PLUGIN',
+    emptyDetailText: 'Select a plugin from the left to see its skills and tools.',
+    title: 'Plugins',
+
+    async load() {
+      const r = await LibraryShell.fetch('plugin', '/api/plugins');
+      if (!r.ok) throw new Error(`Load failed (${r.status})`);
+      _plugins = Array.isArray(r.data) ? r.data : [];
+      // Discovered digest — a READ of the persisted plugin digest (the
+      // claude-marketplaces provider feed is digest-backed; this never
+      // triggers network ingestion). Fail-soft: a dead read leaves the
+      // Installed experience untouched.
+      try {
+        const d = await LibraryShell.fetch('plugin', '/api/discover/claude-marketplaces');
+        if (d.ok && d.data && Array.isArray(d.data.items)) _digest = d.data;
+      } catch (_) { /* digest stays as-was */ }
+    },
+
+    // Installed — layer chip (origin: system|user) + version badge ride the
+    // LB0 row contract; selection is data-id (title matching retired).
+    list() {
+      return _plugins.map(p => ({
+        id: p.id,
+        title: p.name || p.id,
+        meta: `${(p.skills || []).length} skill${(p.skills || []).length === 1 ? '' : 's'} · ${(p.tools || []).length} tool${(p.tools || []).length === 1 ? '' : 's'}`,
+        group: '',
+        provenance: (p.layer || p.origin) === 'user' ? 'user' : 'oob',
+        blocks: ['tools', 'context'],
+        tags: [],
+        icon: 'plugin',
+        chips: [{ label: p.layer || p.origin || 'system', cls: 'plugin-layer-chip' }],
+        badges: p.version ? [{ label: `v${p.version}`, cls: 'plugin-version-badge' }] : [],
+        dot: { cls: p.error ? 'err' : 'up', title: p.error || 'registered' },
+      }));
+    },
+
+    // Discovered — pointer-only records from the persisted digest, grouped
+    // per marketplace repo, license + added/changed diff badges.
+    discovered() {
+      const items = (_digest && _digest.items) || [];
+      return items.map(r => {
+        const md = r.metadata || {};
+        const badges = [{ label: md.license || 'unknown', cls: 'plugin-license-badge' }];
+        if (md.diff === 'added') badges.push({ label: 'new', cls: 'lib-diff-new' });
+        else if (md.diff === 'changed') badges.push({ label: 'updated', cls: 'lib-diff-update' });
+        return {
+          id: DISC_PREFIX + r.id,
+          title: r.name || r.id,
+          meta: _oneLine(r.description),
+          group: md.repo || '',
+          tags: ((md.manifest_entry || {}).keywords || []).filter(t => typeof t === 'string'),
+          icon: 'plugin',
+          chips: md.category ? [{ label: String(md.category) }] : [],
+          badges,
+        };
+      });
+    },
+
+    // Legacy AssetPeek deep-dive, re-wired: delegated action on newly
+    // rendered rows (the old inline onclick is retired).
+    renderRowExtras(item) {
+      if (_isDisc(item.id)) return null;
+      const b = document.createElement('span');
+      b.className = 'agent-tile-action';
+      b.dataset.action = 'plugins.peek';
+      b.dataset.id = item.id;
+      b.title = 'Deep dive — tools, skills, identity';
+      b.textContent = '⌕';
+      return b;
+    },
+
+    detail(id) {
+      if (_isDisc(id)) {
+        return { sections: { overview: (el) => _renderDiscOverview(el, id) } };
       }
-    });
-  }
+      return { sections: { overview: (el) => _renderOverview(el, id) } };
+    },
 
-  function renderDetail(p) {
-    document.getElementById('plugin-detail-label').innerHTML =
-      `// ${esc((p.name || p.id).toUpperCase())}`;
+    actions(id) {
+      if (!_isDisc(id)) return [];   // installed verbs (files/reload/delete) land in LB5-U2
+      const rec = _discRecord(id);
+      const nSkills = rec ? ((rec.install || {}).skills || []).length : 0;
+      return [
+        { action: 'plugins.view-manifest', label: 'View manifest', verb: 'test' },
+        { action: 'plugins.import-skills', verb: 'install', accent: true,
+          label: `Import skills${nSkills ? ` (${nSkills})` : ''}`,
+          enabled: nSkills > 0,
+          reason: nSkills ? undefined : 'no SKILL.md pointers in this record' },
+        { action: 'plugins.seed-wizard', label: 'Seed wizard', verb: 'edit' },
+      ];
+    },
+  });
+
+  // ── Installed detail (Overview) ─────────────────────────────────────
+  // Full payload per selection; skills/tools accordions + the plugin-tool
+  // TestPane mount render here so the pre-shell worked example survives.
+  async function _renderOverview(el, id) {
+    const r = await LibraryShell.fetch('plugin', `/api/plugins/${encodeURIComponent(id)}`);
+    if (!r.ok) {
+      el.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed to load plugin (HTTP ${r.status})</div>`;
+      return;
+    }
+    const p = r.data || {};
     const skillsHtml = (p.skills || []).map(s => `
       <details class="skill-accordion">
         <summary>
@@ -100,12 +200,13 @@ export const PluginsPanel = (function () {
         <div class="body">${renderMarkdown(s.body || '*(no body)*')}</div>
       </details>
     `).join('');
-
     const toolsHtml = (p.tools || []).map(t => renderToolAccordion(p.id, t)).join('');
 
-    document.getElementById('plugin-detail').innerHTML = `
+    el.innerHTML = `
+      ${_kindBanner()}
       <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px">
         <code>${esc(p.path || '')}</code> · ${esc(p.author || 'unknown author')}
+        · v${esc(p.version || '?')} · <span class="lib-badge">${esc(p.layer || p.origin || 'system')}</span>
       </div>
       <div style="font-size:0.78rem;color:var(--text);margin-bottom:8px">
         ${esc(p.description || '')}
@@ -115,11 +216,180 @@ export const PluginsPanel = (function () {
       ${(p.tools || []).length ? '<div class="plugin-section-h">Test</div><div id="plugin-test-pane"></div>' : ''}
     `;
     // plugin-tool TestPane live mount (LB1-U2) — the layered harness (L0
-    // saved settings / L1 skills / L3 schema form) alongside the retained
-    // per-tool accordions above.
-    const paneHost = document.getElementById('plugin-test-pane');
+    // saved settings / L1 skills / L3 schema form).
+    const paneHost = el.querySelector('#plugin-test-pane');
     if (paneHost) TestPane.mount('plugin-tool', p.id, paneHost, { plugin: p });
   }
+
+  // ── Discovered detail (Overview) ────────────────────────────────────
+  function _renderDiscOverview(el, id) {
+    const rec = _discRecord(id);
+    if (!rec) {
+      el.innerHTML = '<div class="model-empty">Not in the current digest — hit ⟳ Digest to refresh.</div>';
+      return;
+    }
+    const md = rec.metadata || {};
+    const comps = md.components || {};
+    const compsLine = Object.entries(comps).filter(([, n]) => n)
+      .map(([k, n]) => `${n} ${k}`).join(' · ') || '—';
+    const licensed = String(md.license || 'unknown').toLowerCase();
+    const licenseHtml = `<span class="lib-badge">${esc(md.license || 'unknown')}</span>` +
+      (['mit', 'apache-2.0', 'bsd-2-clause', 'bsd-3-clause', '0bsd', 'isc',
+        'mpl-2.0', 'cc0-1.0', 'cc-by-4.0', 'unlicense'].indexOf(licensed) === -1
+        ? ' <span style="color:var(--amber);font-size:0.62rem">non-permissive / unknown — review before importing anything</span>'
+        : '');
+    const stale = md.fetched_at
+      ? new Date(md.fetched_at * 1000).toLocaleString()
+      : 'never';
+    const diffHtml = md.diff === 'added' ? ' <span class="lib-badge lib-diff-new">new</span>'
+      : md.diff === 'changed' ? ' <span class="lib-badge lib-diff-update">updated</span>' : '';
+    el.innerHTML = `
+      ${_kindBanner()}
+      ${_kvGrid([
+        ['Record', `<code>${esc(rec.id)}</code>`],
+        ['Marketplace', `<code>${esc(md.repo || '?')}</code> @ <code>${esc(String(md.ref || '').slice(0, 12))}</code>`],
+        ['Category', esc(md.category || '—')],
+        ['Version', `${esc(rec.version || 'unknown')} <span class="lib-badge">${esc(md.version_resolution || 'unknown')}</span>`],
+        ['License', licenseHtml],
+        ['Components', esc(compsLine)],
+        ['Digest', `fetched ${esc(stale)}${diffHtml}`],
+        ['Description', esc(rec.description || '(none)')],
+      ])}
+      <div style="font-size:0.62rem;color:var(--text-muted)">
+        Pointer-only record — nothing is installed until you import. Auto-conversion
+        of Claude Code plugins into Enclave plugins is deliberately out of scope (v1);
+        SKILL.md pointers bridge through the native skills importer.
+      </div>
+      <div id="plugin-manifest-view" style="margin-top:10px" hidden></div>`;
+  }
+
+  function viewManifest(id) {
+    const rec = _discRecord(id || _selected());
+    const view = document.getElementById('plugin-manifest-view');
+    if (!rec || !view) return;
+    if (!view.hidden) { view.hidden = true; return; }
+    const md = rec.metadata || {};
+    view.hidden = false;
+    view.innerHTML = `
+      <div class="skills-tree-meta" style="margin-bottom:4px">
+        manifest entry · <a href="${esc(rec.url || '#')}" target="_blank" rel="noopener"
+          style="color:var(--accent)">${esc(md.path || 'view upstream')}</a></div>
+      <pre class="md-code" style="font-size:0.66rem;max-height:280px;overflow:auto">${esc(JSON.stringify(md.manifest_entry || {}, null, 2))}</pre>`;
+  }
+
+  // Import skills — license surfaced FIRST, then each SKILL.md pointer
+  // bridges through the existing POST /api/skills/import into an installed
+  // target plugin picked in the wizard.
+  function importSkills(id) {
+    const rec = _discRecord(id || _selected());
+    if (!rec) return;
+    const skills = (rec.install || {}).skills || [];
+    if (!skills.length) { Toast.info('No skills', 'This record carries no SKILL.md pointers.'); return; }
+    const lic = (rec.metadata || {}).license || 'unknown';
+    const targets = _plugins.map(p => p.id);
+    LibraryWizard.open({
+      title: `Import skills — ${rec.name || rec.id}`,
+      steps: {
+        configure: (body) => {
+          body.innerHTML = `
+            <div class="admin-modal-sub" style="margin-bottom:8px">
+              License: <span class="lib-badge">${esc(lic)}</span> — review the upstream
+              terms before importing; the skill bodies are fetched verbatim.</div>
+            <label class="admin-modal-label" for="plugins-import-target">Target plugin</label>
+            <select id="plugins-import-target" data-wiz-key="plugin_id">
+              ${targets.map(t => `<option value="${esc(t)}"${t === 'user-skills' ? ' selected' : ''}>${esc(t)}</option>`).join('')}
+            </select>
+            <div class="admin-modal-sub" style="margin-top:8px">
+              ${skills.length} SKILL.md pointer${skills.length === 1 ? '' : 's'}:
+              ${skills.map(s => `<code>${esc(s.name || s.path)}</code>`).join(' · ')}</div>`;
+        },
+      },
+      validate: (step, state) =>
+        (step !== 'confirm' || (state.values.plugin_id || '').trim()) ? true : 'pick a target plugin',
+      submitLabel: 'Import',
+      onSubmit: async (state) => {
+        const target = (state.values.plugin_id || '').trim();
+        let done = 0; const errors = [];
+        for (const s of skills) {
+          try {
+            // retries:0 — import writes files + registration; never double-fire.
+            const r = await Net.call('/api/skills/import', {
+              retries: 0,
+              init: {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ..._headers() },
+                body: JSON.stringify({ url: s.skill_md_url, plugin_id: target }),
+              },
+            });
+            if (r.ok) done += 1;
+            else errors.push(`${s.name || s.path}: ${(r.data && r.data.detail) || `HTTP ${r.status}`}`);
+          } catch (e) { errors.push(`${s.name || s.path}: ${e.message}`); }
+        }
+        await load();
+        if (done && !errors.length) return { ok: true, message: `${done} skill(s) imported into ${target}.` };
+        if (done) return { ok: true, message: `${done} imported, ${errors.length} failed — ${errors[0]}` };
+        return { ok: false, detail: errors[0] || 'import failed' };
+      },
+    });
+  }
+
+  // Seed wizard — stages a digest record (name + description pre-filled) as
+  // the seed for the plugin-creation wizard; the forge flow itself lands in
+  // LB5-U3 and consumes the staged seed.
+  function seedWizard(id) {
+    const rec = _discRecord(id || _selected());
+    if (!rec) return;
+    LibraryWizard.open({
+      title: 'Seed plugin wizard',
+      steps: {
+        configure: (body) => {
+          body.innerHTML = `
+            <label class="admin-modal-label" for="plugins-seed-name">Plugin name</label>
+            <input id="plugins-seed-name" data-wiz-key="name" value="${esc(rec.name || '')}">
+            <label class="admin-modal-label" for="plugins-seed-desc" style="margin-top:8px">Description</label>
+            <textarea id="plugins-seed-desc" data-wiz-key="description" rows="4"
+              style="width:100%">${esc(rec.description || '')}</textarea>
+            <div class="admin-modal-sub" style="margin-top:8px">
+              Stages this record as the seed for the local-model plugin forge —
+              the creation wizard pre-fills from it.</div>`;
+        },
+      },
+      submitLabel: 'Stage seed',
+      onSubmit: async (state) => {
+        _forgeSeed = {
+          name: (state.values.name || rec.name || '').trim(),
+          description: (state.values.description || rec.description || '').trim(),
+          source_record: rec.id,
+        };
+        return { ok: true, message: 'Seed staged for the plugin forge.' };
+      },
+    });
+  }
+
+  function forgeSeed() { return _forgeSeed; }   // consumed by LB5-U3
+
+  // Visible ⟳ Digest — the ONLY code path that triggers marketplace network
+  // ingestion (operator-triggered POST, master-key gated, retries:0).
+  async function refreshDigest() {
+    Toast.info('Refreshing plugin digest…');
+    try {
+      const r = await Net.call('/api/discover/claude-marketplaces/refresh', {
+        retries: 0,
+        init: { method: 'POST', headers: _headers() },
+      });
+      if (!r.ok) {
+        const detail = (r.data && r.data.detail) ? r.data.detail : `HTTP ${r.status}`;
+        Toast.warn('Digest refresh degraded', detail);
+      }
+    } catch (e) { Toast.warn('Digest refresh degraded', e.message); }
+    await load();
+    const st = LibraryShell.state('plugin');
+    if (st) { st.side = 'discovered'; st.chromeBuilt = false; }
+    LibraryShell.renderSidebar('plugin');
+    Toast.success('Plugin digest refreshed');
+  }
+
+  // ── Tool accordions + tester (LB1-U2 surface, unchanged) ────────────
 
   // Per-tool last-5 invocations kept in memory for this panel session.
   const _runHistory = new Map(); // key: `${pluginId}:${toolId}` → array of {ts, ms, status, body}
@@ -224,17 +494,33 @@ export const PluginsPanel = (function () {
       document.getElementById('tool-history-' + key), _runHistory.get(key) || []);
   }
 
+  // ── Panel API (signature-compatible with the pre-shell module) ──────
+  function load() { return LibraryShell.reload('plugin'); }
   function refresh() { load(); }
+  function select(id) { LibraryShell.select('plugin', id); }
+  function renderDetail() { LibraryShell.renderDetail('plugin'); }
 
   window.addEventListener('adminPanelActivated', e => {
     if (e.detail && e.detail.panel === 'admin-plugins') load();
   });
 
   // Delegated actions — plugin rows + tool-tester forms re-render per
-  // load/select. The form's submit delegates (submit bubbles) and keeps
-  // the old inline preventDefault.
+  // load/select; legacy ids stay alive as aliases over the shell flows.
   Actions.click({
-    'plugins.select': el => select(el.dataset.id)
+    'plugins.select': el => select(el.dataset.id),
+    'plugins.sub-tab': el => {
+      const st = LibraryShell.state('plugin');
+      if (!st) return;
+      st.side = el.dataset.side === 'discovered' ? 'discovered' : 'installed';
+      st.chromeBuilt = false;
+      LibraryShell.renderSidebar('plugin');
+    },
+    'plugins.refresh-digest': () => refreshDigest(),
+    'plugins.view-manifest': el => viewManifest(el.dataset.id),
+    'plugins.import-skills': el => importSkills(el.dataset.id),
+    'plugins.seed-wizard': el => seedWizard(el.dataset.id),
+    'plugins.goto-mcp': () => LibraryShell.open('mcp'),
+    'plugins.peek': el => AssetPeek.open('plugin', el.dataset.id),
   });
   Actions.on('submit', {
     'plugins.run-tool': (el, e) => {
@@ -244,5 +530,7 @@ export const PluginsPanel = (function () {
   });
 
   return { load, refresh, select, renderDetail, renderToolAccordion,
-           runTool, renderToolForm, _collectParams };
+           runTool, renderToolForm, _collectParams,
+           refreshDigest, importSkills, seedWizard, viewManifest, forgeSeed,
+           adapter };
 })();
