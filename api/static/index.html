@@ -2009,6 +2009,15 @@
        (/api/workspaces/*) stays the artifact substrate underneath. -->
   <div class="tab-content" id="tab-research" style="display:none">
 
+    <!-- RX-2 — Store subnav. Explore = graph + deep research (default); Store =
+         the browsable Obsidian-like note tree over the shared `research`
+         workspace. Toggling adds `store-active` to #tab-research; CSS hides the
+         explore siblings (only-add: one class + one rule, no restructuring). -->
+    <div class="research-subnav" role="tablist" aria-label="Research view">
+      <button type="button" class="research-subnav-btn active" data-action="research.subnav" data-view="explore" role="tab">Explore</button>
+      <button type="button" class="research-subnav-btn" data-action="research.subnav" data-view="store" role="tab">Store</button>
+    </div>
+
     <div class="research-layout">
 
       <!-- LEFT: Knowledge Graph + Session Detail -->
@@ -2072,6 +2081,10 @@
           <div class="session-preview" id="session-detail-preview"></div>
           <div class="detail-connections" id="session-detail-connections"></div>
           <div id="session-detail-actions" style="margin-top:8px"></div>
+          <!-- RX-2 — exploratory node rail mount. Painted ONLY via the shared
+               pane-guard (shell/context-node-rail.js) on a research-pane node
+               selection: Read / Compare ↔ / Build upon / Walk graph. -->
+          <div id="research-node-rail" class="research-node-rail"></div>
         </div>
       </div>
 
@@ -2140,6 +2153,26 @@
         <span class="corner-tr"></span><span class="corner-bl"></span>
         <div class="panel-label">Reading</div>
         <div class="research-surface" id="research-surface"></div>
+      </div>
+    </div>
+
+    <!-- RX-2 — the Obsidian-like store. A direct child of #tab-research so the
+         `store-active` CSS rule (which hides every explore sibling) reveals just
+         this panel + the subnav. Read-only tree (GET only, no egress) over the
+         shared `research` workspace: sessions/ · sources/ · notes/. -->
+    <div class="research-store panel" id="research-store-panel" hidden>
+      <span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="research-store-head">
+        <div class="panel-label">Research Store</div>
+        <span class="research-store-sub">// sessions · sources · notes — every note RAG-indexed</span>
+        <button type="button" class="action-btn xs ghost" data-action="research.store-refresh"
+                title="Reload the store tree">⟳ Refresh</button>
+      </div>
+      <div class="research-store-body">
+        <div class="research-store-tree" id="research-store-tree"></div>
+        <div class="research-store-preview" id="research-store-preview">
+          <div class="rnr-empty" style="padding:14px">Select a note to preview it.</div>
+        </div>
       </div>
     </div>
 

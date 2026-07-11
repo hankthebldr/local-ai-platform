@@ -134,6 +134,19 @@ export const ResearchArtifacts = (function () {
       const p = _payloads[Number(el.dataset.idx)];
       if (p) captureRaw(p);
     },
+    // RX-2 — promote a result into a durable captured artifact. Same seam as
+    // research.capture, but gated on a non-empty body (a sentinel-only finding
+    // is not worth promoting) so the operator gets honest feedback.
+    'research.promote-artifact': (el, e) => {
+      if (e) e.preventDefault();
+      const p = _payloads[Number(el.dataset.idx)];
+      if (!p) return;
+      if (isEmptyBody(p)) {
+        if (window.Toast) Toast.info('Nothing to promote', 'This result has no synthesis body.', { ttl: 1800 });
+        return;
+      }
+      captureRaw(p);
+    },
     'research.library':   () => openLibrary(),
     'research.export':    () => exportResearch(),
     'research.lib-close': () => {

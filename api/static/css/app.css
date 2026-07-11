@@ -3364,6 +3364,61 @@ textarea.composer-desc-area {
   .research-thread { max-height: 320px; }
 }
 
+/* ── RX-2: actionable results + store + exploratory node rail ─────────────── */
+
+/* Store subnav — Explore vs Store. Toggling `store-active` on #tab-research
+   hides every explore sibling, leaving just the subnav + the store panel. */
+.research-subnav { display: flex; gap: 6px; margin-bottom: 12px; }
+.research-subnav-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  font: inherit; font-size: 0.66rem; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 5px 14px; border-radius: 999px; cursor: pointer;
+}
+.research-subnav-btn:hover { color: var(--text); border-color: var(--accent-dim); }
+.research-subnav-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-ghost); }
+/* One rule hides every explore sibling when the Store view is active. The
+   subnav + store panel are the only direct children exempted. */
+#tab-research.store-active > *:not(.research-subnav):not(#research-store-panel) { display: none !important; }
+
+/* Actionable source rows in the results — chip + a lib-actions-row. */
+.res-source-rows { display: flex; flex-direction: column; gap: 8px; }
+.research-source-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+}
+.research-source-row .lib-actions-row { margin-top: 0; margin-left: auto; }
+.research-synth-actions { margin-top: 10px; }
+
+/* Exploratory node rail — painted into the session-detail panel by the shared
+   pane-guard on a research-node selection. */
+.research-node-rail { margin-top: 10px; }
+.research-node-rail:empty { display: none; }
+.rnr-head { font-size: 0.58rem; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
+.rnr-verbs { margin-top: 0; }
+.rnr-result { margin-top: 10px; font-size: 0.72rem; }
+.rnr-result:empty { display: none; }
+.rnr-busy, .rnr-empty { color: var(--text-muted); font-size: 0.68rem; padding: 6px 0; }
+.rnr-section { margin-bottom: 10px; }
+.rnr-section-h { font-size: 0.6rem; letter-spacing: 0.05em; color: var(--accent); text-transform: uppercase; margin-bottom: 3px; }
+.rnr-walk-progress { font-size: 0.62rem; color: var(--cyan); margin-bottom: 8px; }
+.rnr-walk-more { font-size: 0.62rem; color: var(--text-muted); margin-top: 8px; }
+
+/* The Obsidian-like store panel — file tree + markdown preview. */
+.research-store-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.research-store-head .panel-label { margin: 0; }
+.research-store-sub { font-size: 0.6rem; color: var(--text-muted); }
+.research-store-head .action-btn { margin-left: auto; }
+.research-store-body { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 16px; }
+.research-store-tree { min-height: 120px; overflow: auto; max-height: 60vh; }
+.research-store-preview {
+  border-left: 1px solid var(--border); padding-left: 16px;
+  overflow: auto; max-height: 60vh; font-size: 0.74rem;
+}
+@media (max-width: 900px) {
+  .research-store-body { grid-template-columns: 1fr; }
+  .research-store-preview { border-left: 0; border-top: 1px solid var(--border); padding-left: 0; padding-top: 12px; }
+}
+
 /* Session detail panel (opens on node click) */
 .session-detail-panel {
   background: var(--bg-panel);

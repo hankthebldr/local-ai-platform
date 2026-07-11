@@ -92,3 +92,83 @@ def test_rx1_web_search_off_by_default(index_soup):
 def test_rx1_reading_surface_is_full_width(index_html_text):
     # No letterbox on the reading body — the report reads like a page.
     assert ".research-reading-body { max-width: none;" in index_html_text
+
+
+# ── RX-2: actionable results, Obsidian store, shared exploratory node rail ───
+
+
+def test_rx2_store_subnav_present_and_delegated(index_soup):
+    nav = index_soup.find(class_="research-subnav")
+    assert nav is not None, "Store subnav missing"
+    btns = nav.find_all("button")
+    views = {b.get("data-view") for b in btns}
+    assert {"explore", "store"} <= views
+    for b in btns:
+        assert b.get("data-action") == "research.subnav"
+        # No new inline handlers on the subnav buttons.
+        assert not [a for a in (b.attrs or {}) if a.startswith("on")]
+
+
+def test_rx2_store_panel_and_tree_markup(index_soup):
+    assert index_soup.find(id="research-store-panel") is not None, "store panel missing"
+    assert index_soup.find(id="research-store-tree") is not None, "store tree missing"
+    assert index_soup.find(id="research-store-preview") is not None, "store preview missing"
+    # Refresh is delegated, not inline.
+    refresh = index_soup.select_one('[data-action="research.store-refresh"]')
+    assert refresh is not None
+
+
+def test_rx2_node_rail_mount_present(index_soup):
+    mount = index_soup.find(id="research-node-rail")
+    assert mount is not None, "node-rail mount missing from the session-detail panel"
+    # The legacy per-node action footer stays alive (only-add).
+    assert index_soup.find(id="session-detail-actions") is not None
+
+
+def test_rx2_shared_rail_module_is_canonical(index_html_text):
+    # RX-2 owns the canonical shared node-rail; the pane-guard is declared once.
+    assert "shell/context-node-rail.js" in index_html_text
+    assert "ContextNodeRail" in index_html_text
+    # The research rail REGISTERS into the shared module (kind:'research-node'),
+    # it does not reimplement rail plumbing.
+    assert "research/research-node-rail.js" in index_html_text
+    assert "ContextNodeRail.register('research-node'" in index_html_text
+    # The single pane-guard drives the rail through activate().
+    assert "ContextNodeRail.activate('research-node'" in index_html_text
+
+
+def test_rx2_node_rail_verbs_wired(index_html_text):
+    for action in (
+        "'research.node-read'",
+        "'research.compare-node'",
+        "'research.build-upon'",
+        "'research.graph-walk'",
+    ):
+        assert action in index_html_text, f"node-rail verb {action} not wired"
+    # The exploratory endpoints are the operator-triggered POSTs.
+    assert "/api/research/compare-node" in index_html_text
+    assert "/api/research/graph-walk" in index_html_text
+
+
+def test_rx2_actionable_result_rows(index_html_text):
+    # Per-source/per-result actions — promote / save / cite — data-action only.
+    for action in (
+        "'research.save-source'",
+        "'research.cite'",
+        "'research.promote-artifact'",
+    ):
+        assert action in index_html_text, f"result action {action} not wired"
+    assert "/api/research/save-source" in index_html_text
+    # Cite drops an Obsidian-style wikilink into the follow-up input.
+    assert "[[source:" in index_html_text
+
+
+def test_rx2_store_reuses_skills_tree_grammar(index_html_text):
+    # The store browser rides the LB3 .skills-tree grammar (no bespoke tree CSS).
+    assert "research/research-store.js" in index_html_text
+    assert "skills-tree-file" in index_html_text
+
+
+def test_rx2_store_active_hides_explore_siblings(index_html_text):
+    # One CSS rule (only-add) hides every explore sibling in the Store view.
+    assert "#tab-research.store-active" in index_html_text

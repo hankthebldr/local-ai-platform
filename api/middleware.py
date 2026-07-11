@@ -63,6 +63,11 @@ SCOPE_MAP = {
     "/api/profiles": "profiles",
     "/api/plugins": "plugins",
     "/api/workflows": "workflows",
+    # RX-2: the shared `research` workspace (saved sources/notes + MOCs) is a
+    # data-action write surface. Gate the whole /api/workspaces prefix on a
+    # `workspaces` scope (parity with /api/documents) so a scoped SPA key can
+    # write notes but an unscoped key is 403'd. Operate U11 also writes here.
+    "/api/workspaces": "workspaces",
     "/api/keys": "keys",  # master key bypasses this before scope check
     "/a2a": "a2a",  # A2A JSON-RPC dispatch
 }

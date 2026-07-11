@@ -166,7 +166,7 @@ ALL_SCOPES = [
     "chat", "completions", "models",
     "documents", "memory", "context",
     "profiles", "plugins", "workflows",
-    "keys", "a2a",
+    "workspaces", "keys", "a2a",
 ]
 
 

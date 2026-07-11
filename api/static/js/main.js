@@ -34,6 +34,12 @@ import { TestPane } from './library/test-pane.js';
 import { RunsTab } from './runs/runs-tab.js';
 import { WorkflowMemory } from './runs/workflow-memory.js';
 import { ResearchArtifacts } from './runs/research-artifacts.js';
+// RX-2 — the canonical shared node-rail (this spec owns it; Operate U14
+// consumes) + the research consumers registered into it. Side-effect imports:
+// each self-wires its data-actions and (for the rail) registers its kind.
+import { ContextNodeRail } from './shell/context-node-rail.js';
+import { ResearchNodeRail } from './research/research-node-rail.js';
+import { ResearchStore } from './research/research-store.js';
 import { AdminMenu } from './admin/menu.js';
 import { AdminAuth } from './admin/auth.js';
 import { ApiKeysPanel } from './admin/api-keys.js';
@@ -3563,6 +3569,12 @@ function selectNode(d, paneKey) {
       actEl.innerHTML = '';
     }
   }
+
+  // RX-2 — drive the exploratory node rail through the shared pane-guard. The
+  // guard (declared once in shell/context-node-rail.js) only paints the
+  // research rail for research-pane selections; a context-pane selection is
+  // rejected, so a click in one surface never drives the other's rail.
+  try { ContextNodeRail.activate('research-node', d, pane); } catch (_) {}
 }
 
 // ── Detail-panel helpers (reused by every node type) ───────────────
@@ -3776,10 +3788,23 @@ function renderResearchResults(data) {
     `;
   }).join('');
 
-  // Source chips
-  const chips = (data.sources || []).map(s =>
-    `<a class="res-source-chip" href="${esc(s.url || '#')}" target="_blank" rel="noopener" title="${esc(s.title || s.url || '')}">${esc(s.title || s.url || '')}</a>`
-  ).join('');
+  // RX-2 — every source is actionable: save it as a durable store note
+  // (RAG-indexed) or drop a [[source:<slug>]] cite into the follow-up. Rows use
+  // data-action delegation (no inline handlers); the slug is derived to match
+  // the server's slug so a cite resolves to the saved note.
+  const sourceRows = (data.sources || []).map(s => {
+    const url = s.url || '';
+    const title = s.title || url || '(untitled)';
+    const slug = _researchSlug(title || url);
+    return `
+      <div class="research-source-row">
+        <a class="res-source-chip" href="${esc(url || '#')}" target="_blank" rel="noopener" title="${esc(title)}">${esc(title.slice(0, 80))}</a>
+        <div class="lib-actions-row">
+          <button class="action-btn xs" data-action="research.save-source" data-title="${esc(title)}" data-url="${esc(url)}" data-slug="${esc(slug)}">Save to store</button>
+          <button class="action-btn xs ghost" data-action="research.cite" data-slug="${esc(slug)}">Cite</button>
+        </div>
+      </div>`;
+  }).join('');
 
   // Render synthesis markdown (basic)
   const synthesis = renderMarkdownBasic(data.synthesis || '');
@@ -3812,7 +3837,12 @@ function renderResearchResults(data) {
       <div class="synthesis-label">SYNTHESIS</div>
       ${synthesis}
     </div>
-    ${chips ? `<div style="margin-top:12px;font-size:0.62rem;color:var(--text-muted);margin-bottom:6px">ALL SOURCES</div><div class="res-sources">${chips}</div>` : ''}
+    <div class="lib-actions-row research-synth-actions" style="margin-top:10px">
+      <button class="action-btn xs accent" data-action="research.promote-artifact" data-idx="${synthIdx}">Promote to artifact</button>
+      <button class="action-btn xs" data-action="research.save-source" data-kind="synthesis">Save to store</button>
+      <button class="action-btn xs ghost" data-action="research.cite" data-slug="${esc(_researchSlug('Synthesis: ' + (data.topic || 'untitled')))}">Cite</button>
+    </div>
+    ${sourceRows ? `<div style="margin-top:12px;font-size:0.62rem;color:var(--text-muted);margin-bottom:6px">ALL SOURCES</div><div class="res-source-rows">${sourceRows}</div>` : ''}
     <div class="research-actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="action-btn accent" data-action="research.capture" data-idx="${synthIdx}">+ Capture synthesis as artifact</button>
       <button class="action-btn cyan" data-action="research.library">View captured artifacts</button>
@@ -3988,6 +4018,95 @@ async function submitResearchFollowup() {
 }
 
 Actions.click({ 'research.followup': () => submitResearchFollowup() });
+
+/* ── RX-2: actionable results — save to the Obsidian-like store + cite ────────
+   Each source/result row can be promoted (captured artifact), saved as a
+   durable RAG-indexed markdown note in the shared `research` workspace, or
+   cited as a [[source:<slug>]] wikilink into the follow-up input. All egress
+   is operator-initiated (a save writes local; nothing leaves the box). */
+
+// Frontend slug — mirrors the server's _derive_slug so a cite token resolves to
+// the note a save writes (same normalization on both sides).
+function _researchSlug(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'note';
+}
+
+async function researchSaveSource(el) {
+  let title;
+  let content;
+  let url = el.dataset.url || null;
+  let slug = el.dataset.slug || '';
+  if (el.dataset.kind === 'synthesis') {
+    const d = window._lastResearch || {};
+    title = 'Synthesis: ' + (d.topic || 'untitled');
+    content = d.synthesis || '';
+    url = null;
+    slug = _researchSlug(title);
+  } else {
+    title = el.dataset.title || 'source';
+    content = (url ? 'source: ' + url + '\n\n' : '') + title;
+  }
+  if (!slug) slug = _researchSlug(title);
+  const prev = el.textContent;
+  el.disabled = true;
+  el.textContent = 'Saving…';
+  try {
+    const resp = await Net.call('/api/research/save-source', {
+      retries: 0,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, content, url, slug, tags: ['research'] }),
+      },
+    });
+    const data = (resp.data && typeof resp.data === 'object') ? resp.data : {};
+    if (!resp.ok) throw new Error(data.detail || resp.error || `HTTP ${resp.status}`);
+    if (window.Toast) {
+      window.Toast.success('Saved to store', data.path + (data.rag_ingested ? ' · indexed' : ''), { ttl: 2500 });
+    }
+    el.textContent = 'Saved ✓';
+    setTimeout(() => { el.disabled = false; el.textContent = prev; }, 1500);
+  } catch (e) {
+    if (window.Toast) window.Toast.danger('Save failed', String(e));
+    el.disabled = false;
+    el.textContent = prev;
+  }
+}
+
+function researchCite(el) {
+  const slug = el.dataset.slug || '';
+  if (!slug) return;
+  const input = document.getElementById('research-followup-input');
+  const token = `[[source:${slug}]]`;
+  if (input) {
+    input.value = input.value ? input.value.replace(/\s*$/, '') + ' ' + token + ' ' : token + ' ';
+    input.focus();
+  }
+  if (window.Toast) window.Toast.info('Cite', `Inserted ${token}`, { ttl: 1200 });
+}
+
+// Store subnav — Explore (graph + research) vs Store (the browsable note tree).
+// Toggling `store-active` hides every explore sibling via CSS (only-add: one
+// class + one rule) so no existing markup is restructured.
+function switchResearchView(view) {
+  const tab = document.getElementById('tab-research');
+  if (!tab) return;
+  const isStore = view === 'store';
+  tab.classList.toggle('store-active', isStore);
+  tab.querySelectorAll('.research-subnav-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === view));
+  if (isStore) { try { ResearchStore.load(); } catch (_) {} }
+}
+
+Actions.click({
+  'research.save-source': (el) => researchSaveSource(el),
+  'research.cite': (el) => researchCite(el),
+  'research.subnav': (el) => switchResearchView(el.dataset.view),
+});
 
 // ── Research artifact capture ────────────────────────────────────────────
 // Wraps POST /api/feedback/artifacts. Each click captures the finding as
