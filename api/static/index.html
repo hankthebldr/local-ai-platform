@@ -908,6 +908,14 @@
           <span class="ws-tab-label">Logs</span>
           <span class="ws-tab-meta" id="ws-logs-meta">—</span>
         </button>
+        <!-- DR-1: In Progress — durable Composer drafts. Autosaved snapshots
+             survive reloads; open/rename/duplicate/delete; Save publishes a
+             draft into a workflow (freezing the draft). Delegated (data-action). -->
+        <button type="button" class="workstream-tab" data-ws="in-progress"
+                data-action="ws.switch" data-ws-target="in-progress">
+          <span class="ws-tab-label">In Progress</span>
+          <span class="ws-tab-meta" id="ws-inprogress-meta">—</span>
+        </button>
         <span style="flex:1"></span>
         <button type="button" class="action-btn xs ghost"
                 onclick="ComposerWorkstream.refresh()" title="Refresh the active sub-tab">⟲</button>
@@ -954,6 +962,23 @@
           <div class="ws-logs-signals" id="ws-logs-signals" hidden></div>
           <div id="ws-logs-body">
             <div class="model-empty">Run the workflow to see per-step logs.</div>
+          </div>
+        </div>
+
+        <!-- DR-1: In-Progress drafts pane. Rows carry name, step count,
+             dirty/last-saved, and a last-run dot; the header + action buttons
+             delegate through data-action (drafts.new / drafts.open / …). -->
+        <div class="ws-pane" id="ws-pane-in-progress" hidden style="max-height:340px;overflow:auto">
+          <div class="panel-label" style="display:flex;align-items:center;gap:8px">
+            <span>In Progress</span>
+            <span style="flex:1"></span>
+            <button type="button" class="action-btn xs" data-action="drafts.new"
+                    title="Start a fresh draft on a blank canvas">+ New</button>
+            <button type="button" class="action-btn xs ghost" data-action="ws.switch"
+                    data-ws-target="in-progress" title="Refresh the draft list">⟲</button>
+          </div>
+          <div id="ws-inprogress-body">
+            <div class="model-empty">Your in-progress workflows autosave here and survive a reload.</div>
           </div>
         </div>
       </div>

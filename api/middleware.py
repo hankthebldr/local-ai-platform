@@ -63,6 +63,12 @@ SCOPE_MAP = {
     "/api/profiles": "profiles",
     "/api/plugins": "plugins",
     "/api/workflows": "workflows",
+    # DR-1: composer draft store (opaque canvas snapshots) is a data-action
+    # write surface. Gate the whole /api/composer prefix on the `workflows`
+    # scope (parity with /api/workflows) — a draft is a pre-publish workflow,
+    # so a key that can author workflows can author drafts. Master key + the
+    # auth-off dev path bypass this before scope resolution.
+    "/api/composer": "workflows",
     # RX-2: the shared `research` workspace (saved sources/notes + MOCs) is a
     # data-action write surface. Gate the whole /api/workspaces prefix on a
     # `workspaces` scope (parity with /api/documents) so a scoped SPA key can

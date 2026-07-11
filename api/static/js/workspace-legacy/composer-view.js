@@ -11,6 +11,11 @@ export const ComposerView = (function () {
     updateCanvasEmptyState();
     // Show the begin/end boundary immediately, even on an empty canvas.
     if (typeof dfScheduleAnchorRefresh === 'function') dfScheduleAnchorRefresh();
+    // DR-1: reconcile the durable draft store on first Composer mount. On the
+    // no-draft path this is a byte-for-byte no-op (the boot seed spawns as
+    // before); with a queued draft it suppresses the boot seed and restores the
+    // saved canvas losslessly. Runs once per session (internal guard).
+    if (typeof dfBootRestoreDraft === 'function') { try { dfBootRestoreDraft(); } catch (_) {} }
     if (_booted) {
       // Already initialised — workbenches refresh quickly to pick up
       // server-side changes (newly registered MCP, etc).

@@ -5,7 +5,7 @@ import { Net } from '../core/net.js';
 import { Toast, EmptyState, ErrorPanel, Skeleton } from '../core/ui.js';
 
 export const ComposerWorkstream = (function () {
-  const panes = ['step', 'run', 'history', 'logs'];
+  const panes = ['step', 'run', 'history', 'logs', 'in-progress'];
 
   function _setActive(name) {
     panes.forEach(p => {
@@ -23,6 +23,11 @@ export const ComposerWorkstream = (function () {
     if (name === 'run')     _refreshRun();
     if (name === 'history') _refreshHistory();
     if (name === 'logs')    _refreshLogs();
+    // DR-1: In-Progress drafts pane — rendered by main.js (needs snapshot/
+    // restore access); bridged onto window.
+    if (name === 'in-progress' && typeof window.dfRefreshInProgress === 'function') {
+      try { window.dfRefreshInProgress(); } catch (_) {}
+    }
   }
 
   function focusStep(stepId) {

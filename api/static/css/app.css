@@ -1088,6 +1088,38 @@ select.model-select,
 .ws-history-status { text-align: right; color: var(--text-dim); }
 .ws-history-ts { color: var(--text-muted); text-align: right; }
 
+/* ── DR-1: In-Progress draft rows ───────────────────────────────── */
+.df-draft-list { display: flex; flex-direction: column; gap: 4px; }
+.df-draft-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 0.64rem;
+}
+.df-draft-row.active { border-color: var(--accent-dim); background: var(--accent-trace); }
+.df-draft-open {
+  display: flex; flex-direction: column; gap: 2px;
+  background: none; border: none; padding: 0; margin: 0;
+  text-align: left; cursor: pointer; color: inherit; min-width: 0;
+}
+.df-draft-name { color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.df-draft-sub { color: var(--text-muted); font-size: 0.58rem; }
+.df-draft-dirty { color: var(--warn); }
+.df-draft-rename-input {
+  background: var(--bg-deep); color: var(--text);
+  border: 1px solid var(--accent-dim); border-radius: 2px;
+  font-family: var(--mono); font-size: 0.64rem; padding: 2px 4px; width: 160px;
+}
+.df-draft-run-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.df-draft-run-ok      { background: var(--accent); }
+.df-draft-run-fail    { background: var(--red); }
+.df-draft-run-pending { background: var(--warn); }
+.df-draft-run-idle    { background: var(--border-strong); }
+
 /* ── Skills Lab — research thinking cards ────────────────────────
    Each sub-question becomes an expandable "thinking" card so the
    operator can see exactly what context the research agent gathered

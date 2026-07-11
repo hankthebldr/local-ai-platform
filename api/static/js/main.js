@@ -5521,6 +5521,28 @@ let dfSeedSchema = [];
 let _dfAnchorBusy = false;
 let _dfAnchorTimer = null;
 
+// ── DR-1: durable draft identity + WAL ──────────────────────────────
+// A draft is the lossless canvas snapshot (dfEditor.export() + dfNodeData +
+// dfNextId + dfSeedSchema + meta) keyed by a client-minted draft_id — distinct
+// from the published workflow_id. The id is minted SYNCHRONOUSLY at canvas-
+// dirty t0 (before any autosave) so a crash mid-first-edit still reconciles to
+// one identity. Persisted to a localStorage WAL (crash-safe, sync) + debounced
+// to the server (POST /api/composer/drafts).
+let _dfActiveDraftId = null;     // the draft currently being edited (or null)
+let _dfDraftDirty = false;       // unsaved canvas changes since last flush
+let _dfDraftFlushTimer = null;   // debounced server/WAL flush handle
+let _dfRestoring = false;        // suppress dirty marks while restore rebuilds
+let _dfLoading = false;          // suppress dirty marks while a SAVED wf loads
+let _dfDraftPublishing = false;  // suppress dirty marks during publish-freeze
+let _dfBootRestoreDone = false;  // boot reconciliation runs once per session
+// Set synchronously at module load: if a WAL draft exists we must SUPPRESS the
+// boot seed (dfEnsureSeedNode bails) until dfBootRestoreDraft() rebuilds the
+// real canvas — otherwise the auto-spawned seed races the restored one.
+let _dfDraftQueued = false;
+const _DF_WAL_KEY = 'enclave.composer.draft.wal';
+const _DF_FLUSH_MS = 4000;
+try { _dfDraftQueued = !!_dfWalRead(); } catch (_) { _dfDraftQueued = false; }
+
 // Each template carries a `persona` key — the same vocabulary AgentIcons
 // uses, so the palette glyph, the agent card glyph, and the run-state
 // overlay all share one visual language. `role` is the LLM-routing class
@@ -5926,6 +5948,9 @@ function dfInitEditor() {
     dfClearConfigPanel();
     if (typeof composerExitStepEngage === 'function') composerExitStepEngage();
   });
+  // DR-1: a real spawn dirties the draft (import()'s addNodeImport does NOT
+  // dispatch nodeCreated, so restore never self-triggers this).
+  dfEditor.on('nodeCreated', () => { try { dfMarkDraftDirty(); } catch (_) {} });
   dfEditor.on('nodeRemoved', (id) => {
     delete dfNodeData[id];
     if (dfSelectedNodeId === id) dfSelectedNodeId = null;
@@ -5937,9 +5962,10 @@ function dfInitEditor() {
       try { syncCompositionModelsToChatPicker(); } catch (_) {}
     }
     if (!_dfAnchorBusy) dfScheduleAnchorRefresh();  // re-bracket begin/end
+    try { dfMarkDraftDirty(); } catch (_) {}
   });
-  dfEditor.on('connectionCreated', (conn) => { dfOnConnectionCreated(conn); if (!_dfAnchorBusy) dfScheduleAnchorRefresh(); });
-  dfEditor.on('connectionRemoved', (conn) => { dfOnConnectionRemoved(conn); if (!_dfAnchorBusy) dfScheduleAnchorRefresh(); });
+  dfEditor.on('connectionCreated', (conn) => { dfOnConnectionCreated(conn); if (!_dfAnchorBusy) dfScheduleAnchorRefresh(); try { dfMarkDraftDirty(); } catch (_) {} });
+  dfEditor.on('connectionRemoved', (conn) => { dfOnConnectionRemoved(conn); if (!_dfAnchorBusy) dfScheduleAnchorRefresh(); try { dfMarkDraftDirty(); } catch (_) {} });
 
   container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
   container.addEventListener('drop', (e) => {
@@ -6813,9 +6839,388 @@ function dfAddSeedNode(x, y) {
 // so loaded workflows keep their decorative __start__ ghost untouched.
 function dfEnsureSeedNode() {
   if (!dfEditor) return;
+  // DR-1: while a draft is queued for restore, suppress the boot seed — the
+  // restored snapshot carries its OWN seed and an auto-spawn here would race
+  // it (two seeds). dfBootRestoreDraft() clears the flag once it has rebuilt.
+  if (_dfDraftQueued) return;
   if (dfFindSeedNodeId() != null) return;
   if (Object.keys(dfNodeData).length) return;
   dfAddSeedNode(40, 200);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   DR-1 — DURABLE DRAFT STORE (identity · snapshot · restore · In-Progress)
+   A workflow is crystallized conversation; an in-progress workflow must
+   STICK across reloads. The snapshot is opaque + lossless (dfEditor.export()
+   round-trips ports/connections/composite _sub_of proxies + positions — proven
+   by the DR-1 import() prototype); dfNodeData/dfNextId/dfSeedSchema are parallel
+   module state restored by direct assignment (import() never touches them).
+   ══════════════════════════════════════════════════════════════════ */
+
+function _dfMintDraftId() {
+  // uuid4 hex (32 chars), no dashes — matches the store's id charset.
+  try {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '');
+  } catch (_) { /* fall through */ }
+  return 'd' + Date.now().toString(16) + Math.random().toString(16).slice(2, 10);
+}
+
+function _dfRealStepCount() {
+  return Object.keys(dfNodeData || {})
+    .filter(k => dfNodeData[k] && !dfNodeData[k].is_seed).length;
+}
+
+function _dfMetaField(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+
+// Opaque snapshot. export() OWNS zoom/pan/positions — we do NOT double-store a
+// separate view transform (critique-resolution #17).
+function dfBuildSnapshot() {
+  let ex = null;
+  try { ex = dfEditor ? JSON.parse(JSON.stringify(dfEditor.export())) : null; } catch (_) { ex = null; }
+  return {
+    export: ex,
+    nodeData: JSON.parse(JSON.stringify(dfNodeData || {})),
+    nextId: dfNextId,
+    seedSchema: JSON.parse(JSON.stringify(dfSeedSchema || [])),
+    meta: {
+      id: _dfMetaField('df-wf-id'),
+      name: _dfMetaField('df-wf-name'),
+      description: _dfMetaField('df-wf-desc'),
+      role: _dfMetaField('df-wf-role'),
+      category: _dfMetaField('df-wf-category'),
+    },
+  };
+}
+
+// Post-restore invariant: EXACTLY ONE seed. The snapshot always carries the
+// seed node; if a stray boot seed slipped in, drop the extras.
+function _dfEnforceSingleSeed() {
+  const seeds = Object.keys(dfNodeData || {}).filter(k => dfNodeData[k] && dfNodeData[k].is_seed);
+  for (let i = 1; i < seeds.length; i++) {
+    const nid = seeds[i];
+    try { dfEditor.removeNodeId('node-' + nid); } catch (_) {}
+    delete dfNodeData[nid];
+  }
+  return Object.keys(dfNodeData || {}).filter(k => dfNodeData[k] && dfNodeData[k].is_seed).length;
+}
+
+// Restore a snapshot LOSSLESSLY. Hard-clear canvas + dfNodeData + reset dfNextId
+// BEFORE import (collision bindings), re-invoke anchor rebuild AFTER, assert one
+// seed. Returns true on success.
+function dfRestoreSnapshot(blob) {
+  if (!blob || !blob.export) return false;
+  _dfRestoring = true;
+  try {
+    if (typeof dfInitEditor === 'function' && !dfEditor) dfInitEditor();
+    if (!dfEditor) return false;
+    dfEditor.clear();
+    dfNodeData = {};
+    dfSelectedNodeId = null;
+    dfNextId = (typeof blob.nextId === 'number') ? blob.nextId : 0;  // BEFORE import
+    dfEditor.import(blob.export, false);  // rebuild graph; suppress import event
+    dfNodeData = JSON.parse(JSON.stringify(blob.nodeData || {}));
+    dfSeedSchema = JSON.parse(JSON.stringify(blob.seedSchema || []));
+    const m = blob.meta || {};
+    [['df-wf-id', m.id], ['df-wf-name', m.name], ['df-wf-desc', m.description],
+     ['df-wf-role', m.role], ['df-wf-category', m.category]].forEach(([id, v]) => {
+      const el = document.getElementById(id); if (el && v != null) el.value = v;
+    });
+    const descEl = document.getElementById('df-wf-desc');
+    if (descEl) { try { descEl.dispatchEvent(new Event('input')); } catch (_) {} }
+    _dfEnforceSingleSeed();
+    if (typeof dfRefreshAnchors === 'function') dfRefreshAnchors();  // reconcile begin/end
+    try { ComposerView.updateCanvasEmptyState(); } catch (_) {}
+    return true;
+  } catch (e) {
+    console.warn('draft restore failed', e);
+    return false;
+  } finally {
+    _dfRestoring = false;
+  }
+}
+
+// ── WAL (localStorage, synchronous, crash-safe) ─────────────────────
+function _dfWalRead() {
+  try { const raw = localStorage.getItem(_DF_WAL_KEY); return raw ? JSON.parse(raw) : null; }
+  catch (_) { return null; }
+}
+function _dfWalWrite(rec) {
+  try { localStorage.setItem(_DF_WAL_KEY, JSON.stringify(rec)); } catch (_) {}
+}
+function _dfWalClear() {
+  try { localStorage.removeItem(_DF_WAL_KEY); } catch (_) {}
+}
+
+// Mint identity at dirty-t0, mark dirty, schedule a debounced flush. No-ops
+// while restoring / publishing / anchor-refreshing, and until the canvas holds
+// a REAL step (a bare boot seed is not worth a draft).
+function dfMarkDraftDirty() {
+  if (_dfRestoring || _dfLoading || _dfDraftPublishing || _dfAnchorBusy) return;
+  if (_dfRealStepCount() === 0) return;
+  if (!_dfActiveDraftId) _dfActiveDraftId = _dfMintDraftId();  // synchronous t0
+  _dfDraftDirty = true;
+  clearTimeout(_dfDraftFlushTimer);
+  _dfDraftFlushTimer = setTimeout(() => { dfFlushDraft(); }, _DF_FLUSH_MS);
+}
+
+function _dfDraftName() {
+  const nm = (_dfMetaField('df-wf-name') || '').trim();
+  const wid = (_dfMetaField('df-wf-id') || '').trim();
+  return nm || wid || 'Untitled workflow';
+}
+
+// Flush the current snapshot to the WAL (first — crash-safe) then to the
+// server (best-effort). Called by the debounce timer + beforeunload.
+async function dfFlushDraft() {
+  if (!_dfActiveDraftId || !_dfDraftDirty) return;
+  const snap = dfBuildSnapshot();
+  const rec = {
+    draft_id: _dfActiveDraftId,
+    name: _dfDraftName(),
+    workflow_id: (_dfMetaField('df-wf-id') || '').trim() || null,
+    step_count: _dfRealStepCount(),
+    blob: snap,
+    updated_at: Date.now() / 1000,
+  };
+  _dfWalWrite(rec);        // WAL first — survives a crash before the POST lands
+  _dfDraftDirty = false;
+  try {
+    await Net.postJson('/api/composer/drafts', {
+      draft_id: rec.draft_id, blob: snap, name: rec.name,
+      workflow_id: rec.workflow_id, step_count: rec.step_count,
+    }, { silent: true, retries: 0 });
+  } catch (_) { /* WAL already holds it; next flush retries the server */ }
+  try { if (_dfInProgressActive()) dfRefreshInProgress(); } catch (_) {}
+}
+
+// Boot reconciliation — runs once when the Composer first mounts. Reconcile the
+// WAL against the server draft (newer updated_at wins) and restore it, then
+// clear the boot-seed suppression flag. On the no-draft path this is a
+// byte-for-byte no-op (the boot seed spawns exactly as before).
+async function dfBootRestoreDraft() {
+  if (_dfBootRestoreDone) { return; }
+  _dfBootRestoreDone = true;
+  const wal = _dfWalRead();
+  if (!wal || !wal.draft_id) { _dfDraftQueued = false; return; }
+  let rec = wal;
+  try {
+    const r = await Net.call('/api/composer/drafts/' + encodeURIComponent(wal.draft_id),
+      { silent: true, retries: 0 });
+    if (r.ok && r.data && (r.data.updated_at || 0) > (wal.updated_at || 0)) rec = r.data;
+  } catch (_) { /* offline / not-yet-synced — the WAL copy wins */ }
+  if (!rec || rec.published || !rec.blob || !rec.blob.export) {
+    _dfDraftQueued = false;
+    try { if (dfEditor && !Object.keys(dfNodeData).length) dfEnsureSeedNode(); } catch (_) {}
+    return;
+  }
+  _dfActiveDraftId = rec.draft_id;
+  const ok = dfRestoreSnapshot(rec.blob);
+  _dfDraftQueued = false;
+  if (!ok) {
+    try { dfEnsureSeedNode(); } catch (_) {}
+    return;
+  }
+  // Reconcile WAL -> server: the pre-reload flush may have been dropped (offline
+  // or rate-limited during the boot burst), leaving the server behind the WAL.
+  // Best-effort upsert AFTER the boot request burst subsides so the In-Progress
+  // list reflects the restored draft. Delayed to dodge the cold-boot 429 window.
+  setTimeout(() => {
+    Net.postJson('/api/composer/drafts', {
+      draft_id: rec.draft_id, blob: rec.blob, name: rec.name || _dfDraftName(),
+      workflow_id: rec.workflow_id || null, step_count: rec.step_count || _dfRealStepCount(),
+    }, { silent: true, retries: 0 }).catch(() => {});
+  }, 2500);
+  if (window.Toast) Toast.info('Draft restored', _dfDraftName() + ' — resumed where you left off', { ttl: 2600 });
+}
+
+// Publish-freeze: on a successful Save the draft's identity collapses into the
+// saved workflow_id. Freeze/DELETE the draft so there is no dual mutable
+// identity; the In-Progress row disappears. Edit-in-Composer of the published
+// workflow loads the SAVED definition, never a post-publish draft blob.
+async function dfPublishFreezeDraft(workflowId) {
+  if (!_dfActiveDraftId) return;
+  const id = _dfActiveDraftId;
+  _dfDraftPublishing = true;
+  clearTimeout(_dfDraftFlushTimer);
+  _dfActiveDraftId = null;
+  _dfDraftDirty = false;
+  _dfWalClear();
+  try {
+    await Net.call('/api/composer/drafts/' + encodeURIComponent(id),
+      { silent: true, retries: 0, init: { method: 'DELETE' } });
+  } catch (_) { /* best-effort — the local identity is already released */ }
+  _dfDraftPublishing = false;
+  try { if (_dfInProgressActive()) dfRefreshInProgress(); } catch (_) {}
+}
+
+// ── In-Progress workstream pane (5th tab) ───────────────────────────
+function _dfInProgressActive() {
+  const t = document.querySelector('.workstream-tab[data-ws="in-progress"].active');
+  return !!t;
+}
+
+function _dfRelTime(ts) {
+  if (!ts) return '';
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+  if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+  return Math.floor(secs / 86400) + 'd ago';
+}
+
+function _dfDraftRowHtml(d) {
+  const active = d.draft_id === _dfActiveDraftId;
+  const dirty = active && _dfDraftDirty;
+  const status = (d.last_run_status || '').toLowerCase();
+  const dotClass = status === 'completed' ? 'ok' : status === 'failed' ? 'fail'
+    : status ? 'pending' : 'idle';
+  const meta = dirty ? '<span class="df-draft-dirty">● unsaved</span>'
+    : 'saved ' + esc(_dfRelTime(d.updated_at));
+  return `<div class="df-draft-row${active ? ' active' : ''}" data-draft-id="${esc(d.draft_id)}">
+    <span class="df-draft-run-dot df-draft-run-${dotClass}" title="last run: ${esc(status || 'none')}"></span>
+    <button type="button" class="df-draft-open" data-action="drafts.open" data-draft-id="${esc(d.draft_id)}"
+            title="Open this draft on the canvas">
+      <span class="df-draft-name">${esc(d.name || 'Untitled workflow')}</span>
+      <span class="df-draft-sub">${esc(d.step_count || 0)} step${d.step_count === 1 ? '' : 's'} · ${meta}</span>
+    </button>
+    <span style="flex:1"></span>
+    <button type="button" class="action-btn xs ghost" data-action="drafts.rename" data-draft-id="${esc(d.draft_id)}" title="Rename">✎</button>
+    <button type="button" class="action-btn xs ghost" data-action="drafts.duplicate" data-draft-id="${esc(d.draft_id)}" title="Duplicate">⎘</button>
+    <button type="button" class="action-btn xs ghost" data-action="drafts.delete" data-draft-id="${esc(d.draft_id)}" title="Delete">×</button>
+  </div>`;
+}
+
+async function dfRefreshInProgress() {
+  const body = document.getElementById('ws-inprogress-body');
+  if (!body) return;
+  const r = await Net.call('/api/composer/drafts', { silent: true, retries: 0 });
+  const rows = (r.ok && Array.isArray(r.data)) ? r.data : [];
+  const meta = document.getElementById('ws-inprogress-meta');
+  if (meta) meta.textContent = rows.length ? String(rows.length) : '—';
+  if (!rows.length) {
+    EmptyState.render(body, {
+      title: 'No drafts in progress',
+      detail: 'Start composing on the canvas — your work autosaves here and survives a reload. Publish with Save to graduate a draft into a workflow.',
+      glyph: '✎',
+    });
+    return;
+  }
+  body.innerHTML = `<div class="df-draft-list">${rows.map(_dfDraftRowHtml).join('')}</div>`;
+}
+
+async function dfDraftOpen(id) {
+  if (!id) return;
+  const r = await Net.call('/api/composer/drafts/' + encodeURIComponent(id), { silent: true, retries: 0 });
+  if (!r.ok || !r.data || !r.data.blob) { Toast.danger('Open failed', 'Draft could not be loaded'); return; }
+  if (typeof switchTab === 'function') { try { switchTab('dashboard'); } catch (_) {} }
+  if (typeof ComposerView !== 'undefined' && ComposerView.init) { try { ComposerView.init(); } catch (_) {} }
+  _dfActiveDraftId = id;
+  _dfDraftDirty = false;
+  const ok = dfRestoreSnapshot(r.data.blob);
+  if (ok) {
+    _dfWalWrite({ draft_id: id, name: r.data.name, workflow_id: r.data.workflow_id,
+                  step_count: r.data.step_count, blob: r.data.blob, updated_at: r.data.updated_at });
+    dfRefreshInProgress();
+  }
+}
+
+function dfDraftRename(id) {
+  const row = document.querySelector('.df-draft-row[data-draft-id="' + id + '"]');
+  const nameEl = row && row.querySelector('.df-draft-name');
+  if (!nameEl) return;
+  const current = nameEl.textContent || '';
+  // Inline rename — no native prompt() (CP-1 keeps the shell prompt-free).
+  const input = document.createElement('input');
+  input.type = 'text'; input.value = current; input.className = 'df-draft-rename-input';
+  input.setAttribute('data-draft-id', id);
+  nameEl.replaceWith(input);
+  input.focus(); input.select();
+  const commit = async () => {
+    const val = (input.value || '').trim();
+    if (val && val !== current) {
+      await Net.call('/api/composer/drafts/' + encodeURIComponent(id), {
+        silent: true, retries: 0,
+        init: { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: val }) },
+      });
+    }
+    dfRefreshInProgress();
+  };
+  input.addEventListener('blur', commit, { once: true });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { e.preventDefault(); input.value = current; input.blur(); }
+  });
+}
+
+async function dfDraftDuplicate(id) {
+  const r = await Net.call('/api/composer/drafts/' + encodeURIComponent(id), { silent: true, retries: 0 });
+  if (!r.ok || !r.data || !r.data.blob) { Toast.danger('Duplicate failed'); return; }
+  const newId = _dfMintDraftId();
+  await Net.postJson('/api/composer/drafts', {
+    draft_id: newId, blob: r.data.blob, name: (r.data.name || 'Untitled') + ' copy',
+    workflow_id: null, step_count: r.data.step_count,
+  }, { silent: true, retries: 0 });
+  Toast.info('Draft duplicated', (r.data.name || 'Untitled') + ' copy', { ttl: 1800 });
+  dfRefreshInProgress();
+}
+
+function dfDraftDelete(id) {
+  Confirm.ask({
+    title: 'Delete draft?',
+    body: 'This removes the in-progress draft. Published workflows are unaffected.',
+    okLabel: 'Delete', danger: true,
+  }).then(async (ok) => {
+    if (!ok) return;
+    await Net.call('/api/composer/drafts/' + encodeURIComponent(id),
+      { silent: true, retries: 0, init: { method: 'DELETE' } });
+    if (id === _dfActiveDraftId) {
+      _dfActiveDraftId = null; _dfDraftDirty = false; _dfWalClear();
+    }
+    dfRefreshInProgress();
+  });
+}
+
+function dfDraftNew() {
+  // Release the current identity and start a blank canvas; the next real edit
+  // mints a fresh draft_id at t0.
+  _dfActiveDraftId = null; _dfDraftDirty = false; _dfWalClear();
+  clearTimeout(_dfDraftFlushTimer);
+  if (typeof switchTab === 'function') { try { switchTab('dashboard'); } catch (_) {} }
+  if (typeof composerNewWorkflow === 'function') composerNewWorkflow();
+  dfRefreshInProgress();
+}
+
+// Delegated actions for the In-Progress pane (data-action, no inline handlers).
+Actions.click({
+  'drafts.open':      el => dfDraftOpen(el.dataset.draftId),
+  'drafts.rename':    el => dfDraftRename(el.dataset.draftId),
+  'drafts.duplicate': el => dfDraftDuplicate(el.dataset.draftId),
+  'drafts.delete':    el => dfDraftDelete(el.dataset.draftId),
+  'drafts.new':       () => dfDraftNew(),
+});
+
+// Cross-module bridge (composer-view.js boot hook + composer-workstream.js
+// pane switch call these as window globals). Direct window assignment mirrors
+// the existing composerAddAgentAtCenter pattern — no legacy-bridge edit needed.
+window.dfBootRestoreDraft = dfBootRestoreDraft;
+window.dfRefreshInProgress = dfRefreshInProgress;
+
+// Flush the WAL synchronously before the tab closes so a reload never loses the
+// last few seconds of edits (the server flush is debounced; the WAL is not).
+if (!window._dfDraftUnloadBound) {
+  window._dfDraftUnloadBound = true;
+  window.addEventListener('beforeunload', () => {
+    try {
+      if (_dfActiveDraftId && _dfDraftDirty) {
+        const snap = dfBuildSnapshot();
+        _dfWalWrite({
+          draft_id: _dfActiveDraftId, name: _dfDraftName(),
+          workflow_id: (_dfMetaField('df-wf-id') || '').trim() || null,
+          step_count: _dfRealStepCount(), blob: snap, updated_at: Date.now() / 1000,
+        });
+      }
+    } catch (_) {}
+  });
 }
 
 // ── Loop safety rails (kind:ralph / kind:loop) ──────────────────────
@@ -7612,6 +8017,9 @@ function dfUpdateNodeData(nodeId, field, value, opts) {
   if (!dfNodeData[nodeId]) return;
   opts = opts || {};
   dfNodeData[nodeId][field] = value;
+  // DR-1: a committed step-config edit dirties the draft (live-edit ticks are
+  // debounced by the flush timer, so per-keystroke marks are cheap).
+  if (opts.commit) { try { dfMarkDraftDirty(); } catch (_) {} }
 
   const apply = () => {
     if (!dfNodeData[nodeId]) return;
@@ -8180,6 +8588,9 @@ async function dfSave() {
       if (typeof refreshWorkflows === 'function') refreshWorkflows();
       // BU8c: the saved yaml is what schedule-preview reads — re-check.
       try { dfRefreshSignalBand(); } catch (_) {}
+      // DR-1: publish collapses the draft identity into the saved workflow_id.
+      // Freeze/delete the draft so there is no dual mutable identity.
+      try { await dfPublishFreezeDraft(result.workflow_id || (definition && definition.id)); } catch (_) {}
     } else {
       const err = (resp.data && typeof resp.data === 'object') ? resp.data : {};
       Toast.danger('Save failed', err.detail || JSON.stringify(err));
@@ -10346,6 +10757,14 @@ function composerNewWorkflow() {
   try { composerExitStepEngage(); } catch (_) {}
   dfNodeData = {}; dfNextId = 0; dfSelectedNodeId = null;
   dfSeedSchema = [];  // fresh workflow → empty input contract
+  // DR-1: reset the draft identity so loading/scaffolding a different workflow
+  // doesn't keep flushing to the previous draft_id. The next real edit mints a
+  // fresh draft at t0. (Boot-restore + dfDraftOpen set the id AFTER their own
+  // canvas rebuild, which does NOT route through here — so restore is safe.)
+  if (!_dfRestoring) {
+    _dfActiveDraftId = null; _dfDraftDirty = false;
+    clearTimeout(_dfDraftFlushTimer);
+  }
   ['df-wf-id', 'df-wf-name', 'df-wf-desc'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -10377,6 +10796,27 @@ async function composerLoadById(wfId) {
 // chain), restores the seed schema, draws START/END anchors, and lays out.
 function composerLoadDefinition(defn) {
   defn = defn || {};
+  // DR-1: placing a SAVED definition's nodes must not auto-mint a draft — a
+  // load is not an edit. The operator's first real change after load starts
+  // the draft. (Manual bench composition does NOT route through here.)
+  _dfLoading = true;
+  // DR-1 collision-binding: this is the first-edit "load the SAVED definition"
+  // path. composerLoadDefinition cannot yet HYDRATE composite step kinds
+  // (parallel/loop/ralph/…) — that lands with GP-1 P0-2 (Gate D). Warn (don't
+  // silently flatten) so editing a published composite in Gate C isn't a quiet
+  // de-composition. Drafts themselves round-trip composites losslessly (blob),
+  // so this warning is scoped to the SAVED-definition load, not draft restore.
+  try {
+    const composites = (defn.steps || [])
+      .filter(s => s && s.kind && s.kind !== 'llm')
+      .map(s => s.kind);
+    if (composites.length && window.Toast) {
+      Toast.warn('Composite steps load flat',
+        `${composites.length} composite step(s) (${[...new Set(composites)].join(', ')}) ` +
+        'edit as plain nodes until composite hydration lands — Save would flatten them. ' +
+        'Re-scaffold from the Patterns bench instead.', { ttl: 5200 });
+    }
+  } catch (_) {}
   try {
     // Centralized reveal (S0): loading a definition is a canvas-intent
     // action, so the Composer tab takes the stage — and it must do so
@@ -10526,6 +10966,7 @@ function composerLoadDefinition(defn) {
     // (The reveal happens at the top of this function — switchTab('dashboard')
     // before node spawn — replacing the old tail-end canvas-mode pivot.)
   } catch (e) { Toast.danger('Load error', e.message); }
+  finally { _dfLoading = false; }  // DR-1: re-arm dirty-marking for real edits
 }
 
 async function composerLoadByIdAndSwitch() {
