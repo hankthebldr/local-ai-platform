@@ -287,6 +287,53 @@ class PluginService:
                 return skill
         return None
 
+    # ── user layer access (LB3-U1 skills promote) ───────────────────
+
+    @property
+    def user_dir(self) -> Optional[Path]:
+        """Writable user-layer plugins directory (None when not configured)."""
+        return self._user_dir
+
+    def ensure_user_plugin(
+        self,
+        plugin_id: str,
+        name: Optional[str] = None,
+        description: str = "",
+    ) -> Path:
+        """Create a minimal user-layer plugin skeleton when absent.
+
+        Idempotent — an existing plugin directory (any content) is returned
+        as-is. The manifest is written atomically (tmp+replace). Raises
+        RuntimeError when no writable user layer is configured. Callers
+        should re-scan afterwards if they need the plugin discoverable.
+        """
+        if self._user_dir is None:
+            raise RuntimeError(
+                "no writable user plugin layer; deployment not initialised"
+            )
+        pdir = self._user_dir / plugin_id
+        manifest_path = pdir / "plugin.yaml"
+        if manifest_path.exists():
+            return pdir
+        (pdir / "skills").mkdir(parents=True, exist_ok=True)
+        doc = {
+            "id": plugin_id,
+            "name": name or plugin_id.replace("-", " ").replace("_", " ").title(),
+            "version": "0.1.0",
+            "description": description
+            or "User-layer plugin holding operator-promoted skills.",
+            "author": "operator",
+            "skills": [],
+        }
+        tmp = manifest_path.with_suffix(".yaml.tmp")
+        tmp.write_text(
+            yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        tmp.replace(manifest_path)  # atomic
+        logger.info("Created user-layer plugin skeleton: %s", pdir)
+        return pdir
+
     # ── install / uninstall (Phase 1.4) ─────────────────────────────
 
     def install_plugin(self, archive_path: Path) -> dict:
