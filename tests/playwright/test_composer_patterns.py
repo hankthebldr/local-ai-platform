@@ -147,3 +147,96 @@ def test_complex_ralph_pattern_scaffolds_wired_sub_dag(signed_in_page):
     assert result["journal"], "ralph.journal_path missing"
     # Default budget preset (standard) stamps its halt caps.
     assert result["maxIter"] == 25
+
+
+def test_ralph_composite_survives_save_reload_save(signed_in_page):
+    """GP-1a (P0-2): a scaffolded ralph composite survives
+    Save → reload (composerLoadDefinition) → Save with its kind + nested
+    body/ralph config intact. Before P0-2, composerLoadDefinition flattened
+    every step to a plain llm node, so the reloaded workflow lost its ralph
+    kind and re-saved as four disconnected top-level steps."""
+    page = signed_in_page
+    _wait_canvas(page)
+    result = page.evaluate(
+        """() => {
+            const yaml = window.jsyaml;
+            // 1. Scaffold a ralph composite onto the canvas.
+            window.dfScaffoldPattern('ralph_loop', 380, 260);
+            document.getElementById('df-wf-id').value = 'rt-ralph';
+            document.getElementById('df-wf-name').value = 'RT Ralph';
+            // 2. Serialize → parse (exactly what Save persists / load reads back).
+            const defn1 = yaml.load(window.dfExportYaml());
+            // 3. Reload the saved definition onto a fresh canvas (clears first).
+            window.composerLoadDefinition(defn1);
+            // 4. Re-serialize the reloaded canvas.
+            const defn2 = yaml.load(window.dfExportYaml());
+            const ralphOf = (d) => (d.steps || []).find(s => s && s.kind === 'ralph');
+            const shape = (r) => r ? {
+                kind: r.kind,
+                body: (r.body || []).map(b => b.id),
+                journal: r.ralph && r.ralph.journal_path,
+                maxIter: r.ralph && r.ralph.halt && r.ralph.halt.max_iterations,
+            } : null;
+            return {
+                loadedHydrated: !!(window.dfNodeData &&
+                    Object.values(window.dfNodeData).some(d => d && d.kind === 'ralph')),
+                bodyProxies: window.dfNodeData
+                    ? Object.values(window.dfNodeData).filter(d => d && d._sub_role === 'body').length : 0,
+                topLevelSteps: (defn2.steps || []).length,
+                r1: shape(ralphOf(defn1)),
+                r2: shape(ralphOf(defn2)),
+            };
+        }"""
+    )
+    assert result["r1"], "scaffolded ralph did not serialize as a composite"
+    assert result["loadedHydrated"], "composite kind flattened on load (P0-2 regression)"
+    assert result["bodyProxies"] == 4, f"expected 4 body proxies after reload: {result}"
+    # The sub-DAG steps fold NESTED into the ralph parent — never as extra
+    # top-level steps (that was the pre-P0-2 flatten failure).
+    assert result["topLevelSteps"] == 1, f"body steps leaked to top level: {result}"
+    assert result["r2"], "ralph composite lost its kind on reload+save (flattened)"
+    assert result["r2"] == result["r1"], f"ralph not stable across round-trip: {result}"
+
+
+def test_parallel_composite_survives_save_reload_save(signed_in_page):
+    """GP-1a (P0-2): the parallel branch/gather hydration path round-trips too —
+    research_fanout is an llm index step + a parallel fan-out; after reload the
+    parallel step keeps its kind, branches and gather (branch proxies fold
+    nested, never leaking as top-level steps)."""
+    page = signed_in_page
+    _wait_canvas(page)
+    result = page.evaluate(
+        """() => {
+            const yaml = window.jsyaml;
+            window.dfScaffoldPattern('research_fanout', 380, 260);
+            document.getElementById('df-wf-id').value = 'rt-fanout';
+            document.getElementById('df-wf-name').value = 'RT Fanout';
+            const defn1 = yaml.load(window.dfExportYaml());
+            window.composerLoadDefinition(defn1);
+            const defn2 = yaml.load(window.dfExportYaml());
+            const parOf = (d) => (d.steps || []).find(s => s && s.kind === 'parallel');
+            const shape = (p) => p ? {
+                kind: p.kind,
+                branches: (p.branches || []).map(b => b.id),
+                gather: p.gather && p.gather.id,
+            } : null;
+            return {
+                loadedHydrated: !!(window.dfNodeData &&
+                    Object.values(window.dfNodeData).some(d => d && d.kind === 'parallel')),
+                branchProxies: window.dfNodeData
+                    ? Object.values(window.dfNodeData).filter(d => d && d._sub_role === 'branch').length : 0,
+                gatherProxies: window.dfNodeData
+                    ? Object.values(window.dfNodeData).filter(d => d && d._sub_role === 'gather').length : 0,
+                topLevelSteps: (defn2.steps || []).length,
+                p1: shape(parOf(defn1)),
+                p2: shape(parOf(defn2)),
+            };
+        }"""
+    )
+    assert result["p1"], "scaffolded research_fanout did not serialize a parallel step"
+    assert result["loadedHydrated"], "parallel kind flattened on load (P0-2 regression)"
+    assert result["branchProxies"] >= 2, f"expected >=2 branch proxies after reload: {result}"
+    assert result["gatherProxies"] == 1, f"expected exactly one gather proxy: {result}"
+    # index (llm) + fanout (parallel) = 2 top-level steps; branches/gather nest.
+    assert result["topLevelSteps"] == 2, f"branch/gather leaked to top level: {result}"
+    assert result["p2"] == result["p1"], f"parallel not stable across round-trip: {result}"

@@ -6716,6 +6716,75 @@ function dfScaffoldPattern(patternKey, x, y) {
   return firstNid;
 }
 
+// GP-1a (P0-2): decorate a LOADED composite step (or one of its nested body/
+// branch/gather/worker entries) into canvas node data. Mirrors
+// _dfDecoratePatternNodeData but WITHOUT the Patterns-bench template provenance
+// (data.pattern/complexity) — a loaded step wasn't scaffolded from a bench card.
+// Fills the UI fields dfNodeHtml/dfRenderConfigPanel bind to while PRESERVING
+// kind + the nested composite config, and stamps the _sub_of/_sub_role proxy
+// linkage the composite serializer (_dfCleanStep / dfExportYaml) keys off.
+function _dfDecorateLoadedComposite(step, parentNid, subRole) {
+  step.name = step.name || step.id;
+  step.role = step.role || 'general';
+  step.inputs = Array.isArray(step.inputs) ? step.inputs : [];
+  step.outputs = (Array.isArray(step.outputs) && step.outputs.length) ? step.outputs : ['result'];
+  // a2a steps carry no prompt; every other kind renders with an (often empty)
+  // system_prompt so the node card + config panel have a field to bind. Accept
+  // the v2 structured prompt as a fallback, same as the plain-load path.
+  if (step.kind !== 'a2a' && step.system_prompt == null) {
+    step.system_prompt = (step.prompt && (step.prompt.task || step.prompt.role_inline)) || '';
+  }
+  step.output_format = (step.output_parser && step.output_parser.format) || step.output_format || 'raw';
+  step.quality_gates = Array.isArray(step.quality_gates) ? step.quality_gates : [];
+  step.persona = step.persona ||
+    (window.AgentIcons ? AgentIcons.resolve({ role: step.role, name: step.name }) : 'general');
+  if (parentNid != null) { step._sub_of = parentNid; step._sub_role = subRole; }
+  return step;
+}
+
+// GP-1a (P0-2): the inverse of dfScaffoldPattern for a SAVED composite step.
+// dfScaffoldPattern builds a composite sub-DAG from a Patterns-bench TEMPLATE;
+// this rebuilds the identical wired sub-DAG from a loaded step definition (real
+// ids, no suffix-rename, no budget re-stamp — the stored step already carries
+// its resolved kind config). The parent node's data IS the serialized step
+// (_dfCleanStep reads src.body/branches/gather/workers straight off it) and the
+// child proxies share those SAME nested objects, so a leaf edit round-trips and
+// the children (carrying _sub_of) never re-serialize as top-level steps. Returns
+// the parent node id so composerLoadDefinition can wire depends_on via idMap.
+function dfHydrateCompositeStep(step, x, y) {
+  if (!dfEditor || !step) return null;
+  const parent = _dfDecorateLoadedComposite(step);
+  const nid = dfAddPatternNode(parent, x, y);
+  const childX = x + 240;
+  // Sequential body chain (ralph / loop): parent → first → … → last.
+  if (Array.isArray(parent.body) && parent.body.length) {
+    let prev = nid;
+    parent.body.forEach((c, i) => {
+      const cnid = dfAddPatternNode(_dfDecorateLoadedComposite(c, nid, 'body'), childX + i * 240, y + 180);
+      try { dfEditor.addConnection(prev, cnid, 'output_1', 'input_1'); } catch (_) {}
+      prev = cnid;
+    });
+  }
+  // Parallel fan-out: parent → every branch → gather.
+  if (Array.isArray(parent.branches) && parent.branches.length) {
+    const branchNids = parent.branches.map((c, i) =>
+      dfAddPatternNode(_dfDecorateLoadedComposite(c, nid, 'branch'), childX, y - 160 + i * 160));
+    branchNids.forEach(bnid => { try { dfEditor.addConnection(nid, bnid, 'output_1', 'input_1'); } catch (_) {} });
+    if (parent.gather) {
+      const gnid = dfAddPatternNode(_dfDecorateLoadedComposite(parent.gather, nid, 'gather'), childX + 250, y);
+      branchNids.forEach(bnid => { try { dfEditor.addConnection(bnid, gnid, 'output_1', 'input_1'); } catch (_) {} });
+    }
+  }
+  // Orchestrator: parent → each named worker (workers is an id→step map).
+  if (parent.workers && typeof parent.workers === 'object' && !Array.isArray(parent.workers)) {
+    Object.keys(parent.workers).forEach((k, i) => {
+      const wnid = dfAddPatternNode(_dfDecorateLoadedComposite(parent.workers[k], nid, 'worker'), childX, y + 160 + i * 150);
+      try { dfEditor.addConnection(nid, wnid, 'output_1', 'input_1'); } catch (_) {}
+    });
+  }
+  return nid;
+}
+
 function dfNodeHtml(data) {
   // Seed nodes render as the START-pill grammar, not a step card. Branching
   // here keeps every repaint path (dfUpdateNodeData's apply) seed-aware.
@@ -10800,23 +10869,12 @@ function composerLoadDefinition(defn) {
   // load is not an edit. The operator's first real change after load starts
   // the draft. (Manual bench composition does NOT route through here.)
   _dfLoading = true;
-  // DR-1 collision-binding: this is the first-edit "load the SAVED definition"
-  // path. composerLoadDefinition cannot yet HYDRATE composite step kinds
-  // (parallel/loop/ralph/…) — that lands with GP-1 P0-2 (Gate D). Warn (don't
-  // silently flatten) so editing a published composite in Gate C isn't a quiet
-  // de-composition. Drafts themselves round-trip composites losslessly (blob),
-  // so this warning is scoped to the SAVED-definition load, not draft restore.
-  try {
-    const composites = (defn.steps || [])
-      .filter(s => s && s.kind && s.kind !== 'llm')
-      .map(s => s.kind);
-    if (composites.length && window.Toast) {
-      Toast.warn('Composite steps load flat',
-        `${composites.length} composite step(s) (${[...new Set(composites)].join(', ')}) ` +
-        'edit as plain nodes until composite hydration lands — Save would flatten them. ' +
-        'Re-scaffold from the Patterns bench instead.', { ttl: 5200 });
-    }
-  } catch (_) {}
+  // GP-1a (P0-2): composite step kinds (parallel/loop/ralph/orchestrator/…) now
+  // HYDRATE into their wired sub-DAG on load (dfHydrateCompositeStep below), so
+  // editing a saved/published composite is no longer a silent flatten — Save
+  // re-serializes the nested body/branches/gather unchanged. (This retires the
+  // Gate-C "Composite steps load flat" warning; the DR-1 first-edit path is now
+  // safe for composites.)
   try {
     // Centralized reveal (S0): loading a definition is a canvas-intent
     // action, so the Composer tab takes the stage — and it must do so
@@ -10853,10 +10911,21 @@ function composerLoadDefinition(defn) {
     // after every node exists.
     const idMap = {};
     (defn.steps || []).forEach((step, i) => {
-      const tmplKey = (step.role && dfStepTemplates.find(t => t.role === step.role)) ? step.role : 'custom';
-      const tmpl = dfStepTemplates.find(t => t.key === tmplKey) || dfStepTemplates.find(t => t.key === 'custom');
       const x = 80 + (i % 4) * 220;
       const y = 60 + Math.floor(i / 4) * 140;
+      // GP-1a (P0-2): a composite kind rebuilds its wired sub-DAG (parent +
+      // body/branch/gather/worker proxies) via the scaffold-inverse rather than
+      // collapsing to one plain llm node. Deep-copy the step first so the
+      // canvas owns its nested objects (the parent-data ⇄ child-proxy
+      // shared-reference contract dfScaffoldPattern relies on), then register
+      // only the parent in idMap — proxies are nested, never top-level deps.
+      if (step && step.kind && step.kind !== 'llm') {
+        const compNid = dfHydrateCompositeStep(JSON.parse(JSON.stringify(step)), x, y);
+        if (compNid != null) idMap[step.id] = compNid;
+        return;
+      }
+      const tmplKey = (step.role && dfStepTemplates.find(t => t.role === step.role)) ? step.role : 'custom';
+      const tmpl = dfStepTemplates.find(t => t.key === tmplKey) || dfStepTemplates.find(t => t.key === 'custom');
       // No auto-chain on load — the definition's depends_on drives wiring.
       const nodeId = dfAddNodeFromTemplate(tmpl.key, x, y, { autoChain: false });
       if (nodeId != null) {
