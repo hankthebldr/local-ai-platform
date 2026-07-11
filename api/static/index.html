@@ -479,6 +479,7 @@
     <div class="nav-section" aria-hidden="true">Library</div>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <button class="tab-btn" data-tab="prompts" data-action="switch-tab" data-tab-target="prompts">Prompts<span class="tab-count" id="prompts-count"></span></button>
+    <button class="tab-btn" data-tab="tasks" data-action="switch-tab" data-tab-target="tasks">Tasks<span class="tab-count" id="tasks-count"></span></button>
     <!-- Skill Lab folded into the Skills tab + Research tab. The
          knowledge graph + deep-research panel live in Research (Build);
          the Skills tab is the unified skill management page. -->
@@ -2695,6 +2696,26 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Tasks library (LB6) — manage/discover/create/edit agentic task
+       schemas that feed the Composer Task bench. The LibraryShell mounts
+       into #tasks-shell on first activation; the toolbar owns creation +
+       the operator-triggered discovery refresh (reads never fetch). Hooks
+       are NOT a tab here — task schemas reference them (colocated in
+       Prompts per decision). -->
+  <div class="tab-content" id="tab-tasks" style="display:none">
+    <div class="admin-modal-error" style="background:rgba(0,192,232,0.10);border-color:#00C0E8;color:#00C0E8;margin-bottom:14px;font-size:0.7rem">
+      ℹ Tasks are agentic step schemas (persona · role · instructions · outputs · prompt/hook refs). They feed the Composer Task bench under a "Library" divider — the built-in 13 stay first. Curated seeds ship with the app; refresh pulls the allowlisted remote catalog (Admin ▸ Sources governs it; reads never touch the network).
+    </div>
+    <div class="models-toolbar" style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+      <button class="action-btn accent" data-action="tasks.new">+ New task</button>
+      <span style="flex:1"></span>
+      <button type="button" class="action-btn" id="tasks-refresh-discover"
+              data-action="tasks.discover-refresh"
+              title="Operator-triggered fetch of the allowlisted remote task catalog (Admin ▸ Sources governs it); nothing fetches on tab activation">⟳ Discover</button>
+    </div>
+    <div id="tasks-shell"></div>
   </div>
 
   <div class="tab-content" id="tab-admin-mcp" style="display:none">

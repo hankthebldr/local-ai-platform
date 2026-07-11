@@ -29,6 +29,7 @@ import { LibraryShell } from './library/shell.js';
 import { LibraryWizard } from './library/wizard.js';
 import { MCPPanel } from './library/mcp.js';
 import { PromptsLibrary } from './library/prompts.js';
+import { TasksPanel } from './library/tasks.js';
 import { TestPane } from './library/test-pane.js';
 import { RunsTab } from './runs/runs-tab.js';
 import { WorkflowMemory } from './runs/workflow-memory.js';
@@ -157,6 +158,10 @@ function switchTab(name, el) {
   // Prompts library (roles + templates CRUD + render). Refresh on every
   // visit since prompts/{roles,templates}/ may have changed on disk.
   if (name === 'prompts' && window.PromptsLibrary) { PromptsLibrary.load(); }
+  // Tasks library (LB6) — agentic task schemas on the shell. Mount once,
+  // reload after; the discovery read serves the persisted digest only.
+  // Imported binding (no window global) — same posture as ModelsPanel.
+  if (name === 'tasks') { try { TasksPanel.activate(); } catch (_) {} }
   // Projects tab — refresh the Kanban (lists projects + the active
   // board) on every visit. Updates the count chip in the nav too.
   if (name === 'projects') {
@@ -5649,6 +5654,14 @@ function dfInitEditor() {
       dfAddNodeFromTemplate(tmplKey, canvasX, canvasY);
       return;
     }
+    // Library task cards (LB6): their own MIME routes to
+    // dfAddNodeFromLibraryTask (dfStepTemplates + the df-template path are
+    // untouched). Additive branch — a missing key is a no-op.
+    const libTaskKey = e.dataTransfer.getData('application/df-library-task');
+    if (libTaskKey) {
+      dfAddNodeFromLibraryTask(TasksPanel.libraryTask(libTaskKey), canvasX, canvasY);
+      return;
+    }
     // Pattern cards (BU4): SIMPLE spawns one kinded node; COMPLEX routes
     // through dfScaffoldPattern for the pre-wired sub-DAG.
     const patternKey = e.dataTransfer.getData('application/df-pattern');
@@ -6059,6 +6072,70 @@ function dfInitPalette() {
     item.dataset.templateKey = tmpl.key;
     palette.appendChild(item);
   });
+  // LB6 — append operator library tasks under a "Library" divider AFTER the
+  // 13 statics (deduped, statics win). Fail-soft: any error leaves the
+  // palette byte-identical. dfStepTemplates is NEVER mutated.
+  try { TasksPanel.fetchComposerTasks(); } catch (_) {}
+}
+
+// LB6 — spawn a canvas node from a library task schema. Mirrors
+// dfAddNodeFromTemplate's node-data body but registers via the
+// dfAddPatternNode seam (the established "register without a dfStepTemplates
+// lookup" precedent) — dfStepTemplates stays frozen. Save/restore is
+// untouched: the node carries a dfRoleColors-vocabulary `role`, so the
+// existing role-scan restore resolves it to the same-role static or `custom`.
+function dfAddNodeFromLibraryTask(schema, x, y) {
+  if (!schema || !dfEditor) return;
+  const data = {
+    id: (schema.key || 'task') + '_' + (++dfNextId),
+    name: schema.name,
+    role: schema.role,
+    persona: schema.persona,
+    system_prompt: schema.prompt,
+    outputs: [...(schema.outputs && schema.outputs.length ? schema.outputs : ['result'])],
+    output_format: schema.format || 'raw',
+    quality_gates: [],
+    inputs: [],
+    is_decision: !!schema.is_decision,
+  };
+  const nodeId = dfAddPatternNode(data, x, y);
+  dfSelectedNodeId = nodeId;
+  dfRenderConfigPanel(nodeId);
+  dfAutoChain(nodeId);
+  if (!_dfAnchorBusy) dfScheduleAnchorRefresh();
+  return nodeId;
+}
+
+// Click-to-add fallback for library task cards (drag-and-drop is finicky
+// across zoom/trackpad — the agent-card path had the same issue). Spawns the
+// task at the visible canvas center; `tasks.send-to-composer` rides this.
+async function dfSendTaskToComposer(taskId) {
+  const schema = TasksPanel.mapById(taskId);
+  if (!schema) { if (window.Toast) Toast.warn('Task not found', taskId, { ttl: 1600 }); return; }
+  if (typeof switchTab === 'function' && document.getElementById('tab-dashboard') &&
+      !document.getElementById('tab-dashboard').classList.contains('active')) {
+    switchTab('dashboard');
+  }
+  if (typeof ComposerView !== 'undefined' && ComposerView && ComposerView.init) {
+    try { ComposerView.init(); } catch (_) {}
+  } else if (typeof dfInitEditor === 'function') {
+    try { dfInitEditor(); } catch (_) {}
+  }
+  if (typeof dfEditor === 'undefined' || !dfEditor) {
+    if (window.Toast) Toast.warn('Canvas not ready', 'Try again in a moment', { ttl: 1800 });
+    return;
+  }
+  const canvas = document.getElementById('drawflow-canvas');
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const precanvas = dfEditor.precanvas || canvas;
+  const pre = precanvas.getBoundingClientRect();
+  const zoom = (typeof dfEditor.zoom === 'number') ? dfEditor.zoom : 1;
+  const canvasX = (rect.left + rect.width / 2 - pre.left) / zoom;
+  const canvasY = (rect.top + rect.height / 2 - pre.top) / zoom;
+  const jitter = (Math.random() - 0.5) * 60;
+  dfAddNodeFromLibraryTask(schema, canvasX + jitter, canvasY + jitter);
+  if (window.Toast) Toast.info('Added task', taskId, { ttl: 1400 });
 }
 
 function dfAddNodeFromTemplate(templateKey, x, y, opts) {
@@ -9666,11 +9743,25 @@ function _benchCapResolve(el) {
     const key = 'cap:' + (el.dataset.capId || el.dataset.dragValue || '');
     _benchInspectDebounced(key, () => ComposerWorkstream.inspectCapability(cap));
   };
+  // LB6 — library task cards hover-inspect from the dfLibraryTemplates Map
+  // (its OWN action id; the static bench.inspect-template handler is
+  // untouched). Feeds the same ComposerWorkstream.inspectTemplate inspector.
+  const inspectLibraryTaskCard = el => {
+    const rec = TasksPanel.libraryTask(el.dataset.taskId);
+    if (!rec) return;
+    _benchInspectDebounced('libtask:' + rec.key, () => ComposerWorkstream.inspectTemplate(rec));
+  };
   Actions.on('mouseover', {
     'bench.add-agent':       inspectAgentCard,   // hover inspects; click still adds (parity)
     'bench.inspect-template': inspectTemplateCard,
+    'bench.inspect-library-task': inspectLibraryTaskCard,
     'bench.inspect-cap':     inspectCapCard,     // plugin / MCP cards (not draggable)
     'bench.drag':            inspectCapCard      // skill cards + nested tool rows
+  });
+  // tasks.send-to-composer lives here (needs the canvas internals) — the
+  // click-to-add twin of the library-task drag path.
+  Actions.click({
+    'tasks.send-to-composer': el => dfSendTaskToComposer(el.dataset.id),
   });
   Actions.on('focusin', {
     'bench.add-agent': inspectAgentCard          // agent cards are tabbable (role=button)
