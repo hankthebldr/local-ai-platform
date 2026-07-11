@@ -92,6 +92,7 @@ class PluginService:
         # explicit layer is provided. Default falls back to the deployment-
         # resolved storage roots; if detection failed, plugins/ relative
         # to cwd (pre-Phase-1 behavior).
+        self._auto_resolve = False
         if system_dir is not None or user_dir is not None:
             self._system_dir = Path(system_dir) if system_dir else None
             self._user_dir = Path(user_dir) if user_dir else None
@@ -108,8 +109,15 @@ class PluginService:
                 self._system_dir = d.system_storage_root / "plugins"
                 self._user_dir = d.user_storage_root / "plugins"
             except Exception:
+                # Deployment singleton not installed yet — plugins.py builds
+                # this service at import time, BEFORE api/main.py's startup
+                # event runs detect_deployment(). Fall back to the pre-Phase-1
+                # cwd layout for now and retry lazily (LB5-U3): without the
+                # retry a live server has NO writable user layer and every
+                # user-layer write (install, forge, file PUT) 500s.
                 self._system_dir = Path("plugins")
                 self._user_dir = None
+                self._auto_resolve = True
         # Legacy alias for code paths that still call self._dir
         self._dir = self._system_dir or Path("plugins")
         self._plugins: dict = {}
@@ -119,12 +127,40 @@ class PluginService:
         # saves ride the same bump until scan_plugins() clears the flag.
         self._dirty: set = set()
 
+    def _maybe_resolve_layers(self) -> None:
+        """Late-bind the deployment storage layers (LB5-U3).
+
+        Only active for the auto-resolve constructor path that raced app
+        startup (see __init__). The first scan or user_dir access after
+        detect_deployment() has installed the singleton picks up the real
+        (system, user) layers — the object identity of the router/chat
+        shared singleton never changes.
+        """
+        if not self._auto_resolve:
+            return
+        try:
+            from .deployment import _get_current as _get_dep
+
+            d = _get_dep()
+        except Exception:
+            return  # still pre-startup — keep the cwd fallback for now
+        self._system_dir = d.system_storage_root / "plugins"
+        self._user_dir = d.user_storage_root / "plugins"
+        self._dir = self._system_dir
+        self._auto_resolve = False
+        logger.info(
+            "Plugin layers late-bound from deployment: system=%s user=%s",
+            self._system_dir,
+            self._user_dir,
+        )
+
     def scan_plugins(self) -> list:
         """Walk both layers (system first, then user). User overrides on id.
 
         Returns the union as a list of plugin dicts. Each carries `origin`
         and `overrides_system` so the UI can render which layer won.
         """
+        self._maybe_resolve_layers()
         self._plugins.clear()
         self._tools.clear()
         self._dirty.clear()  # reload closes the version-bump cycle (LB5-U2)
@@ -324,6 +360,7 @@ class PluginService:
     @property
     def user_dir(self) -> Optional[Path]:
         """Writable user-layer plugins directory (None when not configured)."""
+        self._maybe_resolve_layers()
         return self._user_dir
 
     def ensure_user_plugin(
@@ -339,6 +376,7 @@ class PluginService:
         RuntimeError when no writable user layer is configured. Callers
         should re-scan afterwards if they need the plugin discoverable.
         """
+        self._maybe_resolve_layers()
         if self._user_dir is None:
             raise RuntimeError(
                 "no writable user plugin layer; deployment not initialised"
@@ -528,6 +566,7 @@ class PluginService:
         rejected. Re-scans afterwards so the new plugin is immediately
         discoverable. Returns the installed plugin dict.
         """
+        self._maybe_resolve_layers()
         if self._user_dir is None:
             raise RuntimeError(
                 "no writable user plugin layer; deployment not initialised"

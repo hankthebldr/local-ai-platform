@@ -21,7 +21,12 @@ from pydantic import BaseModel, Field
 
 from ..logging_config import logger
 from ..middleware import require_master_key
+from ..models.plugin_models import PluginFileSet, PluginFileWrite, PluginSpecDraft
+from ..services.ollama_service import OllamaService
+from ..services.plugin_forge import PluginForgeService
 from ..services.plugin_service import PluginService
+
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
 
@@ -185,15 +190,6 @@ def _user_files_errors(exc: Exception) -> HTTPException:
     if isinstance(exc, ValueError):
         return HTTPException(status_code=400, detail=str(exc))
     return HTTPException(status_code=500, detail=str(exc))
-
-
-class PluginFileWrite(BaseModel):
-    """One file save from the Files tab editor. ``version`` (optional) is
-    honored verbatim as the new plugin.yaml version; when absent the first
-    save since the last reload patch-bumps it (dirty flag)."""
-
-    content: str
-    version: Optional[str] = None
 
 
 @router.get("/{plugin_id}/files", dependencies=[Depends(require_master_key)])
@@ -373,3 +369,83 @@ async def invoke_tool(plugin_id: str, tool_id: str, params: dict):
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     return result
+
+
+# ── Creation forge (LB5-U3) ──────────────────────────────────────────────
+# POST /scaffold/spec      NL description → editable PluginSpecDraft
+# POST /scaffold/generate  spec → reviewable PluginFileSet (nothing written)
+# POST /scaffold/install   reviewed file set → user layer + scan_plugins()
+#
+# The whole pipeline runs on LOCAL models (OllamaService + ModelResolver;
+# deterministic fallback when the model is down — the wizard never 5xxs on
+# a cold box). Every route is master-key gated. Skills-only by default:
+# tool stubs are an explicit opt-in and every *.py in the reviewed set
+# passes the denylisted-imports lint at install time (tools run in-process).
+# No path conflicts: "scaffold" matches _ID_RE, but the /{plugin_id} routes
+# above are GET/DELETE/PUT — these are POST-only.
+
+
+def _forge() -> PluginForgeService:
+    return PluginForgeService(OllamaService(OLLAMA_HOST))
+
+
+class ScaffoldSpecRequest(BaseModel):
+    """Operator description → draft spec. ``allow_tools`` is the explicit
+    opt-in; without it the local model is told to propose zero tools."""
+
+    description: str
+    name: str = ""
+    allow_tools: bool = False
+    model: Optional[str] = None
+    role: Optional[str] = "reasoning"
+
+
+class ScaffoldGenerateRequest(BaseModel):
+    """(Edited) spec → file set. ``include_tools`` re-confirms the opt-in at
+    generation time — a seeded spec carrying tools still needs it."""
+
+    spec: PluginSpecDraft
+    include_tools: bool = False
+
+
+@router.post("/scaffold/spec", dependencies=[Depends(require_master_key)])
+async def scaffold_spec(req: ScaffoldSpecRequest):
+    """Draft a plugin spec from a natural-language description (local model;
+    deterministic one-skill/zero-tools fallback when the model is down)."""
+    if not req.description.strip():
+        raise HTTPException(status_code=400, detail="description is required")
+    draft = _forge().draft_spec(
+        req.description,
+        name=req.name,
+        allow_tools=req.allow_tools,
+        model=req.model,
+        role=req.role,
+    )
+    return draft.model_dump()
+
+
+@router.post("/scaffold/generate", dependencies=[Depends(require_master_key)])
+async def scaffold_generate(req: ScaffoldGenerateRequest):
+    """Materialize a (possibly operator-edited) spec into a reviewable file
+    set. Nothing is written — install is a separate, reviewed step."""
+    try:
+        file_set = _forge().generate_files(req.spec, include_tools=req.include_tools)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return file_set.model_dump()
+
+
+@router.post("/scaffold/install", dependencies=[Depends(require_master_key)])
+async def scaffold_install(file_set: PluginFileSet):
+    """Install a reviewed file set into the user layer (409 on existing id,
+    charset-allowlisted ids, containment on every path, atomic writes,
+    denylist lint on every *.py), then re-scan so it registers immediately."""
+    try:
+        installed = _forge().install(plugin_service, file_set)
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"installed": installed["id"], "plugin": _with_layer(installed)}

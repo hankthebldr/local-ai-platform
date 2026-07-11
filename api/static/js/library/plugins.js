@@ -32,6 +32,13 @@
 // Reload badge whose button fires the existing POST /api/plugins/reload
 // (in-process rescan — chat + tester pick the edit up next call). Delete
 // stays Confirm-gated.
+//
+// Creation forge (LB5-U3): + Forge runs a LibraryWizard flow over the three
+// master-key scaffold routes — description → spec draft (LOCAL model,
+// deterministic fallback surfaced honestly) → generated file set → MANDATORY
+// per-file review/edit → install (409 on existing id, server-side denylist
+// lint on every *.py since tool code runs in-process). Seedable from a
+// Discovered digest record via plugins.seed-wizard.
 import { esc, renderMarkdown } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
@@ -492,9 +499,9 @@ export const PluginsPanel = (function () {
     });
   }
 
-  // Seed wizard — stages a digest record (name + description pre-filled) as
-  // the seed for the plugin-creation wizard; the forge flow itself lands in
-  // LB5-U3 and consumes the staged seed.
+  // Seed wizard (LB5-U1 → LB5-U3): a digest record (name + description
+  // pre-filled, editable) is staged as the seed and handed straight to the
+  // local-model creation forge.
   function seedWizard(id) {
     const rec = _discRecord(id || _selected());
     if (!rec) return;
@@ -510,22 +517,246 @@ export const PluginsPanel = (function () {
               style="width:100%">${esc(rec.description || '')}</textarea>
             <div class="admin-modal-sub" style="margin-top:8px">
               Stages this record as the seed for the local-model plugin forge —
-              the creation wizard pre-fills from it.</div>`;
+              the creation wizard opens pre-filled from it.</div>`;
         },
       },
-      submitLabel: 'Stage seed',
+      submitLabel: 'Open forge',
       onSubmit: async (state) => {
         _forgeSeed = {
           name: (state.values.name || rec.name || '').trim(),
           description: (state.values.description || rec.description || '').trim(),
           source_record: rec.id,
         };
-        return { ok: true, message: 'Seed staged for the plugin forge.' };
+        // Hand off to the creation forge on the staged seed (LB5-U3); the
+        // reopen rides a task so this submit's render settles first.
+        setTimeout(() => openForge(_forgeSeed), 0);
+        return { ok: true, message: 'Seed staged — opening the plugin forge…' };
       },
     });
   }
 
-  function forgeSeed() { return _forgeSeed; }   // consumed by LB5-U3
+  function forgeSeed() { return _forgeSeed; }   // consumed by the forge flow
+
+  // ── Creation forge (LB5-U3) ─────────────────────────────────────────
+  // LibraryWizard flow over the three master-key scaffold routes:
+  //   Source    — name + description + explicit tools opt-in (seedable from
+  //               a digest record via plugins.seed-wizard)
+  //   Configure — spec drafted by the LOCAL model (POST /scaffold/spec;
+  //               honest fallback chip when the model is down), editable JSON
+  //   Confirm   — MANDATORY per-file review/edit (POST /scaffold/generate;
+  //               tool code runs in-process, nothing installs sight-unseen),
+  //               then Install → POST /scaffold/install (409 on existing id,
+  //               server re-lints every *.py). Every POST is retries:0.
+  let _forgeState = null;   // live wizard state (captured by step renderers)
+  let _forgeDraft = null;   // PluginSpecDraft — server shape, operator-editable
+  let _forgeFiles = null;   // PluginFileSet from /scaffold/generate
+  let _forgeIdx = 0;        // file selected in the review screen
+  let _forgeBusy = false;
+
+  function openForge(seed) {
+    const s = seed || _forgeSeed || {};
+    _forgeDraft = null; _forgeFiles = null; _forgeIdx = 0; _forgeBusy = false;
+    LibraryWizard.open({
+      title: 'Forge plugin — local model',
+      state: { values: {
+        name: s.name || '', description: s.description || '', allow_tools: false,
+      } },
+      steps: {
+        source: (body, state) => {
+          _forgeState = state;
+          const v = state.values || {};
+          body.innerHTML = `
+            <div class="admin-modal-sub" style="margin-bottom:8px">
+              Describe the plugin; the LOCAL model drafts a spec from it —
+              nothing leaves the box.${s.source_record
+                ? ` Seeded from digest record <code>${esc(s.source_record)}</code>.` : ''}</div>
+            <label class="admin-modal-label" for="plugin-forge-name">Plugin name</label>
+            <input id="plugin-forge-name" data-wiz-key="name" value="${esc(v.name || '')}">
+            <label class="admin-modal-label" for="plugin-forge-desc" style="margin-top:8px">What should it do?</label>
+            <textarea id="plugin-forge-desc" data-wiz-key="description" rows="5"
+              style="width:100%" placeholder="e.g. Coach chat sessions on writing XSIAM correlation rules…">${esc(v.description || '')}</textarea>
+            <label class="admin-modal-label" style="margin-top:8px;display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="checkbox" id="plugin-forge-tools" data-wiz-key="allow_tools"${v.allow_tools ? ' checked' : ''}>
+              also scaffold tool stubs (opt-in — tools run in-process; skills-only by default)
+            </label>`;
+        },
+        configure: (body, state) => { _forgeState = state; _renderForgeSpec(body); },
+        confirm: (body, state) => { _forgeState = state; _renderForgeReview(body); },
+      },
+      validate: (step, state) => {
+        if (step === 'source' && !String(state.values.description || '').trim()) {
+          return 'describe what the plugin should do first';
+        }
+        if (step === 'configure') {
+          const ta = document.getElementById('plugin-forge-spec');
+          if (!ta || !_forgeDraft) return 'draft a spec first';
+          try {
+            const parsed = JSON.parse(ta.value);
+            if (JSON.stringify(parsed) !== JSON.stringify(_forgeDraft)) {
+              _forgeDraft = parsed;
+              _forgeFiles = null;   // spec changed — the file set must regenerate
+            }
+          } catch (e) { return 'spec is not valid JSON: ' + e.message; }
+        }
+        if (step === 'confirm' && (!_forgeFiles || !(_forgeFiles.files || []).length)) {
+          return 'generate the file set first';
+        }
+        return true;
+      },
+      submitLabel: 'Install',
+      onSubmit: () => installForge(),
+    });
+  }
+
+  function _renderForgeSpec(body) {
+    if (!_forgeDraft) {
+      body.innerHTML = '<div class="model-empty">Drafting spec on the local model…</div>';
+      draftSpec();
+      return;
+    }
+    const chip = _forgeDraft.source === 'fallback'
+      ? '<span class="lib-badge" style="color:var(--amber)">fallback — model unavailable, deterministic one-skill draft</span>'
+      : `<span class="lib-badge">model · ${esc(_forgeDraft.model || 'local')}</span>`;
+    body.innerHTML = `
+      <div class="admin-modal-sub" style="margin-bottom:6px">Draft spec ${chip} —
+        edit the JSON freely; Next materializes it into a reviewable file set.
+        <button type="button" class="action-btn" data-action="plugins.wizard-spec"
+          style="float:right" title="Discard edits and re-draft from the description">↺ Re-draft</button></div>
+      <textarea id="plugin-forge-spec" rows="14" spellcheck="false"
+        style="width:100%;font-family:var(--mono);font-size:0.68rem"
+        aria-label="Plugin spec draft (JSON)">${esc(JSON.stringify(_forgeDraft, null, 2))}</textarea>`;
+  }
+
+  // POST /scaffold/spec — retries:0 (LLM call), AdminAuth headers.
+  async function draftSpec() {
+    if (_forgeBusy || !_forgeState) return;
+    _forgeBusy = true;
+    _forgeDraft = null; _forgeFiles = null;
+    const body = document.getElementById('lib-wizard-body');
+    if (body) body.innerHTML = '<div class="model-empty">Drafting spec on the local model…</div>';
+    const v = _forgeState.values || {};
+    let r;
+    try {
+      r = await LibraryWizard.post('/api/plugins/scaffold/spec', {
+        description: String(v.description || ''),
+        name: String(v.name || ''),
+        allow_tools: !!v.allow_tools,
+      }, _headers());
+    } catch (e) { r = { ok: false, data: { detail: e.message }, status: 0 }; }
+    _forgeBusy = false;
+    if (!r.ok) {
+      if (body) body.innerHTML = `
+        <div class="admin-modal-error" style="margin:0">Draft failed:
+          ${esc((r.data && r.data.detail) || `HTTP ${r.status}`)}</div>
+        <button type="button" class="action-btn" data-action="plugins.wizard-spec"
+          style="margin-top:8px">Retry</button>`;
+      return;
+    }
+    _forgeDraft = r.data;
+    if (body) _renderForgeSpec(body);
+  }
+
+  function _renderForgeReview(body) {
+    if (!_forgeFiles) {
+      body.innerHTML = '<div class="model-empty">Generating file set…</div>';
+      generateForge();
+      return;
+    }
+    _renderForgeFiles(body);
+  }
+
+  // POST /scaffold/generate — nothing is written server-side; the response
+  // is the review payload. retries:0.
+  async function generateForge() {
+    if (_forgeBusy || !_forgeDraft) return;
+    _forgeBusy = true;
+    _forgeIdx = 0;
+    const body = document.getElementById('lib-wizard-body');
+    let r;
+    try {
+      r = await LibraryWizard.post('/api/plugins/scaffold/generate', {
+        spec: _forgeDraft,
+        include_tools: !!(((_forgeState || {}).values || {}).allow_tools),
+      }, _headers());
+    } catch (e) { r = { ok: false, data: { detail: e.message }, status: 0 }; }
+    _forgeBusy = false;
+    if (!r.ok) {
+      if (body) body.innerHTML = `
+        <div class="admin-modal-error" style="margin:0">Generate failed:
+          ${esc((r.data && r.data.detail) || `HTTP ${r.status}`)}</div>
+        <button type="button" class="action-btn" data-action="plugins.wizard-generate"
+          style="margin-top:8px">Retry</button>`;
+      return;
+    }
+    _forgeFiles = r.data;
+    if (body) _renderForgeFiles(body);
+  }
+
+  // The MANDATORY review/edit screen — every generated file is shown and
+  // editable before anything reaches disk (tool code runs in-process).
+  function _renderForgeFiles(body) {
+    body = body || document.getElementById('lib-wizard-body');
+    if (!body || !_forgeFiles) return;
+    const files = _forgeFiles.files || [];
+    const f = files[_forgeIdx] || files[0] || { path: '', content: '' };
+    body.innerHTML = `
+      <div class="admin-modal-sub" style="margin-bottom:6px">
+        Mandatory review — every file is editable here and NOTHING is written
+        until Install. Tool code runs in-process; *.py files are denylist-linted
+        again server-side at install.
+        <button type="button" class="action-btn" data-action="plugins.wizard-generate"
+          style="float:right" title="Re-generate from the current spec (discards file edits)">↺ Re-generate</button></div>
+      ${(_forgeFiles.warnings || []).map(w =>
+        `<div class="admin-modal-sub" style="color:var(--amber)">⚠ ${esc(w)}</div>`).join('')}
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin:6px 0">
+        ${files.map((x, i) => `
+          <button type="button" class="action-btn${i === _forgeIdx ? ' accent' : ''}"
+            data-action="plugins.wizard-file" data-idx="${i}">${esc(x.path)}</button>`).join('')}
+      </div>
+      <textarea id="plugin-forge-file" rows="14" spellcheck="false"
+        style="width:100%;font-family:var(--mono);font-size:0.68rem"
+        aria-label="File body — ${esc(f.path)}">${esc(f.content)}</textarea>
+      <div class="admin-modal-sub" style="margin-top:4px">
+        Installs <code>${esc(_forgeFiles.plugin_id)}</code> into the user layer ·
+        ${files.length} file${files.length === 1 ? '' : 's'}</div>
+      <div id="lib-wizard-result" style="margin-top:8px"></div>`;
+  }
+
+  function _syncForgeFile() {
+    const ta = document.getElementById('plugin-forge-file');
+    if (!ta || !_forgeFiles) return;
+    const f = (_forgeFiles.files || [])[_forgeIdx];
+    if (f) f.content = ta.value;
+  }
+
+  function switchForgeFile(idx) {
+    if (!_forgeFiles) return;
+    _syncForgeFile();
+    const n = (_forgeFiles.files || []).length;
+    _forgeIdx = Math.max(0, Math.min(n - 1, idx | 0));
+    _renderForgeFiles();
+  }
+
+  // POST /scaffold/install — retries:0 (a write; never double-fire). The
+  // server 409s an existing id, containment-checks every path and re-lints
+  // *.py, then scan_plugins() registers the plugin — no separate reload.
+  async function installForge() {
+    if (!_forgeFiles) return { ok: false, detail: 'generate the file set first' };
+    _syncForgeFile();
+    const r = await LibraryWizard.post('/api/plugins/scaffold/install', {
+      plugin_id: _forgeFiles.plugin_id,
+      files: _forgeFiles.files || [],
+      tools_included: !!_forgeFiles.tools_included,
+    }, _headers());
+    if (!r.ok) {
+      return { ok: false, detail: (r.data && r.data.detail) || `HTTP ${r.status}` };
+    }
+    const pid = _forgeFiles.plugin_id;
+    _forgeSeed = null;
+    await load();
+    select(pid);
+    return { ok: true, message: `Installed ${pid} — registered and live (skills inject on the next matching chat turn).` };
+  }
 
   // Visible ⟳ Digest — the ONLY code path that triggers marketplace network
   // ingestion (operator-triggered POST, master-key gated, retries:0).
@@ -678,6 +909,12 @@ export const PluginsPanel = (function () {
     'plugins.view-manifest': el => viewManifest(el.dataset.id),
     'plugins.import-skills': el => importSkills(el.dataset.id),
     'plugins.seed-wizard': el => seedWizard(el.dataset.id),
+    // LB5-U3 creation forge (all POSTs behind these are retries:0)
+    'plugins.wizard-open': () => openForge(),
+    'plugins.wizard-spec': () => draftSpec(),
+    'plugins.wizard-generate': () => { _forgeFiles = null; generateForge(); },
+    'plugins.wizard-install': () => LibraryWizard.submit(),
+    'plugins.wizard-file': el => switchForgeFile(parseInt(el.dataset.idx, 10) || 0),
     'plugins.goto-mcp': () => LibraryShell.open('mcp'),
     'plugins.peek': el => AssetPeek.open('plugin', el.dataset.id),
     // LB5-U2 management plane
@@ -696,6 +933,7 @@ export const PluginsPanel = (function () {
   return { load, refresh, select, renderDetail, renderToolAccordion,
            runTool, renderToolForm, _collectParams,
            refreshDigest, importSkills, seedWizard, viewManifest, forgeSeed,
+           openForge, draftSpec, generateForge, installForge,
            openFile, saveFile, reloadPlugins, deletePlugin,
            adapter };
 })();
