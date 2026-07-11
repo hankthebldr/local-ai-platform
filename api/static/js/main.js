@@ -5645,6 +5645,11 @@ function dfInitEditor() {
   container.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
   container.addEventListener('drop', (e) => {
     e.preventDefault();
+    // MS-2: whatever branch a drop dispatches into, clear the empty-state
+    // overlay at the drop-handler tail so a freshly dropped step is never
+    // left painted-over by the "Compose a workflow" guide. finally() runs on
+    // every early-return path below; the update is real-step-gated + guarded.
+    try {
     const rect = container.getBoundingClientRect();
     const canvasX = (e.clientX - rect.left - dfEditor.precanvas.getBoundingClientRect().left + rect.left);
     const canvasY = (e.clientY - rect.top  - dfEditor.precanvas.getBoundingClientRect().top  + rect.top);
@@ -5680,6 +5685,9 @@ function dfInitEditor() {
     // Skills / plugin tools / MCP tools attach to the SELECTED step
     // rather than spawning a new node — they're per-step equipment.
     // (Existing flow elsewhere in the file handles this; left intact.)
+    } finally {
+      try { ComposerView.updateCanvasEmptyState(); } catch (_) {}
+    }
   });
 }
 
@@ -5725,6 +5733,9 @@ async function composerAddAgentAtCenter(agentId) {
   // exactly on top of each other.
   const jitter = (Math.random() - 0.5) * 60;
   await dfAddNodeFromAgent(agentId, canvasX + jitter, canvasY + jitter);
+  // MS-2: click-to-add lands the node asynchronously (agent fetch) — refresh
+  // the empty-state overlay once it's registered so the guide clears.
+  try { ComposerView.updateCanvasEmptyState(); } catch (_) {}
   if (window.Toast) Toast.info('Added agent', agentId, { ttl: 1400 });
 }
 window.composerAddAgentAtCenter = composerAddAgentAtCenter;
@@ -6492,6 +6503,9 @@ function dfAddSeedNode(x, y) {
   // Keep the mirror in sync (dfExportYaml + the DfSeedSchema modal read it).
   dfSeedSchema = schema.map(s => ({ key: s.key, description: s.description }));
   if (!_dfAnchorBusy) dfScheduleAnchorRefresh();
+  // MS-2: refresh the canvas state so the spine primes on the seed while the
+  // overlay stays up (a seed alone is not a real step — see updateCanvasEmptyState).
+  try { ComposerView.updateCanvasEmptyState(); } catch (_) {}
   return nodeId;
 }
 

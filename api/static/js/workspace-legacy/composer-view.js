@@ -28,14 +28,22 @@ export const ComposerView = (function () {
   function updateCanvasEmptyState() {
     const panel = document.querySelector('.composer-canvas-panel');
     if (!panel) return;
-    const hasNodes = Object.keys(dfNodeData || {}).length > 0;
-    panel.classList.toggle('has-nodes', hasNodes);
+    // MS-2: the empty-state overlay is gated on REAL step count, not raw node
+    // count. The boot seed is scaffolding (an input contract, not a composed
+    // step) — counting it would falsely hide the "Compose a workflow" guide on
+    // a fresh canvas and, worse, leave the overlay stale after a palette drop.
+    const realSteps = Object.keys(dfNodeData || {})
+      .filter((k) => dfNodeData[k] && !dfNodeData[k].is_seed).length;
+    panel.classList.toggle('has-nodes', realSteps > 0);
     // Spine follows the canvas: dormant ghost when empty, live when primed.
+    // It keys off ANY node presence (seed included) — unchanged from prior
+    // behavior — so priming the workstream strip is decoupled from the overlay.
     // During a BootSequence reveal we hold it primed (window._bsPriming) so
     // composerNewWorkflow()'s transient 0-node window can't hide the canvas
     // mid-build — drawflow must lay nodes into a visible, sized canvas.
+    const anyNodes = Object.keys(dfNodeData || {}).length > 0;
     if (typeof ComposerSplit !== 'undefined') {
-      try { ComposerSplit.setSpinePrimed(window._bsPriming ? true : hasNodes); } catch (_) {}
+      try { ComposerSplit.setSpinePrimed(window._bsPriming ? true : anyNodes); } catch (_) {}
     }
   }
 

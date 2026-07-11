@@ -79,6 +79,22 @@ def test_simple_pattern_drop_creates_one_kinded_node(signed_in_page):
     assert node["code"]["source"] == "inline"
 
 
+def test_workbench_benches_stay_single_row_at_1600(signed_in_page):
+    """MS-2 invariant re-asserted on the Patterns bench (PB-1 re-runs it at 7
+    benches): at 1600px every workbench tab shares a single offsetTop — the tab
+    strip scrolls horizontally (flex-wrap:nowrap) instead of wrapping to a
+    second row, which the 6th (Patterns) tab used to trigger."""
+    page = signed_in_page
+    page.set_viewport_size({"width": 1600, "height": 900})
+    _wait_canvas(page)
+    tops = page.evaluate(
+        "() => Array.from(document.querySelectorAll('.workbench-tabs .workbench-tab'))"
+        ".map(t => t.offsetTop)"
+    )
+    assert len(tops) >= 6, f"expected >=6 workbench tabs, got {len(tops)}"
+    assert len(set(tops)) == 1, f"workbench tabs wrapped to multiple rows: {tops}"
+
+
 def test_complex_ralph_pattern_scaffolds_wired_sub_dag(signed_in_page):
     """Dropping the ralph COMPLEX pattern creates the composite parent plus
     its four body proxies (plan/execute/verify/consolidate), wired

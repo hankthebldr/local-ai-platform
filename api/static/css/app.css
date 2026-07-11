@@ -5694,11 +5694,16 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .composer-right-panel { padding: 10px 12px; }
 .composer-right .composer-right-panel:first-child { max-height: 280px; overflow: auto; }
 
-/* Tab strip — wrap to a second row so every tab (incl. MCPs) is
-   reachable even when the left rail is narrow. Tabs stay clickable
-   targets at any width. */
-.workbench-tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding: 0 4px; row-gap: 0; }
-.workbench-tab { background: transparent; border: none; color: var(--text-dim); font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 7px 8px; cursor: pointer; border-bottom: 2px solid transparent; }
+/* Tab strip — every bench tab (incl. MCPs / Patterns) stays reachable even
+   when the left rail is narrow. Tabs stay clickable targets at any width. */
+/* MS-2: benches stay on ONE row. As the palette grows (Patterns is the 6th,
+   PB-1's Prompts the 7th) tabs must scroll horizontally rather than wrap to a
+   second row — a wrapped row shoves the canvas down and reads as breakage. */
+.workbench-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; border-bottom: 1px solid var(--border); padding: 0 4px; row-gap: 0; scrollbar-width: thin; scrollbar-color: var(--border) transparent; -webkit-overflow-scrolling: touch; }
+.workbench-tabs::-webkit-scrollbar { height: 4px; }
+.workbench-tabs::-webkit-scrollbar-track { background: transparent; }
+.workbench-tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.workbench-tab { flex: 0 0 auto; white-space: nowrap; background: transparent; border: none; color: var(--text-dim); font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 7px 6px; cursor: pointer; border-bottom: 2px solid transparent; }
 .workbench-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .workbench-tab:hover:not(.active) { color: var(--text); }
 .workbench-body { flex: 1; overflow: auto; padding: 6px; }
