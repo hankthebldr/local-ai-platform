@@ -266,6 +266,39 @@
 .skills-tree-file:hover { background:var(--surface-card,var(--bg)); color:var(--accent); }
 .skills-tree-meta { color:var(--text-muted); font-size:0.6rem; margin-left:6px; }
 .skills-file-view { margin-top:10px; }
+/* ── LB4-U2 — Models library shell: fit dots, runner badges, intent
+   recommender strip, pull-progress line, perf table, prompt-recommend rows.
+   Dot classes mirror the /catalog fit payload (good/tight/no-fit/unknown). */
+.lib-dot.fit-no-fit { background:var(--danger); }
+.lib-dot.fit-unknown { background:var(--text-muted); }
+.lib-badge.models-runner { text-transform:uppercase; letter-spacing:0.06em; }
+.lib-badge.runner-vllm { color:var(--accent); border-color:var(--accent-dim,var(--accent)); }
+.lib-badge.runner-ollama { color:var(--cyan); border-color:var(--cyan-dim,var(--cyan)); }
+.lib-badge.runner-hf { color:var(--amber,#F5A623); }
+.lib-badge.models-gguf { color:var(--success); }
+.lib-badge.models-rec-hit { color:var(--amber,#F5A623); border-color:var(--amber,#F5A623); }
+.models-toolbar { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.models-pull-progress { font-family:var(--mono); font-size:0.62rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:46ch; }
+.models-rec-strip { border:1px solid var(--border); border-radius:var(--radius-sm,4px); padding:8px 10px; margin-bottom:10px; font-size:0.7rem; }
+.models-rec-head { font-family:var(--mono); font-size:0.62rem; color:var(--text-muted); margin-bottom:6px; letter-spacing:0.04em; }
+.models-rec-row { display:flex; align-items:center; gap:8px; padding:3px 0; flex-wrap:wrap; }
+.models-rec-rank { font-family:var(--mono); font-size:0.62rem; color:var(--accent); min-width:22px; }
+.models-rec-name { color:var(--text); cursor:pointer; text-align:left; }
+.models-rec-name:hover { color:var(--accent); }
+.models-perf-table { border-collapse:collapse; font-size:0.68rem; width:100%; }
+.models-perf-table th, .models-perf-table td { border:1px solid var(--border); padding:4px 8px; text-align:left; }
+.models-perf-table th { color:var(--text-muted); font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.06em; }
+.models-fit-bar { height:8px; border:1px solid var(--border); border-radius:var(--radius-pill,999px); overflow:hidden; margin:8px 0 4px; background:var(--bg-deep,var(--bg)); }
+.models-fit-fill { height:100%; }
+.models-fit-fill.fit-good { background:var(--success); }
+.models-fit-fill.fit-tight { background:var(--amber,#F5A623); }
+.models-fit-fill.fit-no-fit { background:var(--danger); }
+.models-fit-fill.fit-unknown { background:var(--text-muted); }
+.models-prompt-row { border:1px solid var(--border); border-radius:var(--radius-sm,4px); padding:6px 9px; margin-bottom:6px; }
+.models-prompt-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.models-prompt-score { font-family:var(--mono); font-size:0.62rem; color:var(--accent); margin-left:auto; }
+.models-prompt-factors { margin-top:4px; display:flex; gap:4px; flex-wrap:wrap; }
+.models-prompt-factors .lib-chip { margin-left:0; }
 </style>
 <style id="test-pane-styles">
 /* ── TestPane — layered test harness in the shell Test tab (LB1-U2) ────
@@ -1247,20 +1280,46 @@
 
   <!-- ═══ TAB: INVENTORY ═══════════════════════════════════════════ -->
   <div class="tab-content" id="tab-inventory">
-    <div class="panel" style="margin-bottom:16px">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">Hardware Profile</div>
-      <div id="hw-info" class="metric-row">
-        <span class="metric-key">detecting...</span>
-      </div>
+    <!-- LB4-U2: Models library shell — THE single visible models surface on
+         this tab. Intent ranking (deterministic recommender) + the
+         operator-triggered HF discovery refresh live on the toolbar; the
+         LibraryShell mounts into #models-shell on first tab activation. -->
+    <div class="models-toolbar">
+      <label for="models-intent" style="font-size:0.62rem;color:var(--text-muted);font-family:var(--mono)">// intent</label>
+      <select id="models-intent" class="model-select" data-action="models.intent"
+              aria-label="Rank models for an intent">
+        <option value="">— rank models for an intent —</option>
+        <!-- Composer task taxonomy — same keys as TASK_ROLE_MAP
+             (api/routers/inventory.py) / dfStepTemplates. -->
+        <option value="analyzer">analyzer</option>
+        <option value="classifier">classifier</option>
+        <option value="planner">planner</option>
+        <option value="retriever">retriever</option>
+        <option value="code_gen">code_gen</option>
+        <option value="rule_writer">rule_writer</option>
+        <option value="composer">composer</option>
+        <option value="validator">validator</option>
+        <option value="reviewer">reviewer</option>
+        <option value="decision">decision</option>
+        <option value="fast_extract">fast_extract</option>
+        <option value="uncensored">uncensored</option>
+        <option value="custom">custom</option>
+      </select>
+      <span id="models-pull-progress" class="models-pull-progress" hidden></span>
+      <span style="flex:1"></span>
+      <button type="button" class="action-btn" id="models-refresh-discover"
+              data-action="models.refresh-discover"
+              title="Operator-triggered HuggingFace scan — fires the master-key POST /api/inventory/discover/refresh; nothing fetches on tab activation">⟳ Discover</button>
     </div>
+    <div id="models-rec-strip" class="models-rec-strip" hidden></div>
+    <div id="models-shell"></div>
 
     <!-- Installed Locally — every model actually resident on this box across
-         backends (Ollama + vLLM), catalogued or not. The catalog grid below
-         is for DISCOVERING new models; this panel MANAGES what you already
-         have. Populated by loadInstalledLocal() from /api/inventory/status
-         (installed_local) cross-referenced with /api/inventory/memory. -->
-    <div class="panel" style="margin-bottom:16px">
+         backends (Ollama + vLLM), catalogued or not. The shell above is for
+         browsing/pulling; this panel MANAGES memory residency. Populated by
+         loadInstalledLocal() from /api/inventory/status (installed_local)
+         cross-referenced with /api/inventory/memory. -->
+    <div class="panel" style="margin:16px 0">
       <span class="corner-tr"></span><span class="corner-bl"></span>
       <div class="panel-label">Installed Locally
         <span class="tab-count" id="installed-local-count"></span>
@@ -1271,19 +1330,36 @@
       </div>
     </div>
 
-    <div class="inv-toolbar">
-      <input class="search-input" type="text" aria-label="Search model catalog" placeholder="Search models..." id="inv-search" oninput="filterCatalog()" />
-      <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
-      <button class="filter-btn" onclick="setFilter('installed', this)">Installed</button>
-      <button class="filter-btn" onclick="setFilter('available', this)">Available</button>
-      <button class="filter-btn" onclick="setFilter('uncensored', this)">Uncensored</button>
-      <button class="filter-btn" onclick="setFilter('coding', this)">Coding</button>
-      <button class="filter-btn" onclick="setFilter('reasoning', this)">Reasoning</button>
-    </div>
+    <!-- Hidden legacy holder (LB4-U2 / critique F2): the pre-shell catalog
+         surface parks here with its ids UNCHANGED (#inv-stats, #inv-grid,
+         .inv-toolbar, hardware panel). CatalogModelsShare.showInCatalog()
+         still relocates these nodes to the Catalog page (the Admin Catalog
+         keeps binding); showInModelsTab() returns them HERE — so the Models
+         tab never renders two models surfaces and never double-fetches
+         /api/inventory. -->
+    <div id="inv-legacy-holder" hidden>
+      <div class="panel" style="margin-bottom:16px">
+        <span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="panel-label">Hardware Profile</div>
+        <div id="hw-info" class="metric-row">
+          <span class="metric-key">detecting...</span>
+        </div>
+      </div>
 
-    <div class="inv-stats" id="inv-stats"></div>
-    <div class="inv-grid" id="inv-grid">
-      <div class="model-empty">Loading catalog...</div>
+      <div class="inv-toolbar">
+        <input class="search-input" type="text" aria-label="Search model catalog" placeholder="Search models..." id="inv-search" oninput="filterCatalog()" />
+        <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+        <button class="filter-btn" onclick="setFilter('installed', this)">Installed</button>
+        <button class="filter-btn" onclick="setFilter('available', this)">Available</button>
+        <button class="filter-btn" onclick="setFilter('uncensored', this)">Uncensored</button>
+        <button class="filter-btn" onclick="setFilter('coding', this)">Coding</button>
+        <button class="filter-btn" onclick="setFilter('reasoning', this)">Reasoning</button>
+      </div>
+
+      <div class="inv-stats" id="inv-stats"></div>
+      <div class="inv-grid" id="inv-grid">
+        <div class="model-empty">Loading catalog...</div>
+      </div>
     </div>
   </div>
 

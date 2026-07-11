@@ -22,6 +22,8 @@
 //     renderRowExtras?(item): Node|null,    // escape hatch beyond the fields above
 //     detail(id): {sections:{overview,…}},  // value: html string | Node | async (mountEl)=>…
 //                                           // fns are invoked on FIRST subnav activation
+//     sectionOrder?: [...], sectionLabels?: {key: label},  // kind-specific
+//                                           // subnav sections (LB4 models)
 //     actions(id): [{action?, label, verb, enabled?, reason?, danger?, data?}],
 //     testPane?(id): renderFn,              // Test tab slot — hidden when absent (LB1 fills)
 //     onAction?(verb, id, el),              // generic lib.action dispatcher target
@@ -346,8 +348,11 @@ export const LibraryShell = (function () {
     } catch (_) { sections = {}; }
     // Test tab slot: filled only when the adapter wires a testPane (LB1).
     if (a.testPane && !sections.test) sections.test = (mountEl) => a.testPane(id)(mountEl);
-    const known = SECTION_ORDER.filter(s => sections[s] != null);
-    const extra = Object.keys(sections).filter(s => SECTION_ORDER.indexOf(s) === -1);
+    // Adapters with kind-specific sections (LB4 models: weights/performance/
+    // fit/prompts) may supply their own order; default order unchanged.
+    const order = a.sectionOrder || SECTION_ORDER;
+    const known = order.filter(s => sections[s] != null);
+    const extra = Object.keys(sections).filter(s => order.indexOf(s) === -1);
     return { sections, ids: known.concat(extra) };
   }
 
@@ -378,7 +383,7 @@ export const LibraryShell = (function () {
       <div class="lib-subnav" role="tablist">${ids.map(s => `
         <button type="button" class="lib-subnav-pill ${st.subnav === s ? 'active' : ''}" role="tab"
           aria-selected="${st.subnav === s}" data-action="lib.subnav" data-kind="${esc(kind)}" data-section="${esc(s)}">
-          ${esc(SECTION_LABELS[s] || s)}</button>`).join('')}
+          ${esc((a.sectionLabels && a.sectionLabels[s]) || SECTION_LABELS[s] || s)}</button>`).join('')}
       </div>` : '';
     const prov = item && item.provenance
       ? ` <span class="lib-prov-chip prov-${esc(item.provenance)}">${esc(item.provenance)}</span>` : '';

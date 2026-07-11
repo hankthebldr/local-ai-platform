@@ -102,13 +102,22 @@ export const CatalogModelsShare = (function () {
   let inCatalog = false;
   const ids = ['inv-stats', 'inv-grid', 'discover-section'];
   const sel = ['.panel', '.inv-toolbar'];
+  // LB4-U2 (F2): the legacy nodes' HOME is the hidden #inv-legacy-holder
+  // inside #tab-inventory — ids unchanged, so showInCatalog() still moves
+  // the same nodes to the Catalog page and the Admin Catalog keeps binding,
+  // but the Models tab shows exactly ONE visible models surface
+  // (#models-shell). Falls back to #tab-inventory if the holder is absent.
+  function _home() {
+    return document.getElementById('inv-legacy-holder')
+      || document.getElementById('tab-inventory');
+  }
   function _nodes() {
     const arr = [];
-    // Hardware profile + toolbar are sibling elements of
-    // #tab-inventory; grab them by selector. The grid + stats +
-    // discover have stable ids.
+    // Hardware profile + toolbar live inside the holder (or, pre-holder,
+    // as siblings under #tab-inventory); grab them by selector. The grid +
+    // stats + discover have stable ids.
     sel.forEach(s => {
-      const home = document.getElementById('tab-inventory');
+      const home = _home();
       const owned = document.getElementById('catalog-models-mount');
       (home?.querySelector(s) || owned?.querySelector(s))
         && arr.push(home?.querySelector(s) || owned.querySelector(s));
@@ -133,7 +142,9 @@ export const CatalogModelsShare = (function () {
     },
     showInModelsTab() {
       if (!inCatalog) return;
-      const home = document.getElementById('tab-inventory');
+      // Return the nodes to the hidden holder — parked, not shown: the
+      // Models tab's visible surface is #models-shell.
+      const home = _home();
       if (!home) return;
       _moveTo(home);
       inCatalog = false;

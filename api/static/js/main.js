@@ -24,6 +24,7 @@ import { Kanban } from './library/kanban.js';
 import { WorkflowIndex } from './library/workflow-index.js';
 import { AgentGen } from './library/agents.js';
 import { CatalogPage, CatalogModelsShare } from './library/models.js';
+import { ModelsPanel } from './library/models-panel.js';
 import { LibraryShell } from './library/shell.js';
 import { LibraryWizard } from './library/wizard.js';
 import { MCPPanel } from './library/mcp.js';
@@ -169,10 +170,13 @@ function switchTab(name, el) {
     try { renderRunsPerfBand(); } catch (_) {}
   }
   if (name === 'inventory') {
-    // Move the shared inventory DOM back from the Catalog mount so
-    // the Models tab actually renders. Idempotent if it's already home.
+    // Park the shared legacy inventory DOM back in the hidden holder
+    // (LB4-U2/F2) so the Catalog-page relocation keeps working while
+    // #models-shell stays the single visible models surface. The shell's
+    // own /api/inventory/catalog read (ModelsPanel.activate) is this tab's
+    // ONE inventory fetch — loadCatalog now runs only for the Catalog page.
     if (window.CatalogModelsShare) CatalogModelsShare.showInModelsTab();
-    if (!catalogLoaded) loadCatalog();
+    ModelsPanel.activate();
     loadInstalledLocal();
   }
   // Catalog (legacy `workflows` data-tab): pull the shared inventory
@@ -2235,10 +2239,26 @@ async function unloadModel(name) {
   Actions.click({
     'models.unload':       el => unloadModel(el.dataset.model),
     'models.remove-local': el => removeLocalModel(el.dataset.model),
-    'models.remove':       el => removeModel(el.dataset.model),
-    'models.test':         el => testModel(el.dataset.model),
+    // Shared action ids (only-add): the legacy catalog grid keeps its
+    // handlers byte-identical; buttons born inside the Models library shell
+    // carry data-shell="models" and route into ModelsPanel (LB4-U2) — remove
+    // there Confirm-gates + reloads the shell, pull renders the shell-side
+    // progress line, test opens the LB1 TestPane model adapter.
+    'models.remove':       el => {
+      if (el.dataset.shell === 'models') {
+        ModelsPanel.remove(el.dataset.id).then(done => { if (done) catalogLoaded = false; });
+      } else removeModel(el.dataset.model);
+    },
+    'models.test':         el => el.dataset.shell === 'models'
+                                   ? ModelsPanel.test(el.dataset.id)
+                                   : testModel(el.dataset.model),
     'models.review':       el => reviewModel(el.dataset.repo),
-    'models.pull':         el => pullModel(el.dataset.model, el.dataset.modelId),
+    'models.pull':         el => {
+      if (el.dataset.shell === 'models') {
+        ModelsPanel.pull(el.dataset.modelId, el.dataset.model)
+          .then(done => { if (done) catalogLoaded = false; });
+      } else pullModel(el.dataset.model, el.dataset.modelId);
+    },
     'models.close':        closeModal,
     'models.open-workflows': el => { closeModal(el); switchTab('workflow-index'); },
     'models.modal-test':   el => { closeModal(el); testModel(el.dataset.model); }
