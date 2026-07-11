@@ -3,6 +3,7 @@ import { esc } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
+import { LibraryWizard } from './wizard.js';
 
 export const ExtDiscover = (function () {
   async function _toggle(detailsEl) {
@@ -236,32 +237,60 @@ export const SkillsDiscover = (function () {
     </div>`;
   }
 
-  // Install → asks for the target plugin id. We default to general-skills
-  // since it's the catch-all bundle, but the operator can override.
-  async function install(skillId) {
+  // Install → target-plugin choice through the LibraryWizard (LB3-U2 —
+  // window.prompt() retired). Endpoint + payload byte-identical to the old
+  // flow: POST /api/skills/discover/{id}/install {plugin_id}. Defaults to
+  // general-skills since it's the catch-all bundle; operator can override.
+  // onDone (optional) lets callers (the Skills library shell) refresh too.
+  async function install(skillId, onDone) {
     const plugins = await _availablePlugins();
     const def = plugins.includes('general-skills') ? 'general-skills' : (plugins[0] || 'general-skills');
-    const target = prompt(`Install '${skillId}' into which plugin?`, def);
-    if (!target) return;
-    // retries:0 — install writes skill files; don't double-install.
-    const r = await Net.call(`/api/skills/discover/${encodeURIComponent(skillId)}/install`, {
-      retries: 0,
-      init: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plugin_id: target }),
+    LibraryWizard.open({
+      title: `Install skill '${skillId}'`,
+      submitLabel: 'Install',
+      steps: {
+        configure: (el, state) => {
+          el.innerHTML = `
+            <div class="admin-modal-sub">Copies the catalog SKILL.md into the chosen plugin and registers it.</div>
+            <label class="admin-modal-label" for="skills-install-plugin">Target plugin</label>
+            <input id="skills-install-plugin" type="text" data-wiz-key="plugin_id" autocomplete="off"
+              list="skills-install-plugin-options" placeholder="general-skills">
+            <datalist id="skills-install-plugin-options">
+              ${plugins.map(p => `<option value="${esc(p)}"></option>`).join('')}
+            </datalist>`;
+          const inp = el.querySelector('#skills-install-plugin');
+          if (inp) inp.value = state.values.plugin_id || def;
+        },
+      },
+      validate: (stepId, state) => {
+        if (stepId !== 'configure') return true;
+        return (state.values.plugin_id || '').trim() ? true : 'Target plugin required';
+      },
+      onSubmit: async (state) => {
+        const target = (state.values.plugin_id || '').trim() || def;
+        // retries:0 — install writes skill files; don't double-install.
+        const r = await Net.call(`/api/skills/discover/${encodeURIComponent(skillId)}/install`, {
+          retries: 0,
+          init: {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin_id: target }),
+          },
+        });
+        if (!r.ok) {
+          const body = typeof r.data === 'string'
+            ? r.data : ((r.data && r.data.detail) || r.error || '');
+          return { ok: false, detail: body || `HTTP ${r.status}` };
+        }
+        if (window.Toast) Toast.success('Skill installed', `${skillId} → ${target}`);
+        await load(true);
+        // Refresh the workbench so the newly installed skill appears in the
+        // composer's Skills tab without a full page reload.
+        if (typeof loadComposerCatalogs === 'function') loadComposerCatalogs();
+        if (onDone) { try { onDone(); } catch (_) {} }
+        return { ok: true, message: `${skillId} → ${target}` };
       },
     });
-    if (!r.ok) {
-      const body = typeof r.data === 'string' ? r.data : (r.error || '');
-      Toast.danger('Install failed', body || `HTTP ${r.status}`);
-      return;
-    }
-    if (window.Toast) Toast.success('Skill installed', `${skillId} → ${target}`);
-    await load(true);
-    // Refresh the workbench so the newly installed skill appears in the
-    // composer's Skills tab without a full page reload.
-    if (typeof loadComposerCatalogs === 'function') loadComposerCatalogs();
   }
 
   async function uninstall(skillId, pluginId) {
@@ -300,10 +329,41 @@ export const SkillsDiscover = (function () {
   }
 
   // Browse every skill in a GitHub repo (skills.sh repos are at
-  // skills.sh/<owner>/<repo>) and install any of them.
-  async function browseGithubRepo() {
-    const repo = prompt('GitHub repo to browse (owner/repo):', 'anthropics/skills');
-    if (!repo || !repo.trim()) return;
+  // skills.sh/<owner>/<repo>) and install any of them. The repo choice rides
+  // the LibraryWizard (window.prompt() retired); the listing keeps its
+  // existing modal + endpoints (GET /api/skills/github, POST /api/skills/import).
+  async function browseGithubRepo(repoArg) {
+    if (!repoArg) {
+      LibraryWizard.open({
+        title: 'Browse a GitHub skills repo',
+        submitLabel: 'Browse',
+        steps: {
+          source: (el, state) => {
+            el.innerHTML = `
+              <div class="admin-modal-sub">Lists every SKILL.md in the repo; installs go to <code>general-skills</code>.</div>
+              <label class="admin-modal-label" for="skills-browse-repo">GitHub repo (owner/repo)</label>
+              <input id="skills-browse-repo" type="text" data-wiz-key="repo" autocomplete="off"
+                placeholder="anthropics/skills">`;
+            const inp = el.querySelector('#skills-browse-repo');
+            if (inp) inp.value = state.values.repo || 'anthropics/skills';
+          },
+        },
+        validate: (stepId, state) => {
+          if (stepId !== 'source') return true;
+          return /^[\w.-]+\/[\w.-]+$/.test((state.values.repo || '').trim())
+            ? true : 'Use the owner/repo form';
+        },
+        onSubmit: async (state) => {
+          const repo = (state.values.repo || '').trim();
+          // Open the listing modal after the wizard's submit cycle settles —
+          // closing the wizard mid-submit would null its flow state.
+          setTimeout(() => { LibraryWizard.close(); browseGithubRepo(repo); }, 0);
+          return { ok: true, message: `Loading ${repo}…` };
+        },
+      });
+      return;
+    }
+    const repo = repoArg;
     const modal = document.createElement('div');
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
     const inner = document.createElement('div');
@@ -351,28 +411,60 @@ export const SkillsDiscover = (function () {
   }
 
   // Import a SKILL.md from a URL (skills.sh entries are GitHub-backed — grab
-  // the SKILL.md's GitHub link). Fetches + parses frontmatter server-side,
-  // installs into the chosen plugin, then refreshes discovery.
-  async function importFromUrl() {
-    const url = prompt('SKILL.md URL to import\n(a GitHub raw or blob link — e.g. from a skills.sh skill):');
-    if (!url || !url.trim()) return;
-    const plugin = prompt('Install into which plugin?', 'general-skills');
-    if (!plugin || !plugin.trim()) return;
-    _setMeta('Importing…');
-    try {
-      // retries:0 — import writes a skill file; don't double-install.
-      const d = await Net.postJson('/api/skills/import', { url: url.trim(), plugin_id: plugin.trim() }, { retries: 0 });
-      // Hot-reload the plugin registry so the skill activates immediately —
-      // no API restart. The chat path reads the same live registry.
-      let active = false;
-      try { active = (await Net.call('/api/plugins/reload', { retries: 0, silent: true, init: { method: 'POST' } })).ok; } catch (_) {}
-      const msg = `Imported "${d.name || d.skill_id}" → ${d.plugin_id}` + (active ? ' — active now.' : ' (reload to activate).');
-      Toast.info(msg);
-      load(true);
-    } catch (e) {
-      Toast.danger('Import failed', e.message);
-      _setMeta('');
-    }
+  // the SKILL.md's GitHub link). URL + target plugin ride the LibraryWizard
+  // (window.prompt() retired); endpoints byte-identical: POST
+  // /api/skills/import {url, plugin_id} then POST /api/plugins/reload.
+  // onDone (optional) lets the Skills library shell refresh after import.
+  async function importFromUrl(onDone) {
+    LibraryWizard.open({
+      title: 'Import SKILL.md from URL',
+      submitLabel: 'Import',
+      steps: {
+        source: (el, state) => {
+          el.innerHTML = `
+            <div class="admin-modal-sub">A GitHub raw or blob link — e.g. from a skills.sh skill. Frontmatter is parsed server-side.</div>
+            <label class="admin-modal-label" for="skills-import-url">SKILL.md URL</label>
+            <input id="skills-import-url" type="text" data-wiz-key="url" autocomplete="off"
+              placeholder="https://raw.githubusercontent.com/…/SKILL.md">`;
+          const inp = el.querySelector('#skills-import-url');
+          if (inp) inp.value = state.values.url || '';
+        },
+        configure: (el, state) => {
+          el.innerHTML = `
+            <label class="admin-modal-label" for="skills-import-plugin">Install into plugin</label>
+            <input id="skills-import-plugin" type="text" data-wiz-key="plugin_id" autocomplete="off"
+              placeholder="general-skills">`;
+          const inp = el.querySelector('#skills-import-plugin');
+          if (inp) inp.value = state.values.plugin_id || 'general-skills';
+        },
+      },
+      validate: (stepId, state) => {
+        if (stepId === 'source' && !(state.values.url || '').trim()) return 'URL required';
+        if (stepId === 'configure' && !(state.values.plugin_id || '').trim()) return 'Target plugin required';
+        return true;
+      },
+      onSubmit: async (state) => {
+        const url = (state.values.url || '').trim();
+        const plugin = (state.values.plugin_id || '').trim() || 'general-skills';
+        _setMeta('Importing…');
+        try {
+          // retries:0 — import writes a skill file; don't double-install.
+          const d = await Net.postJson('/api/skills/import', { url, plugin_id: plugin }, { retries: 0 });
+          // Hot-reload the plugin registry so the skill activates immediately —
+          // no API restart. The chat path reads the same live registry.
+          let active = false;
+          try { active = (await Net.call('/api/plugins/reload', { retries: 0, silent: true, init: { method: 'POST' } })).ok; } catch (_) {}
+          const msg = `Imported "${d.name || d.skill_id}" → ${d.plugin_id}` + (active ? ' — active now.' : ' (reload to activate).');
+          Toast.info(msg);
+          load(true);
+          if (onDone) { try { onDone(); } catch (_) {} }
+          return { ok: true, message: msg };
+        } catch (e) {
+          _setMeta('');
+          return { ok: false, detail: e.message };
+        }
+      },
+    });
   }
 
   // Icon-explorer renderer — groups skills by persona (their primary

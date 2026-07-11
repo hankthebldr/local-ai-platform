@@ -1027,7 +1027,7 @@ export const TestPane = (function () {
   register('skill', {
     layerAuth: { l3: 'admin' },
     lockPanel: 'admin-skills',
-    promoteDisabledReason: 'Skill promote lands with the Skills library rebuild (LB3)',
+    promoteDisabledReason: 'Promote lives in the Skills library detail — the Promote action copies this skill into the user layer',
     layers() {
       return {
         l0: null, l1: null, l2: null,

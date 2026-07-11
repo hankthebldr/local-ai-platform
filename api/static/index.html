@@ -252,6 +252,20 @@
 .prompts-rec-score { font-family:var(--mono); font-size:0.62rem; color:var(--accent); min-width:34px; flex-shrink:0; }
 .prompts-rec-name { color:var(--text); }
 .prompts-rec-reason { color:var(--text-muted); font-size:0.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* ── LB3-U2 — Skills library on the shell: calm rows + drill-down ────
+   Calm-card metadata rides the LB0 row contract; these classes style the
+   Files tree, rendered SKILL.md, and the source badge. Added, never renamed. */
+.lib-row .lib-row-meta { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lib-badge.skills-src { text-transform:uppercase; letter-spacing:0.06em; }
+.lib-chip.more { color:var(--text-muted); border-style:dashed; }
+.skills-md-body { font-size:0.72rem; line-height:1.55; border:1px solid var(--border); border-radius:var(--radius-sm,4px); background:var(--surface-card,var(--bg)); padding:10px 12px; max-height:380px; overflow:auto; }
+.skills-md-body pre { background:var(--bg-deep,var(--bg)); border:1px solid var(--border); border-radius:4px; padding:8px 10px; overflow:auto; }
+.skills-tree { border:1px solid var(--border); border-radius:var(--radius-sm,4px); padding:8px 10px; font-family:var(--mono); font-size:0.68rem; }
+.skills-tree-dir { color:var(--text-muted); margin:2px 0; }
+.skills-tree-file { display:block; width:100%; text-align:left; color:var(--text); padding:2px 4px; border-radius:3px; cursor:pointer; }
+.skills-tree-file:hover { background:var(--surface-card,var(--bg)); color:var(--accent); }
+.skills-tree-meta { color:var(--text-muted); font-size:0.6rem; margin-left:6px; }
+.skills-file-view { margin-top:10px; }
 </style>
 <style id="test-pane-styles">
 /* ── TestPane — layered test harness in the shell Test tab (LB1-U2) ────
@@ -2499,6 +2513,19 @@
             </select>
             <button class="action-btn" onclick="SkillsPanel.refresh()" style="margin-left:4px">Refresh</button>
           </span>
+        </div>
+        <!-- LB3-U2 — Skills library toolbar on the shell: creation, wizard-backed
+             install/import, repo browsing, and the operator-triggered discovery
+             refresh (reads never fetch; only this button re-fires the
+             marketplace provider). All data-action, zero new inline handlers. -->
+        <div class="skills-toolbar" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+          <button class="action-btn accent" data-action="skills.create">+ New Skill</button>
+          <button class="action-btn" data-action="skills.browse-repo"
+            title="Browse + install any skill in a GitHub repo (e.g. a skills.sh repo)">⌗ Browse repo</button>
+          <button class="action-btn" data-action="skills.import"
+            title="Import a single SKILL.md by URL (wizard-backed)">+ Import URL</button>
+          <button class="action-btn" data-action="skills.refresh-discovery"
+            title="Operator-triggered: re-fires the skills-marketplace provider refresh, then re-reads the discovery catalog. Tab activation never fetches.">⟳ Refresh discovery</button>
         </div>
         <div id="skills-list" style="margin-top:10px;font-size:0.78rem"></div>
       </div>

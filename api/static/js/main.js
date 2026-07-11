@@ -53,6 +53,9 @@ import { DfSeedSchema } from './workspace-legacy/df-seed-schema.js';
 import { Projects } from './shell/projects.js';
 import { SkillsBuilder, WorkflowBuilder } from './library/builders.js';
 import { ExtDiscover, SkillsDiscover } from './library/discover.js';
+// LB3-U2 — ONE skills normalizer feeds both the Library shell and the
+// Composer Skills bench; the drag payload constants live there too.
+import { flattenSkills, skillKey, SKILL_DRAG_MIME } from './library/skills-data.js';
 // Preserve early window availability (these were direct window.* assigns).
 window.renderMarkdown = renderMarkdown;
 window.SkillsBuilder = SkillsBuilder;
@@ -9413,26 +9416,27 @@ function _capCard(opts) {
 function renderSkillsWorkbench(plugins) {
   const el = document.getElementById('bench-skills-list');
   if (!el) return;
-  const items = [];
-  (plugins || []).forEach(p => {
-    (p.skills || []).forEach(s => items.push({ plugin: p.id, skill: s }));
-  });
+  // LB3-U2 — the bench renders the SAME flattened records as the Skills
+  // library shell (library/skills-data.js). Drag-attach payload unchanged:
+  // mime application/df-skill, value <plugin>::<skill> (skillKey).
+  const items = flattenSkills(plugins);
   if (!items.length) {
     el.innerHTML = '<div class="model-empty" style="font-size:0.62rem">No skills yet. Drop a skill .md file into plugins/&lt;plugin&gt;/skills/.</div>';
     return;
   }
-  el.innerHTML = items.map(({ plugin, skill }) => {
-    const triggers = (skill.triggers || []).map(t => t.keyword).filter(Boolean).slice(0, 3).join(', ');
+  el.innerHTML = items.map(it => {
+    const key = skillKey(it.plugin_id, it.skill_id);
+    const triggers = (it.triggers || []).map(t => t.keyword).filter(Boolean).slice(0, 3).join(', ');
     return _capCard({
       iconKey: 'skill',
-      title: skill.name || skill.id,
-      subtitle: skill.description || '',
+      title: it.name,
+      subtitle: it.description,
       pill: 'skill',
-      drag: { mime: 'application/df-skill', value: `${plugin}::${skill.id}` },
-      inspect: { kind: 'skill', id: `${plugin}::${skill.id}` },
+      drag: { mime: SKILL_DRAG_MIME, value: key },
+      inspect: { kind: 'skill', id: key },
       titleAttr: 'Drag onto a step to attach this skill manually',
       body: `<div class="cap-card-foot">
-        <code class="cap-card-id">${esc(plugin)}::${esc(skill.id)}</code>
+        <code class="cap-card-id">${esc(key)}</code>
         ${triggers ? `<span class="cap-card-meta">triggers · ${esc(triggers)}</span>` : ''}
       </div>`,
     });
