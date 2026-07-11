@@ -193,8 +193,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if self.rpm <= 0:
             return await call_next(request)
 
-        # Skip rate limiting on public paths
-        if request.url.path in PUBLIC_PATHS:
+        # Skip rate limiting on public paths and static assets — a cold SPA
+        # boot fetches the whole ES-module fan-out (~60 files) from one IP,
+        # which would otherwise blow the 60-rpm budget and self-429 the app's
+        # own API calls. Mirrors the AuthMiddleware exemption (see dispatch above).
+        path = request.url.path
+        if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
