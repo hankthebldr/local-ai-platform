@@ -221,6 +221,25 @@
 .lib-wiz-step.on .n { border-color:var(--accent); color:var(--accent); }
 .lib-wiz-conn { flex:1; height:1px; background:var(--border); min-width:14px; }
 .lib-wiz-body { min-height:96px; }
+/* ── Prompts hooks + meta sidecars (LB2-U1) ───────────────────────────
+   Hook kind dot, classification meta box, token-estimate chip vs model
+   context (approximate — never a gate), hook test pane. */
+.prompts-kind-dot.hook { background:var(--cyan,#57C4D2); }
+.prompts-meta-box { margin:10px 0 0; padding:9px 10px; border:1px solid var(--border); border-radius:var(--radius-sm,4px); background:var(--surface-card,var(--bg)); font-size:0.7rem; }
+.prompts-meta-box .admin-modal-label { display:block; margin:8px 0 2px; }
+.prompts-meta-box input, .prompts-meta-box select { width:100%; box-sizing:border-box; padding:5px 8px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:0.7rem; }
+.prompts-meta-chips { margin:4px 0 6px; line-height:1.9; }
+.prompts-meta-chips .lib-chip, .prompts-meta-chips .lib-badge { margin-left:0; margin-right:4px; }
+.prompts-fit-badge { color:var(--accent); border-color:var(--accent-dim); background:var(--accent-ghost); }
+.prompts-kv { display:flex; gap:8px; margin:3px 0; font-size:0.7rem; color:var(--text); align-items:baseline; }
+.prompts-kv-key { font-family:var(--mono); font-size:0.6rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-muted); min-width:110px; flex-shrink:0; }
+.prompts-token-chip { display:inline-flex; align-items:center; font-family:var(--mono); font-size:0.55rem; padding:0 7px; border:1px solid var(--border); border-radius:var(--radius-pill,999px); margin-left:6px; white-space:nowrap; }
+.prompts-token-chip.ok { color:var(--success); border-color:var(--success); }
+.prompts-token-chip.warn { color:var(--amber,#F5A623); border-color:var(--amber,#F5A623); }
+.prompts-token-chip.over { color:var(--danger); border-color:var(--danger); }
+.prompts-ctx-select { background:var(--surface-card,var(--bg)); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text-dim); font-family:var(--mono); font-size:0.6rem; padding:1px 4px; }
+.prompts-hook-test { margin-top:12px; }
+.prompts-hook-fail { color:var(--danger); border-color:var(--danger); background:transparent; }
 </style>
 <style id="test-pane-styles">
 /* ── TestPane — layered test harness in the shell Test tab (LB1-U2) ────
@@ -2519,6 +2538,7 @@
         <select id="prompts-create-kind">
           <option value="role">role — persona text (.md)</option>
           <option value="template">template — 5-part Jinja skeleton (.jinja)</option>
+          <option value="hook">hook — engine hook preset (.md, YAML frontmatter: stage/target/config)</option>
         </select>
         <label for="prompts-create-id" class="admin-modal-label">ID (used in workflow role_ref / template_ref)</label>
         <input id="prompts-create-id" type="text" placeholder="e.g. security_reviewer" autocomplete="off">

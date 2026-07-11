@@ -213,7 +213,7 @@ class ContainerDeployment:
 
     def ensure_user_storage(self) -> None:
         for sub in ("plugins", "mcp/binaries", "cache", "workflows", "config",
-                    "prompts/roles", "prompts/templates", "tasks"):
+                    "prompts/roles", "prompts/templates", "prompts/hooks", "tasks"):
             p = self.user_storage_root / sub
             try:
                 p.mkdir(parents=True, exist_ok=True, mode=0o700)
