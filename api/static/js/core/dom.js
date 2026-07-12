@@ -5,6 +5,35 @@
 
 export function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
+// escAttr: HTML-escape for ATTRIBUTE-VALUE context. esc() (textContent→innerHTML)
+// escapes &<> but NOT quotes, so `attr="${esc(x)}"` with an untrusted x is a
+// quote-breakout XSS (`x=" onmouseover="…`). escAttr additionally escapes " and
+// ' so a value can't break out of either quoting style. Use it — not esc() — on
+// untrusted data that lands inside an attribute (title/data-*/value/href).
+export function escAttr(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// safeUrl: sanitize a URL bound for an href/src attribute. Two hazards: (1) a
+// `javascript:`/`data:`/`vbscript:` scheme executes on click even when the
+// string is HTML-escaped; (2) an unescaped quote breaks out of the attribute.
+// Returns '#' for a disallowed scheme, else the URL escAttr'd for the attribute
+// context. http/https/mailto/tel and scheme-relative / path / fragment / query
+// URLs are allowed (no scheme = same-origin relative).
+export function safeUrl(u) {
+  const s = String(u == null ? '' : u).trim();
+  if (!s) return '#';
+  // A scheme is letters/digits/+-. before the first ':' and before any /?#.
+  const m = s.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+  if (m) {
+    const scheme = m[1].toLowerCase();
+    if (!['http', 'https', 'mailto', 'tel'].includes(scheme)) return '#';
+  }
+  return escAttr(s);
+}
+
 export function renderMarkdown(text, opts) {
   if (text == null) return '';
   opts = opts || {};

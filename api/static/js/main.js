@@ -8,7 +8,7 @@ const { Drawflow, d3, dagre, jsyaml } = window;
 // core/ modules (phase-2 U2 carve). Imported for module scope so the bare
 // esc()/renderMarkdown()/renderMarkdownBasic() call-sites keep resolving; still
 // window-bridged via shell/legacy-bridge.js (esc, renderMarkdownBasic) below.
-import { esc, renderMarkdown, renderMarkdownBasic } from './core/dom.js';
+import { esc, escAttr, safeUrl, renderMarkdown, renderMarkdownBasic } from './core/dom.js';
 import { enclSparkline, enclTrendStat, enclUtilChart, enclGaugeStat, enclStatRange } from './core/charts.js';
 import { Net } from './core/net.js';
 import { Theme } from './core/theme.js';
@@ -701,7 +701,7 @@ function renderCitations(text, sources) {
       return seg.replace(/\[(\d+)\]/g, (match, num) => {
         const idx = parseInt(num) - 1;
         if (idx >= 0 && idx < sources.length) {
-          return `<a class="citation" href="${esc(sources[idx].url)}" target="_blank" rel="noopener" title="${esc(sources[idx].title)}">[${num}]</a>`;
+          return `<a class="citation" href="${safeUrl(sources[idx].url)}" target="_blank" rel="noopener" title="${escAttr(sources[idx].title)}">[${num}]</a>`;
         }
         return match;
       });
@@ -716,7 +716,7 @@ function renderSources(sources) {
     `<div class="source-item">
       <span class="source-num">[${i+1}]</span>
       <span><span class="source-title">${esc(s.title)}</span> &mdash;
-      <a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a></span>
+      <a href="${safeUrl(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a></span>
     </div>`
   ).join('');
 
@@ -1885,7 +1885,7 @@ function _renderExternalProviderShell(p) {
       ${kindChips}
       <span class="ext-prov-desc">${esc(p.description || '')}</span>
       <span style="flex:1"></span>
-      <a href="${esc(p.homepage || '#')}" target="_blank" rel="noopener"
+      <a href="${safeUrl(p.homepage || '#')}" target="_blank" rel="noopener"
          onclick="event.stopPropagation()"
          class="ext-prov-link" title="Open the upstream homepage">↗</a>
     </summary>
@@ -3482,7 +3482,7 @@ function selectNode(d, paneKey) {
     previewEl.textContent = `Topic surfaces across ${d.session_count || 0} session${(d.session_count || 0) === 1 ? '' : 's'}. Click a connected node to drill in.`;
   } else if (d.type === 'source') {
     previewEl.innerHTML = d.url
-      ? `<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:underline">${esc(d.url.slice(0, 80))}${d.url.length > 80 ? '…' : ''}</a>`
+      ? `<a href="${safeUrl(d.url)}" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:underline">${esc(d.url.slice(0, 80))}${d.url.length > 80 ? '…' : ''}</a>`
       : `<span style="color:var(--text-muted)">No URL recorded for this source.</span>`;
   } else if (d.type === 'agent') {
     // Agent nodes (new graph schema): description/role/model on one line.
@@ -3588,7 +3588,7 @@ function selectNode(d, paneKey) {
         `<button class="action-btn" data-action="graph.node-deep-dive" style="font-size:0.65rem;padding:4px 10px;border-color:var(--amber);color:var(--amber)">Deep Dive on Topic</button>`;
     } else if (d.type === 'source') {
       actEl.innerHTML = d.url
-        ? `<a class="action-btn" target="_blank" rel="noopener" href="${esc(d.url)}" style="font-size:0.65rem;padding:4px 10px;text-decoration:none;display:inline-block">Open Source ↗</a>`
+        ? `<a class="action-btn" target="_blank" rel="noopener" href="${safeUrl(d.url)}" style="font-size:0.65rem;padding:4px 10px;text-decoration:none;display:inline-block">Open Source ↗</a>`
         : '';
     } else {
       actEl.innerHTML = '';
@@ -3783,7 +3783,7 @@ function renderResearchResults(data) {
     const qSrcs = (sec.sources || []).slice(0, 6);
     const srcHtml = qSrcs.length
       ? qSrcs.map(s =>
-          `<a class="res-source-chip" href="${esc(s.url || '#')}" target="_blank" rel="noopener">${esc(s.title || s.url || '(untitled)').slice(0, 80)}</a>`
+          `<a class="res-source-chip" href="${safeUrl(s.url || '#')}" target="_blank" rel="noopener">${esc(s.title || s.url || '(untitled)').slice(0, 80)}</a>`
         ).join('')
       : '<span style="color:var(--text-muted);font-size:0.62rem">no sources for this angle</span>';
     const ctxPreview = (sec.context || '').slice(0, 320);
@@ -3823,10 +3823,10 @@ function renderResearchResults(data) {
     const slug = _researchSlug(title || url);
     return `
       <div class="research-source-row">
-        <a class="res-source-chip" href="${esc(url || '#')}" target="_blank" rel="noopener" title="${esc(title)}">${esc(title.slice(0, 80))}</a>
+        <a class="res-source-chip" href="${safeUrl(url || '#')}" target="_blank" rel="noopener" title="${escAttr(title)}">${esc(title.slice(0, 80))}</a>
         <div class="lib-actions-row">
-          <button class="action-btn xs" data-action="research.save-source" data-title="${esc(title)}" data-url="${esc(url)}" data-slug="${esc(slug)}">Save to store</button>
-          <button class="action-btn xs ghost" data-action="research.cite" data-slug="${esc(slug)}">Cite</button>
+          <button class="action-btn xs" data-action="research.save-source" data-title="${escAttr(title)}" data-url="${escAttr(url)}" data-slug="${escAttr(slug)}">Save to store</button>
+          <button class="action-btn xs ghost" data-action="research.cite" data-slug="${escAttr(slug)}">Cite</button>
         </div>
       </div>`;
   }).join('');
@@ -3946,7 +3946,7 @@ function _researchReadingCardHtml(turn, idx) {
       return `<span class="res-source-chip rag" title="local knowledge · score ${esc(String(s.score ?? ''))}">${esc(s.title || s.doc_id || 'local')}</span>`;
     }
     const url = s.url || '#';
-    return `<a class="res-source-chip" href="${esc(url)}" target="_blank" rel="noopener">${esc((s.title || url || '').slice(0, 80))}</a>`;
+    return `<a class="res-source-chip" href="${safeUrl(url)}" target="_blank" rel="noopener">${esc((s.title || url || '').slice(0, 80))}</a>`;
   }).join('');
   const heading = turn.kind === 'synthesis'
     ? esc(turn.question || 'Synthesis')
