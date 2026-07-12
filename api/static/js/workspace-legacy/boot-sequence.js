@@ -62,6 +62,14 @@ export const BootSequence = (function () {
     try { localStorage.setItem('enclave.bs.hinted', '1'); } catch (_) {}
     document.body.classList.remove('bs-show-hint');
 
+    // P0-10: the crystallize affordance ("run this with my agents") lives in the
+    // Chat tab, but the plan card renders into #composer-split, which sits on the
+    // Composer (#tab-dashboard). After the four-surface separation that tab is
+    // hidden while the operator is in Chat, so the card + confirm button landed
+    // on a display:none surface — a dead end. Reveal the Composer BEFORE render
+    // so the plan card is on the visible tab and confirm is reachable.
+    if (typeof switchTab === 'function') { try { switchTab('dashboard'); } catch (_) {} }
+
     await _emit(btn);
     _renderShell(split);
     try {

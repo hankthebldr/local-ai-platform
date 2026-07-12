@@ -360,13 +360,91 @@ export const WorkflowIndex = (function () {
     }
   }
 
+  // P0-6: derive the workflow's seed keys locally — the same `seed.*`-prefix
+  // scan the composer + runs DAG use (runs-tab.js / main.js), unioned with the
+  // declared context.inputs. This is offered as the shared derivation Operate
+  // F13 can adopt rather than re-implementing.
+  function _deriveSeedKeys(def) {
+    if (!def) return [];
+    const declared = (((def.context && def.context.inputs) || [])
+      .map(x => (typeof x === 'string' ? x : (x && x.key))).filter(Boolean));
+    const inferred = (def.steps || []).flatMap(s => (s.inputs || [])
+      .filter(i => typeof i === 'string' && i.startsWith('seed.')).map(i => i.slice(5)));
+    return [...new Set([...declared, ...inferred])];
+  }
+
+  // Modal that lets the operator supply seed VALUES before launching a loaded
+  // workflow (P0-6). Resolves to the seed dict, or null when cancelled. When
+  // the workflow declares no seed keys, falls back to a JSON textarea so an
+  // arbitrary seed is still possible (the zero-declared case).
+  function _promptSeedValues(id, def, seedKeys) {
+    return new Promise((resolve) => {
+      const descOf = {};
+      (((def && def.context && def.context.inputs) || [])).forEach(x => {
+        if (x && typeof x === 'object' && x.key) descOf[x.key] = x.description || '';
+      });
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1100;display:flex;align-items:center;justify-content:center';
+      const inner = document.createElement('div');
+      inner.style.cssText = 'background:var(--bg);border:1px solid var(--border);padding:18px;width:min(480px,95vw);max-height:90vh;overflow-y:auto;border-radius:6px;';
+      const body = seedKeys.length
+        ? `<div style="display:flex;flex-direction:column;gap:8px">${seedKeys.map(k => `
+            <div>
+              <label class="df-config-label" style="display:block;margin-bottom:2px">${esc(k)}${descOf[k] ? ` <span style="color:var(--text-muted);font-weight:400">· ${esc(descOf[k])}</span>` : ''}</label>
+              <input type="text" class="chat-input wfi-seed-in" data-seed-key="${esc(k)}" placeholder="value for seed.${esc(k)}" style="font-size:0.72rem;padding:5px 8px;width:100%" autocomplete="off" />
+            </div>`).join('')}</div>`
+        : `<div>
+             <label class="df-config-label" style="display:block;margin-bottom:4px">Seed (JSON) — this workflow declares no seed keys</label>
+             <textarea class="chat-input wfi-seed-json" style="font-size:0.72rem;padding:6px 8px;width:100%;min-height:90px;resize:vertical" spellcheck="false">{}</textarea>
+           </div>`;
+      inner.innerHTML =
+        `<div style="font-weight:600;font-size:0.9rem;margin-bottom:4px">Run ${esc(id)}</div>` +
+        `<div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:12px">Supply the workflow's seed input${seedKeys.length === 1 ? '' : 's'}, then launch.</div>` +
+        body +
+        `<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:16px">
+          <button class="action-btn sm ghost wfi-seed-cancel">Cancel</button>
+          <button class="action-btn sm accent wfi-seed-go">Run ▶</button>
+        </div>`;
+      modal.appendChild(inner);
+      let settled = false;
+      const done = (val) => { if (settled) return; settled = true; try { modal.remove(); } catch (_) {} resolve(val); };
+      modal.addEventListener('click', e => { if (e.target === modal) done(null); });
+      inner.querySelector('.wfi-seed-cancel').addEventListener('click', () => done(null));
+      inner.querySelector('.wfi-seed-go').addEventListener('click', () => {
+        let seed = {};
+        if (seedKeys.length) {
+          inner.querySelectorAll('.wfi-seed-in').forEach(el => {
+            const k = el.getAttribute('data-seed-key');
+            const v = (el.value || '').trim();
+            if (k && v !== '') seed[k] = v;
+          });
+        } else {
+          const ta = inner.querySelector('.wfi-seed-json');
+          try { seed = JSON.parse((ta && ta.value) || '{}'); }
+          catch (_) { Toast.warn('Invalid JSON', 'Fix the seed JSON or clear it to {}.'); return; }
+          if (!seed || typeof seed !== 'object' || Array.isArray(seed)) { Toast.warn('Seed must be a JSON object', 'e.g. {"query": "…"}'); return; }
+        }
+        done(seed);
+      });
+      document.body.appendChild(modal);
+      const first = inner.querySelector('.wfi-seed-in, .wfi-seed-json');
+      if (first) { try { first.focus(); } catch (_) {} }
+    });
+  }
+
   async function run(id) {
     // Kick the run via the async endpoint, then route the operator to
     // the Runs tab and auto-select the new run so they see the live
     // DAG instead of the legacy System → Runs page.
     try {
+      // P0-6: collect editable seed values first — a loaded seed-consuming
+      // workflow used to launch with an empty seed and no way to supply inputs.
+      let def = null;
+      try { def = await Net.getJson('/api/workflows/' + encodeURIComponent(id)); } catch (_) { def = null; }
+      const seed = await _promptSeedValues(id, def, _deriveSeedKeys(def));
+      if (seed === null) return;  // operator cancelled
       // retries:0 — a retried kickoff would start two runs.
-      const out = await Net.postJson('/api/workflows/run-async', { workflow_id: id, seed: {} }, { retries: 0 });
+      const out = await Net.postJson('/api/workflows/run-async', { workflow_id: id, seed }, { retries: 0 });
       switchTab('runs');
       // Give the tab dispatcher a beat to mount + fetch the list,
       // then drill into the new run.

@@ -8115,6 +8115,20 @@ function dfRenderConfigPanel(nodeId) {
             </select>
           </div>
         </div>
+        ${!(data.kind && data.kind !== 'llm') ? `<div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div><label class="df-config-label">Temperature</label>
+            <input type="number" min="0" max="2" step="0.05"
+              value="${data.temperature != null && data.temperature !== '' ? esc(String(data.temperature)) : ''}"
+              placeholder="default" class="chat-input" style="font-size:0.68rem;padding:4px 8px"
+              data-action="df.node-field" data-field="temperature"
+              title="Per-step sampling temperature. Blank inherits the workflow default." /></div>
+          <div><label class="df-config-label">Max tokens</label>
+            <input type="number" min="1" step="128"
+              value="${data.max_tokens != null && data.max_tokens !== '' ? esc(String(data.max_tokens)) : ''}"
+              placeholder="default" class="chat-input" style="font-size:0.68rem;padding:4px 8px"
+              data-action="df.node-field" data-field="max_tokens"
+              title="Per-step max output tokens. Blank inherits the workflow default." /></div>
+        </div>` : ''}
         ${data._from_agent ? `<div class="df-provenance-chip">forked from agent <code>${esc(data._from_agent)}</code></div>` : ''}
         ${data._from_prompt ? `<div class="df-provenance-chip">prompt <code>${esc(data._from_prompt)}</code></div>` : ''}
       </div>
@@ -8548,10 +8562,13 @@ function dfDeleteNode(nodeId) {
 // targets as the step form (popup primary, workstream dock fallback).
 // Edits commit on "Save seed" (composer.seed-save) so mid-typing repaints
 // can't steal focus; rows are DOM-only until saved.
-function _dfSeedCfgRowHtml(key, desc) {
+function _dfSeedCfgRowHtml(key, desc, val) {
+  // P0-6: each schema row carries a VALUE input so operators can supply the
+  // seed value for a loaded workflow (dfRunWorkflowLive reads data.seed_values).
   return `<div class="df-seed-cfg-row" style="display:flex;gap:4px;margin-bottom:4px;align-items:center">
-      <input type="text" class="chat-input df-seed-cfg-key" placeholder="query" value="${esc(key || '')}" style="font-size:0.64rem;padding:3px 6px;flex:0 0 110px" autocomplete="off" />
+      <input type="text" class="chat-input df-seed-cfg-key" placeholder="query" value="${esc(key || '')}" style="font-size:0.64rem;padding:3px 6px;flex:0 0 92px" autocomplete="off" />
       <input type="text" class="chat-input df-seed-cfg-desc" placeholder="what this input is" value="${esc(desc || '')}" style="font-size:0.64rem;padding:3px 6px;flex:1" autocomplete="off" />
+      <input type="text" class="chat-input df-seed-cfg-val" placeholder="value (optional)" value="${esc(val || '')}" style="font-size:0.64rem;padding:3px 6px;flex:0 0 120px" autocomplete="off" />
       <button type="button" class="btn-unstyled df-tag-remove" aria-label="Remove input" data-action="composer.seed-remove-key">✕</button>
     </div>`;
 }
@@ -8565,8 +8582,9 @@ function dfRenderSeedConfig(nodeId) {
   if (!data || (!panel && !popupBody)) return;
   if (title) title.textContent = 'seed';
   if (popupTitle) popupTitle.textContent = 'Seed — workflow input';
+  const vals = data.seed_values || {};
   const rows = ((data.seed_schema && data.seed_schema.length) ? data.seed_schema : [{ key: '', description: '' }])
-    .map(s => _dfSeedCfgRowHtml(s.key, s.description)).join('');
+    .map(s => _dfSeedCfgRowHtml(s.key, s.description, vals[s.key])).join('');
   const html = `
     <div style="display:flex;flex-direction:column;gap:0" data-node-id="${nodeId}">
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
@@ -8579,7 +8597,7 @@ function dfRenderSeedConfig(nodeId) {
         <div class="df-seed-cfg-rows">${rows}</div>
         <button class="action-btn" style="font-size:0.56rem;padding:2px 8px;margin-top:4px" data-action="composer.seed-add-key">+ Input</button>
         <div style="font-size:0.5rem;color:var(--text-muted);margin-top:6px;letter-spacing:0.04em">
-          Steps reference these as <code style="color:var(--accent)">seed.&lt;key&gt;</code>; they persist as the workflow's <code>context.inputs</code>.
+          Steps reference these as <code style="color:var(--accent)">seed.&lt;key&gt;</code>; keys persist as the workflow's <code>context.inputs</code>. Values are supplied per run (not saved).
         </div>
       </div>
       <div style="padding:8px 0">
@@ -8602,15 +8620,22 @@ function dfSaveSeedConfig(nodeId, root) {
   const q = root.querySelector('.df-seed-cfg-query');
   if (q) data.query = q.value;
   const schema = [];
+  const seedValues = {};
   root.querySelectorAll('.df-seed-cfg-row').forEach(row => {
     const rawKey = (row.querySelector('.df-seed-cfg-key') || {}).value || '';
     const desc = (row.querySelector('.df-seed-cfg-desc') || {}).value || '';
+    const val = (row.querySelector('.df-seed-cfg-val') || {}).value || '';
     // Same seed-ref-safe normalization the DfSeedSchema modal applies.
     const key = rawKey.trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-    if (key && !schema.some(s => s.key === key)) schema.push({ key, description: desc.trim() });
+    if (key && !schema.some(s => s.key === key)) {
+      schema.push({ key, description: desc.trim() });
+      // P0-6: a supplied per-key VALUE feeds the run payload (dfRunWorkflowLive).
+      if (val.trim()) seedValues[key] = val.trim();
+    }
   });
   if (!schema.length) schema.push({ key: 'query', description: '' });
   data.seed_schema = schema;
+  data.seed_values = seedValues;
   data.outputs = schema.map(s => s.key);
   dfSeedSchema = schema.map(s => ({ key: s.key, description: s.description }));
   try {
@@ -8923,7 +8948,12 @@ function dfComposeYamlString() {
       yaml += _dfCompositeStepYaml(data, deps);
       return;
     }
-    yaml += `  - id: ${data.id}\n    name: "${data.name}"\n    role: ${data.role}\n    system_prompt: |\n`;
+    yaml += `  - id: ${data.id}\n    name: "${data.name}"\n    role: ${data.role}\n`;
+    // P0-4: a per-step model pin (data.model) must survive save→reload. The
+    // engine reads AgentStep.model directly; emitting it keeps the pin from
+    // silently collapsing back to the role-based resolver on the next load.
+    if (data.model) yaml += `    model: ${data.model}\n`;
+    yaml += `    system_prompt: |\n`;
     data.system_prompt.split('\n').forEach(line => { yaml += `      ${line}\n`; });
     if (data.inputs.length) { yaml += `    inputs:\n`; data.inputs.forEach(i => { yaml += `      - ${i}\n`; }); }
     yaml += `    outputs:\n`; data.outputs.forEach(o => { yaml += `      - ${o}\n`; });
@@ -8949,6 +8979,20 @@ function dfComposeYamlString() {
     if (data.quality_gates && data.quality_gates.length) {
       yaml += `    quality_gates:\n`;
       data.quality_gates.forEach(g => { yaml += `      - field: ${g.field}\n        operator: ${g.operator}\n`; if (g.value) yaml += `        value: "${g.value}"\n`; });
+    }
+    // P0-4: per-step sampling overrides ride in StepConfig — the engine reads
+    // step.config.temperature/max_tokens and falls back to the workflow
+    // defaults when unset. Emit only the fields the operator actually pinned so
+    // an untouched step keeps inheriting the defaults (and round-trips clean).
+    const _tRaw = data.temperature, _mRaw = data.max_tokens;
+    const _t = (_tRaw === '' || _tRaw == null) ? null : Number(_tRaw);
+    const _m = (_mRaw === '' || _mRaw == null) ? null : Number(_mRaw);
+    const _hasT = _t != null && !Number.isNaN(_t);
+    const _hasM = _m != null && !Number.isNaN(_m);
+    if (_hasT || _hasM) {
+      yaml += `    config:\n`;
+      if (_hasT) yaml += `      temperature: ${_t}\n`;
+      if (_hasM) yaml += `      max_tokens: ${_m}\n`;
     }
     yaml += `\n`;
   });
@@ -11054,10 +11098,20 @@ function _benchCapResolve(el) {
     data.skills = data.skills || [];
     data.tools  = data.tools  || [];
     if (skillRef) { if (!data.skills.includes(skillRef)) data.skills.push(skillRef); }
-    if (toolRef)  { if (!data.tools.find(t => (typeof t === 'string' ? t : t.id) === toolRef)) data.tools.push(toolRef); }
+    // P0-5: store tool refs in the CANONICAL dotted form ToolRef requires
+    // (`<owner>.<member>`) so Save/Run don't 422 and every consumer + the YAML
+    // emitter mcp branch read one representation. Plugin bench drags arrive as
+    // `<plugin_id>__<tool_id>`; MCP drags as `<server_id>::<tool_name>` — both
+    // previously stored non-dotted (plugin `pid__tid`, mcp `mcp__srv__tool`)
+    // and 422'd on the very next Save.
+    if (toolRef)  {
+      const i = toolRef.indexOf('__');
+      const ref = i >= 0 ? `${toolRef.slice(0, i)}.${toolRef.slice(i + 2)}` : toolRef;
+      if (!data.tools.find(t => (typeof t === 'string' ? t : t.id) === ref)) data.tools.push(ref);
+    }
     if (mcpRef)   {
       const [serverId, toolName] = mcpRef.split('::');
-      const ref = `mcp__${serverId}__${toolName}`;
+      const ref = `mcp:${serverId}.${toolName}`;
       if (!data.tools.find(t => (typeof t === 'string' ? t : t.id) === ref)) data.tools.push(ref);
     }
     // Re-render the canvas node so the newly attached skill/tool/MCP
@@ -11525,6 +11579,11 @@ function composerLoadDefinition(defn) {
         d.id = step.id || d.id;
         d.name = step.name || d.name;
         d.role = step.role || d.role;
+        // P0-4: restore the per-step model pin + sampling overrides so a loaded
+        // workflow round-trips them (they re-emit via the llm branch above).
+        if (step.model) d.model = step.model;
+        if (step.config && step.config.temperature != null) d.temperature = step.config.temperature;
+        if (step.config && step.config.max_tokens != null) d.max_tokens = step.config.max_tokens;
         // Accept the v2 structured prompt (prompt.task / prompt.role_inline)
         // as a fallback so template-matched workflows that use the v2 schema
         // render with real instructions instead of an empty 'custom' node.
@@ -11597,6 +11656,21 @@ function composerLoadDefinition(defn) {
         ? { key: x, description: '' }
         : { key: x.key, description: x.description || '' })).filter(s => s.key);
     } catch (_) { dfSeedSchema = []; }
+    // P0-6: recreate a LIVE, editable seed node (not the decorative __start__
+    // ghost) whenever the loaded workflow declares OR references seed inputs,
+    // so the operator can supply per-key seed VALUES for a loaded workflow
+    // (dfRenderSeedConfig grows value inputs; dfRunWorkflowLive reads them).
+    // dfAddSeedNode inherits the just-restored dfSeedSchema; dfAddAnchors then
+    // sees a real seed and skips __start__, drawing only END.
+    try {
+      const inferredSeed = allSteps.flatMap(s => (s.inputs || [])
+        .filter(i => typeof i === 'string' && i.startsWith('seed.')).map(i => i.slice(5)));
+      const haveKey = new Set((dfSeedSchema || []).map(s => s.key));
+      inferredSeed.forEach(k => { if (k && !haveKey.has(k)) { dfSeedSchema.push({ key: k, description: '' }); haveKey.add(k); } });
+      if (dfSeedSchema.length && typeof dfAddSeedNode === 'function' && dfFindSeedNodeId() == null) {
+        dfAddSeedNode(40, 200);
+      }
+    } catch (_) {}
     // START/END anchor nodes — same seed→deliverable brackets as the runs
     // DAG. Not tracked in dfNodeData, so dfExportYaml skips them (they're
     // decoration, not steps).
@@ -11688,6 +11762,13 @@ async function dfRunWorkflowLive() {
     if (sd && (sd.query || '').trim()) {
       const primary = (sd.seed_schema && sd.seed_schema[0] && sd.seed_schema[0].key) || 'query';
       seed[primary] = sd.query.trim();
+    }
+    // P0-6: per-key seed VALUES the operator typed into the seed config override
+    // the primary/query mapping and fill the rest of the declared schema.
+    if (sd && sd.seed_values && typeof sd.seed_values === 'object') {
+      Object.entries(sd.seed_values).forEach(([k, v]) => {
+        if (k && v != null && String(v).trim() !== '') seed[k] = v;
+      });
     }
   } catch (_) {}
 
