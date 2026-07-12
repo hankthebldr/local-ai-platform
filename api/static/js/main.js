@@ -36,6 +36,7 @@ import { TasksPanel } from './library/tasks.js';
 import { PatternsPanel } from './library/patterns.js';
 import { TestPane } from './library/test-pane.js';
 import { RunsTab } from './runs/runs-tab.js';
+import { SchedulesView } from './runs/schedules-view.js';
 import { WorkflowMemory } from './runs/workflow-memory.js';
 import { ResearchArtifacts } from './runs/research-artifacts.js';
 // RX-2 — the canonical shared node-rail (this spec owns it; Operate U14
@@ -8030,6 +8031,20 @@ async function dfLoopWrapWorkflow() {
   Toast.success('Wrapped in Ralph loop', `${body.length} step${body.length === 1 ? '' : 's'} → loop body · budgets in Safety rails`);
 }
 Actions.click({ 'composer.loop-wrap': () => { dfLoopWrapWorkflow(); } });
+
+// O6c: schedule the SAVED workflow on a recurring cadence. Opens the
+// LibraryWizard prefilled with this workflow. Requires a saved workflow —
+// the wizard's workflow_id must resolve server-side (schedule CRUD validates
+// it). Toast "Save the workflow first" when the canvas hasn't been saved.
+Actions.click({
+  'composer.schedule': () => {
+    const id = (document.getElementById('df-wf-id')?.value || '').trim();
+    const band = document.getElementById('composer-signal-band');
+    const unsaved = !id || (band && band.dataset.state === 'unsaved');
+    if (unsaved) { Toast.warn('Save the workflow first', 'Save this workflow, then schedule it.'); return; }
+    try { SchedulesView.openScheduleWizard({ workflow_id: id }); } catch (e) { Toast.danger('Schedule', e.message); }
+  },
+});
 
 /* ── BU8c: feasibility signal band ──────────────────────────────────
    Paints #composer-signal-band from GET /api/workflows/{id}/schedule-preview:

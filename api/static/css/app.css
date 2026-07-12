@@ -7214,3 +7214,63 @@ body.bs-show-hint .bs-dispatch:hover::after {
   /* Admin sits at the rail bottom → the menu drops UP from the trigger. */
   body > .tab-nav .admin-menu { bottom: calc(100% + 4px); top: auto; right: 0; left: auto; }
 }
+
+/* ── Schedules rail (Operate U8) ─────────────────────────────────────────── */
+.runs-rail-modebar { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; }
+.runs-rail-modes { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.runs-rail-mode {
+  background: transparent; border: 0; border-right: 1px solid var(--border);
+  color: var(--text-muted); font-family: var(--mono); font-size: 0.58rem;
+  letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 12px; cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.runs-rail-mode:last-child { border-right: 0; }
+.runs-rail-mode:hover { color: var(--text); }
+.runs-rail-mode.active { color: var(--accent); background: var(--accent-ghost); }
+.schedules-shell { min-height: 340px; }
+
+/* Rail list chips — enabled dot reuses .lib-dot; adds ws + overlap chips. */
+.lib-dot.off { background: var(--text-muted); opacity: 0.5; }
+.sched-ws-chip { color: var(--cyan, #4fd6c9); border: 1px solid var(--border); }
+.sched-warn-chip { color: var(--red, #ff5252); border: 1px solid var(--red, #ff5252); }
+
+/* Detail — overview key/value grid + toggle. */
+.sched-ov-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 0.74rem; }
+.sched-kv { display: grid; grid-template-columns: 100px 1fr; gap: 6px; padding: 3px 0; font-size: 0.74rem; border-bottom: 1px solid var(--border); }
+.sched-kv > span:first-child { color: var(--text-muted); }
+.sched-seed code { color: var(--accent); }
+.sched-wf-link { color: var(--accent); text-decoration: underline dotted; cursor: pointer; font-family: var(--mono); font-size: 0.72rem; }
+
+/* History (relations) rows — dispatched rows pivot to the run. */
+.sched-hist { display: flex; flex-direction: column; gap: 2px; }
+.sched-hist-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 4px 6px; border-radius: 3px; font-size: 0.7rem; }
+.sched-hist-row.pivot { cursor: pointer; }
+.sched-hist-row.pivot:hover { background: var(--accent-ghost); }
+.sched-hist-ev { font-family: var(--mono); }
+.sched-hist-ev.ev-error, .sched-hist-ev.ev-auto_disabled { color: var(--red, #ff5252); }
+.sched-hist-ev.ev-dispatched { color: var(--accent); }
+.sched-hist-when { color: var(--text-muted); }
+.sched-hist-trig { color: var(--text-muted); font-size: 0.62rem; }
+.sched-hist-run { margin-left: auto; color: var(--cyan, #4fd6c9); font-size: 0.62rem; }
+
+.sched-test .action-btn { margin-top: 8px; }
+
+/* Scoped write-401 lock row — NEVER wipes #tab-runs (renderLock rule). */
+.sched-lock-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--accent-ghost); font-size: 0.72rem;
+}
+.sched-lock-msg { flex: 1; color: var(--text); }
+
+/* Wizard — workflow radio list + seed rows + cadence blocks. */
+.sched-wf-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; margin-top: 6px; }
+.sched-wf-opt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 0.74rem; }
+.sched-wf-opt:hover { border-color: var(--accent-dim); }
+.sched-wf-name { flex: 1; }
+.sched-wf-id { color: var(--text-muted); font-family: var(--mono); font-size: 0.62rem; }
+.sched-seed-fields { margin: 8px 0; }
+.sched-seed-row { margin-bottom: 6px; }
+.sched-confirm { display: grid; grid-template-columns: 120px 1fr; gap: 6px; font-size: 0.74rem; margin-top: 8px; }
+.sched-confirm > div { display: contents; }
+.sched-confirm > div > span:first-child { color: var(--text-muted); }

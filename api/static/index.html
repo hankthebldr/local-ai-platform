@@ -662,10 +662,13 @@
         <!-- BU8b: wrap the whole canvas into an autonomous ralph loop —
              steps become the loop body, the halt budgets open in the
              Safety rails config. Wired via the Actions module
-             (data-action), no inline handler. Schedule (recurring cron)
-             is cut from v1: no host-side scheduler backend exists. -->
+             (data-action), no inline handler. -->
         <button class="action-btn" data-action="composer.loop-wrap"
                 title="Wrap the current canvas into an autonomous Ralph loop — the steps become the loop body; halt budgets open in Safety rails">↻ Loop-wrap</button>
+        <!-- O6c: schedule the saved workflow on a recurring cadence. Opens the
+             LibraryWizard prefilled with this workflow. Wired via data-action. -->
+        <button class="action-btn" data-action="composer.schedule"
+                title="Schedule this workflow to run on a recurring cadence (save the workflow first)">⏰ Schedule</button>
         <!-- BU8d: starter suggestions — opens a compact chooser of full
              best-practice starters (Ralph / TDD / Research fan-out); a
              pick instantiates seed + scaffold end-to-end. Wired via the
@@ -1797,6 +1800,24 @@
       <div class="band-divider"></div>
       <div class="runs-perf-trends" id="runs-perf-trends"></div>
     </div>
+    <!-- Rail mode toggle (O6c) — Runs | Schedules. Schedules mode mounts a
+         LibraryShell adapter (auth:'optional') into #schedules-shell; + Schedule
+         opens the LibraryWizard. Wired via data-action (no inline handlers). -->
+    <div class="runs-rail-modebar">
+      <div class="runs-rail-modes" role="tablist" aria-label="Runs or Schedules">
+        <button type="button" class="runs-rail-mode active" role="tab" aria-selected="true"
+                data-mode="runs" data-action="runs.rail-mode">Runs</button>
+        <button type="button" class="runs-rail-mode" role="tab" aria-selected="false"
+                data-mode="schedules" data-action="runs.rail-mode">Schedules</button>
+      </div>
+      <div style="flex:1"></div>
+      <button type="button" class="action-btn xs accent" id="runs-schedule-new"
+              data-action="runs.schedule-new" hidden>+ Schedule</button>
+    </div>
+    <div id="runs-mode-schedules" hidden>
+      <div id="schedules-shell" class="schedules-shell"></div>
+    </div>
+    <div id="runs-mode-runs">
     <div class="runs-tab-layout">
       <!-- LEFT: filterable list of recent runs -->
       <div class="runs-tab-list panel">
@@ -1959,6 +1980,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /#runs-mode-runs -->
   </div>
 
   <!-- Step-detail popup — opened by clicking a step in the Run Detail panel.
