@@ -296,6 +296,19 @@ function switchTab(name, el) {
 // future phases add buttons, not handlers.
 Actions.click({ 'switch-tab': (el) => switchTab(el.dataset.tabTarget || el.dataset.tab, el) });
 
+// U9: dashboard upcoming-schedule click → pivot the Runs rail to Schedules
+// mode. Named degrade — if the rail toggle isn't in this build, toast rather
+// than dead-navigate.
+Actions.click({ 'dash.open-schedules': () => {
+  const btn = document.querySelector('.runs-rail-mode[data-mode="schedules"]');
+  if (!btn) { if (window.Toast) Toast.info('Schedules unavailable', 'The Schedules rail is not available in this build.'); return; }
+  try {
+    if (typeof SchedulesView !== 'undefined' && SchedulesView && typeof SchedulesView.setRailMode === 'function') {
+      SchedulesView.setRailMode('schedules');
+    } else { btn.click(); }
+  } catch (e) { if (window.Toast) Toast.danger('Schedules', (e && e.message) || 'Could not open the Schedules rail.'); }
+} });
+
 // CP-1b: no-models onboarding banner. Shown when the /v1/models read comes
 // back empty; hidden the moment a model loads. Operator-dismissible for the
 // session (sessionStorage) so it doesn't nag mid-work, but re-appears next
@@ -482,62 +495,207 @@ async function loadStatus() {
    axes, data-ink only. */
 
 /* The Runs performance band — host utilization (live ring buffer) +
-   cadence trends computed from the run history. Numbers live where the
-   operating decisions happen; no dashboard page. */
+   run-mix / cadence / health from runs-index + scheduler dispatch metrics.
+   Numbers live where the operating decisions happen; no dashboard page.
+
+   U9: extended (not replaced). Two independent network reads —
+   runs-index?limit=60 (U5) and /api/schedules/summary (U4) — feed disjoint
+   cell groups. Each read blanks only its own cells on failure; the whole
+   band hides only when BOTH reads fail. The host util chart + CPU/MEM gauges
+   are driven off the `_sysHistory` ring buffer (untouched) and render
+   regardless of either fetch. */
+
+// Run-mix stacked bar — primary type per run (scheduled > autonomous >
+// test > manual, the classify_type ordering). Pure string builder.
+const _RUN_MIX_ORDER = [
+  { type: 'scheduled', label: 'Scheduled', color: 'var(--accent)' },
+  { type: 'autonomous', label: 'Autonomous', color: 'var(--accent-2)' },
+  { type: 'test', label: 'Test', color: 'var(--info)' },
+  { type: 'manual', label: 'Manual', color: 'var(--text-muted)' },
+];
+function _runMixBar(counts, total) {
+  if (!total) return '<div class="model-empty" style="padding:14px 0">No runs yet</div>';
+  const segs = _RUN_MIX_ORDER.filter(s => counts[s.type] > 0);
+  const bar = segs.map(s =>
+    `<span class="runs-mix-seg" style="width:${(100 * counts[s.type] / total).toFixed(1)}%;background:${s.color}"` +
+    ` title="${esc(s.label)}: ${counts[s.type]}"></span>`).join('');
+  const legend = segs.map(s =>
+    `<span class="runs-mix-key"><span class="d" style="background:${s.color}"></span>` +
+    `${esc(s.label)} <span class="n">${counts[s.type]}</span></span>`).join('');
+  return `<div class="runs-mix-k">run mix · ${total}</div>` +
+    `<div class="runs-mix-track">${bar}</div>` +
+    `<div class="runs-mix-legend">${legend}</div>`;
+}
+
+// Human "in 2h" / "due" from a naive-UTC ISO timestamp.
+function _fmtUntil(iso) {
+  if (!iso) return '';
+  const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+  if (!Number.isFinite(ms)) return '';
+  let d = Math.round((ms - Date.now()) / 1000);
+  if (d <= 0) return 'due';
+  if (d < 3600) return `in ${Math.max(1, Math.round(d / 60))}m`;
+  if (d < 86400) return `in ${Math.round(d / 3600)}h`;
+  return `in ${Math.round(d / 86400)}d`;
+}
+
+function _renderRunsIndexCells(runs) {
+  const mixEl = document.getElementById('runs-mix-cell');
+  const sgEl = document.getElementById('runs-success-gauges');
+  const trends = document.getElementById('runs-perf-trends');
+  const done = runs.filter(x => x.started_at && x.completed_at);
+  // duration_seconds is server-supplied by runs-index; fall back to the wall
+  // delta for older rows that predate the field.
+  const durs = done
+    .map(x => (x.duration_seconds != null ? x.duration_seconds
+      : (new Date(x.completed_at) - new Date(x.started_at)) / 1000))
+    .filter(d => d > 0);
+  const fmtClock = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+  const half = Math.floor(durs.length / 2);
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+  const avgRecent = avg(durs.slice(0, half || durs.length));
+  const avgPrev = avg(durs.slice(half));
+  const avgDelta = (half && avgPrev) ? Math.round(avgRecent - avgPrev) : null;
+
+  const byDay = {}, degByDay = {};
+  runs.forEach(x => {
+    if (!x.started_at) return;
+    const d = x.started_at.slice(0, 10);
+    byDay[d] = (byDay[d] || 0) + 1;
+    if (x.health === 'degraded') degByDay[d] = (degByDay[d] || 0) + 1;
+  });
+  const days = Object.keys(byDay).sort();
+  const perDay = days.map(d => byDay[d]);
+  const degPerDay = days.map(d => degByDay[d] || 0);
+
+  const ok = runs.filter(x => x.status === 'completed').length;
+  const okPct = runs.length ? Math.round(100 * ok / runs.length) : 0;
+  const degraded = runs.filter(x => x.health === 'degraded').length;
+
+  // Run mix by primary type tag.
+  const mix = {};
+  runs.forEach(x => {
+    const t = (x.type_tags && x.type_tags[0] && x.type_tags[0].type) || 'manual';
+    mix[t] = (mix[t] || 0) + 1;
+  });
+  if (mixEl) mixEl.innerHTML = _runMixBar(mix, runs.length);
+
+  // All-vs-Scheduled success gauges.
+  const sched = runs.filter(x =>
+    (x.type_tags || []).some(t => t.type === 'scheduled') || x.origin === 'scheduled' || x.schedule_id);
+  const schedOk = sched.filter(x => x.status === 'completed').length;
+  const schedPct = sched.length ? Math.round(100 * schedOk / sched.length) : null;
+  if (sgEl) {
+    sgEl.innerHTML =
+      enclGaugeStat({ label: 'All ✓', value: okPct, unit: '%', warn: null, sub: `${ok}/${runs.length}` }) +
+      enclGaugeStat({ label: 'Sched ✓', value: schedPct == null ? null : schedPct, unit: '%', warn: null,
+        sub: sched.length ? `${schedOk}/${sched.length}` : 'none' });
+  }
+
+  if (trends) {
+    trends.innerHTML =
+      enclTrendStat({ label: 'avg run', value: durs.length ? fmtClock(avgRecent) : '—',
+        delta: avgDelta != null && avgDelta !== 0 ? `${avgDelta > 0 ? '+' : ''}${avgDelta}s` : '',
+        deltaGood: false, spark: durs.slice(0, 16).reverse(), color: 'var(--accent-2)' }) +
+      enclTrendStat({ label: 'degraded', value: String(degraded),
+        deltaGood: false, spark: degPerDay.slice(-14), color: 'var(--warn)' }) +
+      enclTrendStat({ label: 'runs / day', value: perDay.length ? String(perDay[perDay.length - 1]) : '0',
+        spark: perDay.slice(-14), color: 'var(--info)' }) +
+      enclTrendStat({ label: 'success', value: `${okPct}%`, spark: [], color: 'var(--accent)' });
+  }
+}
+
+function _blankRunsIndexCells() {
+  ['runs-mix-cell', 'runs-success-gauges', 'runs-perf-trends'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+}
+
+function _renderSchedSummaryCells(sum) {
+  const el = document.getElementById('runs-sched-cells');
+  const div = document.getElementById('runs-sched-divider');
+  if (!el) return;
+  const overlap = Object.keys(sum.repeated_overlap || {}).length;
+  const stat = (k, v, warn) =>
+    `<div class="sched-stat${warn ? ' warn' : ''}"><span class="k">${esc(k)}</span>` +
+    `<span class="v">${esc(String(v))}</span></div>`;
+  const strip = (sum.upcoming || []).map(u =>
+    `<button type="button" class="sched-upcoming-item" data-action="dash.open-schedules"` +
+    ` data-sched-id="${escAttr(u.id || '')}" title="${escAttr((u.name || '') + ' — ' + (u.next_fire_at || ''))}">` +
+    `<span class="n">${esc(u.name || u.id || 'schedule')}</span>` +
+    `<span class="t">${esc(_fmtUntil(u.next_fire_at))}</span></button>`).join('');
+  el.innerHTML =
+    '<div class="sched-cells-k">scheduler</div>' +
+    '<div class="sched-stat-row">' +
+      stat('enabled', `${sum.enabled_count || 0}/${sum.total_count || 0}`, false) +
+      stat('24h disp', sum.dispatched_24h || 0, false) +
+      stat('24h skip', sum.skipped_24h || 0, false) +
+      stat('24h fail', sum.failed_24h || 0, (sum.failed_24h || 0) > 0) +
+      (overlap ? stat('overlap', `⚠ ×${overlap}`, true) : '') +
+    '</div>' +
+    (strip
+      ? `<div class="sched-upcoming-k">upcoming</div><div class="sched-upcoming-strip">${strip}</div>`
+      : '<div class="sched-upcoming-empty">No enabled schedules</div>');
+  if (div) div.hidden = false;
+}
+
+function _blankSchedSummaryCells() {
+  const el = document.getElementById('runs-sched-cells');
+  const div = document.getElementById('runs-sched-divider');
+  if (el) el.innerHTML = '';
+  if (div) div.hidden = true;
+}
+
 async function renderRunsPerfBand() {
   const band = document.getElementById('runs-perf-band');
   if (!band) return;
-  try {
-    const hist = window._sysHistory || [];
-    const utilEl = document.getElementById('runs-util-chart');
-    if (utilEl && hist.length >= 2) {
-      const spanMin = Math.max(1, Math.round((hist[hist.length - 1].t - hist[0].t) / 60000));
-      utilEl.innerHTML = enclUtilChart(
-        [{ label: 'cpu', data: hist.map(s => s.cpu) }, { label: 'mem', data: hist.map(s => s.mem) }],
-        { warn: 85, max: 100, unit: '%', xlabels: [`-${spanMin}m`, `-${Math.round(spanMin / 2)}m`, 'now'] });
-    } else if (utilEl) {
-      utilEl.innerHTML = '<div class="model-empty" style="padding:20px 30px">Collecting host samples… (10s poll)</div>';
-    }
 
-    const r = await fetch('/api/workflows/runs?limit=60');
-    const runs = (await r.json()) || [];
-    const done = runs.filter(x => x.started_at && x.completed_at);
-    const durs = done.map(x => (new Date(x.completed_at) - new Date(x.started_at)) / 1000).filter(d => d > 0);
-    const fmtClock = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
-    // Compare the recent half against the previous half — equal windows.
-    const half = Math.floor(durs.length / 2);
-    const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
-    const avgRecent = avg(durs.slice(0, half || durs.length));
-    const avgPrev = avg(durs.slice(half));
-    const avgDelta = (half && avgPrev) ? Math.round(avgRecent - avgPrev) : null;
-    const byDay = {};
-    runs.forEach(x => { if (x.started_at) { const d = x.started_at.slice(0, 10); byDay[d] = (byDay[d] || 0) + 1; } });
-    const days = Object.keys(byDay).sort();
-    const perDay = days.map(d => byDay[d]);
-    const ok = runs.filter(x => x.status === 'completed').length;
-    const okPct = runs.length ? Math.round(100 * ok / runs.length) : 0;
+  // Host utilization — live ring buffer (`_sysHistory`), independent of both
+  // network reads. Always render; never blanks the band on its own.
+  const hist = window._sysHistory || [];
+  const utilEl = document.getElementById('runs-util-chart');
+  if (utilEl && hist.length >= 2) {
+    const spanMin = Math.max(1, Math.round((hist[hist.length - 1].t - hist[0].t) / 60000));
+    utilEl.innerHTML = enclUtilChart(
+      [{ label: 'cpu', data: hist.map(s => s.cpu) }, { label: 'mem', data: hist.map(s => s.mem) }],
+      { warn: 85, max: 100, unit: '%', xlabels: [`-${spanMin}m`, `-${Math.round(spanMin / 2)}m`, 'now'] });
+  } else if (utilEl) {
+    utilEl.innerHTML = '<div class="model-empty" style="padding:20px 30px">Collecting host samples… (10s poll)</div>';
+  }
+  const _h = window._sysHistory || [];
+  const gaugesEl = document.getElementById('runs-perf-gauges');
+  if (gaugesEl && _h.length) {
+    const latest = _h[_h.length - 1];
+    gaugesEl.innerHTML =
+      enclGaugeStat({ label: 'CPU', value: Math.round(latest.cpu || 0), unit: '%', warn: 85 }) +
+      enclGaugeStat({ label: 'MEM', value: Math.round(latest.mem || 0), unit: '%', warn: 85 });
+  } else if (gaugesEl) { gaugesEl.innerHTML = ''; }
 
-    const trends = document.getElementById('runs-perf-trends');
-    if (trends) {
-      trends.innerHTML =
-        enclTrendStat({ label: 'avg run', value: durs.length ? fmtClock(avgRecent) : '—',
-          delta: avgDelta != null && avgDelta !== 0 ? `${avgDelta > 0 ? '+' : ''}${avgDelta}s` : '',
-          deltaGood: false, spark: durs.slice(0, 16).reverse(), color: 'var(--accent-2)' }) +
-        enclTrendStat({ label: 'runs / day', value: perDay.length ? String(perDay[perDay.length - 1]) : '0',
-          spark: perDay.slice(-14), color: 'var(--info)' }) +
-        enclTrendStat({ label: 'success', value: `${okPct}%`, spark: [], color: 'var(--accent)' });
-    }
-    // Live CPU / MEM gauges (GaugeStat) from the host ring buffer.
-    const _h = window._sysHistory || [];
-    const gaugesEl = document.getElementById('runs-perf-gauges');
-    if (gaugesEl && _h.length) {
-      const latest = _h[_h.length - 1];
-      gaugesEl.innerHTML =
-        enclGaugeStat({ label: 'CPU', value: Math.round(latest.cpu || 0), unit: '%', warn: 85 }) +
-        enclGaugeStat({ label: 'MEM', value: Math.round(latest.mem || 0), unit: '%', warn: 85 });
-    } else if (gaugesEl) { gaugesEl.innerHTML = ''; }
-    band.hidden = false;
-  } catch (e) { band.hidden = true; }
+  // Two independent reads — per-cell blanking, hide-all only when both fail.
+  const [runsOk, schedOk] = await Promise.all([
+    (async () => {
+      try {
+        const r = await fetch('/api/workflows/runs-index?limit=60');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        _renderRunsIndexCells((d && d.runs) || []);
+        return true;
+      } catch (_) { _blankRunsIndexCells(); return false; }
+    })(),
+    (async () => {
+      try {
+        const r = await fetch('/api/schedules/summary');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        _renderSchedSummaryCells((await r.json()) || {});
+        return true;
+      } catch (_) { _blankSchedSummaryCells(); return false; }
+    })(),
+  ]);
+
+  // Per-cell blanking above; hide the whole band only when BOTH reads fail
+  // (host util/gauges alone don't justify a mostly-empty band).
+  band.hidden = !runsOk && !schedOk;
 }
 
 /* ── ASSET PEEK — unified deep-dive (design-system EntityCard→peek) ──

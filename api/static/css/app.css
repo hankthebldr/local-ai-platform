@@ -4718,7 +4718,38 @@ textarea.composer-desc-area {
 .encl-range-cur { position:absolute; top:1px; width:6px; height:6px; border-radius:50%; background:var(--rc); box-shadow:0 0 0 2px var(--bg); transform:translateX(-3px); }
 .encl-range-ends { display:flex; justify-content:space-between; font-family:var(--mono); font-size:9px; color:var(--text-faint); }
 .runs-perf-gauges { display:flex; gap:22px; flex-wrap:wrap; padding:2px 0; }
+.runs-success-gauges { display:flex; gap:22px; flex-wrap:wrap; padding:2px 0; align-self:flex-start; }
 .rl-ranges { display:flex; gap:22px; flex-wrap:wrap; margin:4px 0 14px; }
+/* U9: run-mix stacked bar */
+.runs-mix-cell { display:flex; flex-direction:column; gap:7px; min-width:170px; align-self:flex-start; }
+.runs-mix-k { font-family:var(--mono); font-size:0.625rem; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted); }
+.runs-mix-track { display:flex; height:10px; border-radius:var(--radius-pill,999px); overflow:hidden; background:var(--surface-raised,var(--border)); }
+.runs-mix-seg { height:100%; }
+.runs-mix-seg:not(:last-child) { border-right:1px solid var(--bg-elev); }
+.runs-mix-legend { display:flex; gap:14px; flex-wrap:wrap; }
+.runs-mix-key { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:0.625rem; color:var(--text-dim); }
+.runs-mix-key .d { width:7px; height:7px; border-radius:2px; }
+.runs-mix-key .n { color:var(--text); font-weight:600; }
+/* U9: scheduler dispatch summary cells */
+.runs-sched-cells { display:flex; flex-direction:column; gap:9px; min-width:210px; align-self:flex-start; }
+.runs-sched-cells:empty { display:none; }
+.sched-cells-k, .sched-upcoming-k { font-family:var(--mono); font-size:0.625rem; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted); }
+.sched-stat-row { display:flex; gap:18px; flex-wrap:wrap; }
+.sched-stat { display:flex; flex-direction:column; gap:1px; }
+.sched-stat .k { font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-faint); }
+.sched-stat .v { font-family:var(--mono); font-size:1rem; font-weight:600; color:var(--text); line-height:1.1; }
+.sched-stat.warn .v { color:var(--warn); }
+.sched-upcoming-strip { display:flex; gap:7px; flex-wrap:wrap; }
+.sched-upcoming-item {
+  display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+  background:var(--surface-raised,var(--bg)); border:1px solid var(--border);
+  border-radius:var(--radius-pill,999px); padding:3px 10px;
+  font-family:var(--mono); font-size:0.66rem; color:var(--text-dim);
+}
+.sched-upcoming-item:hover { border-color:var(--accent); color:var(--text); }
+.sched-upcoming-item .n { color:var(--text); }
+.sched-upcoming-item .t { color:var(--text-faint); }
+.sched-upcoming-empty { font-family:var(--mono); font-size:0.66rem; color:var(--text-faint); }
 
 /* ── AssetPeek — the unified deep-dive slide-over (design-system
    EntityCard → peek pattern). One panel for every asset kind: models,

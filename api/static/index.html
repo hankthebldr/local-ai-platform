@@ -1798,7 +1798,14 @@
       <div class="encl-util" id="runs-util-chart"></div>
       <div class="runs-perf-gauges" id="runs-perf-gauges"></div>
       <div class="band-divider"></div>
+      <!-- U9: run-mix + all-vs-scheduled success (from runs-index?limit=60) -->
+      <div class="runs-mix-cell" id="runs-mix-cell"></div>
+      <div class="runs-success-gauges" id="runs-success-gauges"></div>
+      <div class="band-divider"></div>
       <div class="runs-perf-trends" id="runs-perf-trends"></div>
+      <!-- U9: scheduler dispatch summary (from /api/schedules/summary) -->
+      <div class="band-divider" id="runs-sched-divider" hidden></div>
+      <div class="runs-sched-cells" id="runs-sched-cells"></div>
     </div>
     <!-- Rail mode toggle (O6c) — Runs | Schedules. Schedules mode mounts a
          LibraryShell adapter (auth:'optional') into #schedules-shell; + Schedule
