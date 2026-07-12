@@ -72,7 +72,7 @@ export const WorkflowIndex = (function () {
       // composerNewWorkflow() on every stray click (description text,
       // tags, mini-DAG) and silently wiped unsaved composer state.
       // Explicit buttons stay as the only action affordance.
-      return `<div class="wfi-card" data-action="wfi.card" data-workflow-id="${esc(w.id)}" title="Double-click to deep-dive into the steps, prompts, and outputs">
+      return `<div class="wfi-card" data-action="wfi.card" data-workflow-id="${esc(w.id)}" title="Double-click to view the steps, prompts, and outputs">
         <div class="wfi-card-head">
           <span class="wfi-card-icon tone-${esc(tone)}" data-cat="${esc(w.category)}">${iconSvg}</span>
           <span class="wfi-card-title">${esc(w.name)}</span>
@@ -93,7 +93,7 @@ export const WorkflowIndex = (function () {
         </div>
         <div class="wfi-card-refs">${refTags.map(t => `<span class="wfi-card-tag">${esc(t)}</span>`).join('')}</div>
         <div class="wfi-card-actions">
-          <button class="action-btn accent" data-action="wfi.deep-dive">Deep Dive</button>
+          <button class="action-btn accent" data-action="wfi.deep-dive">View</button>
           <button class="action-btn" data-action="wfi.compose">Compose</button>
           <button class="action-btn" data-action="wfi.run">Run</button>
           <button class="action-btn" data-action="wfi.export">Export</button>

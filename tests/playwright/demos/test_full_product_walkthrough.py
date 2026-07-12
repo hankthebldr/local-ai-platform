@@ -12,7 +12,7 @@ Output: playwright-results/videos/<hash>.webm (rename per scripts/record-demos.s
 
 Storyboard:
     0:00  Boot — Composer canvas, system strip, workbench
-    0:30  Top-level tabs — Workflow Index, Agents, Skill Lab, Models, Context
+    0:30  Top-level tabs — Workflows, Agents, Skill Lab, Models, Context
     1:15  Kanban — pick project, create a task, drag between columns
     2:00  Composer Workstream — Step / Run / History tabs
     2:30  Skills Lab — synthetic research result with thinking cards + capture

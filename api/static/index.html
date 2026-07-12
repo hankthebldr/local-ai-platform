@@ -469,8 +469,11 @@
          deep research, and the Role Library moved here from the retired
          Context tab (switchTab remaps 'documents' → 'research'). -->
     <button class="tab-btn" data-tab="research" data-action="switch-tab" data-tab-target="research">Research</button>
-    <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
     <div class="nav-section">Operate</div>
+    <!-- U1: relocated from Build → first Operate position; running/scheduled
+         workflows are an Operate concern. id/data-tab stay 'workflow-index'
+         (deep-link routes + switchTab remaps unchanged); #wfi-count travels. -->
+    <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflows<span class="tab-count" id="wfi-count"></span></button>
     <button class="tab-btn" data-tab="projects" onclick="switchTab('projects', this)">Projects<span class="tab-count" id="projects-tab-count"></span></button>
     <button class="tab-btn" data-tab="runs" onclick="switchTab('runs', this)">Runs<span class="tab-count" id="runs-tab-count"></span></button>
     <!-- S4: Context — run/provenance OBSERVABILITY (the run-filtered view
@@ -969,7 +972,7 @@
         <div class="ws-pane" id="ws-pane-run" hidden style="max-height:340px;overflow:auto">
           <div class="panel-label">Active Run</div>
           <div id="ws-run-body">
-            <div class="model-empty">No active run. Hit <strong>Run</strong> on the toolbar above, or trigger a workflow from the Workflow Index.</div>
+            <div class="model-empty">No active run. Hit <strong>Run</strong> on the toolbar above, or trigger a workflow from the Workflows tab.</div>
           </div>
         </div>
 
@@ -1257,15 +1260,17 @@
     </div>
   </div>
 
-  <!-- ═══ TAB: WORKFLOW INDEX ═══════════════════════════════════════
-       Catalogue of every workflow, grouped by inferred category, with
-       import/export-as-bundle and "open in composer" actions. This is
-       the main driver for moving workflows between Enclave instances
-       (or sharing them between teammates). -->
+  <!-- ═══ TAB: WORKFLOWS ═════════════════════════════════════════════
+       The "Workflows" tab (Operate). Internal id stays 'workflow-index'
+       (durable route id — do NOT rename to 'workflows', which is the
+       legacy Catalog). Catalogue of every workflow, grouped by inferred
+       category, with import/export-as-bundle and "open in composer"
+       actions. This is the main driver for moving workflows between
+       Enclave instances (or sharing them between teammates). -->
   <div class="tab-content" id="tab-workflow-index">
     <div class="panel" style="margin-bottom:14px">
       <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">// WORKFLOW INDEX
+      <div class="panel-label">// WORKFLOWS
         <span style="float:right;font-size:0.6rem;color:var(--text-muted);letter-spacing:0.1em">workflows/</span>
       </div>
       <div class="wfi-controls">

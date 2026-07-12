@@ -10,7 +10,7 @@ work" after every change.
 |---|---|---|
 | `test_boot.py` | Clean-slate boot | License auto-fetch, modal stays closed, default tab loads |
 | `test_composer.py` | Workbench + canvas | 3 OOTB XQL agents, xdm-toolkit plugin, System strip shows host values |
-| `test_workflow_index.py` | Workflow Index | 5 OOTB workflows listed; each openable in Composer |
+| `test_workflow_index.py` | Workflows | 5 OOTB workflows listed; each openable in Composer |
 | `test_data_model_rule_smoke.py` | XDM rule flow | (smoke) workflow loads with 4 step nodes; (slow) end-to-end execution |
 | `test_admin_panels.py` | Admin dropdown | Order, System (Memory), License Keys, Plugins, Skills, MCP, Cloud, Exports — no lock state |
 | `test_chat.py` | Chat dock | Model picker populates; send/receive against a real model |

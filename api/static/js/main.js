@@ -162,6 +162,11 @@ function switchTab(name, el) {
   if (name === 'chat') ChatView.init();
   // Workflow Index no longer needs to refresh Kanban — the panel
   // moved to the Projects tab. Keep WorkflowIndex.load on its own.
+  // U1 GUARD: the nav button relabelled to "Workflows" (Operate), but the
+  // id/data-tab stays 'workflow-index' — do NOT collapse it into the legacy
+  // 'workflows' data-tab below, which is the repurposed Catalog page. The two
+  // are distinct routes; 'workflow-index' deep-links + the g-w shortcut rely
+  // on this id being unchanged.
   if (name === 'workflow-index') { WorkflowIndex.load(); }
   // Prompts library (roles + templates CRUD + render). Refresh on every
   // visit since prompts/{roles,templates}/ may have changed on disk.

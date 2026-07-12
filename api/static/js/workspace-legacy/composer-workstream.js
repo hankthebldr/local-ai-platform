@@ -214,7 +214,7 @@ export const ComposerWorkstream = (function () {
     if (!last) {
       EmptyState.render(body, {
         title: 'No active run',
-        detail: 'Hit Run ▶ or Run ▶ live on the toolbar above, or trigger a workflow from the Workflow Index.',
+        detail: 'Hit Run ▶ or Run ▶ live on the toolbar above, or trigger a workflow from the Workflows tab.',
         glyph: '▶',
       });
       _setRunMeta('idle');
@@ -267,7 +267,7 @@ export const ComposerWorkstream = (function () {
     if (!rows.length) {
       EmptyState.render(body, {
         title: 'No runs yet',
-        detail: 'Run a workflow from the toolbar above or kick one off from the Workflow Index.',
+        detail: 'Run a workflow from the toolbar above or kick one off from the Workflows tab.',
         glyph: '▶',
       });
       const hm = document.getElementById('ws-history-meta');

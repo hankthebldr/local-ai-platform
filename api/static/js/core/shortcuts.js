@@ -4,7 +4,7 @@ import { esc } from './dom.js';
 export const Shortcuts = (function () {
   const keymap = [
     { key: 'g d', label: 'Composer (dashboard)',  action: () => switchTab('dashboard') },
-    { key: 'g w', label: 'Workflow Index',         action: () => switchTab('workflow-index') },
+    { key: 'g w', label: 'Workflows (was Workflow Index)', action: () => switchTab('workflow-index') },
     { key: 'g a', label: 'Agents',                 action: () => switchTab('agents') },
     { key: 'g r', label: 'Research',               action: () => switchTab('research') },
     { key: 'g m', label: 'Models',                 action: () => switchTab('inventory') },
