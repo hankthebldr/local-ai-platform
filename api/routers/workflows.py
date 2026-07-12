@@ -316,7 +316,12 @@ async def save_workflow(req: WorkflowSaveRequest):
         default_flow_style=False,
         allow_unicode=True,
     )
-    target.write_text(yaml_text, encoding="utf-8")
+    # Atomic write (GP-2 commit 4): tmp + os.replace so a crash mid-write can
+    # never leave a half-written (unparseable) workflow yaml. The tmp sits in
+    # the same dir as the target so os.replace stays within one filesystem.
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(yaml_text, encoding="utf-8")
+    os.replace(tmp, target)
     logger.info(f"Saved workflow '{wf_id}' to {target}")
     return {
         "saved": True,
