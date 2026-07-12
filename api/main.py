@@ -385,6 +385,16 @@ from .routers import (
 )  # noqa: E402 — Operate U4 local scheduler
 
 app.include_router(_schedules_router.router)
+from .routers import (
+    artifacts as _artifacts_router,
+)  # noqa: E402 — Operate U10 artifacts inventory
+
+app.include_router(_artifacts_router.router)
+from .routers import (
+    format_sets as _format_sets_router,
+)  # noqa: E402 — Operate U10 format-sets library
+
+app.include_router(_format_sets_router.router)
 
 
 # ── Public Endpoints ───────────────────────────────────────────────────────

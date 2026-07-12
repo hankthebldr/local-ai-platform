@@ -88,6 +88,15 @@ SCOPE_MAP = {
     # runs before scope resolution and would 401 a legitimately workflows-scoped
     # SPA key reading the Schedules rail.
     "/api/schedules": "workflows",
+    # Operate U10 (F9): the artifacts inventory (run/feedback/export bytes) and
+    # the format-sets library serve run-provenance content already scope-gated at
+    # /api/workflows. Ship their SCOPE_MAP entries IN THIS UNIT rather than
+    # deferring them — a deferred scope entry is a bypass. Reads ride the
+    # `workflows` scope (data-action tier); format-set WRITES are separately
+    # require_master_key'd in the router. NOT master here — that runs before
+    # scope resolution and would 401 a legitimately workflows-scoped SPA key.
+    "/api/artifacts": "workflows",
+    "/api/format-sets": "workflows",
     "/api/keys": "keys",  # master key bypasses this before scope check
     "/a2a": "a2a",  # A2A JSON-RPC dispatch
 }
