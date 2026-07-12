@@ -1536,34 +1536,11 @@ body::after {
   background: var(--border);
 }
 
-/* Breadcrumb row — context for the current tab, lives on header row 2.
-   JS owns the inner span values; this just paints the chrome. */
-.header-breadcrumb {
-  grid-row: 2;
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-size: 0.62rem;
-  color: var(--text-muted);
-  letter-spacing: 0.08em;
-}
-.header-breadcrumb .crumb {
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
-  font-size: 0.58rem;
-}
-.header-breadcrumb .crumb.active { color: var(--accent); }
-.header-breadcrumb .crumb-sep { color: var(--text-faint); font-size: 0.6rem; }
-.header-breadcrumb .crumb-ctx {
-  color: var(--text);
-  font-size: 0.66rem;
-  letter-spacing: 0;
-  text-transform: none;
-  font-weight: 500;
-}
+/* CP-1a: the .header-breadcrumb chrome was dead CSS — no element in
+   index.html or any JS module ever renders a .header-breadcrumb (the flat
+   tab-nav replaced the two-row header + breadcrumb). Removed the selectors
+   here and their two responsive overrides below to stop lying about a
+   surface that no longer exists. */
 
 /* ── THEME TOGGLE ──────────────────────────────────────────────── */
 .theme-toggle {
@@ -3877,13 +3854,13 @@ textarea.composer-desc-area {
   .tab-btn { padding: 10px 14px; font-size: 0.65rem; }
 
   /* Header: the desktop layout is a 1fr/auto two-column grid. On phones
-     collapse it to a single column so brand, status, and breadcrumb
-     stack vertically instead of competing for horizontal space and
-     clipping. Reset child grid placements so the flow falls in source
-     order; wrap the status row and tighten the gap. */
+     collapse it to a single column so brand and status stack vertically
+     instead of competing for horizontal space and clipping. Reset child
+     grid placements so the flow falls in source order; wrap the status
+     row and tighten the gap. */
   .header {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
     row-gap: 8px;
   }
   .logo { grid-column: 1; grid-row: 1; }
@@ -3894,7 +3871,6 @@ textarea.composer-desc-area {
     font-size: 0.65rem;
   }
   .header-status .vsep { display: none; }
-  .header-breadcrumb { grid-column: 1; grid-row: 3; flex-wrap: wrap; }
   .logo-title { font-size: 1.2rem; letter-spacing: 0.14em; }
   .logo-sub { flex-wrap: wrap; gap: 4px 8px; }
 
@@ -3915,11 +3891,9 @@ textarea.composer-desc-area {
 }
 
 /* Tighter phone breakpoint — at very small widths even the stacked
-   layouts get cramped. Hide the breadcrumb (the active tab is already
-   visible in the nav above it) and drop the lowest-signal status
-   fields so the essentials stay legible. */
+   layouts get cramped. Drop the lowest-signal status fields so the
+   essentials stay legible. */
 @media (max-width: 480px) {
-  .header-breadcrumb { display: none; }
   .header-status .stat-key { display: none; }
   .footer-rail-stat .k { display: none; }
   .footer-meta { display: none; }

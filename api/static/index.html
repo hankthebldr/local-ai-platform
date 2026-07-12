@@ -453,14 +453,14 @@
         <span aria-hidden="true">⌘K</span>
       </button>
     </div>
-  </div>
+  </header>
 
-  <!-- TAB NAVIGATION — flat list. Section labels (Build / Operate / Library)
-       were removed because they consumed horizontal nav space and pushed the
-       Admin dropdown off-screen on standard widths. Tab order is preserved so
+  <!-- TAB NAVIGATION — flat list with Build / Operate / Library section
+       labels. The labels orient the operator; they carry real meaning for
+       assistive tech, so they are NOT aria-hidden. Tab order is preserved so
        muscle memory and any deep-link routes keep working. -->
   <div class="tab-nav" role="tablist">
-    <div class="nav-section" aria-hidden="true">Build</div>
+    <div class="nav-section">Build</div>
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Composer</button>
     <button class="tab-btn" data-tab="chat" data-action="switch-tab" data-tab-target="chat">Chat</button>
     <!-- S3: Research promoted to a first-class Build surface — RAG docs,
@@ -468,7 +468,7 @@
          Context tab (switchTab remaps 'documents' → 'research'). -->
     <button class="tab-btn" data-tab="research" data-action="switch-tab" data-tab-target="research">Research</button>
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflow Index<span class="tab-count" id="wfi-count"></span></button>
-    <div class="nav-section" aria-hidden="true">Operate</div>
+    <div class="nav-section">Operate</div>
     <button class="tab-btn" data-tab="projects" onclick="switchTab('projects', this)">Projects<span class="tab-count" id="projects-tab-count"></span></button>
     <button class="tab-btn" data-tab="runs" onclick="switchTab('runs', this)">Runs<span class="tab-count" id="runs-tab-count"></span></button>
     <!-- S4: Context — run/provenance OBSERVABILITY (the run-filtered view
@@ -476,7 +476,7 @@
          from the retired Library "Context" (documents), whose RAG surface
          now lives in Research under Build. -->
     <button class="tab-btn" data-tab="context" data-action="switch-tab" data-tab-target="context">Context</button>
-    <div class="nav-section" aria-hidden="true">Library</div>
+    <div class="nav-section">Library</div>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <button class="tab-btn" data-tab="prompts" data-action="switch-tab" data-tab-target="prompts">Prompts<span class="tab-count" id="prompts-count"></span></button>
     <button class="tab-btn" data-tab="tasks" data-action="switch-tab" data-tab-target="tasks">Tasks<span class="tab-count" id="tasks-count"></span></button>
@@ -844,7 +844,7 @@
             <div class="df-config-popup-head" id="df-config-popup-head">
               <span class="df-config-popup-grip" aria-hidden="true">⋮⋮</span>
               <span class="panel-label" id="df-config-popup-title" style="margin:0;flex:1">Step Config</span>
-              <button type="button" class="df-config-popup-btn" onclick="composerTestStepInChat()"
+              <button type="button" id="df-config-test-btn" class="df-config-popup-btn" onclick="composerTestStepInChat()"
                       style="width:auto;padding:0 8px;font-size:0.55rem;letter-spacing:0.04em;color:var(--accent)"
                       title="Test just this step in the chat — type a message and see only this step's reply, on its local model">▶ test in chat</button>
               <button type="button" class="df-config-popup-btn" id="df-config-popup-dock"
@@ -1723,9 +1723,9 @@
           Unified ingestion from upstream registries. Items map into the platform's
           <code style="color:var(--cyan)">DiscoveryItem</code> shape (tools / resources / prompts) so a
           legacy plugin, an MCP server, and a system prompt all install through the same surface.
-          See <a href="/api/discover/sources" style="color:var(--cyan)" target="_blank">/api/discover/sources</a>
+          See <a href="/api/discover/sources" style="color:var(--cyan)" target="_blank" rel="noopener noreferrer">/api/discover/sources</a>
           for the provider list, or
-          <a href="/docs#tag/discover" style="color:var(--cyan)" target="_blank">the OpenAPI docs</a>.
+          <a href="/docs#tag/discover" style="color:var(--cyan)" target="_blank" rel="noopener noreferrer">the OpenAPI docs</a>.
         </div>
         <div id="ext-discover-providers">
           <div class="model-empty">Loading providers…</div>
@@ -2664,7 +2664,7 @@
             <button class="action-btn" data-action="plugins.wizard-open"
                     title="Forge a new plugin with the local model — skills-only by default, mandatory per-file review before install">+ Forge</button>
             <button class="action-btn" data-action="plugins.refresh-digest"
-                    title="Operator-triggered: fetch the pinned Claude marketplaces and persist the plugin digest (reads never fetch)">⟳ Digest</button>
+                    title="Operator-triggered: fetch the pinned Claude marketplaces and persist the plugin digest (reads never fetch)">⟳ Discover</button>
             <button class="action-btn" data-action="plugins.refresh">Refresh</button>
           </span>
         </div>
@@ -2714,7 +2714,7 @@
           <button class="action-btn" data-action="skills.import"
             title="Import a single SKILL.md by URL (wizard-backed)">+ Import URL</button>
           <button class="action-btn" data-action="skills.refresh-discovery"
-            title="Operator-triggered: re-fires the skills-marketplace provider refresh, then re-reads the discovery catalog. Tab activation never fetches.">⟳ Refresh discovery</button>
+            title="Operator-triggered: re-fires the skills-marketplace provider refresh, then re-reads the discovery catalog. Tab activation never fetches.">⟳ Discover</button>
         </div>
         <div id="skills-list" style="margin-top:10px;font-size:0.78rem"></div>
       </div>
@@ -2741,7 +2741,7 @@
             <button class="action-btn accent" data-action="prompts.new">+ New</button>
             <button class="action-btn" data-action="prompts.refresh">Refresh</button>
             <button class="action-btn" data-action="prompts.discover-refresh"
-              title="Operator-triggered fetch of the allowlisted prompt digest sources (Admin ▸ Sources governs the allowlist; reads never touch the network)">⟳ Digest</button>
+              title="Operator-triggered fetch of the allowlisted prompt digest sources (Admin ▸ Sources governs the allowlist; reads never touch the network)">⟳ Discover</button>
           </span>
         </div>
         <p style="margin:6px 0 4px;color:var(--text-muted);font-size:0.72rem">

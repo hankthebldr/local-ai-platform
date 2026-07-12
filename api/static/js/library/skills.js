@@ -82,7 +82,7 @@ export const SkillsPanel = (function () {
     auth: 'admin',                    // honest tier — backend fully gated (F12)
     selectAction: 'skills.select',    // legacy row action id kept alive
     emptyText: 'No skills installed. Add one under plugins/<plugin>/skills/.',
-    emptyDiscoveredText: 'Nothing discovered — hit ⟳ Refresh to re-read the catalogs.',
+    emptyDiscoveredText: 'Nothing discovered — hit ⟳ Discover to re-read the catalogs.',
     emptyDetailLabel: '// SELECT A SKILL',
     emptyDetailText: 'Select a skill on the left to read its body, files, relations, and examples — or dry-run its triggers in the Test tab.',
     title: 'Skills',
@@ -356,7 +356,7 @@ export const SkillsPanel = (function () {
 
   async function _renderDiscOverview(el, id) {
     const rec = _discRecord(id);
-    if (!rec) { el.innerHTML = '<div class="model-empty">Not in the current catalog read — hit ⟳ Refresh.</div>'; return; }
+    if (!rec) { el.innerHTML = '<div class="model-empty">Not in the current catalog read — hit ⟳ Discover.</div>'; return; }
     const state = rec.installed ? 'installed' : (rec.has_body ? 'available' : 'bundled');
     el.innerHTML = _kvGrid([
       ['Skill ID', `<code>${esc(rec.id)}</code>`],

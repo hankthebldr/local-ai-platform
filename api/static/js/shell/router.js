@@ -14,10 +14,14 @@ export function initRouter() {
   }
   function go(route) {
     if (!route) return;
-    // Whitelist against real panels ('discover' is a legacy alias that
-    // switchTab remaps to inventory). switchTab itself warns on junk —
-    // this guard just avoids touching RunsTab state for a bad hash.
-    if (!document.getElementById('tab-' + route.tab) && route.tab !== 'discover') return;
+    // Whitelist against real panels. 'discover' and 'documents' are legacy
+    // aliases that switchTab remaps (→ inventory / → research); they have no
+    // own #tab- element, so exempt them from the existence guard or a
+    // deep-link like #/documents would silently no-op. switchTab itself
+    // warns on junk — this guard just avoids touching RunsTab state for a
+    // bad hash.
+    if (!document.getElementById('tab-' + route.tab)
+        && route.tab !== 'discover' && route.tab !== 'documents') return;
     switchTab(route.tab);
     if (route.tab === 'runs' && route.arg && window.RunsTab) {
       // select() fetches the run directly, so it works before the runs

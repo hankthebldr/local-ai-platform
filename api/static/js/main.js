@@ -1275,14 +1275,40 @@ function composerEnterStepEngage(nodeId) {
   } catch (_) {}
 }
 
-// Explicit "test in chat" — engage the selected step AND focus the chat input
-// so the operator can immediately type a message and see only this step's reply
-// (routes to /api/workflows/test-step via the sendMessage step-engage branch).
+// CP-1a: the test-step endpoint (/api/workflows/test-step) only accepts a
+// single llm step — a seed or a composite (parallel/loop/ralph) 400s. This
+// predicate is the single source of truth for BOTH the render-time control
+// guard (hide "test in chat" for un-testable kinds) and the click-time bail.
+function _composerStepIsTestable(data) {
+  return !!data && !data.is_seed && !(data.kind && data.kind !== 'llm');
+}
+
+// Reflect testability on the popup's "test in chat" control so the operator
+// never clicks a control that will 400. Called from dfRenderConfigPanel and
+// dfRenderSeedConfig on every node select.
+function _composerSyncTestBtn(data) {
+  const btn = document.getElementById('df-config-test-btn');
+  if (btn) btn.hidden = !_composerStepIsTestable(data);
+}
+
+// Explicit "test in chat" — engage the selected step, SWITCH TO THE CHAT TAB
+// (the control was a dead end from the Composer tab — the focused input was
+// off-screen), AND focus the chat input so the operator can immediately type a
+// message and see only this step's reply (routes to /api/workflows/test-step
+// via the sendMessage step-engage branch).
 function composerTestStepInChat() {
   const nodeId = (typeof dfSelectedNodeId !== 'undefined' && dfSelectedNodeId != null)
     ? dfSelectedNodeId : window._composerEngagedNodeId;
   if (nodeId == null) return;
+  // Render-guarded above, but re-assert at click time: a seed/composite step
+  // has no single-step test path and would 400.
+  const data = (typeof dfNodeData !== 'undefined' && dfNodeData) ? dfNodeData[nodeId] : null;
+  if (!_composerStepIsTestable(data)) {
+    if (window.Toast) Toast.info('Not testable in chat', 'Seed and composite (parallel / loop / ralph) steps have no single-step test — run the whole workflow instead.');
+    return;
+  }
   composerEnterStepEngage(nodeId);
+  try { if (typeof switchTab === 'function') switchTab('chat'); } catch (_) {}
   const p = document.getElementById('prompt');
   if (p) {
     p.focus();
@@ -8128,6 +8154,9 @@ function dfRenderConfigPanel(nodeId) {
   const popupTitle = document.getElementById('df-config-popup-title');
   const title = document.getElementById('df-config-title');
   if (!data || (!panel && !popupBody)) return;
+  // CP-1a: keep the popup's "test in chat" control honest — visible only for
+  // llm steps that the single-step test endpoint actually accepts.
+  _composerSyncTestBtn(data);
   // Seed nodes get their own config surface (query + input schema) instead
   // of the step identity/prompt/gates form.
   if (data.is_seed) return dfRenderSeedConfig(nodeId);
@@ -8632,6 +8661,7 @@ function dfRenderSeedConfig(nodeId) {
   const popupTitle = document.getElementById('df-config-popup-title');
   const title = document.getElementById('df-config-title');
   if (!data || (!panel && !popupBody)) return;
+  _composerSyncTestBtn(data);  // CP-1a: seed steps aren't testable in chat
   if (title) title.textContent = 'seed';
   if (popupTitle) popupTitle.textContent = 'Seed — workflow input';
   const vals = data.seed_values || {};
@@ -10489,10 +10519,24 @@ let _benchPrompts = [];
 const PROMPT_DRAG_MIME = 'application/df-prompt';
 const _benchCaps = { plugins: [], mcps: [] };
 
+// CP-1a: an unauthenticated bench read returns 401 — show the "sign in via
+// Admin" hint rather than a bare "HTTP 401" error string. Any other non-ok
+// status stays an ErrorPanel-style message. One helper, five call sites.
+function _renderWorkbenchStatus(id, status) {
+  if (status === 401 || status === 403) renderWorkbenchAuthHint(id);
+  else renderWorkbenchError(id, `HTTP ${status}`);
+}
+
 async function loadWorkbenches() {
   // Auth is handled globally by the monkey-patched window.fetch (installed
   // alongside the Auth module). Each pane fails independently so one
   // failing endpoint doesn't blank the whole sidebar.
+  // CP-1a: paint a loading skeleton so the panes read as "working" rather
+  // than "empty" during the fetch.
+  try {
+    ['bench-skills-list', 'bench-plugins-list', 'bench-mcps-list', 'bench-agents-list', 'bench-prompts-list']
+      .forEach(id => { const el = document.getElementById(id); if (el && window.Skeleton) Skeleton.fill(el, 3); });
+  } catch (_) {}
 
   // Plugins (powers both Skills and Plugins panes)
   try {
@@ -10503,8 +10547,8 @@ async function loadWorkbenches() {
       renderSkillsWorkbench(plugins);
       renderPluginsWorkbench(plugins);
     } else {
-      renderWorkbenchError('bench-skills-list', `HTTP ${r.status}`);
-      renderWorkbenchError('bench-plugins-list', `HTTP ${r.status}`);
+      _renderWorkbenchStatus('bench-skills-list', r.status);
+      _renderWorkbenchStatus('bench-plugins-list', r.status);
     }
   } catch (e) {
     renderWorkbenchError('bench-skills-list', e.message);
@@ -10519,7 +10563,7 @@ async function loadWorkbenches() {
       _benchCaps.mcps = servers || [];  // BU5: inspector resolves cards here
       renderMcpsWorkbench(servers);
     } else {
-      renderWorkbenchError('bench-mcps-list', `HTTP ${r.status}`);
+      _renderWorkbenchStatus('bench-mcps-list', r.status);
     }
   } catch (e) {
     renderWorkbenchError('bench-mcps-list', e.message);
@@ -10535,7 +10579,7 @@ async function loadWorkbenches() {
       _benchAgents = agents || [];  // BU5: inspector resolves cards here
       renderAgentsWorkbench(agents);
     } else {
-      renderWorkbenchError('bench-agents-list', `HTTP ${r.status}`);
+      _renderWorkbenchStatus('bench-agents-list', r.status);
     }
   } catch (e) {
     renderWorkbenchError('bench-agents-list', e.message);
@@ -10550,7 +10594,7 @@ async function loadWorkbenches() {
       _benchPrompts = (r.data || []).filter(p => p && p.kind !== 'hook');
       renderPromptsWorkbench(_benchPrompts);
     } else {
-      renderWorkbenchError('bench-prompts-list', `HTTP ${r.status}`);
+      _renderWorkbenchStatus('bench-prompts-list', r.status);
     }
   } catch (e) {
     renderWorkbenchError('bench-prompts-list', e.message);
@@ -11873,7 +11917,12 @@ async function composerStopRun() {
     if (window.Toast) Toast.warn('No active run', 'Start a run first.');
     return;
   }
-  if (!confirm('Stop this run? The engine halts at the next step boundary; the in-flight step finishes first.')) return;
+  const okStop = await Confirm.ask({
+    title: 'Stop this run?',
+    body: 'The engine halts at the next step boundary; the in-flight step finishes first.',
+    okLabel: 'Stop run', cancelLabel: 'Keep running', danger: true,
+  });
+  if (!okStop) return;
   const btn = document.getElementById('composer-stop-btn');
   if (btn) { btn.disabled = true; btn.textContent = '◼ Stopping…'; }
   try {
@@ -12314,10 +12363,13 @@ window.PromptsLibrary = PromptsLibrary;
       _restore(t);
     }
   }
-  function del(id) {
+  async function del(id) {
     var idx = threads.findIndex(function (x) { return x.id === id; });
     if (idx < 0) return;
-    if (!window.confirm('Delete this thread? This cannot be undone.')) return;
+    var ok = window.Confirm
+      ? await Confirm.ask({ title: 'Delete this thread?', body: 'This cannot be undone.', okLabel: 'Delete', danger: true })
+      : window.confirm('Delete this thread? This cannot be undone.');
+    if (!ok) return;
     _remove(id);
     threads.splice(idx, 1);
     if (id === activeId) {

@@ -106,7 +106,7 @@ export const PluginsPanel = (function () {
     selectAction: 'plugins.select',   // legacy row action id kept alive
     rowClass: 'plugin-card',          // legacy row class kept alive (only-add)
     emptyText: 'No plugins found in plugins/ directory.',
-    emptyDiscoveredText: 'No digest yet — hit ⟳ Digest to fetch the pinned Claude marketplaces.',
+    emptyDiscoveredText: 'No digest yet — hit ⟳ Discover to fetch the pinned Claude marketplaces.',
     emptyDetailLabel: '// SELECT A PLUGIN',
     emptyDetailText: 'Select a plugin from the left to see its skills and tools.',
     title: 'Plugins',
@@ -391,7 +391,7 @@ export const PluginsPanel = (function () {
   function _renderDiscOverview(el, id) {
     const rec = _discRecord(id);
     if (!rec) {
-      el.innerHTML = '<div class="model-empty">Not in the current digest — hit ⟳ Digest to refresh.</div>';
+      el.innerHTML = '<div class="model-empty">Not in the current digest — hit ⟳ Discover to refresh.</div>';
       return;
     }
     const md = rec.metadata || {};

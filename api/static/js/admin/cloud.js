@@ -15,6 +15,15 @@ export const CloudPanel = (function () {
   }
 
   async function load() {
+    // CP-1a: cloud-provider management is a master-key surface — every
+    // mutation (add/edit/delete/test) goes through AdminAuth.fetch. Pre-gate
+    // the whole panel with the same lock ApiKeysPanel uses so an unauthed
+    // operator sees a "Sign in as admin" affordance instead of a raw
+    // "Failed (HTTP 401)".
+    if (window.AdminAuth && !AdminAuth.isSignedIn()) {
+      AdminAuth.renderLock('admin-cloud');
+      return;
+    }
     const list = document.getElementById('cloud-list');
     if (!list) return;
     list.innerHTML = '<div style="color:var(--text-muted);font-size:0.7rem">Loading…</div>';

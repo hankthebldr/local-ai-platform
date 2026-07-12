@@ -99,7 +99,19 @@ export const ApiKeysPanel = (function () {
     document.getElementById('create-key-close-btn').disabled = true;
 
     _selectedScopes = new Set();
-    const scopes = await _ensureScopes();
+    // CP-1a: _ensureScopes() hits the network — a failure used to throw past
+    // the modal-open lines below, leaving the operator with a half-reset form
+    // that never appears (silent dead control). Surface it instead.
+    let scopes;
+    try {
+      scopes = await _ensureScopes();
+    } catch (e) {
+      const err = document.getElementById('create-key-error');
+      if (err) { err.hidden = false; err.textContent = 'Could not load scopes — check the master key and retry.'; }
+      Toast.danger('Scopes unavailable', e.message || String(e));
+      document.getElementById('create-key-modal').hidden = false;
+      return;
+    }
     const picker = document.getElementById('new-key-scopes');
     picker.innerHTML = scopes.map(s =>
       `<button type="button" class="btn-unstyled scope-chip" data-scope="${esc(s)}" aria-pressed="false"

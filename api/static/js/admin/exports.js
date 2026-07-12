@@ -21,6 +21,14 @@ export const ExportsPanel = (function () {
     // header for future-proofing (cheap, harmless, consistent with other admin panels).
     const r = await Net.call('/api/exports', { init: { headers: AdminAuth.authHeaders() } });
     if (!r.ok) {
+      // CP-1a: exports is base-auth + `exports` scope (P0-13), NOT master-key —
+      // a scoped SPA key reads fine, so we deliberately do NOT pre-gate on the
+      // admin master key. But a genuine 401/403 (no valid key at all) should
+      // show the sign-in lock instead of a raw "Failed (HTTP 401)".
+      if ((r.status === 401 || r.status === 403) && window.AdminAuth) {
+        AdminAuth.renderLock('admin-exports');
+        return;
+      }
       list.innerHTML = `<div class="admin-modal-error" style="margin:0">Failed (HTTP ${r.status})</div>`;
       return;
     }
