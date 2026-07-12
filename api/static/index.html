@@ -58,6 +58,8 @@
 /* Ollama-down banner — local planning/Promote/Pin need the daemon. */
 .ollama-down-banner { display:flex; align-items:center; gap:10px; padding:7px 12px; margin:0 0 8px; border:1px solid var(--danger-dim,var(--danger)); border-radius:6px; background:var(--danger-ghost,rgba(229,104,90,0.12)); color:var(--text); font-size:0.66rem; font-family:var(--mono); }
 .ollama-down-banner[hidden] { display:none; }
+.no-models-banner { display:flex; align-items:center; gap:10px; padding:7px 12px; margin:0 0 8px; border:1px solid var(--warn,#d9a441); border-radius:6px; background:rgba(217,164,65,0.10); color:var(--text); font-size:0.66rem; font-family:var(--mono); }
+.no-models-banner[hidden] { display:none; }
 .composer-split.ollama-down .bs-dispatch,
 .composer-split.ollama-down .msg-pin-btn,
 .agent-chat-dock.ollama-down .bs-dispatch,
@@ -861,6 +863,14 @@
             <div class="composer-canvas-empty-inner">
               <div class="composer-canvas-empty-title">Compose a workflow</div>
               <div class="composer-canvas-empty-sub">Drag steps from the palette on the left, then connect their outputs to downstream inputs.</div>
+              <!-- CP-1b: live first-run checklist. Step 1 checks off once the
+                   operator has started a chat / pinned a reply (updated by
+                   renderComposerEmptyChecklist from updateCanvasEmptyState). -->
+              <ol class="composer-empty-checklist" id="composer-empty-checklist" aria-label="Getting started">
+                <li data-step="1"><span class="cec-mark" aria-hidden="true">○</span>Start a chat or pick a starter</li>
+                <li data-step="2"><span class="cec-mark" aria-hidden="true">○</span>Add &amp; connect steps on the canvas</li>
+                <li data-step="3"><span class="cec-mark" aria-hidden="true">○</span>Run ▶ live to execute</li>
+              </ol>
               <!-- BU8d: one-click starter for a new operator — the overlay
                    is pointer-events:none so the canvas stays draggable;
                    the CTA re-enables hit-testing for itself only (CSS). -->
@@ -1034,6 +1044,16 @@
         <span><strong>Ollama isn't reachable</strong> — local planning, Promote &amp; Pin are paused. Start it with <code>ollama serve</code>.</span>
         <span style="flex:1"></span>
         <button type="button" class="action-btn xs" onclick="loadStatus()">Retry</button>
+      </div>
+      <!-- CP-1b: no-models onboarding banner — shown when /v1/models is empty
+           (nothing to chat/compose/run with). Operator-dismissible for the
+           session; re-appears next boot until a model is pulled. -->
+      <div id="no-models-banner" class="no-models-banner" hidden>
+        <span class="status-pip offline" aria-hidden="true"></span>
+        <span><strong>No chat models loaded</strong> — pull one to chat, compose, or run. Try <code>ollama pull llama3.2:3b</code>.</span>
+        <span style="flex:1"></span>
+        <button type="button" class="action-btn xs" data-action="switch-tab" data-tab-target="inventory">Models ▸</button>
+        <button type="button" class="action-btn xs ghost" data-action="banner.dismiss-no-models" title="Dismiss for this session">✕</button>
       </div>
       <div class="thread-bar" id="thread-bar">
         <button type="button" class="thread-switch" id="thread-switch" onclick="Threads.toggleMenu()" title="Switch conversation thread">

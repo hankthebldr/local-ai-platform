@@ -40,6 +40,8 @@ export const ComposerView = (function () {
     const realSteps = Object.keys(dfNodeData || {})
       .filter((k) => dfNodeData[k] && !dfNodeData[k].is_seed).length;
     panel.classList.toggle('has-nodes', realSteps > 0);
+    // CP-1b: refresh the first-run checklist state (step 1 = chat/pin started).
+    try { if (typeof window.renderComposerEmptyChecklist === 'function') window.renderComposerEmptyChecklist(); } catch (_) {}
     // Spine follows the canvas: dormant ghost when empty, live when primed.
     // It keys off ANY node presence (seed included) — unchanged from prior
     // behavior — so priming the workstream strip is decoupled from the overlay.

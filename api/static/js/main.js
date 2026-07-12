@@ -282,6 +282,46 @@ function switchTab(name, el) {
 // future phases add buttons, not handlers.
 Actions.click({ 'switch-tab': (el) => switchTab(el.dataset.tabTarget || el.dataset.tab, el) });
 
+// CP-1b: no-models onboarding banner. Shown when the /v1/models read comes
+// back empty; hidden the moment a model loads. Operator-dismissible for the
+// session (sessionStorage) so it doesn't nag mid-work, but re-appears next
+// boot until a model is actually pulled.
+function syncNoModelsBanner(hasModels) {
+  const b = document.getElementById('no-models-banner');
+  if (!b) return;
+  let dismissed = false;
+  try { dismissed = sessionStorage.getItem('enclave.noModelsDismissed') === '1'; } catch (_) {}
+  b.hidden = hasModels || dismissed;
+}
+window.syncNoModelsBanner = syncNoModelsBanner;
+
+// CP-1b: the empty-canvas overlay carries a 3-step first-run checklist. It's
+// only visible while the canvas has no real steps, so step 2 (add steps) and
+// step 3 (run) are always "todo" in that window — but step 1 (start a chat /
+// pin a reply) is a real signal we CAN reflect live, so a returning operator
+// sees "you've already started". Called from ComposerView.updateCanvasEmptyState.
+function renderComposerEmptyChecklist() {
+  const ol = document.getElementById('composer-empty-checklist');
+  if (!ol) return;
+  let started = false;
+  try {
+    started = (typeof chatHistory !== 'undefined' && chatHistory && chatHistory.length > 0)
+      || ((window._enclavePins || []).length > 0);
+  } catch (_) {}
+  const li1 = ol.querySelector('li[data-step="1"]');
+  if (li1) {
+    li1.classList.toggle('done', started);
+    const mark = li1.querySelector('.cec-mark');
+    if (mark) mark.textContent = started ? '✓' : '○';
+  }
+}
+window.renderComposerEmptyChecklist = renderComposerEmptyChecklist;
+Actions.click({ 'banner.dismiss-no-models': () => {
+  try { sessionStorage.setItem('enclave.noModelsDismissed', '1'); } catch (_) {}
+  const b = document.getElementById('no-models-banner');
+  if (b) b.hidden = true;
+} });
+
 /* ── TABLIST SEMANTICS (a11y) ───────────────────────────────────────
    The markup keeps plain .tab-btn buttons; roles + roving tabindex are
    assigned here so the nav is a real WAI-ARIA tablist: screen readers
@@ -531,6 +571,7 @@ async function loadModels() {
 
     if (models.length === 0) {
       container.innerHTML = '<div class="model-empty">No models. Run: ollama pull dolphin3</div>';
+      try { syncNoModelsBanner(false); } catch (_) {}  // CP-1b
       // Also clear the model-select; otherwise the "loading…" sentinel
       // stays forever on a fresh stack (or a 401 response with d.data === undefined).
       // Cache must reflect reality for downstream node-config dropdowns.
@@ -563,6 +604,7 @@ async function loadModels() {
     // avoids a re-fetch on every node click and keeps the picker in
     // sync with what's actually loaded in Ollama.
     window._chatModels = chatModels.map(m => m.id);
+    try { syncNoModelsBanner(chatModels.length > 0); } catch (_) {}  // CP-1b
     // Backend attribution per model id (/v1/models carries the serving
     // runner in owned_by: "ollama" | "vllm"). Read by the per-message
     // model chip so each reply names the backend that produced it.
@@ -6460,6 +6502,16 @@ function dfApplyRunState(run) {
     if (countEl) countEl.textContent = `${completed}/${total}`;
     if (barEl) barEl.style.width = '100%';
     chip.classList.add('visible');
+    // CP-1b: first-success handoff — the FIRST time this operator lands a
+    // completed run, nudge them toward the durable next step (Save → reuse).
+    // Fires once, ever (localStorage-gated); the persistent NextActions strip
+    // above owns the ongoing chaining affordances.
+    try {
+      if (localStorage.getItem('enclave.firstRunDone') !== '1') {
+        localStorage.setItem('enclave.firstRunDone', '1');
+        if (window.Toast) Toast.success('First run complete', 'Save this workflow to reuse it — then schedule or run it again anytime.', { ttl: 6000 });
+      }
+    } catch (_) {}
     // Linger briefly so the operator sees the green, then fade.
     clearTimeout(window._dfRunChipFadeTimer);
     window._dfRunChipFadeTimer = setTimeout(() => chip.classList.remove('visible'), 4500);
@@ -9115,6 +9167,11 @@ async function dfSave() {
     if (resp.ok) {
       const result = resp.data;
       Toast.success('Saved', result.path);
+      // CP-1b: mark that THIS operator has authored + saved a workflow from the
+      // console. The op-path "Save the workflow" stage reads this flag instead
+      // of "any workflow exists on disk" — a fresh install ships OOB workflows,
+      // so the disk check gave a false ✓ on a virgin install.
+      try { localStorage.setItem('enclave.authoredWorkflow', '1'); } catch (_) {}
       // CH-1: chain forward — a saved workflow's natural next hops are run + schedule.
       try {
         NextActions.render('save.ok', {
@@ -11836,6 +11893,13 @@ async function dfRunWorkflowLive() {
     if (window.Toast) Toast.warn('Empty workflow', 'Add at least one step to the canvas before running.');
     return;
   }
+  // CP-1b: zero-model preflight — a run needs at least one loaded chat model,
+  // or every llm step fails at the engine. Fail early with a pull hint rather
+  // than kicking off a run that's doomed to error on the first step.
+  if (!(window._chatModels && window._chatModels.length)) {
+    if (window.Toast) Toast.warn('No models loaded', 'Pull a chat model first (e.g. `ollama pull llama3.2:3b`), then run.');
+    return;
+  }
   let definition;
   try {
     if (typeof dfBuildWorkflowDefinition === 'function') {
@@ -12080,15 +12144,21 @@ window.PromptsLibrary = PromptsLibrary;
       });
   }
 
+  // CP-1b: the "Save the workflow" stage is DONE only when this operator has
+  // actually authored + saved one from the console (dfSave sets the flag) —
+  // NOT merely because the install ships OOB workflows on disk (_async.wfs),
+  // which gave every virgin install a false ✓.
+  function authoredWf() { try { return localStorage.getItem('enclave.authoredWorkflow') === '1'; } catch (e) { return false; } }
+
   function computeState() {
     var seed = chatLen() > 0 || pinCount() > 0;
     var scaf = nodeCount() > 0;
     var st = [
-      { done: seed,        locked: false },
-      { done: scaf,        locked: !seed },
-      { done: _async.runs, locked: !scaf },
-      { done: _async.wfs,  locked: !scaf },
-      { done: false,       locked: true, future: true },
+      { done: seed,          locked: false },
+      { done: scaf,          locked: !seed },
+      { done: _async.runs,   locked: !scaf },
+      { done: authoredWf(),  locked: !scaf },
+      { done: false,         locked: true, future: true },
     ];
     for (var i = 0; i < st.length; i++) { if (!st[i].done && !st[i].locked && !st[i].future) { st[i].hot = true; break; } }
     return st;

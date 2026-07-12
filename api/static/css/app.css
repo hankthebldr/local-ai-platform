@@ -6371,6 +6371,12 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .composer-canvas-empty-inner { text-align: center; max-width: 320px; }
 .composer-canvas-empty-title { font-size: 0.9rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
 .composer-canvas-empty-sub { font-size: 0.7rem; line-height: 1.5; }
+/* CP-1b: first-run checklist inside the empty-canvas overlay. */
+.composer-empty-checklist { list-style: none; margin: 14px 0 0; padding: 0; text-align: left; display: inline-block; }
+.composer-empty-checklist li { display: flex; align-items: center; gap: 8px; font-size: 0.66rem; line-height: 1.9; color: var(--text-muted); }
+.composer-empty-checklist li .cec-mark { font-size: 0.72rem; color: var(--text-faint); width: 1em; text-align: center; }
+.composer-empty-checklist li.done { color: var(--accent); }
+.composer-empty-checklist li.done .cec-mark { color: var(--accent); }
 .composer-canvas-panel.has-nodes .composer-canvas-empty { display: none; }
 
 /* BU8d: guidance — starter chooser + best-practice card. The empty-state
