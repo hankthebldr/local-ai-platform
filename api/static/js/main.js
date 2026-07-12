@@ -7691,8 +7691,10 @@ window.dfRefreshInProgress = dfRefreshInProgress;
 // last few seconds of edits (the server flush is debounced; the WAL is not).
 if (!window._dfDraftUnloadBound) {
   window._dfDraftUnloadBound = true;
-  window.addEventListener('beforeunload', () => {
+  window.addEventListener('beforeunload', (e) => {
+    let dirty = false;
     try {
+      dirty = !!_dfDraftDirty;
       if (_dfActiveDraftId && _dfDraftDirty) {
         const snap = dfBuildSnapshot();
         _dfWalWrite({
@@ -7702,6 +7704,11 @@ if (!window._dfDraftUnloadBound) {
         });
       }
     } catch (_) {}
+    // CP-1c: power-user guard — if the canvas has unsaved edits, ask before
+    // navigating away. The WAL flush above already persisted them to the draft
+    // store (restore is lossless), so this is a belt-and-suspenders confirm,
+    // not the last line of defense.
+    if (dirty) { e.preventDefault(); e.returnValue = ''; return ''; }
   });
 }
 
@@ -8305,10 +8312,10 @@ function dfRenderConfigPanel(nodeId) {
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Tools &amp; Skills</div>
         <label class="df-config-label">Tools (plugin / MCP)</label>
         <div id="df-tools-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px">${(data.tools||[]).map((t,i)=>`<span class="df-tag">${esc(typeof t==='string'?t:(t.mcp?('mcp:'+t.mcp):(t.plugin||t.tool_id||t.name||t.id||JSON.stringify(t))))}<span class="df-tag-remove" onclick="dfRemoveTool(${nodeId},${i})">✕</span></span>`).join('') || '<span style="font-size:0.56rem;color:var(--text-faint)">none</span>'}</div>
-        <div style="display:flex;gap:4px;margin-bottom:8px"><input type="text" id="df-new-tool-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="plugin.tool or mcp:server.tool" onkeydown="if(event.key==='Enter'){dfAddTool(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddTool(${nodeId})">Add</button></div>
+        <div style="display:flex;gap:4px;margin-bottom:8px"><input type="text" id="df-new-tool-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="plugin.tool or mcp:server.tool" data-action="df.add-tool-key" data-node-id="${nodeId}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddTool(${nodeId})">Add</button></div>
         <label class="df-config-label">Skills</label>
         <div id="df-skills-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px">${(data.skills||[]).map((s,i)=>`<span class="df-tag">${esc(typeof s==='string'?s:(s.id||s.name||JSON.stringify(s)))}<span class="df-tag-remove" onclick="dfRemoveSkill(${nodeId},${i})">✕</span></span>`).join('') || '<span style="font-size:0.56rem;color:var(--text-faint)">none</span>'}</div>
-        <div style="display:flex;gap:4px"><input type="text" id="df-new-skill-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="skill-id" onkeydown="if(event.key==='Enter'){dfAddSkill(${nodeId});event.preventDefault()}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddSkill(${nodeId})">Add</button></div>
+        <div style="display:flex;gap:4px"><input type="text" id="df-new-skill-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="skill-id" data-action="df.add-skill-key" data-node-id="${nodeId}" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" onclick="dfAddSkill(${nodeId})">Add</button></div>
         <div id="df-companions-${nodeId}" style="margin-top:8px"></div>
       </div>
       <div style="padding:8px 0">
@@ -10557,6 +10564,65 @@ function composerSwitchBench(bench, el) {
     p.hidden = (p.id !== 'bench-' + bench);
   });
 }
+
+/* ── CP-1c: composer-scoped power-user keys ──────────────────────────
+   Active ONLY while the Composer (dashboard) tab is showing and focus is
+   not in a text field. The handler bails when another listener already
+   consumed the event (defaultPrevented) — the cheap modal-stack guard so
+   an open popup's own keys win. Bindings:
+     1..7      → switch palette bench (Task/Agents/Skills/Plugins/MCPs/
+                 Patterns/Prompts, the on-screen bench order)
+     [  /  ]   → cycle the bottom workstream panes
+     Ctrl/⌘-S  → save the workflow (fires regardless of focus; save is safe)
+   The `g`-prefixed tab keymap + Cmd-K palette live in core/shortcuts.js
+   (Operate U1 owns that map) and are intentionally NOT touched here. */
+const _COMPOSER_BENCH_ORDER = ['steps', 'agents', 'skills', 'plugins', 'mcps', 'patterns', 'prompts'];
+function _composerTabActive() {
+  const t = document.getElementById('tab-dashboard');
+  return !!(t && t.classList.contains('active'));
+}
+function _isTextField(el) {
+  if (!el) return false;
+  const tag = (el.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+}
+function _composerCycleWorkstream(dir) {
+  const tabs = [...document.querySelectorAll('.workstream-tab')].filter(b => b.offsetParent !== null);
+  if (!tabs.length) return;
+  let idx = tabs.findIndex(b => b.classList.contains('active'));
+  if (idx < 0) idx = 0;
+  const next = tabs[(idx + dir + tabs.length) % tabs.length];
+  const target = next && (next.dataset.wsTarget || next.dataset.ws);
+  if (target && window.ComposerWorkstream) ComposerWorkstream.switch(target, next);
+}
+if (!window._composerKeysBound) {
+  window._composerKeysBound = true;
+  document.addEventListener('keydown', (e) => {
+    // Ctrl/⌘-S — save from anywhere on the composer.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+      if (_composerTabActive()) { e.preventDefault(); try { dfSave(); } catch (_) {} }
+      return;
+    }
+    if (e.defaultPrevented) return;                       // modal-stack guard
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!_composerTabActive() || _isTextField(e.target)) return;
+    if (e.key >= '1' && e.key <= '7') {
+      const bench = _COMPOSER_BENCH_ORDER[Number(e.key) - 1];
+      if (bench) { e.preventDefault(); composerSwitchBench(bench); }
+      return;
+    }
+    if (e.key === '[') { e.preventDefault(); _composerCycleWorkstream(-1); return; }
+    if (e.key === ']') { e.preventDefault(); _composerCycleWorkstream(1); return; }
+  });
+}
+
+// CP-1c: migrated the tool/skill add-inputs' inline onkeydown (Enter → add)
+// to delegated data-action keydown handlers — no inline on* in the config
+// panel template. The Add buttons keep their onclick (pre-existing debt).
+Actions.on('keydown', {
+  'df.add-tool-key':  (el, e) => { if (e.key === 'Enter') { e.preventDefault(); dfAddTool(Number(el.dataset.nodeId)); } },
+  'df.add-skill-key': (el, e) => { if (e.key === 'Enter') { e.preventDefault(); dfAddSkill(Number(el.dataset.nodeId)); } },
+});
 
 /* ── Workbench loaders ──────────────────────────────────────────── */
 
