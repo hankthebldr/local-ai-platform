@@ -14,10 +14,11 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..logging_config import logger
+from ..middleware import require_master_key
 from ..services.workspace import (
     WorkspaceError,
     WorkspacePolicy,
@@ -25,9 +26,17 @@ from ..services.workspace import (
     WorkspaceViolation,
     get_workspace_registry,
 )
-from ..services.workspace_index import WorkspaceIndex
+from ..services.workspace_index import INDEX_SUBDIR, WorkspaceIndex, _slug
 
 router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
+
+# Operate U10 hardening: workspaces mutate the local filesystem (create/delete a
+# binding, write/edit/expand a file, drive an index worklist). Those are the
+# **real** write surface — gate them all on the master key (a no-op when
+# ENABLE_API_AUTH is off, the master gate otherwise). Reads (list/get/files/
+# search/index inspection) stay open. The prefix keeps its existing SCOPE_MAP
+# 'workspaces' scope for base auth; this is the additive write gate on top.
+_MASTER = [Depends(require_master_key)]
 
 
 # ── request bodies ───
@@ -87,7 +96,7 @@ def _guard(fn):
 
 
 # ── CRUD ───
-@router.post("")
+@router.post("", dependencies=_MASTER)
 def create_workspace(body: CreateWorkspaceBody):
     reg = get_workspace_registry()
     ws = _guard(
@@ -112,7 +121,7 @@ def get_workspace(name: str):
     return {"workspace": ws.meta.model_dump(), "stats": ws.stats()}
 
 
-@router.delete("/{name}")
+@router.delete("/{name}", dependencies=_MASTER)
 def delete_workspace(name: str):
     reg = get_workspace_registry()
     try:
@@ -148,21 +157,21 @@ def search(name: str, q: str, glob: str = "**/*.md"):
     return {"query": q, "hits": _guard(lambda: ws.search(q, glob))}
 
 
-@router.put("/{name}/file")
+@router.put("/{name}/file", dependencies=_MASTER)
 def write_file(name: str, body: WriteBody):
     """make — create or overwrite a file."""
     ws = _ws(name)
     return _guard(lambda: ws.write(body.path, body.content))
 
 
-@router.post("/{name}/edit")
+@router.post("/{name}/edit", dependencies=_MASTER)
 def edit_file(name: str, body: EditBody):
     """edit — literal find/replace."""
     ws = _ws(name)
     return _guard(lambda: ws.edit(body.path, body.find, body.replace, body.count))
 
 
-@router.post("/{name}/expand")
+@router.post("/{name}/expand", dependencies=_MASTER)
 def expand_file(name: str, body: ExpandBody):
     """expand — append, or insert under a markdown heading."""
     ws = _ws(name)
@@ -183,18 +192,47 @@ def _item_payload(idx: WorkspaceIndex) -> dict:
     }
 
 
+@router.get("/{name}/indexes")
+def list_indexes(name: str):
+    """List every durable worklist index bound to this workspace (U10).
+
+    Reads the ``.enclave/index/*.json`` state files and returns each index's
+    name + counts + completion — the Artifacts tab Workspaces pane renders these
+    with Requeue-stale / Render-MOC buttons. Read-only; the index files live
+    inside the workspace root (containment enforced by WorkspaceIndex)."""
+    ws = _ws(name)
+    idx_dir = (ws.root / INDEX_SUBDIR).resolve()
+    out = []
+    if idx_dir.is_dir():
+        try:
+            idx_dir.relative_to(ws.root)
+        except ValueError:  # pragma: no cover — defensive
+            raise HTTPException(status_code=400, detail="index dir escapes workspace")
+        for f in sorted(idx_dir.glob("*.json")):
+            idx = WorkspaceIndex(ws, f.stem)
+            out.append(
+                {
+                    "name": idx.name,
+                    "slug": _slug(f.stem),
+                    "counts": idx.counts(),
+                    "complete": idx.is_complete(),
+                }
+            )
+    return {"indexes": out}
+
+
 @router.get("/{name}/index/{index}")
 def get_index(name: str, index: str):
     return _guard(lambda: _item_payload(_index(name, index)))
 
 
-@router.post("/{name}/index/{index}/items")
+@router.post("/{name}/index/{index}/items", dependencies=_MASTER)
 def add_index_items(name: str, index: str, body: AddItemsBody):
     idx = _index(name, index)
     return _guard(lambda: {**idx.add_items(body.items), "counts": idx.counts()})
 
 
-@router.post("/{name}/index/{index}/next")
+@router.post("/{name}/index/{index}/next", dependencies=_MASTER)
 def next_pending(name: str, index: str, requeue_stale: bool = False):
     """Claim the next pending item (marks it in_progress). Pass
     requeue_stale=true at loop start to first reclaim interrupted items."""
@@ -209,7 +247,7 @@ def next_pending(name: str, index: str, requeue_stale: bool = False):
     return _guard(run)
 
 
-@router.post("/{name}/index/{index}/requeue")
+@router.post("/{name}/index/{index}/requeue", dependencies=_MASTER)
 def requeue_stale(name: str, index: str):
     """Reclaim interrupted (in_progress) items back to pending — resume prep.
     Does NOT claim a new item (unlike /next)."""
@@ -222,7 +260,7 @@ def requeue_stale(name: str, index: str):
     return _guard(run)
 
 
-@router.post("/{name}/index/{index}/items/{item_id}/status")
+@router.post("/{name}/index/{index}/items/{item_id}/status", dependencies=_MASTER)
 def set_index_status(name: str, index: str, item_id: str, body: StatusBody):
     idx = _index(name, index)
     return _guard(
@@ -230,7 +268,7 @@ def set_index_status(name: str, index: str, item_id: str, body: StatusBody):
     )
 
 
-@router.post("/{name}/index/{index}/render")
+@router.post("/{name}/index/{index}/render", dependencies=_MASTER)
 def render_index(name: str, index: str, body: RenderBody):
     idx = _index(name, index)
     return _guard(lambda: {"rendered": idx.render_markdown(body.path)})

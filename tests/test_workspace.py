@@ -218,3 +218,67 @@ def test_edit_negative_count_clamped(tmp_path):
     ws.write("a.md", "l l l")
     r = ws.edit("a.md", "l", "L", count=-5)   # negative must not replace-all-misreport
     assert r["replacements"] >= 0 and ws.read("a.md").count("L") == 3
+
+
+# ── U10: NEW GET /{name}/indexes + write-gate (master-key) hardening ──────────
+def test_router_indexes_listing(client, tmp_path):
+    """GET /{name}/indexes enumerates the workspace's durable worklists with
+    counts + completion — the Artifacts tab Workspaces pane consumes this."""
+    import api.services.workspace as wsmod
+
+    wsmod._registry = wsmod.WorkspaceRegistry(store_path=tmp_path / "reg.json")
+    root = str(tmp_path / "idxproj")
+    assert client.post("/api/workspaces", json={"name": "idxproj", "root": root}).status_code == 200
+
+    # empty at first
+    assert client.get("/api/workspaces/idxproj/indexes").json()["indexes"] == []
+
+    # seed one index with two items
+    client.post(
+        "/api/workspaces/idxproj/index/sites/items",
+        json={"items": [{"id": "a", "title": "A"}, {"id": "b", "title": "B"}]},
+    )
+    listing = client.get("/api/workspaces/idxproj/indexes").json()["indexes"]
+    assert len(listing) == 1
+    row = listing[0]
+    assert row["name"] == "sites"
+    assert row["counts"]["pending"] == 2
+    assert row["complete"] is False
+
+
+def test_write_gate_no_op_when_auth_off(client, tmp_path):
+    """With ENABLE_API_AUTH=false the master gate is a no-op — writes succeed
+    without any Authorization header (the module-scoped client runs auth-off)."""
+    import api.services.workspace as wsmod
+
+    wsmod._registry = wsmod.WorkspaceRegistry(store_path=tmp_path / "reg2.json")
+    root = str(tmp_path / "gate")
+    assert client.post("/api/workspaces", json={"name": "gate", "root": root}).status_code == 200
+    assert client.put(
+        "/api/workspaces/gate/file", json={"path": "n.md", "content": "# n"}
+    ).status_code == 200
+
+
+def test_write_gate_requires_master_when_auth_on(tmp_path, monkeypatch):
+    """With auth ON and no master key, every real write surface is 401'd while
+    reads stay open. This is the U10 hardening on the REAL write endpoints
+    (POST '', DELETE /{name}, PUT file, POST edit/expand, index mutations)."""
+    monkeypatch.setenv("ENABLE_API_AUTH", "true")
+    monkeypatch.setenv("RATE_LIMIT_RPM", "0")
+    import importlib
+
+    import api.middleware
+
+    importlib.reload(api.middleware)
+    import api.main
+
+    importlib.reload(api.main)
+    authed = TestClient(api.main.app)
+
+    # writes → 401 (no key at all: base auth also blocks, but the gate is the
+    # point — an unauth'd write never mutates the filesystem)
+    assert authed.post("/api/workspaces", json={"name": "x", "root": str(tmp_path)}).status_code in (401, 403)
+    assert authed.put("/api/workspaces/x/file", json={"path": "a.md", "content": "y"}).status_code in (401, 403)
+    assert authed.post("/api/workspaces/x/edit", json={"path": "a.md", "find": "a", "replace": "b"}).status_code in (401, 403)
+    assert authed.post("/api/workspaces/x/index/i/items", json={"items": []}).status_code in (401, 403)
+    assert authed.delete("/api/workspaces/x").status_code in (401, 403)
