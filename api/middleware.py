@@ -58,6 +58,13 @@ SCOPE_MAP = {
     "/v1/completions": "completions",
     "/v1/models": "models",
     "/api/documents": "documents",
+    # GP-2 (P0-13 corrected): chat-session markdown exports are a data-action
+    # write surface (save/list/read/zip/delete). Gate the whole /api/exports
+    # prefix on an `exports` scope — parity with /api/documents. A scoped SPA
+    # key can save exports; an unscoped key is 403'd. NOT require_master_key:
+    # that runs before scope resolution and would 401 a legitimately
+    # exports-scoped key, making this entry dead config.
+    "/api/exports": "exports",
     "/api/memory": "memory",
     "/api/context": "context",
     "/api/profiles": "profiles",
