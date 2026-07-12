@@ -1375,6 +1375,7 @@ export const RunsTab = (function () {
     const isFailed = ['failed', 'error'].includes(s);
     const isTerminal = ['completed', 'canceled', 'failed', 'error'].includes(s);
     _setBtn('runs-tab-pause-btn',  isLive);     // shown but disabled — placeholder
+    _setBtn('runs-tab-fix-btn',    isFailed);   // CH-1: Fix failing step (round-trip to composer)
     _setBtn('runs-tab-resume-btn', isFailed);
     _setBtn('runs-tab-cancel-btn', isLive);
     _setBtn('runs-tab-rerun-btn',  isTerminal && !!run.workflow_id);
@@ -1385,16 +1386,66 @@ export const RunsTab = (function () {
     if (b) b.hidden = !show;
   }
 
+  // Resume a FAILED run (CH-1). The plain /resume endpoint short-circuits on
+  // terminal status — calling it on a failed run is a silent no-op, yet the
+  // old code toasted "Resuming run" before knowing that, so the operator saw
+  // a success that never happened. Point at /resume-from-failed (flips the
+  // run back to running then re-dispatches at the failed step) and toast the
+  // REAL result, not an optimistic one.
   async function resumeCurrent() {
     if (!_selectedId) return;
+    const btn = document.getElementById('runs-tab-resume-btn');
+    if (btn) btn.disabled = true;
     try {
       // retries:0 — resume re-executes steps; must fire exactly once.
-      await Net.postJson(`/api/workflows/runs/${encodeURIComponent(_selectedId)}/resume`, {}, { retries: 0 });
-      if (window.Toast) Toast.info('Resuming run', 'Picking up at the first un-completed step.');
+      const r = await Net.call(
+        `/api/workflows/runs/${encodeURIComponent(_selectedId)}/resume-from-failed`,
+        { retries: 0, init: { method: 'POST' } }
+      );
+      if (!r.ok) {
+        const d = (r.data && typeof r.data === 'object') ? r.data : {};
+        throw new Error(d.detail || `HTTP ${r.status}`);
+      }
+      const st = (r.data && r.data.status) || 'running';
+      if (window.Toast) Toast.success('Resumed from failure', `Re-dispatched from the failed step (now ${st}).`);
       select(_selectedId);
     } catch (e) {
       if (window.Toast) Toast.danger('Resume failed', e.message);
+    } finally {
+      if (btn) btn.disabled = false;
     }
+  }
+
+  // CH-1 round-trip pivot: open a run's workflow on the composer canvas,
+  // focused on the failing step, so the operator can Fix → Save → Resume.
+  // Args are optional — a click from the run toolbar derives both from the
+  // currently-selected run (its workflow_id + first failed step).
+  function openInComposer(wfId, stepId) {
+    const run = _currentRun || {};
+    wfId = wfId || run.workflow_id || '';
+    if (!stepId) {
+      const failed = (run.step_results || []).find(
+        r => ['failed', 'error'].includes(String(r.status || '').toLowerCase()));
+      stepId = failed ? failed.step_id : '';
+    }
+    if (!wfId) {
+      if (window.Toast) Toast.danger('Cannot open in composer', 'This run has no workflow_id to load.');
+      return;
+    }
+    // composerLoadById switches to the composer tab and rebuilds the canvas
+    // (hydrating composite kinds — GP-1a landed). After it settles, focus the
+    // failing node so the operator lands exactly on what broke.
+    if (typeof window.composerLoadById !== 'function') {
+      if (window.Toast) Toast.danger('Composer unavailable', 'Could not reach the composer loader.');
+      return;
+    }
+    Promise.resolve(window.composerLoadById(wfId)).then(() => {
+      if (!stepId) return;
+      // Wait out composerLoadDefinition's 50ms auto-layout before focusing.
+      setTimeout(() => {
+        try { if (typeof window.dfFocusStepFromSignal === 'function') window.dfFocusStepFromSignal(stepId, false); } catch (_) {}
+      }, 600);
+    });
   }
   async function cancelCurrent() {
     if (!_selectedId) return;
@@ -1593,7 +1644,7 @@ export const RunsTab = (function () {
   });
 
   return { init, load, render, setFilter, select,
-    resumeCurrent, cancelCurrent, pauseCurrent, rerunCurrent,
+    resumeCurrent, cancelCurrent, pauseCurrent, rerunCurrent, openInComposer,
     toggleStepExpand, toggleStepOutput, toggleBottomDrawer, markFailed,
     openStepDetail, closeStepDetail, openAnchorDetail, pivotResearch, pivotContextGraph,
     pivotNewAgent, copyStepContext,

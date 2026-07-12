@@ -5303,6 +5303,72 @@ button.ws-signal-chip { cursor: pointer; transition: border-color 0.15s, backgro
 /* unknown + unsaved stay on the muted defaults above — deliberately
    quieter than green so a missing-sizes verdict never reads as healthy. */
 
+/* ── CH-1: iteration-chaining strip + last-run health chip ──────────────
+   The row sits under the composer toolbar. The NextActions strip paints
+   "what next" chips after a run finishes / a save lands; the last-run chip
+   shows the loaded workflow's most recent run health + a History pivot.
+   Same warm-charcoal + teal vocabulary as the signal band above. */
+.composer-chain-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-top: 6px;
+}
+.composer-chain-row:empty { display: none; }
+
+.next-actions-strip {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+}
+.next-actions-strip[hidden] { display: none; }
+.next-actions-strip .na-lead {
+  font-family: var(--mono); font-size: 0.52rem;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--text-muted); margin-right: 2px;
+}
+.na-chip {
+  display: inline-flex; align-items: center;
+  font-family: var(--mono); font-size: 0.56rem;
+  letter-spacing: 0.04em;
+  padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.na-chip:hover { border-color: var(--accent-dim); color: var(--accent); background: var(--accent-ghost); }
+.na-chip.na-accent { color: var(--accent); border-color: var(--accent-dim); }
+.na-chip.na-accent:hover { background: var(--accent-ghost); border-color: var(--accent); }
+.na-chip.na-danger { color: var(--danger); border-color: var(--danger-dim); }
+.na-chip.na-danger:hover { background: var(--danger-ghost); border-color: var(--danger); }
+
+.composer-last-run-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--border);
+  font-family: var(--mono); font-size: 0.56rem;
+  letter-spacing: 0.04em; color: var(--text-dim);
+}
+.composer-last-run-chip[hidden] { display: none; }
+.composer-last-run-chip .lrc-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0; background: var(--text-muted);
+}
+.composer-last-run-chip.ok      { border-color: var(--success-dim); color: var(--success); }
+.composer-last-run-chip.ok   .lrc-dot   { background: var(--success); }
+.composer-last-run-chip.fail    { border-color: var(--danger-dim); color: var(--danger); }
+.composer-last-run-chip.fail .lrc-dot   { background: var(--danger); }
+.composer-last-run-chip.live    { border-color: var(--accent-dim); color: var(--accent); }
+.composer-last-run-chip.live .lrc-dot   { background: var(--accent); animation: dfSegPulse 0.9s ease-in-out infinite; }
+.composer-last-run-chip .lrc-history {
+  font-family: var(--mono); font-size: 0.54rem; letter-spacing: 0.04em;
+  padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.composer-last-run-chip .lrc-history:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Floating run-progress chip is now clickable (re-open the run). */
+.df-run-progress.is-clickable { cursor: pointer; }
+
 /* Zombie banner — pinned above the step strip when a "running"
    run has shipped no progress for > 10 min. */
 .runs-zombie-banner {

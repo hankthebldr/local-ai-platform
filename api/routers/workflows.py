@@ -732,6 +732,79 @@ async def cancel_run(run_id: str):
     }
 
 
+def _valid_run_id(run_id: str) -> bool:
+    """Run ids are engine-minted uuid4 hex/strings. Constrain to a filename-
+    safe charset so a crafted id can never traverse out of the run store
+    (``get_run`` joins it onto DATA_DIR). Mirrors the ``/{workflow_id}`` guard.
+    """
+    return bool(run_id) and all(c.isalnum() or c in "_-" for c in run_id)
+
+
+@router.post("/runs/{run_id}/resume-from-failed")
+def resume_from_failed(run_id: str):
+    """Re-dispatch a FAILED run from its first non-completed step (CH-1).
+
+    Plain ``/resume`` is a no-op on a failed run — ``engine.resume`` short-
+    circuits on terminal status (completed/failed/canceled) and returns the
+    snapshot unchanged. The Fix&Resume loop needs the opposite: after the
+    operator edits the failing step and re-saves, flip the run back to
+    ``running`` (so ``resume`` re-executes) and resume. Modeled byte-for-byte
+    on ``resolve_approval``'s flip-then-resume: set ``status="running"``,
+    ``engine._checkpoint``, then ``engine.resume(run_id)`` with no explicit
+    definition so the engine reloads the SAVED workflow yaml (picking up the
+    operator's edits). Completed steps keep their earlier outputs; only the
+    failed tail re-runs.
+
+    Add-only. Idempotency mirrors ``cancel_run``/``resolve_approval``: a
+    missing run is 404; a run that isn't failed is 409 (only failed runs can
+    resume-from-failed — a completed/running run has nothing to re-dispatch).
+
+    Composite step kinds (parallel/loop/ralph/orchestrator) resume natively —
+    the engine executes them from the reloaded definition, and the composer's
+    composite hydration (GP-1a / P0-2, landed) keeps the round-tripped yaml
+    faithful, so composite Fix&Resume is safe.
+    """
+    if not _valid_run_id(run_id):
+        raise HTTPException(status_code=400, detail="invalid run id")
+
+    engine = get_engine()
+    snapshot = engine.get_run(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    current = (snapshot.get("status") or "").lower()
+    if current not in {"failed", "error"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"run is not failed (status={current or 'unknown'}); "
+            "only a failed run can resume-from-failed",
+        )
+
+    from ..models.workflow_models import WorkflowRun
+
+    run = WorkflowRun.model_validate(snapshot)
+    # Flip off the terminal state so resume() re-dispatches instead of short-
+    # circuiting. Checkpoint first so a crash between flip and resume leaves a
+    # consistent (running) snapshot the plain /resume path can still pick up.
+    run.status = "running"
+    engine._checkpoint(run)
+
+    try:
+        # definition=None → engine reloads ./workflows/<workflow_id>.yaml, so
+        # the operator's just-saved edits to the failing step take effect.
+        resumed = engine.resume(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return {
+        "run_id": resumed.run_id,
+        "workflow_id": resumed.workflow_id,
+        "status": resumed.status,
+        "error": resumed.error,
+        "resumed_from_failed": True,
+    }
+
+
 @router.post("/runs/{run_id}/approvals/{gate_id}")
 def resolve_approval(run_id: str, gate_id: str, body: ApprovalRequest):
     """Resolve a paused HITL approval gate, then resume the run (Task 13).
@@ -967,3 +1040,27 @@ async def schedule_preview(workflow_id: str):
         ],
         "notes": preview.notes,
     }
+
+
+@router.get("/{workflow_id}/runs")
+async def list_workflow_runs(workflow_id: str, limit: int = 20):
+    """Runs for ONE workflow, newest first (CH-1 read-model seam).
+
+    The generic ``/runs`` endpoint lists every run across all workflows; this
+    scopes to a single workflow so the composer can paint a last-run health
+    chip and a workflow-scoped History without pulling the whole run index.
+    Read-only, no engine mutation, no network egress.
+
+    This is the canonical read-model seam the Operate plane's run-index unit
+    (U5) is amended to CONSUME rather than re-implement its own ``/runs``
+    filter (see the CH-1 ↔ U5 binding in the hardening spec).
+    """
+    if not workflow_id or not all(c.isalnum() or c in "_-" for c in workflow_id):
+        raise HTTPException(status_code=400, detail="invalid workflow id")
+    limit = max(1, min(int(limit), 200))
+    engine = get_engine()
+    # Over-scan then filter+cap: list_runs returns cross-workflow summaries, so
+    # widen the scan window so a busy fleet doesn't starve this workflow's rows.
+    scan = engine.list_runs(limit=max(limit * 10, 200))
+    runs = [r for r in scan if r.get("workflow_id") == workflow_id][:limit]
+    return {"workflow_id": workflow_id, "count": len(runs), "runs": runs}

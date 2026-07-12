@@ -16,6 +16,7 @@ import { Toast, Confirm, EmptyState, ErrorPanel, Skeleton } from './core/ui.js';
 import { Shortcuts } from './core/shortcuts.js';
 import { Heartbeat } from './core/heartbeat.js';
 import { Actions } from './shell/actions.js';
+import { NextActions } from './shell/next-actions.js';
 import { initRouter } from './shell/router.js';
 import { AssetPeek } from './library/asset-peek.js';
 import { SkillsPanel } from './library/skills.js';
@@ -6307,8 +6308,15 @@ function dfApplyRunState(run) {
   if (terminalRunStatus) {
     _dfToggleStopBtn(false);
     window._composerActiveRunId = null;
+    // CH-1: keep the id so the floating chip's composer.open-active-run can
+    // re-open the finished run after a reload; drop the *live* flag only.
+    try { if (run.run_id) localStorage.setItem('enclave.composer.activeRun', run.run_id); } catch (_) {}
   } else {
     window._composerActiveRunId = run.run_id || window._composerActiveRunId || null;
+    // CH-1: persist so #df-run-progress → composer.open-active-run survives a reload.
+    try {
+      if (window._composerActiveRunId) localStorage.setItem('enclave.composer.activeRun', window._composerActiveRunId);
+    } catch (_) {}
     _dfToggleStopBtn(true);
   }
 
@@ -6339,6 +6347,26 @@ function dfApplyRunState(run) {
   // chip's early returns so terminal runs keep both current.
   _dfPaintRunSegments(segClasses);
   _dfRenderRunSignals(run, planned, status, resultById);
+
+  // CH-1: the iteration-chaining "what next" strip. Mount the next-action
+  // chips on the terminal + gate states (persist-until-next-event); clear it
+  // while a run is mid-flight so a freshly-started run never shows the
+  // previous run's chips. The failing-step id routes the 'Fix failing step'
+  // chip straight to the canvas node that broke.
+  try {
+    const _naStatus = String(run.status || '').toLowerCase();
+    const _firstFailed = (results.find(r =>
+      r && ['failed', 'error'].includes(String(r.status || '').toLowerCase())) || {}).step_id || '';
+    const _naCtx = {
+      runId: run.run_id || window._composerActiveRunId || '',
+      workflowId: run.workflow_id || (document.getElementById('df-wf-id') || {}).value || '',
+      stepId: _firstFailed,
+    };
+    if (_naStatus === 'awaiting_approval') NextActions.render('run.awaiting_gate', _naCtx);
+    else if (terminalRunStatus && _naStatus === 'completed') NextActions.render('run.finished.ok', _naCtx);
+    else if (terminalRunStatus && ['failed', 'error'].includes(_naStatus)) NextActions.render('run.finished.failed', _naCtx);
+    else NextActions.clear();
+  } catch (_) {}
 
   // Update the floating chip.
   const chip = document.getElementById('df-run-progress');
@@ -8833,7 +8861,14 @@ function _dfCompositeStepYaml(data, deps) {
   return '  - ' + lines[0] + '\n' + lines.slice(1).map(l => '    ' + l).join('\n') + '\n\n';
 }
 
-function dfExportYaml() {
+// Pure canvas → YAML string. NO panel side-effect (doesn't touch
+// #df-yaml-panel / #df-yaml-output), so it's safe to call for a LIVE run
+// build without flashing the export panel open. dfExportYaml() wraps this
+// and adds the panel paint; dfBuildWorkflowDefinition() parses it back to a
+// definition dict so a Run › live sends the CANVAS the operator is looking
+// at, not a stale saved copy (P0-1). Returns undefined when the editor
+// isn't up yet (mirrors the old dfExportYaml early-return contract).
+function dfComposeYamlString() {
   if (!dfEditor) return;
   const exported = dfEditor.export();
   const homeData = exported.drawflow.Home.data;
@@ -8918,9 +8953,29 @@ function dfExportYaml() {
     yaml += `\n`;
   });
 
-  document.getElementById('df-yaml-panel').style.display = 'block';
-  document.getElementById('df-yaml-output').textContent = yaml;
   return yaml;
+}
+
+// Back-compat wrapper: the historical Export-YAML button + every existing
+// caller expects the panel to paint. Compose the string, then apply the
+// side-effect. Returns the same yaml string as before.
+function dfExportYaml() {
+  const yaml = dfComposeYamlString();
+  if (yaml == null) return yaml;
+  const panel = document.getElementById('df-yaml-panel');
+  const out = document.getElementById('df-yaml-output');
+  if (panel) panel.style.display = 'block';
+  if (out) out.textContent = yaml;
+  return yaml;
+}
+
+// Live-canvas definition dict for Run › live (P0-1). Parses the side-effect-
+// free YAML string so the run payload is the canvas exactly as it stands —
+// no save required. Returns null when the canvas can't compose (no editor).
+function dfBuildWorkflowDefinition() {
+  const yaml = dfComposeYamlString();
+  if (!yaml) return null;
+  return jsyaml.load(yaml);
 }
 
 async function dfSave() {
@@ -8934,6 +8989,12 @@ async function dfSave() {
     if (resp.ok) {
       const result = resp.data;
       Toast.success('Saved', result.path);
+      // CH-1: chain forward — a saved workflow's natural next hops are run + schedule.
+      try {
+        NextActions.render('save.ok', {
+          workflowId: result.workflow_id || (definition && definition.id) || '',
+        });
+      } catch (_) {}
       if (typeof refreshWorkflows === 'function') refreshWorkflows();
       // BU8c: the saved yaml is what schedule-preview reads — re-check.
       try { dfRefreshSignalBand(); } catch (_) {}
@@ -10032,6 +10093,64 @@ Actions.click({
   // source is an unresolved seed.<key> input carry data-seed="1" and
   // route to the SEED node's config instead.
   'logs.focus-step':      el => dfFocusStepFromSignal(el.dataset.stepId, el.dataset.seed === '1')
+});
+
+// ── CH-1: iteration-chaining pivots ───────────────────────────────────────
+// The floating run-progress chip re-opens the active run; the loaded-workflow
+// last-run chip opens that workflow's scoped History; the NextActions strip's
+// next.* chips are the "what next" hops. next.schedule/next.promote route to
+// the Operate plane (U8 / U11+U14) — honest toasts until Operate builds them.
+Actions.click({
+  'composer.open-active-run': () => composerOpenActiveRun(),
+  'ws.history-open': el => {
+    const wfId = el.dataset.wfId || '';
+    const runId = el.dataset.runId || '';
+    switchTab('runs');
+    setTimeout(() => {
+      try {
+        Promise.resolve(RunsTab.load()).then(() => { if (runId) RunsTab.select(runId); });
+      } catch (_) {}
+    }, 150);
+  },
+  // NextActions strip verbs. Chips carry data-run-id / data-wf-id / data-step-id.
+  'next.fix-step': el => {
+    const stepId = el.dataset.stepId || (NextActions.ctx() || {}).stepId || '';
+    const wfId = el.dataset.wfId || (NextActions.ctx() || {}).workflowId || '';
+    // Already on the canvas for the failed run — just focus the failing node.
+    // If we're not on that workflow's canvas, load it first via the runs pivot.
+    const onCanvas = stepId && dfFindNodeIdForStep(stepId) != null;
+    if (onCanvas) { dfFocusStepFromSignal(stepId, false); switchTab('dashboard'); }
+    else if (wfId && window.RunsTab) RunsTab.openInComposer(wfId, stepId);
+    else if (stepId) { switchTab('dashboard'); setTimeout(() => dfFocusStepFromSignal(stepId, false), 200); }
+  },
+  'next.resume': el => {
+    const runId = el.dataset.runId || (NextActions.ctx() || {}).runId || '';
+    if (!runId) { if (window.Toast) Toast.warn('No run', 'No failed run to resume.'); return; }
+    switchTab('runs');
+    setTimeout(() => {
+      try { Promise.resolve(RunsTab.load()).then(() => { RunsTab.select(runId); setTimeout(() => RunsTab.resumeCurrent(), 200); }); } catch (_) {}
+    }, 150);
+  },
+  'next.run': () => dfRunWorkflowLive(),
+  'next.save': () => dfSave(),
+  'next.rerun': el => {
+    const runId = el.dataset.runId || (NextActions.ctx() || {}).runId || '';
+    if (runId) {
+      switchTab('runs');
+      setTimeout(() => { try { Promise.resolve(RunsTab.load()).then(() => { RunsTab.select(runId); setTimeout(() => RunsTab.rerunCurrent(), 200); }); } catch (_) {} }, 150);
+    } else { dfRunWorkflowLive(); }
+  },
+  'next.review-gate': el => {
+    const runId = el.dataset.runId || (NextActions.ctx() || {}).runId || '';
+    switchTab('runs');
+    if (runId) setTimeout(() => { try { Promise.resolve(RunsTab.load()).then(() => RunsTab.select(runId)); } catch (_) {} }, 150);
+  },
+  'next.schedule': () => {
+    if (window.Toast) Toast.info('Scheduling', 'Recurring runs land with the Operate plane (scheduler, U8).');
+  },
+  'next.promote': () => {
+    if (window.Toast) Toast.info('Promote', 'Promoting a run into a workspace lands with the Operate plane (U11 / U14).');
+  },
 });
 
 // ── Chat Rating ───────────────────────────────────────────────────────────
@@ -11241,6 +11360,19 @@ function composerNewWorkflow() {
   });
   const yamlPanel = document.getElementById('df-yaml-panel');
   if (yamlPanel) yamlPanel.style.display = 'none';
+  // CH-1: a fresh/blank workflow must not inherit the previous workflow's run
+  // overlay or its "what next" chips. Always stop any live poller; on an
+  // explicit new/clear (NOT a mid-load rebuild) also tear down the run pane +
+  // cancel a still-live run so nothing bleeds across workflows.
+  try {
+    if (window.ComposerWorkstream) {
+      ComposerWorkstream.stopPolling();
+      if (!_dfLoading && !_dfRestoring) ComposerWorkstream.clearRun();
+    }
+  } catch (_) {}
+  try { NextActions.clear(); } catch (_) {}
+  const lrChip = document.getElementById('composer-last-run-chip');
+  if (lrChip) { lrChip.hidden = true; lrChip.innerHTML = ''; }
   ComposerView.updateCanvasEmptyState();
   if (typeof dfScheduleAnchorRefresh === 'function') dfScheduleAnchorRefresh();
 }
@@ -11257,7 +11389,65 @@ async function composerLoadById(wfId) {
     const defn = r.data;
     if (!defn.id) defn.id = wfId;
     composerLoadDefinition(defn);
+    // CH-1: round-trip pivot — surface the loaded workflow's last-run health
+    // chip (opens its scoped History). Best-effort, read-only GET; a workflow
+    // with no runs simply hides the chip.
+    try { dfShowLastRunHealth(wfId); } catch (_) {}
   } catch (e) { Toast.danger('Load error', e.message); }
+}
+
+// CH-1: paint the last-run health chip for a loaded workflow. Reads the
+// workflow-scoped run index (GET /api/workflows/{id}/runs) — the CH-1
+// read-model seam — takes the newest run, and shows a status dot + a History
+// button that opens the Runs tab scoped to that run. Read-only; no egress
+// beyond this operator-initiated load. Silent no-op when the chip mount or
+// the run index is unavailable.
+async function dfShowLastRunHealth(wfId) {
+  const chip = document.getElementById('composer-last-run-chip');
+  if (!chip || !wfId) return;
+  try {
+    const r = await Net.call(
+      `/api/workflows/${encodeURIComponent(wfId)}/runs?limit=1`,
+      { silent: true, retries: 0 }
+    );
+    const runs = (r.ok && r.data && Array.isArray(r.data.runs)) ? r.data.runs : [];
+    if (!runs.length) { chip.hidden = true; chip.innerHTML = ''; return; }
+    const last = runs[0];
+    const st = String(last.status || '').toLowerCase();
+    const tone = st === 'completed' ? 'ok'
+      : (st === 'failed' || st === 'error') ? 'fail'
+      : (st === 'running' || st === 'queued') ? 'live' : 'neutral';
+    chip.className = 'composer-last-run-chip ' + tone;
+    chip.innerHTML =
+      `<span class="lrc-dot" aria-hidden="true"></span>` +
+      `<span class="lrc-label">last run: ${esc(st || '—')}</span>` +
+      `<button type="button" class="lrc-history" data-action="ws.history-open"` +
+      ` data-wf-id="${esc(wfId)}" data-run-id="${esc(last.run_id || '')}"` +
+      ` title="Open run history for this workflow">History →</button>`;
+    chip.hidden = false;
+  } catch (_) { chip.hidden = true; chip.innerHTML = ''; }
+}
+
+// CH-1: reopen the active/last composer run from the floating progress chip.
+// The run id survives a reload via localStorage (dfApplyRunState persists it),
+// so clicking the chip after F5 re-attaches the live poller / re-opens the run
+// in the Runs tab. Falls back to the last run summary when no live id is held.
+function composerOpenActiveRun() {
+  let runId = window._composerActiveRunId
+    || (window._lastRunSummary && window._lastRunSummary.run_id) || '';
+  if (!runId) {
+    try { runId = localStorage.getItem('enclave.composer.activeRun') || ''; } catch (_) {}
+  }
+  if (!runId) {
+    if (window.Toast) Toast.info('No active run', 'Start a run to watch it here.');
+    return;
+  }
+  // Re-attach the live workstream poller (idempotent — it clears any prior
+  // interval) so an in-flight run keeps updating; a terminal run just paints
+  // its final state once.
+  try {
+    if (window.ComposerWorkstream) ComposerWorkstream.startPolling(runId);
+  } catch (_) {}
 }
 
 // Load a workflow-definition OBJECT directly onto the canvas. Shared by
@@ -11605,6 +11795,9 @@ window.composerStopRun = composerStopRun;
     'runs.load':        () => RunsTab.load(),
     'runs.select':      el => RunsTab.select(el.dataset.runId),
     'runs.mark-failed': () => RunsTab.markFailed(),
+    // CH-1 round-trip pivot: open the current run's workflow on the canvas,
+    // focused on the failing step, so the operator can fix → save → resume.
+    'runs.open-in-composer': el => RunsTab.openInComposer(el.dataset.wfId || '', el.dataset.stepId || ''),
     'runs.gate':        el => RunsTab.resolveGate(el.dataset.runId, el.dataset.gateId, el.dataset.decision),
     'runs.step-detail': el => RunsTab.openStepDetail(stepIdOf(el)),
     'runs.step-expand': el => RunsTab.toggleStepExpand(stepIdOf(el)),
@@ -12408,6 +12601,7 @@ window.PromptsLibrary = PromptsLibrary;
 export {
   AgentGen,
   ComposerSplit,
+  NextActions,
   PatternsPanel,
   Projects,
   WorkflowIndex,
@@ -12462,6 +12656,7 @@ export {
   composerLoadDefinition,
   composerLoadFromIndex,
   composerNewWorkflow,
+  composerOpenActiveRun,
   composerSeedAgent,
   composerSwitchBench,
   composerTestStepInChat,
@@ -12486,6 +12681,8 @@ export {
   dfAttachPromptToNode,
   dfAutoChain,
   dfAutoLayout,
+  dfBuildWorkflowDefinition,
+  dfComposeYamlString,
   dfClearConfigPanel,
   dfDeleteNode,
   dfDetachSkill,
@@ -12495,6 +12692,7 @@ export {
   dfExportYaml,
   dfFetchCompanions,
   dfFindNodeIdForStep,
+  dfFocusStepFromSignal,
   dfImportBundle,
   dfImportYaml,
   dfInitEditor,
@@ -12519,6 +12717,7 @@ export {
   dfRunWorkflowLive,
   dfSave,
   dfSaveCanvasAsPattern,
+  dfShowLastRunHealth,
   dfScaffoldPattern,
   dfSendPatternToComposer,
   fetchComposerPatterns,

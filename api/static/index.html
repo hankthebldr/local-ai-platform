@@ -671,13 +671,23 @@
         <button class="action-btn" onclick="composerExportBundle()" title="Export this workflow + linked agents as a portable bundle">Export Bundle</button>
         <button class="action-btn pull" onclick="dfSave()">Save</button>
         <div style="flex:1"></div>
-        <button class="action-btn ghost" onclick="dfRunWorkflowLive()" title="Save + run in background; watch live progress in the workstream below">Run ▶ live</button>
+        <button class="action-btn ghost" onclick="dfRunWorkflowLive()" title="Run the live canvas in the background (no save required); watch step-by-step progress in the workstream below">Run ▶ live</button>
         <button class="send-btn" onclick="dfRunWorkflowFromComposer()" title="Save then run this workflow (synchronous; switches to the Runs tab when done)">Run ▶</button>
         <!-- Stop control — appears only while a live run is active (toggled
              by dfApplyRunState). Cancels the run at the next step boundary. -->
         <button class="action-btn" id="composer-stop-btn" onclick="composerStopRun()"
                 title="Stop the active run (the engine halts at the next step boundary; the in-flight step finishes first)"
                 style="border-color:var(--red,#ff5252);color:var(--red,#ff5252)" hidden>◼ Stop</button>
+      </div>
+      <!-- CH-1: iteration-chaining strip + last-run health chip. The strip
+           paints "what next" chips after a run finishes / a save lands
+           (persist-until-next-event, filled by NextActions.render); the
+           last-run chip shows the loaded workflow's most recent run health
+           and opens its scoped History. Both hidden until there's something
+           to show. Wired via data-action (no inline handlers). -->
+      <div class="composer-chain-row">
+        <div class="composer-last-run-chip" id="composer-last-run-chip" role="status" hidden></div>
+        <div class="next-actions-strip" id="next-actions-strip" role="toolbar" aria-label="Next actions" hidden></div>
       </div>
       <!-- BU8c: feasibility signal band — paints the schedule-preview
            verdict for the SAVED copy of this workflow: green (feasible),
@@ -810,8 +820,11 @@
           </div>
           <!-- Live workflow-run progress chip — floats over the canvas
                while a run is active. Hidden by default; toggled by
-               dfApplyRunState() from the ComposerWorkstream poller. -->
-          <div class="df-run-progress" id="df-run-progress" role="status" aria-live="polite">
+               dfApplyRunState() from the ComposerWorkstream poller.
+               CH-1: clicking it re-opens the active/last run (survives a
+               reload — the run id is persisted to localStorage). -->
+          <div class="df-run-progress is-clickable" id="df-run-progress" role="status" aria-live="polite"
+               data-action="composer.open-active-run" title="Open this run — re-attach the live view (works after a reload)">
             <span class="df-run-progress-spinner" id="df-run-progress-spinner"></span>
             <span class="df-run-progress-label">Run</span>
             <span class="df-run-progress-current" id="df-run-progress-current">—</span>
@@ -1772,6 +1785,11 @@
                     onclick="RunsTab.pauseCurrent()" hidden
                     title="Pause this run at the next step boundary (engine support coming — currently a no-op)"
                     disabled>⏸ Pause</button>
+            <!-- CH-1: Fix failing step — round-trips to the composer canvas
+                 focused on the step that broke. data-action (no inline). -->
+            <button class="action-btn xs" id="runs-tab-fix-btn"
+                    data-action="runs.open-in-composer" hidden
+                    title="Open this run's workflow on the canvas, focused on the failing step, to edit and re-save it">✎ Fix failing step</button>
             <button class="action-btn xs" id="runs-tab-resume-btn"
                     onclick="RunsTab.resumeCurrent()" hidden
                     title="Resume from where the last attempt failed">▶ Resume</button>
