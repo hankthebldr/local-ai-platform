@@ -594,6 +594,39 @@ async def list_runs(limit: int = 20):
     return engine.list_runs(limit=limit)
 
 
+# Registered inside the /runs block (Operate-plane spec §3.2, F15) so it resolves
+# BEFORE the `GET /{workflow_id}` catch-all at the tail of this module — a literal
+# path registered here always wins over that parameterized route, and the legacy
+# `GET /runs` above is byte-unchanged (frontend 404 fallback). The frozen engine's
+# own list_runs is deliberately NOT used by this path — run_index scans the run
+# root directly, read-only.
+@router.get("/runs-index")
+async def runs_index(
+    limit: int = 30,
+    cursor: Optional[str] = None,
+    status: Optional[str] = None,
+    type: Optional[str] = None,  # noqa: A002 — public query-param name (type chip)
+    health: Optional[str] = None,
+    q: Optional[str] = None,
+):
+    """Keyset-paged, filterable, health-tagged index over the run root.
+
+    ``(started_at, run_id)`` descending cursor, server-side status/type/health/q
+    filters, a bounded per-request scan, and per-workflow anomaly stats from an
+    amortized cache. Read-only; the frozen engine is untouched.
+    """
+    from ..services import run_index
+
+    return run_index.scan_runs(
+        limit=limit,
+        cursor=cursor,
+        status=status,
+        type_=type,
+        health=health,
+        q=q,
+    )
+
+
 @router.get("/runs/{run_id}")
 async def get_run(run_id: str):
     """Get full details of a specific workflow run"""
