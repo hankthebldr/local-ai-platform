@@ -63,6 +63,23 @@ def test_export_missing_raises(svc):
         svc.export_bundle("nope")
 
 
+def test_context_workspace_field_round_trips(svc, tmp_path, monkeypatch):
+    """The new context_workspace field survives an unrelated PATCH (dict-merge
+    replay keeps the U2 binding intact)."""
+    from api.services import workspace as ws_mod
+
+    monkeypatch.setenv("ENCLAVE_DATA_DIR", str(tmp_path / "wsdata"))
+    monkeypatch.setattr(ws_mod, "_registry", None)
+    svc.create_project(ProjectCreate(id="cw", name="CW"))
+    svc.bind_context_workspace("cw")
+    assert svc.get_project("cw")["context_workspace"] == "proj-cw"
+    # An unrelated update must not drop the binding.
+    svc.update_project("cw", ProjectUpdate(description="edited"))
+    got = svc.get_project("cw")
+    assert got["context_workspace"] == "proj-cw"
+    assert got["description"] == "edited"
+
+
 # ── Agent generator (heuristic fallback) ───────────────────────────────
 
 
