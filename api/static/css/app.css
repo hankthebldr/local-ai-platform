@@ -3321,6 +3321,30 @@ textarea.composer-desc-area {
 }
 .context-tool-name { font-family: var(--mono); color: var(--accent); }
 
+/* U14 — Context node rail: the #context-node-list run/response picker in the
+   right rail. Rows reuse graph.node-select; kind dots share the run/provenance
+   legend palette. */
+.context-node-group { margin-bottom: 8px; }
+.context-node-group-h {
+  font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-dim); margin: 4px 0 4px 2px;
+}
+.context-node-group-n { color: var(--text-muted); }
+.context-node-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 8px; margin-bottom: 4px; background: var(--bg-deep);
+  color: var(--text); text-align: left; cursor: pointer;
+  font-size: 0.7rem; transition: border-color 0.12s ease, background 0.12s ease;
+}
+.context-node-row:hover { border-color: var(--accent); background: var(--bg-elevated, var(--bg-deep)); }
+.context-node-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--text-dim); }
+.context-node-dot.kind-workflow_run { background: var(--cyan); }
+.context-node-dot.kind-response { background: var(--amber); }
+.context-node-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.context-node-status { font-size: 0.58rem; color: var(--text-muted); font-family: var(--mono); }
+.context-node-prov { font-size: 0.62rem; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
+
 /* Graph legend */
 .graph-legend {
   position: absolute; bottom: 10px; left: 14px; z-index: 2;

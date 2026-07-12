@@ -3632,6 +3632,13 @@ function renderGraph(data, paneKey) {
   _graphPaneState[pane].state = state;
   if (pane === 'research') window._graphState = state;
 
+  // U14 — the Context node picker (#context-node-list) subscribes to this so
+  // it stays in lockstep with every context repaint (load / Rebuild / config
+  // toggle). Research repaints never fire it. No new global, no inline handler.
+  if (pane === 'context') {
+    try { document.dispatchEvent(new CustomEvent('graph:context-rendered')); } catch (_) {}
+  }
+
   // Deselect on background click
   svg.on('click', () => clearGraphSelection(pane));
 }
@@ -3902,6 +3909,13 @@ function selectNode(d, paneKey) {
   // research rail for research-pane selections; a context-pane selection is
   // rejected, so a click in one surface never drives the other's rail.
   try { ContextNodeRail.activate('research-node', d, pane); } catch (_) {}
+
+  // U14 — drive the Context node rail through the SAME single pane-guard. A
+  // research-pane selection is rejected here (pane mismatch), so a Research
+  // click can never paint the Context rail's pivot footer; a context-pane
+  // selection paints the run/promote/provenance pivots into
+  // #context-detail-actions.
+  try { ContextNodeRail.activate('context-node', d, pane); } catch (_) {}
 }
 
 // ── Detail-panel helpers (reused by every node type) ───────────────

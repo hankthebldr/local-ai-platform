@@ -2240,21 +2240,42 @@
             <span><span class="legend-dot" style="background:var(--accent)"></span>Skill / Tool</span>
           </div>
         </div>
-        <div class="session-detail-panel" id="context-detail">
-          <div class="detail-head">
-            <span class="detail-kind-chip" id="context-detail-kind">node</span>
-            <div class="panel-label" id="context-detail-title">Run</div>
-          </div>
-          <div class="session-meta" id="context-detail-meta"></div>
-          <div class="session-topics" id="context-detail-topics"></div>
-          <div class="session-preview" id="context-detail-preview"></div>
-          <div class="detail-connections" id="context-detail-connections"></div>
-          <div id="context-detail-actions" style="margin-top:8px"></div>
-        </div>
       </div>
 
-      <!-- RIGHT: Active context sessions (/api/context) + Runs pointer -->
+      <!-- RIGHT: Node rail (picker + relocated detail) + sessions + Runs pointer -->
       <div class="research-right">
+
+        <!-- U14: run/provenance node rail. The #context-node-list picker
+             reuses graph.node-select; the node detail panel (ids preserved,
+             relocated here from the left column) is the rail's mount — its
+             #context-detail-actions footer carries the run/promote/provenance
+             pivots painted by the context-node consumer via the shared
+             shell/context-node-rail.js pane-guard. -->
+        <div class="panel">
+          <span class="corner-tr"></span><span class="corner-bl"></span>
+          <div class="panel-label" style="display:flex;align-items:center;gap:8px">
+            Run / Provenance Nodes
+            <span class="tab-count" id="context-node-count"></span>
+          </div>
+          <div style="font-size:0.68rem;color:var(--text-dim);margin:6px 0 10px;line-height:1.5">
+            Every run and response node in the provenance graph. Pick one to
+            inspect its grounding, pivot to the full run, or promote it into
+            Research.
+          </div>
+          <div id="context-node-list" style="max-height:220px;overflow-y:auto"></div>
+          <div class="session-detail-panel" id="context-detail">
+            <div class="detail-head">
+              <span class="detail-kind-chip" id="context-detail-kind">node</span>
+              <div class="panel-label" id="context-detail-title">Run</div>
+            </div>
+            <div class="session-meta" id="context-detail-meta"></div>
+            <div class="session-topics" id="context-detail-topics"></div>
+            <div class="session-preview" id="context-detail-preview"></div>
+            <div class="detail-connections" id="context-detail-connections"></div>
+            <div id="context-detail-actions" style="margin-top:8px"></div>
+          </div>
+        </div>
+
         <div class="panel">
           <span class="corner-tr"></span><span class="corner-bl"></span>
           <div class="panel-label" style="display:flex;align-items:center;gap:8px">
