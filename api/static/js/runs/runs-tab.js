@@ -5,6 +5,7 @@ import { esc } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
+import { logBlock, stepChips } from './step-log-render.js';
 
 export const RunsTab = (function () {
   let _rows = [];
@@ -929,6 +930,7 @@ export const RunsTab = (function () {
           </div>` : ''}
           ${_renderStepPrompt(s)}
           ${_renderStepOutputs(run, s.step_id)}
+          ${stepChips(s, { esc })}
           ${_renderSandboxCodePanel(s)}
         </div>` : '';
 
@@ -1018,18 +1020,11 @@ export const RunsTab = (function () {
     }
     const rows = items.map(([label, text]) => {
       const key = '⟦' + label + '⟧';
-      const open = _expandedOutputs.has(s.step_id + '::' + key);
       const preview = text.replace(/\s+/g, ' ').slice(0, 60) + (text.length > 60 ? '…' : '');
-      return `<div class="run-step-output${open ? ' open' : ''}">
-        <button type="button" class="btn-unstyled run-step-output-head" style="width:100%" aria-expanded="${open}" data-action="runs.output-toggle" data-step-id="${esc(s.step_id)}" data-key="${esc(key)}">
-          <span class="run-step-caret">${open ? '▾' : '▸'}</span>
-          <span class="ctx-field-k">${esc(label)}</span>
-          ${open ? '' : `<span class="ctx-field-v">${esc(preview)}</span>`}
-          <span style="flex:1"></span>
-          <span class="run-step-output-meta">${text.length} chars</span>
-        </button>
-        ${open ? `<pre class="run-step-output-full">${esc(text)}</pre>` : ''}
-      </div>`;
+      // U7: shared per-key renderer (run-step-output* markup preserved).
+      return logBlock({ mode: 'per-key', stepId: s.step_id, key, label,
+        preview, meta: text.length + ' chars', full: text,
+        expanded: _expandedOutputs, esc });
     }).join('');
     return `<div class="run-step-row-kv run-step-outputs-kv">
       <span class="run-step-row-k">input</span>
@@ -1066,17 +1061,11 @@ export const RunsTab = (function () {
         : (v === null ? 'null' : Array.isArray(v) ? `array[${v.length}]` : 'object');
       const meta = isStr ? `${v.length} chars`
         : (Array.isArray(v) ? `${v.length} items` : (v === null ? '' : 'object'));
-      const open = _expandedOutputs.has(stepId + '::' + k);
-      return `<div class="run-step-output${open ? ' open' : ''}">
-        <button type="button" class="btn-unstyled run-step-output-head" style="width:100%" aria-expanded="${open}" data-action="runs.output-toggle" data-step-id="${esc(stepId)}" data-key="${esc(k)}">
-          <span class="run-step-caret">${open ? '▾' : '▸'}</span>
-          <span class="ctx-field-k">${esc(k)}</span>
-          ${open ? '' : `<span class="ctx-field-v">${esc(String(preview))}</span>`}
-          <span style="flex:1"></span>
-          <span class="run-step-output-meta">${esc(meta)}</span>
-        </button>
-        ${open ? `<pre class="run-step-output-full">${esc(full)}</pre>` : ''}
-      </div>`;
+      // U7: shared per-key renderer. `meta` is pre-escaped (it's a computed
+      // string); `preview` coerced to string then escaped inside the block.
+      return logBlock({ mode: 'per-key', stepId, key: k, label: k,
+        preview: String(preview), meta: esc(meta), full,
+        expanded: _expandedOutputs, esc });
     }).join('');
     return `<div class="run-step-row-kv run-step-outputs-kv">
       <span class="run-step-row-k">output</span>

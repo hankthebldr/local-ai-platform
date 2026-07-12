@@ -3,6 +3,7 @@
 import { esc } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, EmptyState, ErrorPanel, Skeleton } from '../core/ui.js';
+import { logChip, stepChips, logBlock } from '../runs/step-log-render.js';
 
 export const ComposerWorkstream = (function () {
   const panes = ['step', 'run', 'history', 'logs', 'in-progress'];
@@ -305,29 +306,17 @@ export const ComposerWorkstream = (function () {
     if (m) m.textContent = text;
   }
 
+  // U7: the chip + block renderers now live in runs/step-log-render.js so the
+  // Runs step-expand row and this pane render one grammar. These two thin
+  // shims keep the local call-sites (and any legacy caller) working for one
+  // release; they forward to the shared joined-mode renderer.
   function _logChip(name, duration, status) {
-    const bad = status && status !== 'ok';
-    return `<span class="df-tag" style="${bad ? 'color:var(--red, #e5484d);' : ''}font-size:0.56rem">`
-      + esc(name) + ' · ' + esc(duration) + ' · ' + esc(status) + '</span>';
+    return logChip(name, duration, status, { esc });
   }
 
   function _logBlock(stepId, which, label, text, captured) {
-    const key = stepId + ':' + which;
-    const open = _expandedLogs.has(key);
-    if (!captured) {
-      return `<div style="padding:2px 0">
-        <span style="font-size:0.54rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em">${esc(label)}</span>
-        <span style="font-size:0.62rem;color:var(--text-faint);font-style:italic;margin-left:6px">${esc(text)}</span>
-      </div>`;
-    }
-    return `<div style="padding:2px 0">
-      <button type="button" class="ws-run-action ghost" data-action="wslogs.output-toggle"
-              data-log-key="${esc(key)}" style="font-size:0.54rem;text-transform:uppercase;letter-spacing:0.08em"
-              title="Expand / collapse">${open ? '▾' : '▸'} ${esc(label)}</button>
-      <div style="font-size:0.62rem;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;
-                  ${open ? 'max-height:220px;overflow:auto' : 'max-height:2.6em;overflow:hidden'};
-                  padding:2px 0 0 14px">${esc(text)}</div>
-    </div>`;
+    return logBlock({ mode: 'joined', stepId, which, label, text, captured,
+      expanded: _expandedLogs, esc });
   }
 
   function _renderLogs() {
@@ -356,14 +345,8 @@ export const ComposerWorkstream = (function () {
       const hasOut = out !== undefined && out !== null;
       const outText = !hasOut ? 'no output captured'
         : (typeof out === 'string' ? out : JSON.stringify(out, null, 2));
-      // Strategy strip — metadata only (args/bodies aren't persisted).
-      const chips = []
-        .concat((s.mcp_calls || []).map(c =>
-          _logChip(c.server_id + '·' + c.tool_name, Math.round(c.duration_ms || 0) + 'ms', c.status || 'ok')))
-        .concat((s.plugin_tools_called || []).map(p =>
-          _logChip(p.plugin_id + '__' + p.tool_id, Math.round(p.duration_ms || 0) + 'ms', p.status || 'ok')))
-        .concat((s.skills_activated || []).map(k =>
-          _logChip(k.plugin_id + '::' + k.skill_id, (k.injected_chars || 0) + 'ch', k.trigger || 'keyword')));
+      // Strategy strip — metadata only (args/bodies aren't persisted). Built
+      // by the shared renderer so Composer and Runs surface identical chips.
       const stateClass = s.status === 'completed' ? 'ok' : s.status === 'failed' ? 'fail' : 'pending';
       const dur = s.duration_seconds != null ? Math.round(s.duration_seconds) + 's' : '?';
       return `
@@ -377,10 +360,7 @@ export const ComposerWorkstream = (function () {
           </div>
           ${_logBlock(s.step_id, 'input', 'Input', hasPrompt ? promptParts.join('\n\n') : 'prompt not captured', hasPrompt)}
           ${_logBlock(s.step_id, 'output', 'Output', outText, hasOut)}
-          ${chips.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 0 0">
-            <span style="font-size:0.52rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.08em">strategy · metadata-only</span>
-            ${chips.join('')}
-          </div>` : ''}
+          ${stepChips(s, { esc })}
         </div>`;
     }).join('');
     _setLogsMeta(steps.length + ' steps');
