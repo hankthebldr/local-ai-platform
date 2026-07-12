@@ -550,64 +550,35 @@ async def run_workflow_async(
     Use this when you want live UI updates. The sync /run endpoint is
     still the right call for short workflows that return quickly.
     """
-    import uuid as _uuid
-    from datetime import datetime as _dt
-    from ..models.workflow_models import WorkflowRun, WorkflowContext
+    from ..services.run_dispatch import (
+        RunPrepareError,
+        WorkflowNotFound,
+        dispatch_blocking,
+        prepare_run,
+    )
 
     engine = get_engine()
 
-    if req.definition:
-        defn = engine.load_from_dict(req.definition)
-    elif req.workflow_id:
-        yaml_path = engine.resolve_workflow_path(req.workflow_id, WORKFLOWS_DIR)
-        if not yaml_path:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Workflow '{req.workflow_id}' not found in public or private overlay",
-            )
-        defn = engine.load(yaml_path)
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Provide either 'workflow_id' or 'definition'",
-        )
-
+    # prepare_run expresses BOTH branches (workflow_id AND inline definition,
+    # the Composer Run ▶ live path) + validation + queued placeholder + origin
+    # sidecar. The response contract below stays byte-identical; the only new
+    # observable is data/workflows/<run_id>/origin.json.
     try:
-        engine.validate(defn, seed_keys=list(req.seed.keys()) if req.seed else None)
+        defn, run_id = prepare_run(
+            workflow_id=req.workflow_id,
+            definition=req.definition,
+            seed=req.seed,
+            origin={"origin": "manual"},
+            engine=engine,
+        )
+    except WorkflowNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except WorkflowValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except RunPrepareError as e:
+        raise HTTPException(status_code=e.http_status, detail=str(e))
 
-    # Pre-create the run id + checkpoint a "queued" record so the client
-    # can immediately poll /runs/{id}. The engine generates its own
-    # internal run_id otherwise; we hand it in so the URL is stable.
-    run_id = str(_uuid.uuid4())
-    ctx = WorkflowContext(seed=dict(req.seed or {}))
-    placeholder = WorkflowRun(
-        run_id=run_id,
-        workflow_id=defn.id,
-        status="queued",
-        context=ctx,
-        started_at=_dt.utcnow(),
-    )
-    try:
-        engine._checkpoint(placeholder)
-    except Exception:
-        pass
-
-    def _run_in_background():
-        from ..logging_config import logger as _logger
-
-        try:
-            engine.run(defn, seed=req.seed, run_id=run_id)
-        except TypeError:
-            # Older engine signature without run_id kwarg — fall back and
-            # accept the engine's auto-generated id. The pre-checkpoint
-            # placeholder is then orphaned (harmless; cleanup elsewhere).
-            engine.run(defn, seed=req.seed)
-        except Exception as e:
-            _logger.error(f"Background workflow run {run_id} failed: {e}")
-
-    background_tasks.add_task(_run_in_background)
+    background_tasks.add_task(dispatch_blocking, defn, req.seed, run_id, engine)
     return {
         "run_id": run_id,
         "workflow_id": defn.id,

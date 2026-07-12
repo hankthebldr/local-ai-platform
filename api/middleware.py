@@ -81,6 +81,13 @@ SCOPE_MAP = {
     # `workspaces` scope (parity with /api/documents) so a scoped SPA key can
     # write notes but an unscoped key is 403'd. Operate U11 also writes here.
     "/api/workspaces": "workspaces",
+    # Operate U4: the local scheduler read surface (list/detail/history/summary)
+    # serves the same run-provenance bytes as /api/workflows. Gate reads on the
+    # `workflows` scope (data-action tier, parity with /api/workflows) — writes
+    # are separately require_master_key'd in the router. NOT master here: that
+    # runs before scope resolution and would 401 a legitimately workflows-scoped
+    # SPA key reading the Schedules rail.
+    "/api/schedules": "workflows",
     "/api/keys": "keys",  # master key bypasses this before scope check
     "/a2a": "a2a",  # A2A JSON-RPC dispatch
 }
