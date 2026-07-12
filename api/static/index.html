@@ -476,6 +476,12 @@
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflows<span class="tab-count" id="wfi-count"></span></button>
     <button class="tab-btn" data-tab="projects" onclick="switchTab('projects', this)">Projects<span class="tab-count" id="projects-tab-count"></span></button>
     <button class="tab-btn" data-tab="runs" onclick="switchTab('runs', this)">Runs<span class="tab-count" id="runs-tab-count"></span></button>
+    <!-- U11: Artifacts — the durable-outputs Operate surface (outputs
+         inventory · local-directory workspaces · format sets). It is a
+         .tab-btn, so it rides the DELEGATED switch-tab handler (no new
+         inline onclick); id/data-tab 'artifacts' is unclaimed. Fixed nav
+         order: Workflows · Projects · Runs · Artifacts · Context. -->
+    <button class="tab-btn" data-tab="artifacts" data-action="switch-tab" data-tab-target="artifacts">Artifacts<span class="tab-count" id="artifacts-count"></span></button>
     <!-- S4: Context — run/provenance OBSERVABILITY (the run-filtered view
          of the knowledge graph + the /api/context session store). Distinct
          from the retired Library "Context" (documents), whose RAG surface
@@ -2129,6 +2135,52 @@
       </header>
       <div class="proj-drawer-body" id="proj-drawer-body"></div>
     </aside>
+  </div>
+
+  <!-- ═══ TAB: ARTIFACTS (Operate) ══════════════════════════════════
+       U11 (O5): the durable-outputs surface. Three panes, each a
+       LibraryShell adapter mount (library/artifacts-tab.js):
+         · Outputs     — GET /api/artifacts unified inventory (auth:none)
+         · Workspaces  — GET /api/workspaces C2 local-directory runtime
+                         (auth:optional; RX-2's 'research' store lists here,
+                         read-only — no rival store, no new ingest path)
+         · Format sets — GET /api/format-sets presets (auth:optional)
+       All chrome is data-action delegated (no inline handlers, no globals).
+       switchTab('artifacts') → ArtifactsTab.init(). -->
+  <div class="tab-content" id="tab-artifacts" style="display:none">
+    <div class="artifacts-head">
+      <div class="artifacts-panebar" role="tablist" aria-label="Artifacts panes">
+        <button type="button" class="artifacts-pane-btn active" role="tab" aria-selected="true"
+          data-action="artifacts.pane" data-pane="outputs">Outputs</button>
+        <button type="button" class="artifacts-pane-btn" role="tab" aria-selected="false"
+          data-action="artifacts.pane" data-pane="workspaces">Workspaces</button>
+        <button type="button" class="artifacts-pane-btn" role="tab" aria-selected="false"
+          data-action="artifacts.pane" data-pane="formats">Format Sets</button>
+        <span class="artifacts-head-spacer" style="flex:1"></span>
+        <button type="button" class="action-btn xs" data-action="artifacts.refresh">Refresh</button>
+      </div>
+    </div>
+
+    <div class="artifacts-pane" id="artifacts-pane-outputs">
+      <div class="artifacts-facets" id="artifacts-facets"></div>
+      <div id="artifacts-outputs-shell" class="artifacts-shell-host"></div>
+    </div>
+
+    <div class="artifacts-pane" id="artifacts-pane-workspaces" hidden>
+      <div class="artifacts-pane-toolbar">
+        <span class="artifacts-pane-hint">Local directories bound as governed workspaces. Binding never modifies files.</span>
+        <button type="button" class="action-btn accent" data-action="artifacts.ws-bind">+ Bind Directory</button>
+      </div>
+      <div id="artifacts-workspaces-shell" class="artifacts-shell-host"></div>
+    </div>
+
+    <div class="artifacts-pane" id="artifacts-pane-formats" hidden>
+      <div class="artifacts-pane-toolbar">
+        <span class="artifacts-pane-hint">Output-format instruction presets the Composer bakes into a step's constraints.</span>
+        <button type="button" class="action-btn accent" data-action="artifacts.fmt-new">+ New Format Set</button>
+      </div>
+      <div id="artifacts-formats-shell" class="artifacts-shell-host"></div>
+    </div>
   </div>
 
   <!-- ═══ TAB: CONTEXT (Operate) ════════════════════════════════════

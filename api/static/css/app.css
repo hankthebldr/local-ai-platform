@@ -7305,3 +7305,64 @@ body.bs-show-hint .bs-dispatch:hover::after {
 .sched-confirm { display: grid; grid-template-columns: 120px 1fr; gap: 6px; font-size: 0.74rem; margin-top: 8px; }
 .sched-confirm > div { display: contents; }
 .sched-confirm > div > span:first-child { color: var(--text-muted); }
+
+/* ── Artifacts tab (U11 · O5) ─────────────────────────────────────── */
+#tab-artifacts { padding: 0 4px; }
+.artifacts-head { margin: 8px 0 10px; }
+.artifacts-panebar { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.artifacts-pane-btn {
+  background: none; border: 1px solid transparent; color: var(--text-muted);
+  font-size: 0.72rem; padding: 4px 12px; border-radius: 6px 6px 0 0; cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.artifacts-pane-btn:hover { color: var(--text); }
+.artifacts-pane-btn.active { color: var(--accent); border-color: var(--border); border-bottom-color: transparent; background: var(--panel, rgba(255,255,255,0.02)); }
+.artifacts-pane-toolbar { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; flex-wrap: wrap; }
+.artifacts-pane-hint { font-size: 0.66rem; color: var(--text-muted); flex: 1; min-width: 200px; }
+.artifacts-shell-host { min-height: 320px; }
+
+.artifacts-facets { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 10px; }
+.artifacts-facet-group { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.artifacts-facet-label { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+.artifacts-facet-chip {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  font-size: 0.62rem; padding: 2px 8px; border-radius: 10px; cursor: pointer; display: inline-flex; gap: 4px; align-items: center;
+}
+.artifacts-facet-chip:hover { color: var(--text); }
+.artifacts-facet-chip.active { color: var(--accent); border-color: var(--accent); }
+.artifacts-facet-n { font-size: 0.54rem; opacity: 0.7; }
+
+.artifacts-src-run, .artifacts-src-feedback, .artifacts-src-export,
+.artifacts-type-chip, .artifacts-ext-chip, .artifacts-ver-chip { font-size: 0.54rem; }
+.artifacts-src-run { color: var(--accent); }
+.artifacts-src-feedback { color: var(--purple, #a78bfa); }
+.artifacts-src-export { color: var(--cyan, #38bdf8); }
+.artifacts-ro-badge { color: var(--amber, #e0a000); }
+
+.artifacts-ov { display: flex; flex-direction: column; gap: 4px; }
+.artifacts-kv { display: flex; justify-content: space-between; gap: 12px; font-size: 0.7rem; padding: 2px 0; }
+.artifacts-kv > span:first-child { color: var(--text-muted); flex: 0 0 auto; }
+.artifacts-kv > span:last-child { text-align: right; word-break: break-word; }
+.artifacts-sub-label { font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--cyan, #38bdf8); margin: 10px 0 4px; }
+.artifacts-preview-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.62rem; color: var(--text-muted); margin-bottom: 4px; }
+.artifacts-preview {
+  background: var(--code-bg, rgba(0,0,0,0.25)); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; font-size: 0.66rem; line-height: 1.5; max-height: 420px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+.artifacts-sentinel { color: var(--accent); }
+.artifacts-rel { display: flex; flex-direction: column; gap: 8px; }
+.artifacts-rel-note { font-size: 0.66rem; color: var(--text-muted); line-height: 1.5; margin: 0 0 6px; }
+
+.artifacts-idx-list, .artifacts-file-list, .artifacts-sched-list { display: flex; flex-direction: column; gap: 4px; }
+.artifacts-idx-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.64rem; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.artifacts-idx-name { font-weight: 600; }
+.artifacts-idx-counts { color: var(--text-muted); flex: 1; min-width: 120px; }
+.artifacts-idx-btns { display: flex; gap: 4px; }
+.artifacts-file-row { text-align: left; font-size: 0.66rem; padding: 3px 6px; color: var(--text); cursor: pointer; border-radius: 4px; }
+.artifacts-file-row:hover { background: var(--panel, rgba(255,255,255,0.04)); color: var(--accent); }
+.artifacts-file-view { margin-top: 8px; }
+.artifacts-sched-row { display: flex; align-items: center; gap: 6px; font-size: 0.66rem; padding: 3px 0; }
+.artifacts-sched-name { flex: 1; }
+.artifacts-sched-cad { color: var(--text-muted); font-size: 0.6rem; }
+.artifacts-lock-row { margin-bottom: 8px; }

@@ -37,6 +37,7 @@ import { PatternsPanel } from './library/patterns.js';
 import { TestPane } from './library/test-pane.js';
 import { RunsTab } from './runs/runs-tab.js';
 import { SchedulesView } from './runs/schedules-view.js';
+import { ArtifactsTab } from './library/artifacts-tab.js';
 import { WorkflowMemory } from './runs/workflow-memory.js';
 import { ResearchArtifacts } from './runs/research-artifacts.js';
 // RX-2 — the canonical shared node-rail (this spec owns it; Operate U14
@@ -244,6 +245,10 @@ function switchTab(name, el) {
   // session store. ContextView keeps its OWN load flag, so the
   // researchLoaded single-shot guard can't starve this pane (R3).
   if (name === 'context') ContextView.init();
+  // Artifacts (U11 · O5): the durable-outputs Operate surface. Mount-once
+  // per pane, reload-after; ArtifactsTab owns its three LibraryShell adapters
+  // (outputs · workspaces · format sets). Imported binding, no window global.
+  if (name === 'artifacts') { try { ArtifactsTab.init(); } catch (_) {} }
   if (name === 'workflows') {
     // Legacy loader still runs (writes to the hidden mounts under
     // the Catalog page so refreshWorkflows + loadWorkflowDetail
@@ -5851,6 +5856,79 @@ const dfStepTemplates = [
 const dfRoleColors = { reasoning: '#2BD4B4', coding: '#57C4D2', fast: '#E0A33C', general: '#1FB983', uncensored: '#E08A4C' };
 const dfFmtDescs = { raw: 'Full LLM text as-is', json: 'Parse as JSON object', json_array: 'Parse as JSON array', markdown_sections: 'Split by ## headings', key_value: 'Parse key: value lines', csv: 'Parse CSV/TSV', regex: 'Extract via regex' };
 
+// ── Composer format sets (U11 · O5) ─────────────────────────────────
+// A step can select a format set (library/artifacts-tab.js authors them).
+// The chosen set's serialized constraint lines are baked into the step at
+// serialize time as a fenced [format:<id>@<version>] … [/format] sentinel —
+// carried inside the modeled v1 system_prompt (the field the Composer owns and
+// round-trips through Pydantic), so the format instructions reach the model and
+// the dropdown re-hydrates on load. On load we ALSO read step.prompt.constraints
+// for externally-authored v2 workflows. Frozen engine untouched.
+let _dfFormatSets = [];            // [{id,name,target,version,...}] summaries
+let _dfFormatSetsLoaded = false;
+async function dfLoadFormatSets(force) {
+  if (_dfFormatSetsLoaded && !force) return _dfFormatSets;
+  try {
+    const r = await Net.call('/api/format-sets', { retries: 0, init: { method: 'GET' } });
+    if (r.ok && Array.isArray(r.data)) { _dfFormatSets = r.data; _dfFormatSetsLoaded = true; }
+  } catch (_) { /* dropdown falls back to the pinned-id option */ }
+  return _dfFormatSets;
+}
+// Extract a trailing format sentinel from a system_prompt / prompt string.
+// Returns {id, version, lines[], clean} or null. Only an EXACT machine block is
+// matched + stripped — operator prose is never dropped (tolerant fallback).
+function dfExtractFormatSentinel(text) {
+  if (!text || typeof text !== 'string') return null;
+  const re = /\n*\[format:([A-Za-z0-9][A-Za-z0-9_-]{0,79})@(\d+)\][\s\S]*?\[\/format\][ \t]*$/;
+  const m = text.match(re);
+  if (!m) return null;
+  const clean = text.slice(0, m.index).replace(/\s+$/, '');
+  const block = m[0].replace(/^\n+/, '');
+  return { id: m[1], version: Number(m[2]), lines: block.split('\n'), clean };
+}
+// Scan a v2 prompt.constraints[] list for the opener sentinel (externally
+// authored workflows). Returns {id, version, lines[]} or null.
+function dfFormatFromConstraints(constraints) {
+  if (!Array.isArray(constraints)) return null;
+  const start = constraints.findIndex(c => typeof c === 'string' && /^\[format:[A-Za-z0-9][A-Za-z0-9_-]{0,79}@\d+\]$/.test(c.trim()));
+  if (start === -1) return null;
+  const m = constraints[start].trim().match(/^\[format:([A-Za-z0-9][A-Za-z0-9_-]{0,79})@(\d+)\]$/);
+  const end = constraints.findIndex((c, i) => i >= start && typeof c === 'string' && c.trim() === '[/format]');
+  const lines = end === -1 ? constraints.slice(start) : constraints.slice(start, end + 1);
+  return { id: m[1], version: Number(m[2]), lines: lines.map(String) };
+}
+// Pick / clear the format set on a node — fetches the exact serialized
+// constraint lines so serialization is synchronous + byte-faithful to the
+// server preview. data.format_set is the id; data.format_constraints the lines.
+async function dfSetNodeFormat(nid, id) {
+  const d = dfNodeData[nid];
+  if (!d) return;
+  if (!id) {
+    d.format_set = '';
+    d.format_constraints = null;
+    d.format_version = null;
+  } else {
+    try {
+      const r = await Net.call(`/api/format-sets/${encodeURIComponent(id)}/preview`, {
+        retries: 0, init: { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+      });
+      if (r.ok && r.data) {
+        d.format_set = id;
+        d.format_constraints = r.data.constraints || [`[format:${id}@1]`, '[/format]'];
+        d.format_version = r.data.version || 1;
+      } else {
+        d.format_set = id;
+        d.format_constraints = [`[format:${id}@1]`, '[/format]'];
+      }
+    } catch (_) {
+      d.format_set = id;
+      d.format_constraints = [`[format:${id}@1]`, '[/format]'];
+    }
+  }
+  try { dfMarkDraftDirty(); } catch (_) {}
+  if (dfSelectedNodeId === nid) dfRenderConfigPanel(nid);
+}
+
 // ── BU4: Pattern presets (deployment topologies) ────────────────────
 // A PATTERN is the shape work executes in — every card maps onto the
 // engine's closed 8-kind vocabulary. SIMPLE = one node emitting one
@@ -8412,6 +8490,11 @@ function dfRenderConfigPanel(nodeId) {
   // Seed nodes get their own config surface (query + input schema) instead
   // of the step identity/prompt/gates form.
   if (data.is_seed) return dfRenderSeedConfig(nodeId);
+  // U11: lazily populate the format-set dropdown. First open of any llm node's
+  // config triggers one fetch, then re-renders THIS panel with the options.
+  if (!_dfFormatSetsLoaded && !(data.kind && data.kind !== 'llm')) {
+    dfLoadFormatSets().then(() => { if (dfSelectedNodeId === nodeId) dfRenderConfigPanel(nodeId); });
+  }
   if (title) title.textContent = data.id;
   if (popupTitle) popupTitle.textContent = data.id;
   const gateOps = ['not_empty','contains','not_contains','matches','has_key','all_keys','gt','lt','gte','lte','equals','not_equals','length_gt','length_lt','is_type'];
@@ -8500,6 +8583,15 @@ function dfRenderConfigPanel(nodeId) {
         <div id="df-outputs-${nodeId}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${data.outputs.map((o,i)=>`<span class="df-tag">${esc(o)}<button type="button" class="btn-unstyled df-tag-remove" aria-label="Remove output ${esc(o)}" data-action="df.output-remove" data-idx="${i}">✕</button></span>`).join('')}</div>
         <div style="display:flex;gap:4px"><input type="text" id="df-new-output-${nodeId}" class="chat-input" style="font-size:0.64rem;padding:3px 6px" placeholder="output_key" data-action="df.output-add" /><button class="action-btn" style="font-size:0.56rem;padding:2px 8px" data-action="df.output-add">Add</button></div>
         <div style="margin-top:6px"><label class="df-config-label">Output format</label><select class="model-select" style="font-size:0.64rem;padding:2px 4px" data-action="df.node-set" data-field="output_format">${fmtOptions}</select></div>
+        ${!(data.kind && data.kind !== 'llm') ? `<div style="margin-top:6px"><label class="df-config-label">Format set <span style="color:var(--text-muted);font-weight:400">— bakes into the step's constraints</span></label>
+          <select class="model-select" style="font-size:0.64rem;padding:2px 4px" data-action="composer.format-set"
+                  title="Attach an output-format preset (authored in the Artifacts tab). It serializes as a [format:id@version] sentinel in the step's constraints.">
+            <option value=""${!data.format_set ? ' selected' : ''}>(none)</option>
+            ${_dfFormatSets.map(f => `<option value="${esc(f.id)}"${data.format_set === f.id ? ' selected' : ''}>${esc(f.name || f.id)} · ${esc(f.target || '')}</option>`).join('')}
+            ${data.format_set && !_dfFormatSets.some(f => f.id === data.format_set) ? `<option value="${esc(data.format_set)}" selected>${esc(data.format_set)}${_dfFormatSetsLoaded ? ' (removed)' : ''}</option>` : ''}
+          </select>
+          ${data.format_set && (data.output_format === 'json' || data.output_format === 'json_array') ? `<div class="df-fmt-warn" style="margin-top:4px;font-size:0.56rem;color:var(--amber,#e0a000);line-height:1.4">⚠ A format set combined with a JSON output parser can conflict — the JSON-only Output Format block fights a non-JSON deliverable. Set Output format to <code>raw</code> or drop the format set.</div>` : ''}
+        </div>` : ''}
       </div>
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Tools &amp; Skills</div>
@@ -8870,7 +8962,11 @@ function dfDeleteNode(nodeId) {
       if (!val) return;
       dfAttachPromptToNode(nodeIdOf(el), val);
       el.value = '';
-    }
+    },
+    // U11 — attach/detach an output format set on this step. Fetches the exact
+    // serialized constraint lines so save→load round-trips the [format:…]
+    // sentinel; the panel re-renders (dropdown selection + JSON-conflict warn).
+    'composer.format-set': el => { dfSetNodeFormat(nodeIdOf(el), el.value || ''); }
   });
   Actions.click({
     'df.gate-add':      el => dfAddGate(nodeIdOf(el)),
@@ -9288,7 +9384,15 @@ function dfComposeYamlString() {
     // silently collapsing back to the role-based resolver on the next load.
     if (data.model) yaml += `    model: ${data.model}\n`;
     yaml += `    system_prompt: |\n`;
-    data.system_prompt.split('\n').forEach(line => { yaml += `      ${line}\n`; });
+    // U11: bake the chosen format set's serialized constraint lines into the
+    // step as a trailing [format:<id>@<version>] … [/format] sentinel. Carried
+    // in system_prompt (the modeled v1 field the Composer round-trips) so the
+    // format instructions reach the model and the dropdown re-hydrates on load.
+    let _sp = data.system_prompt || '';
+    if (data.format_set && Array.isArray(data.format_constraints) && data.format_constraints.length) {
+      _sp = (_sp.trim() ? _sp.replace(/\s+$/, '') + '\n\n' : '') + data.format_constraints.join('\n');
+    }
+    _sp.split('\n').forEach(line => { yaml += `      ${line}\n`; });
     if (data.inputs.length) { yaml += `    inputs:\n`; data.inputs.forEach(i => { yaml += `      - ${i}\n`; }); }
     yaml += `    outputs:\n`; data.outputs.forEach(o => { yaml += `      - ${o}\n`; });
     if (deps.length) { yaml += `    depends_on:\n`; deps.forEach(d => { yaml += `      - ${d}\n`; }); }
@@ -12043,6 +12147,19 @@ function composerLoadDefinition(defn) {
         d.system_prompt = step.system_prompt
           || (step.prompt && (step.prompt.task || step.prompt.role_inline))
           || d.system_prompt;
+        // U11: re-hydrate a baked format set. Prefer the modeled v2
+        // prompt.constraints[] (externally-authored workflows); otherwise parse
+        // the trailing sentinel out of the v1 system_prompt (Composer's own
+        // serialization) and strip it so the operator textarea stays clean.
+        d.format_set = ''; d.format_constraints = null; d.format_version = null;
+        const _vc = step.prompt && dfFormatFromConstraints(step.prompt.constraints);
+        const _sent = dfExtractFormatSentinel(d.system_prompt);
+        if (_vc) {
+          d.format_set = _vc.id; d.format_version = _vc.version; d.format_constraints = _vc.lines;
+        } else if (_sent) {
+          d.format_set = _sent.id; d.format_version = _sent.version; d.format_constraints = _sent.lines;
+          d.system_prompt = _sent.clean;
+        }
         d.outputs = Array.isArray(step.outputs) ? step.outputs : d.outputs;
         d.output_format = (step.output_parser && step.output_parser.format) || 'raw';
         d.quality_gates = Array.isArray(step.quality_gates) ? step.quality_gates : [];
