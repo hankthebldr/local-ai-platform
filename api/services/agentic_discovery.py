@@ -113,17 +113,31 @@ def load_sources_config() -> Dict[str, Any]:
     f = _read_sources_file()
     urls = f.get("catalog_urls") if isinstance(f.get("catalog_urls"), dict) else {}
     ttls = f.get("cache_ttls") if isinstance(f.get("cache_ttls"), dict) else {}
+
+    # GP-2 commit 7 (config-integrity, None-vs-empty): distinguish "key ABSENT"
+    # (fall through to env/default) from "key present but EMPTY" (the operator
+    # deliberately cleared the allowlist — honor it, don't resurrect defaults).
+    # The old `f.get(key) or DEFAULT` treated a stored `[]` as falsy and
+    # silently re-populated the shipped defaults, so an operator could never
+    # empty an allowlist through the admin route.
+    def _layered_list(key: str, env_name: str | None, default: List[str]) -> List[str]:
+        if key in f and isinstance(f[key], list):
+            return [str(v) for v in f[key]]  # present (even []) → authoritative
+        if env_name:
+            env_vals = _env_csv(env_name)
+            if env_vals:
+                return env_vals
+        return list(default)
+
     return {
-        "skill_repos": list(
-            f.get("skill_repos")
-            or _env_csv("ENCLAVE_SKILL_REPOS")
-            or DEFAULT_SKILL_REPOS
+        "skill_repos": _layered_list(
+            "skill_repos", "ENCLAVE_SKILL_REPOS", DEFAULT_SKILL_REPOS
         ),
-        "plugin_marketplaces": list(
-            f.get("plugin_marketplaces") or DEFAULT_PLUGIN_MARKETPLACES
+        "plugin_marketplaces": _layered_list(
+            "plugin_marketplaces", None, DEFAULT_PLUGIN_MARKETPLACES
         ),
-        "prompt_digest_sources": list(
-            f.get("prompt_digest_sources") or DEFAULT_PROMPT_DIGEST_SOURCES
+        "prompt_digest_sources": _layered_list(
+            "prompt_digest_sources", None, DEFAULT_PROMPT_DIGEST_SOURCES
         ),
         "catalog_urls": {
             "skills": (urls.get("skills") or "").strip()

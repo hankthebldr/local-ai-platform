@@ -147,3 +147,58 @@ def test_list_workflow_runs_rejects_traversal(client, data_dir):
     # is what's under test).
     r = client.get("/api/workflows/etc.passwd/runs")
     assert r.status_code == 400
+
+
+# ── mark-failed (GP-2 commit 7) ─────────────────────────────────────────────
+
+
+def test_mark_failed_missing_run_404(client, data_dir):
+    r = client.post("/api/workflows/runs/nope/mark-failed")
+    assert r.status_code == 404
+
+
+def test_mark_failed_rejects_traversal(client, data_dir):
+    r = client.post("/api/workflows/runs/etc..passwd/mark-failed")
+    assert r.status_code == 400
+
+
+def test_mark_failed_flips_zombie_to_failed(client, data_dir):
+    """A stalled run stuck in 'running' is persisted as failed so the operator
+    can then resume-from-failed (which 409s a non-failed run)."""
+    _write_run(data_dir, "zombie", "running")
+    r = client.post("/api/workflows/runs/zombie/mark-failed")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["changed"] is True
+    assert body["status"] == "failed"
+    assert body["error"]  # a reason is recorded
+    persisted = json.loads((data_dir / "zombie" / "run.json").read_text())
+    assert persisted["status"] == "failed"
+    assert persisted["completed_at"]
+
+
+def test_mark_failed_is_noop_on_terminal_run(client, data_dir):
+    """A legitimately-completed run is never clobbered."""
+    _write_run(data_dir, "done", "completed")
+    r = client.post("/api/workflows/runs/done/mark-failed")
+    assert r.status_code == 200
+    assert r.json()["changed"] is False
+    persisted = json.loads((data_dir / "done" / "run.json").read_text())
+    assert persisted["status"] == "completed"  # untouched
+
+
+def test_marked_failed_run_can_then_resume(client, data_dir):
+    """mark-failed → resume-from-failed is the intended zombie-recovery chain."""
+    from api.models.workflow_models import WorkflowRun
+
+    _write_run(data_dir, "z2", "running")
+    assert client.post("/api/workflows/runs/z2/mark-failed").status_code == 200
+    # Now it's failed, resume-from-failed accepts it (engine.resume stubbed).
+    resumed = WorkflowRun(run_id="z2", workflow_id="wf-x", status="completed",
+                          context={"seed": {}})
+    with patch(
+        "api.services.workflow_engine.WorkflowEngine.resume", return_value=resumed
+    ):
+        r = client.post("/api/workflows/runs/z2/resume-from-failed")
+    assert r.status_code == 200
+    assert r.json()["resumed_from_failed"] is True

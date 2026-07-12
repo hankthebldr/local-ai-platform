@@ -810,6 +810,64 @@ def resume_from_failed(run_id: str):
     }
 
 
+@router.post("/runs/{run_id}/mark-failed")
+def mark_run_failed(run_id: str):
+    """Persist a stalled/zombie run as FAILED (GP-2 commit 7).
+
+    A run whose ``status`` is still ``running``/``queued`` after the engine
+    restarted mid-flight is a zombie: nothing is executing it, but the store
+    says it's alive, so the Runs UI polls it forever and it never becomes
+    Fix&Resume-able (resume-from-failed 409s a non-failed run). This route
+    flips the persisted ``run.json`` to ``failed`` so the operator can then
+    resume-from-failed (or archive it) — the terminal state the crash never
+    got to write.
+
+    Add-only, idempotent like ``cancel_run``: a missing run is 404; a run that
+    is ALREADY terminal (completed/failed/canceled/error) is a no-op that
+    returns its current status (no clobber of a legitimately-completed run).
+    """
+    if not _valid_run_id(run_id):
+        raise HTTPException(status_code=400, detail="invalid run id")
+
+    engine = get_engine()
+    snapshot = engine.get_run(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    current = (snapshot.get("status") or "").lower()
+    if current in {"completed", "failed", "canceled", "error"}:
+        return {
+            "run_id": run_id,
+            "status": current,
+            "changed": False,
+            "reason": f"run already terminal: {current}",
+        }
+
+    from datetime import datetime
+
+    from ..models.workflow_models import WorkflowRun
+
+    run = WorkflowRun.model_validate(snapshot)
+    run.status = "failed"
+    if not run.error:
+        run.error = (
+            "Run marked failed by operator: the engine restarted while this "
+            "run was in flight (stalled/zombie), so it never reached a terminal "
+            "state on its own."
+        )
+    if run.completed_at is None:
+        run.completed_at = datetime.utcnow()
+    engine._checkpoint(run)
+
+    return {
+        "run_id": run.run_id,
+        "workflow_id": run.workflow_id,
+        "status": run.status,
+        "error": run.error,
+        "changed": True,
+    }
+
+
 @router.post("/runs/{run_id}/approvals/{gate_id}")
 def resolve_approval(run_id: str, gate_id: str, body: ApprovalRequest):
     """Resolve a paused HITL approval gate, then resume the run (Task 13).

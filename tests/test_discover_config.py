@@ -258,3 +258,33 @@ def test_cache_ttl_consulted_at_fetch_time():
     ad.update_sources_config({"cache_ttls": {"ttltest": 3600}})
     entry.get()
     assert calls["n"] == 2
+
+
+# ── config-integrity: None-vs-empty allowlist (GP-2 commit 7) ───────────────
+
+
+def test_emptied_allowlist_is_not_resurrected_to_defaults():
+    """An operator who deliberately clears an allowlist (stores []) must get
+    an EMPTY list back — not the shipped defaults. The old `f.get(k) or DEFAULT`
+    treated a stored [] as falsy and silently re-populated defaults, so the
+    allowlist could never be emptied through the admin route."""
+    ad.update_sources_config({"skill_repos": []})
+    cfg = ad.load_sources_config()
+    assert cfg["skill_repos"] == []  # honored, NOT DEFAULT_SKILL_REPOS
+
+    ad.update_sources_config({"plugin_marketplaces": []})
+    assert ad.load_sources_config()["plugin_marketplaces"] == []
+
+
+def test_absent_allowlist_still_falls_through_to_defaults():
+    """A key that was NEVER set still resolves to the shipped defaults (the
+    absent-vs-empty distinction the fix preserves)."""
+    cfg = ad.load_sources_config()
+    assert cfg["skill_repos"] == ad.DEFAULT_SKILL_REPOS
+    assert cfg["plugin_marketplaces"] == ad.DEFAULT_PLUGIN_MARKETPLACES
+    assert cfg["prompt_digest_sources"] == ad.DEFAULT_PROMPT_DIGEST_SOURCES
+
+
+def test_set_allowlist_overrides_defaults():
+    ad.update_sources_config({"skill_repos": ["me/only"]})
+    assert ad.load_sources_config()["skill_repos"] == ["me/only"]
