@@ -14,7 +14,7 @@ Endpoints:
 import os
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from ..exceptions import APIError
@@ -129,8 +129,19 @@ async def delete_agent(agent_id: str):
 
 
 @router.post("/{agent_id}/chat")
-async def chat_with_agent(agent_id: str, req: AgentChatRequest):
-    """Chat with an agent — resolves model, builds messages, calls Ollama"""
+async def chat_with_agent(agent_id: str, body: AgentChatRequest, http_req: Request):
+    """Chat with an agent — resolves the model, builds messages, and executes
+    through the SAME /v1/chat/completions pipeline as the main chat surface
+    (GP-2 commit 5).
+
+    The old path called ``ollama.chat`` directly, which meant an agent's tools
+    never ran and its ``web_search`` builtin was a silent no-op — the agent's
+    declared capabilities were ignored at chat time. Routing through
+    ``chat_completions`` executes plugin tools (agentic loop), honors
+    ``web_search`` when the agent declares it, and surfaces OpenAI-shaped
+    errors (APIError bubbles through the shared handler) instead of generic
+    500s.
+    """
     service = get_service()
     agent = service.get_agent(agent_id)
     if not agent:
@@ -160,40 +171,55 @@ async def chat_with_agent(agent_id: str, req: AgentChatRequest):
     # Whether we fell back from the agent's pinned model.
     fell_back = bool(agent.model and resolved_model != agent.model)
 
-    # Build messages with system prompt + context
-    messages = service.build_messages(agent, req.messages)
+    # Build messages with system prompt + context.
+    messages = service.build_messages(agent, body.messages)
 
-    # Use request overrides or agent defaults
-    temperature = req.temperature if req.temperature is not None else agent.temperature
-    max_tokens = req.max_tokens if req.max_tokens is not None else agent.max_tokens
+    # Use request overrides or agent defaults.
+    temperature = body.temperature if body.temperature is not None else agent.temperature
+    max_tokens = body.max_tokens if body.max_tokens is not None else agent.max_tokens
 
-    # Call Ollama
-    ollama = get_ollama()
+    # The agent opts into web search when it declares the built-in web_search
+    # tool. Tool execution (plugin agentic loop) is always enabled — the /v1
+    # path runs the registered plugin tools when the model requests them.
+    wants_web_search = any(
+        getattr(t, "type", None) == "web_search" for t in (agent.tools or [])
+    )
+
+    from .chat import ChatCompletionRequest, Message, chat_completions
+
+    cc_request = ChatCompletionRequest(
+        model=resolved_model,
+        messages=[Message(role=m["role"], content=m.get("content", "")) for m in messages],
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=False,
+        web_search=wants_web_search,
+        tools=True,
+    )
     try:
-        result = ollama.chat(
-            model=resolved_model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        completion = await chat_completions(cc_request, http_req)
     except APIError:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Unexpected chat error for agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Chat failed: {e}")
 
+    choice = (completion.get("choices") or [{}])[0]
+    content = (choice.get("message") or {}).get("content", "")
+
     response = {
         "agent_id": agent_id,
         "model": resolved_model,
-        "content": result.get("content", ""),
-        "usage": {
-            "prompt_tokens": result.get("prompt_eval_count", 0),
-            "completion_tokens": result.get("eval_count", 0),
-            "total_tokens": (
-                result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
-            ),
-        },
+        "content": content,
+        "usage": completion.get("usage", {}),
     }
+    # Surface the grounding + tool trail so the agent chat pane can render
+    # citations / tool badges, same as the main chat.
+    for extra in ("sources", "tool_calls", "provenance", "conversation_id"):
+        if extra in completion:
+            response[extra] = completion[extra]
     if fell_back:
         response["model_fallback"] = {
             "requested": agent.model,

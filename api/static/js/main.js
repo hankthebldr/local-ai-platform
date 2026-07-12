@@ -1055,7 +1055,7 @@ async function chatSaveAsAgent() {
     context,
     tags: ['chat-launchpad'],
   };
-  const r = await Net.call('/api/agents', {
+  let r = await Net.call('/api/agents', {
     retries: 0,
     init: {
       method: 'POST',
@@ -1063,6 +1063,26 @@ async function chatSaveAsAgent() {
       body: JSON.stringify(defn),
     },
   });
+  // GP-2 commit 5: an id collision (409) previously dead-ended as "Save failed".
+  // Offer to update the existing agent in place via PUT — the operator asked to
+  // save this config under a name that's already taken, and overwriting is the
+  // obvious intent once confirmed.
+  if (r.status === 409) {
+    const overwrite = await Confirm.ask({
+      title: 'Agent exists',
+      body: `An agent "${id}" already exists. Update it with this chat config?`,
+      okLabel: 'Update',
+    });
+    if (!overwrite) return null;
+    r = await Net.call(`/api/agents/${encodeURIComponent(id)}`, {
+      retries: 0,
+      init: {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(defn),
+      },
+    });
+  }
   if (!r.ok) {
     const detail = (r.data && (r.data.detail || (r.data.error && r.data.error.message))) || `HTTP ${r.status}`;
     Toast.danger('Save failed', String(detail));
@@ -6070,6 +6090,26 @@ async function composerAddAgentAtCenter(agentId) {
 }
 window.composerAddAgentAtCenter = composerAddAgentAtCenter;
 
+// Map an agent's AgentTool[] to the canonical step ToolRef string form the
+// YAML emitter (main.js ~8961) and every data.tools consumer read:
+//   plugin tool → "<plugin_id>.<tool_id>"
+//   MCP tool    → "mcp:<server_id>.<tool_id>"
+// Built-in `type` tools (web_search/workflow/code_exec) are agent-only — there
+// is no step-level ToolRef for them — so they're dropped rather than emitted
+// as a bogus `plugin: "web_search"`. Defensive against string / partial entries.
+function _dfAgentToolsToRefs(tools) {
+  if (!Array.isArray(tools)) return [];
+  const out = [];
+  for (const t of tools) {
+    if (typeof t === 'string') { out.push(t); continue; }
+    if (!t || typeof t !== 'object') continue;
+    if (t.mcp_server && t.tool_id) { out.push(`mcp:${t.mcp_server}.${t.tool_id}`); continue; }
+    if (t.plugin_id && t.tool_id) { out.push(`${t.plugin_id}.${t.tool_id}`); continue; }
+    // `type`-only built-ins have no step ToolRef → skip (not misencoded).
+  }
+  return out;
+}
+
 async function dfAddNodeFromAgent(agentId, x, y) {
   // Fetch agent definition; spawn an AgentStep clone.
   try {
@@ -6090,6 +6130,18 @@ async function dfAddNodeFromAgent(agentId, x, y) {
       output_format: 'text',
       quality_gates: [],
       inputs: [],
+      // GP-2 commit 5: a fork must carry the agent's TOOLS, context, and
+      // sampling knobs — before this the step dropped them, so a forked
+      // "researcher with web_search + a plugin tool at temp 0.2" became a
+      // bare llm step. Map each AgentTool → the canonical ToolRef string form
+      // the emitter + every consumer read (`mcp:server.tool` / `plugin.tool`);
+      // built-in `type` tools (web_search/workflow/code_exec) have no step-
+      // level ToolRef representation, so they're dropped (not misencoded).
+      tools: _dfAgentToolsToRefs(a.tools),
+      // Carried for fork fidelity + the config panel; ContextSource list.
+      context: Array.isArray(a.context) ? a.context.map(c => ({ ...c })) : [],
+      temperature: a.temperature != null ? a.temperature : '',
+      max_tokens: a.max_tokens != null ? a.max_tokens : '',
       // Provenance — surfaced in the node config panel so the operator
       // remembers which agent this step was forked from.
       _from_agent: agentId,
@@ -9610,6 +9662,9 @@ async function deleteAgent(agentId) {
     const r = await Net.call(`/api/agents/${agentId}`, { retries: 0, init: { method: 'DELETE' } });
     if (!r.ok) throw new Error((r.data && r.data.detail) || 'Delete failed');
     loadAgentsTab();
+    // GP-2 commit 5: keep the composer's #agent-select fork dropdown in sync —
+    // a deleted agent must not linger as a selectable fork source.
+    try { loadAgentsForSelector(); } catch (_) {}
     if (_activeAgentId === agentId) closeAgentChat();
   } catch(e) {
     Toast.danger('Failed to delete agent', e.message);
@@ -9953,6 +10008,9 @@ async function _saveAgentModal(existingId) {
     if (!r.ok) { showErr(d.detail || JSON.stringify(d)); if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; } return; }
     document.querySelector('div[style*=fixed]')?.remove();
     loadAgentsTab();
+    // GP-2 commit 5: refresh the composer's #agent-select so a create/rename
+    // is immediately available (and a stale label is dropped) as a fork source.
+    try { loadAgentsForSelector(); } catch (_) {}
   } catch(e) {
     showErr('Request failed: ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Save changes' : 'Create agent'; }
@@ -12649,12 +12707,27 @@ window.PromptsLibrary = PromptsLibrary;
   function back() { if (st.phase === 2) st.draft = null; st.phase = Math.max(0, st.phase - 1); render(); }
 
   function _generate() {
+    // GP-2 commit 5: /api/agents/generate returns an AgentGenerationResult
+    // envelope {draft, warnings, ...} — the draft is the `.draft` field, NOT
+    // the whole body. The old `st.draft = d` treated the envelope as the draft,
+    // so st.draft.name / .system_prompt were undefined and the editor rendered
+    // blank. Also honor res.ok: on a 4xx/5xx the body is an error object, not a
+    // draft, so surface it instead of silently binding it as the draft.
     fetch('/api/agents/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: st.text, name_hint: st.name, role_hint: st.role, include_source_as_context: true }),
-    }).then(function (r) { return r.json(); })
-      .then(function (d) { st.draft = d || {}; render(); })
-      .catch(function (e) { var body = document.getElementById('rc-body'); if (body) body.innerHTML = '<div class="rc-loading" style="color:var(--danger)">Generation failed: ' + _esc(String(e)) + '</div>'; });
+    }).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, status: r.status, d: d }; });
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          var detail = (res.d && (res.d.detail || (res.d.error && res.d.error.message))) || ('HTTP ' + res.status);
+          throw new Error(detail);
+        }
+        st.draft = (res.d && res.d.draft) || {};
+        render();
+      })
+      .catch(function (e) { var body = document.getElementById('rc-body'); if (body) body.innerHTML = '<div class="rc-loading" style="color:var(--danger)">Generation failed: ' + _esc(String(e && e.message || e)) + '</div>'; });
   }
   function save() {
     if (!st.draft) return;
@@ -12663,9 +12736,18 @@ window.PromptsLibrary = PromptsLibrary;
     fetch('/api/agents/generate/save', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ draft: st.draft, overwrite: false }),
-    }).then(function (r) { return r.json(); })
-      .then(function (d) { st.agentId = (d && d.agent_id) || (st.draft && st.draft.id); st.phase = 3; render(); if (window.Toast) Toast.success('Agent saved', st.draft.name || st.name); })
-      .catch(function (e) { if (window.Toast) Toast.danger('Save failed', String(e)); });
+    }).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, status: r.status, d: d }; });
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          var detail = (res.d && (res.d.detail || (res.d.error && res.d.error.message))) || ('HTTP ' + res.status);
+          throw new Error(detail);
+        }
+        st.agentId = (res.d && res.d.agent_id) || (st.draft && st.draft.id); st.phase = 3; render();
+        if (window.Toast) Toast.success('Agent saved', st.draft.name || st.name);
+      })
+      .catch(function (e) { if (window.Toast) Toast.danger('Save failed', String(e && e.message || e)); });
   }
   function verify() {
     var id = st.agentId; close();
