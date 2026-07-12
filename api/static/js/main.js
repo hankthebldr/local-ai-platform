@@ -569,6 +569,13 @@ async function loadModels() {
     // see how many models are loaded without expanding the popover.
     _setStripModelCount(models.length);
 
+    // The /v1/models fetch has completed and parsed (empty OR populated).
+    // The zero-model run preflight keys off this so it only blocks a run
+    // when we've CONFIRMED there are no chat models — not during the async
+    // gap before this first fetch resolves (which would false-block a run
+    // kicked off immediately after boot).
+    window._modelsFetched = true;
+
     if (models.length === 0) {
       container.innerHTML = '<div class="model-empty">No models. Run: ollama pull dolphin3</div>';
       try { syncNoModelsBanner(false); } catch (_) {}  // CP-1b
@@ -11962,7 +11969,7 @@ async function dfRunWorkflowLive() {
   // CP-1b: zero-model preflight — a run needs at least one loaded chat model,
   // or every llm step fails at the engine. Fail early with a pull hint rather
   // than kicking off a run that's doomed to error on the first step.
-  if (!(window._chatModels && window._chatModels.length)) {
+  if (window._modelsFetched && !(window._chatModels && window._chatModels.length)) {
     if (window.Toast) Toast.warn('No models loaded', 'Pull a chat model first (e.g. `ollama pull llama3.2:3b`), then run.');
     return;
   }
