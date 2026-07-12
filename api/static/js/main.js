@@ -5561,9 +5561,26 @@ async function loadDocumentsTab() {
 }
 
 async function loadDocumentsList() {
+  const el = document.getElementById('documents-list');
+  if (!el) return;
+  // retries:0 + silent: a down embedding backend answers 503, which Net would
+  // otherwise retry (backoff) and — on network failure — toast on every poll.
+  // We render one calm ErrorPanel with a Retry affordance instead of a
+  // toast-storm. The backend self-heals via _ensure_rag(), so Retry recovers
+  // once the embedding backend is back.
+  const r = await Net.call('/api/documents', { retries: 0, silent: true, init: { method: 'GET' } });
+  if (!r.ok) {
+    ErrorPanel.render(el, {
+      title: 'Documents unavailable',
+      detail: r.status === 503
+        ? 'The embedding backend is offline. Documents heal automatically once it returns.'
+        : (r.error || ('HTTP ' + r.status)),
+      retry: () => loadDocumentsTab(),
+    });
+    return;
+  }
   try {
-    const docs = await Net.getJson('/api/documents');
-    const el = document.getElementById('documents-list');
+    const docs = r.data || [];
     if (!docs.length) {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">No documents yet. Upload above.</div>';
       return;

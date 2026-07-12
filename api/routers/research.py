@@ -75,7 +75,11 @@ def _rag_ground(question: str) -> Dict[str, Any]:
     ``{context, results}``; empty when the RAG backend is unavailable. Never
     raises and never touches the network (local embeddings only)."""
     try:
-        from ..routers.documents import rag_service
+        # Route through _ensure_rag() so a backend that came up mid-session
+        # heals here too — not just on the Documents tab. Returns None while
+        # the embedding backend stays down (best-effort grounding).
+        from ..routers.documents import _ensure_rag
+        rag_service = _ensure_rag()
     except Exception as exc:  # noqa: BLE001 — RAG optional
         logger.debug("research followup RAG unavailable: %s", exc)
         return {"context": "", "results": []}

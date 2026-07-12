@@ -289,3 +289,62 @@ class TestChatRagIntegration:
         finally:
             ctx_mod.context_store = orig_ctx
             prof_mod.profile_service = orig_prof
+
+
+class TestLazyRagHeal:
+    """U13: _ensure_rag() lazily re-initializes the pipeline when the embedding
+    backend was absent at import time but comes up mid-session — no restart."""
+
+    def test_ensure_rag_returns_live_without_reinit(self, monkeypatch):
+        import api.routers.documents as docs
+
+        sentinel = object()
+        monkeypatch.setattr(docs, "rag_service", sentinel)
+
+        def boom():
+            raise AssertionError("must not re-init when already live")
+
+        monkeypatch.setattr(docs, "_init_rag_pipeline", boom)
+        assert docs._ensure_rag() is sentinel
+
+    def test_ensure_rag_heals_after_backend_returns(self, monkeypatch):
+        import api.routers.documents as docs
+
+        # Simulate a backend-absent boot: all three singletons are None.
+        monkeypatch.setattr(docs, "rag_service", None)
+        monkeypatch.setattr(docs, "document_service", None)
+        monkeypatch.setattr(docs, "_embedding_service", None)
+        monkeypatch.setattr(docs, "_rag_last_attempt", 0.0)
+
+        calls = {"n": 0}
+        healed_rag = object()
+        healed_doc = object()
+        emb = MagicMock()
+        emb.get_backend.return_value = "fake"
+
+        def fake_init():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("embedding backend down")
+            return emb, healed_doc, healed_rag
+
+        monkeypatch.setattr(docs, "_init_rag_pipeline", fake_init)
+
+        # First attempt: backend still down → None, globals untouched.
+        assert docs._ensure_rag() is None
+        assert docs.rag_service is None
+        assert calls["n"] == 1
+
+        # Within the throttle window → NO second construction attempt.
+        assert docs._ensure_rag() is None
+        assert calls["n"] == 1
+
+        # Throttle elapses (force last-attempt far in the past) and the backend
+        # is now up → heals AND rebinds the module globals importers read.
+        monkeypatch.setattr(docs, "_rag_last_attempt", 0.0)
+        result = docs._ensure_rag()
+        assert result is healed_rag
+        assert docs.rag_service is healed_rag
+        assert docs.document_service is healed_doc
+        assert docs._embedding_service is emb
+        assert calls["n"] == 2

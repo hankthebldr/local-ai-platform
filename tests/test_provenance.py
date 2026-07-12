@@ -130,6 +130,16 @@ def test_graph_builder_emits_grounding_edges(store, monkeypatch):
     link_types = {link["type"] for link in links}
     assert link_types == {"grounded_on", "activated_skill", "invoked_tool"}
 
+    # U13: the response node carries the FULL response_id (untruncated) so the
+    # Context rail can fetch the exact provenance chain, while the node "id"
+    # stays truncated so the grounding links above still resolve to it.
+    rnode = next(n for n in nodes if n["type"] == "response")
+    assert rnode["response_id"] == "chatcmpl-deadbeef"
+    assert rnode["id"] == "response:chatcmpl-deadbeef"
+    assert rnode["id"] != rnode["response_id"]
+    # Every grounding link's source is the truncated node id, not the full id.
+    assert all(link["source"] == rnode["id"] for link in links)
+
 
 # ── HTTP surface ────────────────────────────────────────────────────────────
 

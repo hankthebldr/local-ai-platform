@@ -167,7 +167,9 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
     # on every request. See test_chat_rag_uses_live_rag_service.
     _context_store = _context_router.context_store
     _profile_service = _profiles_router.profile_service
-    _rag_service = _documents_router.rag_service
+    # _ensure_rag() re-resolves + lazily heals the RAG singleton (returns None
+    # while the embedding backend is down). Cheap when already live.
+    _rag_service = _documents_router._ensure_rag()
 
     # ── Conversation Tracking ─────────────────────────────────────────
     conversation_id = req.headers.get("X-Conversation-ID", str(uuid.uuid4()))

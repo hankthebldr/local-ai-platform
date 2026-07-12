@@ -51,9 +51,13 @@ def ingest_markdown(
     treats RAG indexing as an additive nicety.
     """
     try:
-        # Function-local import of the process-wide singleton. Keeps this module
-        # import-cheap and lets a disabled pipeline be a plain ``None``.
-        from ..routers.documents import document_service
+        # Function-local import + _ensure_rag() so a backend that came up after
+        # boot heals here too. Keeps this module import-cheap and lets a
+        # disabled pipeline be a plain ``None``.
+        from ..routers.documents import _ensure_rag
+        import api.routers.documents as _docs
+        _ensure_rag()
+        document_service = _docs.document_service
     except Exception as e:  # pragma: no cover - import guard
         logger.debug("RAG ingest skipped (documents router unavailable): %s", e)
         return False
