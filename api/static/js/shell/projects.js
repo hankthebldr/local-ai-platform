@@ -27,6 +27,8 @@ export const Projects = (function () {
     _active = id;
     window._activeProject = id;
     document.getElementById('project-badge').textContent = id || '—';
+    // Notify consumers (chat.to-task button state, etc.) without a new global.
+    try { document.dispatchEvent(new CustomEvent('enclave:project-changed', { detail: { id: id || null } })); } catch (_) {}
   }
 
   // Slugify a free-form name → safe project ID. Server enforces the
@@ -161,8 +163,14 @@ export const Projects = (function () {
     inp.click();
   }
 
+  // Active-project getter (U12). Chat.to-task and the plan-ops UI read the
+  // active project through THIS export — not a new window global. shell keeps
+  // mirroring window._activeProject for legacy call sites, but consumers should
+  // import Projects and call active().
+  function active() { return _active; }
+
   return {
-    load, setActive, create, attachCurrentWorkflow, exportBundle, importBundle,
+    load, setActive, active, create, attachCurrentWorkflow, exportBundle, importBundle,
     showCreate, _closeCreate, _submitCreate,
   };
 })();

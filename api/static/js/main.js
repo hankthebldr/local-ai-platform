@@ -1381,6 +1381,52 @@ async function chatSendToResearch() {
   Toast.success('Sent to Research', `Artifact ${art.id || 'saved'}${art.rag_ingested ? ' · RAG-ingested' : ''}`);
 }
 
+// Pivot 4 (U12) — capture the latest assistant answer as an add_task plan-op
+// against the ACTIVE project. Lands PROPOSED like everything AI-originated;
+// requires an active project (button is disabled otherwise, see _syncToTaskBtn).
+async function chatSendToTask() {
+  const pid = Projects.active();
+  if (!pid) {
+    Toast.info('Select a project first', 'Pick a project on the Projects tab, then send the answer as a task.');
+    return;
+  }
+  let lastAssistant = null, lastUser = null;
+  for (let i = chatMetadata.length - 1; i >= 0; i--) {
+    const m = chatMetadata[i];
+    if (!lastAssistant && m.role === 'assistant') { lastAssistant = m; continue; }
+    if (lastAssistant && m.role === 'user') { lastUser = m; break; }
+  }
+  if (!lastAssistant) {
+    Toast.info('Nothing to capture', 'Get an assistant reply first — the latest answer becomes the task.');
+    return;
+  }
+  const title = String((lastUser && lastUser.content) || lastAssistant.content).replace(/\s+/g, ' ').trim().slice(0, 120);
+  const ops = [{ op: 'add_task', title, description: String(lastAssistant.content).slice(0, 4000), column: 'backlog' }];
+  const r = await Net.call(`/api/projects/${encodeURIComponent(pid)}/plan/apply`, {
+    retries: 0,
+    init: {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, (window.AdminAuth ? AdminAuth.authHeaders() : {})),
+      body: JSON.stringify({ ops, source: { agent: 'chat' } }),
+    },
+  });
+  if (!r.ok) { Toast.danger('Capture failed', `HTTP ${r.status}`); return; }
+  const d = (r.data && typeof r.data === 'object') ? r.data : {};
+  Toast.success('Proposed as task', `Project '${pid}' — review it under Projects → Backlog (${d.pending_count || 1} pending).`);
+}
+
+// Reflect the active-project state onto the → Task button (disabled + tooltip
+// when there is no active project). Called on boot and on project change.
+function _syncToTaskBtn() {
+  const btn = document.querySelector('[data-action="chat.to-task"]');
+  if (!btn) return;
+  const pid = Projects.active();
+  btn.disabled = !pid;
+  btn.title = pid
+    ? `Propose the latest answer as a task on project '${pid}'`
+    : 'Select a project first (Projects tab)';
+}
+
 // Config-header wiring — registered ONCE, data-action delegation only.
 Actions.click({
   'chat.pick-tools': () => ChatLaunch.openPicker('tools'),
@@ -1390,7 +1436,11 @@ Actions.click({
   'chat.save-agent': () => { chatSaveAsAgent(); },
   'chat.to-composer': () => { chatSendToComposer(); },
   'chat.to-research': () => { chatSendToResearch(); },
+  'chat.to-task': () => { chatSendToTask(); },
 });
+// Keep the → Task button's disabled state in sync with the active project.
+document.addEventListener('enclave:project-changed', _syncToTaskBtn);
+try { _syncToTaskBtn(); } catch (_) {}
 Actions.change({ 'chat.picker-item': el => ChatLaunch.toggleItem(el) });
 
 // When a composer node is selected, the dashboard chat input engages
@@ -10593,6 +10643,13 @@ Actions.click({ 'shortcuts.close': () => Shortcuts.toggle(false) });
     'proj.docs-save':           () => ProjectsDocs.save(),
     'proj.docs-new':            () => ProjectsDocs.newFile(),
     'proj.docs-refresh':        () => ProjectsDocs.refresh(),
+    // U12 — AI plan-ops + proposals review.
+    'proj.ai-draft-plan':       () => ProjectsBoard.draftPlan(),
+    'proj.ai-groom':            () => ProjectsBoard.groomBacklog(),
+    'proj.ai-status':           () => ProjectsBoard.updateStatusDoc(),
+    'proj.proposals-refresh':   () => ProjectsBoard.loadProposals(),
+    'proj.proposal-accept':     el => ProjectsBoard.acceptProposal(el.dataset.prop),
+    'proj.proposal-reject':     el => ProjectsBoard.rejectProposal(el.dataset.prop),
   });
   Actions.change({
     'proj.backlog-toggle':      el => ProjectsBoard.backlogToggle(el),

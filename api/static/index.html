@@ -474,7 +474,7 @@
          workflows are an Operate concern. id/data-tab stay 'workflow-index'
          (deep-link routes + switchTab remaps unchanged); #wfi-count travels. -->
     <button class="tab-btn" data-tab="workflow-index" onclick="switchTab('workflow-index', this)">Workflows<span class="tab-count" id="wfi-count"></span></button>
-    <button class="tab-btn" data-tab="projects" onclick="switchTab('projects', this)">Projects<span class="tab-count" id="projects-tab-count"></span></button>
+    <button class="tab-btn" data-tab="projects" onclick="switchTab('projects', this)">Projects<span class="tab-count" id="projects-tab-count"></span><span class="tab-count proj-prop-badge" id="proj-proposals-badge" title="Pending AI proposals" hidden></span></button>
     <button class="tab-btn" data-tab="runs" onclick="switchTab('runs', this)">Runs<span class="tab-count" id="runs-tab-count"></span></button>
     <!-- U11: Artifacts — the durable-outputs Operate surface (outputs
          inventory · local-directory workspaces · format sets). It is a
@@ -1192,6 +1192,8 @@
                   title="Append this agent onto the Composer canvas as a workflow step">&rarr; Composer step</button>
           <button type="button" class="action-btn ccfg-pivot" data-action="chat.to-research"
                   title="Capture the latest answer as a durable Research artifact">&rarr; Research</button>
+          <button type="button" class="action-btn ccfg-pivot" data-action="chat.to-task" disabled
+                  title="Select a project first (Projects tab)">&rarr; Task</button>
         </div>
         <div class="ccfg-picker-pop" id="chat-picker-pop" hidden></div>
       </div>
@@ -2075,8 +2077,25 @@
       <div id="projects-tab-placeholder" class="model-empty" style="font-size:0.72rem">Loading projects…</div>
     </div>
 
-    <!-- Backlog segment — grooming table + bulk ops over every task. -->
+    <!-- Backlog segment — grooming table + bulk ops over every task, plus the
+         U12 AI plan-ops bar (Draft plan / Groom backlog / Update status) and
+         the proposals review panel (AI-authored ops land here PROPOSED; the
+         operator accepts/rejects — nothing mutates the board silently). -->
     <div class="proj-seg-panel" id="projects-seg-backlog" role="tabpanel" hidden>
+      <div class="proj-ai-bar" id="proj-ai-bar">
+        <span class="proj-ai-label">AI plan-ops</span>
+        <button class="action-btn xs" data-action="proj.ai-draft-plan"
+                title="Draft a plan-ops proposal from the project's goal + bound docs (local model)">Draft plan</button>
+        <button class="action-btn xs" data-action="proj.ai-groom"
+                title="Propose grooming updates for the current backlog (local model)">Groom backlog</button>
+        <button class="action-btn xs ghost" data-action="proj.ai-status"
+                title="Append a status digest to the project's status doc (expand-only)">Update status doc</button>
+        <span style="flex:1"></span>
+        <button class="action-btn xs ghost" data-action="proj.proposals-refresh"
+                title="Reload pending proposals">Refresh proposals</button>
+      </div>
+      <!-- Proposals review (diff panel) — populated by ProjectsBoard.loadProposals(). -->
+      <div class="proj-proposals" id="proj-proposals" hidden></div>
       <div class="proj-backlog-toolbar" id="proj-backlog-toolbar" hidden>
         <span class="proj-backlog-sel" id="proj-backlog-sel">0 selected</span>
         <span style="flex:1"></span>

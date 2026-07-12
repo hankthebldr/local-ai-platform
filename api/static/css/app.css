@@ -1099,6 +1099,37 @@ select.model-select,
 .proj-bk-open:hover { color: var(--accent); }
 .proj-bk-dim { color: var(--text-muted); }
 
+/* U12 — AI plan-ops bar + proposals review (diff panel) */
+.proj-ai-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; margin-bottom: 8px;
+  border: 1px dashed var(--border); border-radius: 3px; background: var(--bg-sunken);
+}
+.proj-ai-label {
+  font-family: var(--mono); font-size: 0.56rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--accent);
+}
+.proj-proposals { margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; }
+.proj-proposals[hidden] { display: none; }
+.proj-prop-h {
+  font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px;
+}
+.proj-prop-card {
+  border: 1px solid var(--accent-trace); border-left: 2px solid var(--accent);
+  border-radius: 3px; background: var(--bg-elevated, var(--bg-sunken)); padding: 8px 10px;
+}
+.proj-prop-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.proj-prop-src { font-family: var(--mono); font-size: 0.6rem; color: var(--accent); font-weight: 600; }
+.proj-prop-count { font-family: var(--mono); font-size: 0.56rem; color: var(--text-muted); }
+.proj-prop-ts { font-family: var(--mono); font-size: 0.56rem; color: var(--text-muted); }
+.proj-prop-ops { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.proj-prop-ops li { font-size: 0.68rem; color: var(--text-dim); padding-left: 10px; position: relative; }
+.proj-prop-ops li::before { content: "›"; position: absolute; left: 0; color: var(--text-muted); }
+.proj-prop-ops li b { color: var(--text); font-weight: 600; }
+.proj-prop-badge { color: var(--accent); font-family: var(--mono); font-size: 0.56rem; }
+.proj-prop-badge[hidden] { display: none; }
+
 /* ── Timeline ──────────────────────────────────────────────────────── */
 .proj-timeline { display: flex; flex-direction: column; gap: 4px; }
 .proj-tl-lane {

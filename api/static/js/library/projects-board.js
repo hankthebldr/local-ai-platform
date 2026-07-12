@@ -15,6 +15,7 @@ import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Kanban } from './kanban.js';
 import { ProjectsDocs } from './projects-docs.js';
+import { AdminAuth } from '../admin/auth.js';
 
 export const ProjectsBoard = (function () {
   const COLUMNS = ['backlog', 'todo', 'doing', 'review', 'done'];
@@ -225,6 +226,8 @@ export const ProjectsBoard = (function () {
     const toolbar = document.getElementById('proj-backlog-toolbar');
     if (!host) return;
     const pid = _pid();
+    // Refresh AI proposals whenever the Backlog view renders (best-effort).
+    try { loadProposals(); } catch (_) {}
     if (!pid) {
       host.innerHTML = '<div class="model-empty" style="font-size:0.72rem">Pick a project on the Board segment first.</div>';
       if (toolbar) toolbar.hidden = true;
@@ -387,12 +390,213 @@ export const ProjectsBoard = (function () {
     </button>`;
   }
 
+  // ── AI plan-ops + proposals review (U12) ───────────────────────────
+  // AI actions dispatch the frozen-engine project-plan workflow, then POST the
+  // resulting plan-ops to /plan/apply where they land PROPOSED. Nothing touches
+  // the board until the operator accepts a proposal in the review panel.
+
+  function _authHeaders() {
+    try { return AdminAuth.authHeaders ? AdminAuth.authHeaders() : {}; }
+    catch (_) { return {}; }
+  }
+
+  // Poll a run to a terminal status, returning its final run_data (or null).
+  async function _pollRun(runId, { tries = 60, delayMs = 1500 } = {}) {
+    const terminal = new Set(['completed', 'failed', 'error', 'cancelled', 'awaiting_approval']);
+    for (let i = 0; i < tries; i++) {
+      let d = null;
+      try { d = await Net.getJson('/api/workflows/runs/' + encodeURIComponent(runId), { silent: true }); }
+      catch (_) { /* keep polling */ }
+      if (d && terminal.has(d.status)) return d;
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+    return null;
+  }
+
+  // Pull the plan-ops array out of a completed run's workspace, tolerant of the
+  // engine's output-key shapes (workspace.plan, workspace.plan.plan, …).
+  function _extractPlan(runData) {
+    const ws = (runData && runData.workspace) || {};
+    const candidates = [ws.plan, ws.plan && ws.plan.plan, ws.plan && ws.plan.ops];
+    for (const c of candidates) {
+      if (Array.isArray(c)) return c;
+      if (typeof c === 'string') { try { const p = JSON.parse(c); if (Array.isArray(p)) return p; } catch (_) {} }
+    }
+    return null;
+  }
+
+  async function _applyOps(pid, ops, source) {
+    const r = await Net.call('/api/projects/' + encodeURIComponent(pid) + '/plan/apply', {
+      retries: 0,
+      init: {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, _authHeaders()),
+        body: JSON.stringify({ ops, source }),
+      },
+    });
+    if (!r.ok) {
+      Toast.danger('Plan apply failed', typeof r.data === 'string' ? r.data : ('HTTP ' + r.status));
+      return null;
+    }
+    return r.data;
+  }
+
+  let _aiBusy = false;
+  async function _runPlanFlow(kind) {
+    const pid = _pid();
+    if (!pid) { Toast.warn('Pick a project first', 'Choose a project on the Board segment.'); return; }
+    if (_aiBusy) { Toast.info('AI busy', 'A plan is already running.'); return; }
+    const verb = kind === 'groom' ? 'Groom the current backlog' : 'Draft a plan';
+    const goal = window.prompt(verb + ' — what is the goal?', kind === 'groom' ? 'Groom and prioritise the backlog.' : '');
+    if (goal === null) return;
+    _aiBusy = true;
+    Toast.info(kind === 'groom' ? 'Grooming backlog…' : 'Drafting plan…', 'Dispatching the local project-plan workflow.');
+    try {
+      const seed = { project_id: pid, goal: goal || '', docs: '' };
+      const r = await Net.call('/api/workflows/run-async', {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, _authHeaders()),
+          body: JSON.stringify({ workflow_id: 'project-plan', seed }),
+        },
+      });
+      if (!r.ok) { Toast.danger('Dispatch failed', typeof r.data === 'string' ? r.data : ('HTTP ' + r.status)); return; }
+      const runId = r.data && r.data.run_id;
+      if (!runId) { Toast.danger('Dispatch failed', 'No run id returned.'); return; }
+      const runData = await _pollRun(runId);
+      if (!runData || runData.status !== 'completed') {
+        Toast.warn('Plan run did not complete', 'Check the Runs tab (' + esc(runId) + ').');
+        return;
+      }
+      let ops = _extractPlan(runData) || [];
+      if (kind === 'groom') ops = ops.filter(o => o.op === 'update_task' || o.op === 'set_status' || o.op === 'set_milestone');
+      if (!ops.length) { Toast.info('No ops proposed', 'The model returned an empty plan.'); return; }
+      const res = await _applyOps(pid, ops, { run_id: runId, agent: kind === 'groom' ? 'groom-backlog' : 'draft-plan' });
+      if (!res) return;
+      // Best-effort: record the run against the project.
+      try {
+        await Net.call('/api/projects/' + encodeURIComponent(pid) + '/runs', {
+          retries: 0,
+          init: {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, _authHeaders()),
+            body: JSON.stringify({ run_id: runId, workflow_id: 'project-plan', label: (kind === 'groom' ? 'Groom backlog' : 'Draft plan'), origin: 'agent' }),
+          }, silent: true,
+        });
+      } catch (_) {}
+      Toast.success('Proposed ' + res.ops_accepted + ' op' + (res.ops_accepted === 1 ? '' : 's'), 'Review under Backlog → proposals.');
+      await loadProposals();
+    } catch (e) {
+      Toast.danger('AI plan error', String(e && e.message || e));
+    } finally {
+      _aiBusy = false;
+    }
+  }
+
+  function draftPlan() { return _runPlanFlow('draft'); }
+  function groomBacklog() { return _runPlanFlow('groom'); }
+
+  // Status-doc digest via the scribe → workspace expand() (never full rewrite).
+  async function updateStatusDoc() {
+    const pid = _pid();
+    if (!pid) { Toast.warn('Pick a project first'); return; }
+    const ws = 'proj-' + pid;
+    Toast.info('Updating status doc…', 'Appending a digest under a heading (expand-only).');
+    try {
+      const r = await Net.call('/api/workspaces/' + encodeURIComponent(ws) + '/expand', {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, _authHeaders()),
+          body: JSON.stringify({ file: 'notes/status.md', heading: 'Status', agent: 'project-scribe' }),
+        },
+      });
+      if (!r.ok) {
+        Toast.warn('Status update unavailable', r.status === 404 ? 'Bind a docs directory first (Docs segment).' : ('HTTP ' + r.status));
+        return;
+      }
+      Toast.success('Status doc updated', 'See Docs → notes/status.md.');
+    } catch (e) { Toast.danger('Status update error', String(e && e.message || e)); }
+  }
+
+  async function loadProposals() {
+    const host = document.getElementById('proj-proposals');
+    const badge = document.getElementById('proj-proposals-badge');
+    const pid = _pid();
+    if (!host) return;
+    if (!pid) { host.hidden = true; host.innerHTML = ''; if (badge) badge.hidden = true; return; }
+    let props = [];
+    try { props = await Net.getJson('/api/projects/' + encodeURIComponent(pid) + '/proposals', { silent: true }) || []; }
+    catch (_) { host.hidden = true; return; }
+    if (badge) {
+      if (props.length) { badge.textContent = '● ' + props.length; badge.hidden = false; }
+      else badge.hidden = true;
+    }
+    if (!props.length) { host.hidden = true; host.innerHTML = ''; return; }
+    host.hidden = false;
+    host.innerHTML = '<div class="proj-prop-h">Pending AI proposals <span class="proj-bk-dim">(' + props.length + ')</span></div>'
+      + props.map(_proposalCard).join('');
+  }
+
+  function _opLine(op) {
+    const kind = op.op;
+    const before = op.before || {};
+    if (kind === 'add_task') {
+      return '<b>add</b> “' + esc(op.title || '') + '”' + (op.column ? ' → ' + esc(op.column) : '')
+        + (op.priority ? ' · ' + esc(op.priority) : '') + (op.milestone ? ' · ' + esc(op.milestone) : '');
+    }
+    if (kind === 'set_status') {
+      return '<b>move</b> “' + esc(before.title || op.id) + '”: ' + esc(before.column || '?') + ' → ' + esc(op.column || '?');
+    }
+    if (kind === 'set_milestone') {
+      return '<b>milestone</b> “' + esc(before.title || op.id) + '” → ' + esc(op.milestone || '');
+    }
+    const skip = ['op', 'id', 'before', 'ts', 'origin', 'source', 'created_at', 'position', 'proposal_id', 'state', 'plan_op', 'approved_at'];
+    const fields = Object.keys(op).filter(k => !skip.includes(k));
+    return '<b>update</b> “' + esc(before.title || op.id) + '”: ' + esc(fields.join(', ') || '(no fields)');
+  }
+
+  function _proposalCard(p) {
+    const src = (p.source && (p.source.agent || p.source.run_id)) ? esc(p.source.agent || p.source.run_id) : 'agent';
+    const ts = (p.ts || '').replace('T', ' ').slice(0, 16);
+    return `<div class="proj-prop-card" data-prop="${esc(p.proposal_id)}">
+      <div class="proj-prop-head">
+        <span class="proj-prop-src">${src}</span>
+        <span class="proj-prop-count">${p.ops.length} op${p.ops.length === 1 ? '' : 's'}</span>
+        <span class="proj-prop-ts">${esc(ts)}</span>
+        <span style="flex:1"></span>
+        <button class="action-btn xs primary" data-action="proj.proposal-accept" data-prop="${esc(p.proposal_id)}">Accept</button>
+        <button class="action-btn xs danger" data-action="proj.proposal-reject" data-prop="${esc(p.proposal_id)}">Reject</button>
+      </div>
+      <ul class="proj-prop-ops">${p.ops.map(o => '<li>' + _opLine(o) + '</li>').join('')}</ul>
+    </div>`;
+  }
+
+  async function _resolveProposal(propId, action) {
+    const pid = _pid();
+    if (!pid || !propId) return;
+    const r = await Net.call('/api/projects/' + encodeURIComponent(pid) + '/proposals/' + encodeURIComponent(propId) + '/' + action, {
+      retries: 0, init: { method: 'POST', headers: _authHeaders() },
+    });
+    if (!r.ok) { Toast.danger(action + ' failed', typeof r.data === 'string' ? r.data : ('HTTP ' + r.status)); return; }
+    Toast.success(action === 'accept' ? 'Proposal accepted' : 'Proposal rejected');
+    await loadProposals();
+    try { await Kanban.refresh(); } catch (_) {}
+    if (_segment === 'backlog') await renderBacklog();
+  }
+  function acceptProposal(propId) { return _resolveProposal(propId, 'accept'); }
+  function rejectProposal(propId) { return _resolveProposal(propId, 'reject'); }
+
   return {
     init, activate, segment,
     openDrawer, saveDrawer, closeDrawer,
     renderBacklog, renderTimeline,
     backlogToggle, backlogToggleAll,
     backlogBulkMove, backlogBulkPrio, backlogBulkDelete,
+    // U12 — AI plan-ops + proposals
+    draftPlan, groomBacklog, updateStatusDoc,
+    loadProposals, acceptProposal, rejectProposal,
     // exposed for tests / cross-module
     _currentSegment: () => _segment,
   };
