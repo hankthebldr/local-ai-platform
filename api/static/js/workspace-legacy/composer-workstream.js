@@ -141,6 +141,15 @@ export const ComposerWorkstream = (function () {
     _renderInspector({ title: tpl.name || tpl.key, kind: 'template', html });
   }
 
+  // PATTERN = a whole sub-DAG topology (PT-1). The caller (main.js) owns the
+  // shared dfRenderPatternStructure renderer and passes the built HTML in;
+  // this just paints it through the same read-only inspector seam so a canvas
+  // node selection always wins over the drill-down.
+  function inspectPattern(spec) {
+    if (!spec) return;
+    _renderInspector({ title: spec.title || 'Pattern', kind: 'pattern', html: spec.html || '' });
+  }
+
   // CAPABILITY = skill / plugin (tool) / MCP server (tool) detail.
   // cap: { kind:'skill', pluginId, skill } |
   //      { kind:'plugin', plugin, tool? } |
@@ -616,6 +625,7 @@ export const ComposerWorkstream = (function () {
     inspectAgent,
     inspectCapability,
     inspectTemplate,
+    inspectPattern,
     _renderInspector,
     recordRun,
     refresh,

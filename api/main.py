@@ -344,6 +344,9 @@ app.include_router(prompts.router)
 from .routers import tasks as _tasks_router  # noqa: E402 — Task Menu library (LB6)
 
 app.include_router(_tasks_router.router)
+from .routers import patterns as _patterns_router  # noqa: E402 — Patterns library (PT-1)
+
+app.include_router(_patterns_router.router)
 from .routers import projects as _projects_router  # noqa: E402
 
 app.include_router(_projects_router.router)

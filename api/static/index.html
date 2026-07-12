@@ -480,6 +480,7 @@
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <button class="tab-btn" data-tab="prompts" data-action="switch-tab" data-tab-target="prompts">Prompts<span class="tab-count" id="prompts-count"></span></button>
     <button class="tab-btn" data-tab="tasks" data-action="switch-tab" data-tab-target="tasks">Tasks<span class="tab-count" id="tasks-count"></span></button>
+    <button class="tab-btn" data-tab="patterns" data-action="switch-tab" data-tab-target="patterns">Patterns<span class="tab-count" id="patterns-count"></span></button>
     <!-- Skill Lab folded into the Skills tab + Research tab. The
          knowledge graph + deep-research panel live in Research (Build);
          the Skills tab is the unified skill management page. -->
@@ -765,7 +766,8 @@
               <div id="bench-mcps-list"><div class="skeleton skeleton-line short"></div></div>
             </div>
             <div class="workbench-pane" id="bench-patterns" hidden>
-              <div class="workbench-hint">A pattern is a deployment topology. Drag a SIMPLE card for one step of that kind; a COMPLEX card scaffolds a pre-wired, editable sub-DAG.</div>
+              <div class="workbench-hint">A pattern is a deployment topology. Drag a SIMPLE card for one step of that kind; a COMPLEX card scaffolds a pre-wired, editable sub-DAG. Hover a card to drill into its structure.</div>
+              <div style="margin:0 0 8px"><button type="button" class="action-btn xs" data-action="composer.save-as-pattern" title="Save the current canvas as a reusable pattern in the Patterns library">＋ Save canvas as pattern</button></div>
               <div class="df-palette" id="patterns-palette"></div>
             </div>
             <div class="workbench-pane" id="bench-prompts" hidden>
@@ -2797,6 +2799,22 @@
               title="Operator-triggered fetch of the allowlisted remote task catalog (Admin ▸ Sources governs it); nothing fetches on tab activation">⟳ Discover</button>
     </div>
     <div id="tasks-shell"></div>
+  </div>
+
+  <!-- Patterns library (PT-1) — manage/create/edit/promote pattern presets
+       (whole sub-DAG blueprints) that feed the Composer Patterns bench. The
+       LibraryShell mounts into #patterns-shell on first activation; the
+       "Structure" drill-down reuses the same renderer the bench inspector
+       paints. Patterns are local by design — no discovery/egress surface. -->
+  <div class="tab-content" id="tab-patterns" style="display:none">
+    <div class="admin-modal-error" style="background:rgba(0,192,232,0.10);border-color:#00C0E8;color:#00C0E8;margin-bottom:14px;font-size:0.7rem">
+      ℹ Patterns are whole agentic topologies (a pre-wired sub-DAG the Composer scaffolds in one drop). The 8 built-ins ship with the app; edit one to make a deletable user copy, or save the current canvas as a pattern from the Composer's Patterns bench. They feed the bench under a "Library" divider — the built-ins stay first.
+    </div>
+    <div class="models-toolbar" style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+      <button class="action-btn accent" data-action="patterns.new">+ New pattern</button>
+      <span style="flex:1"></span>
+    </div>
+    <div id="patterns-shell"></div>
   </div>
 
   <div class="tab-content" id="tab-admin-mcp" style="display:none">

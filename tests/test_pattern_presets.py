@@ -161,3 +161,36 @@ def test_code_sandbox_id_is_sandbox_path_safe():
     step = PRESET_BY_KEY["code_sandbox"]["steps"][0]
     assert "/" not in step["id"] and "\\" not in step["id"] and ".." not in step["id"]
     assert step["code"]["source"] == "inline" and step["code"]["code"]
+
+
+# ── PT-1 — Patterns library oob catalog == the JS statics ───────────────────
+
+
+def test_patterns_catalog_matches_statics():
+    """PT-1's api/config/patterns_catalog.json (the Patterns library oob layer)
+    mirrors the frozen dfPatternTemplates statics exactly (id↔key, name,
+    complexity, kind, steps). Generated from the JS source of truth — this
+    pins them against drift, and every builtin round-trips WorkflowDefinition
+    (the library's save-time safety rail)."""
+    catalog_doc = json.loads(
+        (
+            Path(__file__).resolve().parent.parent
+            / "api"
+            / "config"
+            / "patterns_catalog.json"
+        ).read_text(encoding="utf-8")
+    )
+    catalog = {c["id"]: c for c in catalog_doc["patterns"]}
+    assert set(catalog) == set(PRESET_BY_KEY), (
+        f"catalog drift vs dfPatternTemplates: {set(catalog) ^ set(PRESET_BY_KEY)}"
+    )
+    assert len(catalog) == 8
+    for key, tpl in PRESET_BY_KEY.items():
+        c = catalog[key]
+        assert c["source"] == "builtin"
+        assert c["name"] == tpl["name"]
+        assert c["complexity"] == tpl["complexity"]
+        assert c["kind"] == tpl["kind"]
+        assert c["steps"] == tpl["steps"], f"{key}: catalog steps drift"
+        # the safety rail the library enforces on every save
+        WorkflowDefinition(**_workflow_for(tpl, steps=c["steps"]))

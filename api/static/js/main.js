@@ -30,6 +30,7 @@ import { LibraryWizard } from './library/wizard.js';
 import { MCPPanel } from './library/mcp.js';
 import { PromptsLibrary } from './library/prompts.js';
 import { TasksPanel } from './library/tasks.js';
+import { PatternsPanel } from './library/patterns.js';
 import { TestPane } from './library/test-pane.js';
 import { RunsTab } from './runs/runs-tab.js';
 import { WorkflowMemory } from './runs/workflow-memory.js';
@@ -168,6 +169,9 @@ function switchTab(name, el) {
   // reload after; the discovery read serves the persisted digest only.
   // Imported binding (no window global) — same posture as ModelsPanel.
   if (name === 'tasks') { try { TasksPanel.activate(); } catch (_) {} }
+  // Patterns library (PT-1) — pattern presets on the shell. Mount once, reload
+  // after. Imported binding (no window global), same posture as TasksPanel.
+  if (name === 'patterns') { try { PatternsPanel.activate(); } catch (_) {} }
   // Projects tab — refresh the Kanban (lists projects + the active
   // board) on every visit. Updates the count chip in the nav too.
   if (name === 'projects') {
@@ -6561,7 +6565,8 @@ function dfInitPatterns() {
       : '';
     return `
       <div class="df-palette-item df-pattern-card" draggable="true"
-           data-action="bench.drag" data-drag-mime="application/df-pattern" data-drag-value="${esc(tpl.key)}"
+           data-action="bench.inspect-pattern" data-drag-mime="application/df-pattern" data-drag-value="${esc(tpl.key)}"
+           data-inspect-key="${esc(tpl.key)}"
            data-pattern="${esc(tpl.key)}" title="${esc(tpl.name)} — ${esc(tpl.desc)}">
         <span class="df-palette-titleblock">
           <span class="df-palette-label">${esc(tpl.name)} ${badge}</span>
@@ -6570,6 +6575,10 @@ function dfInitPatterns() {
         </span>
       </div>`;
   }).join('');
+  // PT-1 — append operator library patterns under a "Library" divider AFTER
+  // the 8 statics (deduped, statics win). Fail-soft: any error leaves the
+  // bench byte-identical. dfPatternTemplates is NEVER mutated.
+  try { fetchComposerPatterns(); } catch (_) {}
 }
 
 // Budget-preset toggle on the Ralph card. Module-scoped state; repaints
@@ -6581,6 +6590,252 @@ Actions.click({
       b.classList.toggle('active', b.dataset.preset === dfRalphBudgetPreset));
   }
 });
+
+// ── PT-1: Patterns drill-down + first-class Patterns library kind ─────────
+// Operator patterns ride their OWN Map + the shared application/df-pattern
+// MIME; the 8-entry dfPatternTemplates statics array stays FROZEN.
+// dfResolvePattern consults the statics FIRST, then the user layer
+// (fail-soft) — an unknown key resolves to null and the drop/scaffold no-ops.
+const dfUserPatterns = new Map();  // key(=user pattern id) -> template-shaped record
+
+function dfResolvePattern(key) {
+  return dfPatternTemplates.find(t => t.key === key)
+      || dfUserPatterns.get(key)
+      || null;
+}
+
+// Read-only drill-down of a pattern's structure — node list + ASCII wiring +
+// the config defaults an operator needs before dropping (ralph halt/budget,
+// loop until-gate, seed.* inputs, provenance). Pure HTML string so ONE
+// renderer serves both the bench inspector (painted into #df-config-panel)
+// and the Patterns library overview. Never throws on a malformed record.
+function dfRenderPatternStructure(tpl) {
+  if (!tpl) return '<div class="model-empty">No pattern selected.</div>';
+  const steps = Array.isArray(tpl.steps) ? tpl.steps : [];
+  const complexity = tpl.complexity
+    || (steps.some(s => s && s.kind && s.kind !== 'llm') ? 'COMPLEX' : 'SIMPLE');
+  const seedRefs = new Set();
+  const cfg = [];
+  const asciiLines = [];
+  const glyph = last => (last ? '└─' : '├─');
+
+  const collect = (s) => {
+    if (!s) return;
+    (s.inputs || []).forEach(r => { if (String(r).startsWith('seed.')) seedRefs.add(String(r)); });
+    if (s.kind === 'ralph' && s.ralph) {
+      const halt = s.ralph.halt || {};
+      if (halt.goal_gate) cfg.push(['halt gate', halt.goal_gate]);
+      const caps = ['max_iterations', 'max_wall_seconds', 'max_total_tokens', 'max_consecutive_failures']
+        .filter(k => halt[k] != null).map(k => `${k}=${halt[k]}`);
+      if (caps.length) cfg.push(['ralph halt', caps.join(', ')]);
+      if (s.ralph.journal_path) cfg.push(['journal', s.ralph.journal_path]);
+    }
+    if (s.kind === 'loop') {
+      if (s.until && s.until.gate) cfg.push(['until gate', s.until.gate]);
+      if (s.max_iterations) cfg.push(['max iterations', String(s.max_iterations)]);
+    }
+    if (s.kind === 'parallel' && s.execution) {
+      cfg.push(['fan-out', `${s.execution.mode || 'auto'} · ${s.execution.failure_policy || 'fail_fast'}`]);
+    }
+    if (s.kind === 'consolidate' && s.consolidate) {
+      cfg.push(['consolidate', `${s.consolidate.target || '?'} · ${s.consolidate.target_name || ''}`.trim()]);
+    }
+    if (s.kind === 'code' && s.code) cfg.push(['code', `${s.code.language || 'python'} · ${s.code.source || 'inline'}`]);
+    if (s.kind === 'a2a' && s.agent_card_url) cfg.push(['a2a card', s.agent_card_url]);
+    (s.body || []).forEach(collect);
+    (s.branches || []).forEach(collect);
+    if (s.gather) collect(s.gather);
+    Object.values(s.workers || {}).forEach(collect);
+  };
+
+  const walkAscii = (s, prefix, last) => {
+    if (!s) return;
+    asciiLines.push(`${prefix}${glyph(last)} ${s.id || '?'}  ·  ${s.kind || 'llm'}`);
+    const childPrefix = prefix + (last ? '    ' : '│   ');
+    const kids = [];
+    (s.body || []).forEach(c => kids.push(c));
+    (s.branches || []).forEach(c => kids.push(c));
+    if (s.gather) kids.push(s.gather);
+    Object.values(s.workers || {}).forEach(w => kids.push(w));
+    kids.forEach((c, i) => walkAscii(c, childPrefix, i === kids.length - 1));
+  };
+
+  if (tpl.budget_presets) {
+    Object.keys(tpl.budget_presets).forEach(p => {
+      const caps = tpl.budget_presets[p] || {};
+      cfg.push([`budget: ${p}`, Object.entries(caps).map(([k, v]) => `${k}=${v}`).join(', ')]);
+    });
+  }
+  steps.forEach(collect);
+  asciiLines.push('seed');
+  steps.forEach((s, i) => walkAscii(s, ' ', i === steps.length - 1));
+
+  const badge = `<span class="df-pattern-badge ${complexity === 'COMPLEX' ? 'complex' : 'simple'}">${esc(complexity)}</span>`;
+  const cfgHtml = cfg.length ? `
+    <div class="prompts-render-label" style="margin-top:12px">// CONFIG DEFAULTS</div>
+    <div style="display:grid;grid-template-columns:130px 1fr;gap:4px 12px;font-size:0.64rem">
+      ${cfg.map(([k, v]) => `<div style="color:var(--text-muted)">${esc(k)}</div><div style="word-break:break-word"><code>${esc(String(v))}</code></div>`).join('')}
+    </div>` : '';
+  const seedHtml = seedRefs.size ? `
+    <div class="prompts-render-label" style="margin-top:12px">// SEED INPUTS</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">${[...seedRefs].map(r => `<span class="df-tag">${esc(r)}</span>`).join('')}</div>` : '';
+
+  return `
+    <div style="display:flex;align-items:baseline;gap:8px;padding:4px 0 8px">
+      <strong style="font-size:0.74rem;color:var(--text)">${esc(tpl.name || tpl.key || tpl.id || 'pattern')}</strong>
+      ${badge}
+      <span class="workbench-item-pill">kind: ${esc(tpl.kind || 'llm')}</span>
+    </div>
+    ${tpl.desc ? `<div style="font-size:0.66rem;color:var(--text-muted);margin-bottom:8px">${esc(tpl.desc)}</div>` : ''}
+    <div class="prompts-render-label">// STRUCTURE (${steps.length} top-level step${steps.length === 1 ? '' : 's'})</div>
+    <pre class="prompts-render-pre" style="white-space:pre;font-size:0.66rem;line-height:1.5;background:var(--bg-alt,rgba(0,0,0,0.2));padding:8px;border:1px solid var(--border);overflow:auto;max-height:280px">${esc(asciiLines.join('\n'))}</pre>
+    ${cfgHtml}
+    ${seedHtml}`;
+}
+
+// Append operator library patterns to #patterns-palette under a "Library"
+// divider AFTER the 8 statics (deduped, statics win). Fail-soft: any error —
+// network, 404 (patterns router absent), empty list — leaves the bench
+// byte-identical. Idempotent (guards on the divider); pass {force:true} to
+// rebuild after a save. Populates dfUserPatterns so drops/inspection resolve.
+async function fetchComposerPatterns(opts) {
+  opts = opts || {};
+  const palette = document.getElementById('patterns-palette');
+  if (!palette) return;
+  const existingDivider = palette.querySelector('[data-lib-divider]');
+  if (existingDivider && !opts.force) return;
+  let rows = [];
+  try {
+    const r = await Net.call('/api/patterns', { silent: true, retries: 0 });
+    if (!r.ok) return;                        // fail-soft — bench untouched
+    rows = (r.data || []).filter(p => p && p.source === 'user');
+  } catch (_) { return; }
+  // Rebuild path: drop any prior library rows + divider first (statics stay).
+  if (existingDivider) existingDivider.remove();
+  palette.querySelectorAll('.df-pattern-lib').forEach(el => el.remove());
+  dfUserPatterns.clear();
+  if (!rows.length) return;                   // nothing to add → identical bench
+  const frag = document.createDocumentFragment();
+  rows.forEach(p => {
+    const rec = {
+      key: p.id, name: p.name || p.id, complexity: p.complexity || 'SIMPLE',
+      kind: p.kind || 'llm', desc: p.desc || '', steps: p.steps || [],
+      budget_presets: p.budget_presets || null,
+    };
+    dfUserPatterns.set(rec.key, rec);
+    frag.appendChild(_dfUserPatternCard(rec));
+  });
+  const divider = document.createElement('div');
+  divider.className = 'df-palette-divider';
+  divider.setAttribute('data-lib-divider', '1');
+  divider.style.cssText = 'margin:10px 4px 4px;padding-top:8px;border-top:1px solid var(--border);' +
+    'font-family:var(--mono);font-size:0.58rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)';
+  divider.textContent = 'Library';
+  palette.appendChild(divider);
+  palette.appendChild(frag);
+}
+
+function _dfUserPatternCard(rec) {
+  const badge = `<span class="df-pattern-badge ${rec.complexity === 'COMPLEX' ? 'complex' : 'simple'}">${esc(rec.complexity)}</span>`;
+  const item = document.createElement('div');
+  item.className = 'df-palette-item df-pattern-card df-pattern-lib';
+  item.draggable = true;
+  // Library pattern cards carry the SAME inspect+drag grammar as the statics.
+  item.dataset.action = 'bench.inspect-pattern';
+  item.dataset.dragMime = 'application/df-pattern';
+  item.dataset.dragValue = rec.key;
+  item.dataset.pattern = rec.key;
+  item.dataset.inspectKey = rec.key;
+  item.title = `${rec.name} — ${rec.desc || ''}`;
+  item.innerHTML = `
+    <span class="df-palette-titleblock">
+      <span class="df-palette-label">${esc(rec.name)} ${badge}</span>
+      <span class="df-pattern-desc">${esc(rec.desc || '')}</span>
+    </span>`;
+  return item;
+}
+
+// composer.save-as-pattern — collect the current canvas' top-level steps via
+// _dfCleanStep (seed + sub-DAG proxies excluded), Confirm, and POST to the
+// Patterns library. The saved pattern joins the bench under "Library".
+async function dfSaveCanvasAsPattern() {
+  if (typeof dfEditor === 'undefined' || !dfEditor) {
+    Toast.warn('Canvas not ready', 'Open the Composer first'); return;
+  }
+  const steps = [];
+  try {
+    const homeData = dfEditor.export().drawflow.Home.data;
+    Object.keys(homeData).map(Number).forEach(nid => {
+      const data = dfNodeData[nid];
+      if (!data || data.is_seed || data._sub_of != null) return;
+      const step = _dfCleanStep(data);
+      if (step) steps.push(step);
+    });
+  } catch (_) { Toast.danger('Save failed', 'Could not read the canvas'); return; }
+  if (!steps.length) { Toast.warn('Nothing to save', 'Add at least one step to the canvas'); return; }
+  const rawId = (document.getElementById('df-wf-id') ? document.getElementById('df-wf-id').value : '') || '';
+  let id = rawId.trim().replace(/[^A-Za-z0-9_-]/g, '_').replace(/^[^A-Za-z0-9]+/, '').slice(0, 80);
+  if (!id) id = 'pattern_' + Date.now().toString(36);
+  const name = (document.getElementById('df-wf-name') ? document.getElementById('df-wf-name').value : '').trim() || id;
+  const composite = steps.some(s => ['ralph', 'loop', 'parallel', 'orchestrator'].indexOf(s.kind) !== -1);
+  const complexity = composite ? 'COMPLEX' : 'SIMPLE';
+  const kind = (steps[steps.length - 1] && steps[steps.length - 1].kind) || 'llm';
+  const ok = await Confirm.ask({
+    title: 'Save canvas as pattern',
+    body: `Save the current canvas (${steps.length} step${steps.length === 1 ? '' : 's'}) as reusable pattern "${id}"? It joins the Patterns library and the Composer bench.`,
+    okLabel: 'Save',
+  });
+  if (!ok) return;
+  const headers = { 'Content-Type': 'application/json' };
+  try { if (window.AdminAuth && AdminAuth.authHeaders) Object.assign(headers, AdminAuth.authHeaders()); } catch (_) {}
+  try {
+    const r = await Net.call('/api/patterns', {
+      retries: 0,
+      init: { method: 'POST', headers, body: JSON.stringify({ id, name, complexity, kind, desc: '', steps, tags: [] }) },
+    });
+    if (!r.ok) { Toast.danger('Save failed', (r.data && r.data.detail) || r.error || `HTTP ${r.status}`); return; }
+    Toast.success('Pattern saved', id);
+    try { await fetchComposerPatterns({ force: true }); } catch (_) {}
+    try { PatternsPanel.load(); } catch (_) {}
+  } catch (e) { Toast.danger('Save failed', e.message); }
+}
+
+Actions.click({ 'composer.save-as-pattern': () => dfSaveCanvasAsPattern() });
+
+// Library "Send to Composer" — scaffold a pattern (static or user) onto the
+// canvas at its visible center. Mirrors dfSendTaskToComposer: switch to the
+// Composer, ensure the editor + user-pattern resolution are ready, then
+// scaffold (SIMPLE routes to dfAddPatternFromTemplate internally).
+async function dfSendPatternToComposer(patternId) {
+  if (!patternId) return;
+  if (typeof switchTab === 'function' && document.getElementById('tab-dashboard') &&
+      !document.getElementById('tab-dashboard').classList.contains('active')) {
+    switchTab('dashboard');
+  }
+  if (typeof ComposerView !== 'undefined' && ComposerView && ComposerView.init) {
+    try { ComposerView.init(); } catch (_) {}
+  } else if (typeof dfInitEditor === 'function') {
+    try { dfInitEditor(); } catch (_) {}
+  }
+  if (typeof dfEditor === 'undefined' || !dfEditor) {
+    if (window.Toast) Toast.warn('Canvas not ready', 'Try again in a moment', { ttl: 1800 });
+    return;
+  }
+  try { await fetchComposerPatterns({ force: true }); } catch (_) {}  // resolve user patterns
+  if (!dfResolvePattern(patternId)) {
+    if (window.Toast) Toast.warn('Pattern not found', patternId, { ttl: 1600 });
+    return;
+  }
+  const canvas = document.getElementById('drawflow-canvas');
+  const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: 800, height: 500 };
+  const precanvas = dfEditor.precanvas || canvas;
+  const pre = precanvas ? precanvas.getBoundingClientRect() : { left: 0, top: 0 };
+  const zoom = (typeof dfEditor.zoom === 'number') ? dfEditor.zoom : 1;
+  const cx = (rect.left + rect.width / 2 - pre.left) / zoom;
+  const cy = (rect.top + rect.height / 2 - pre.top) / zoom;
+  dfScaffoldPattern(patternId, cx, cy);
+  if (window.Toast) Toast.info('Added pattern', patternId, { ttl: 1400 });
+}
 
 // Decorate an engine-schema preset step into canvas node data: the UI
 // fields dfNodeHtml/dfRenderConfigPanel expect, plus the pattern
@@ -6620,7 +6875,7 @@ function dfAddPatternNode(data, x, y) {
 // SIMPLE pattern drop → one node stamping data.kind + its kind config
 // block. COMPLEX keys route through dfScaffoldPattern.
 function dfAddPatternFromTemplate(patternKey, x, y) {
-  const tpl = dfPatternTemplates.find(t => t.key === patternKey);
+  const tpl = dfResolvePattern(patternKey);
   if (!tpl || !dfEditor) return;
   if (tpl.complexity === 'COMPLEX') return dfScaffoldPattern(patternKey, x, y);
   const step = JSON.parse(JSON.stringify(tpl.steps[0]));
@@ -6639,7 +6894,7 @@ function dfAddPatternFromTemplate(patternKey, x, y) {
 // composition rule) whose data objects are the SAME nested objects the
 // parent serializes — editing a leaf edits the emitted nested step.
 function dfScaffoldPattern(patternKey, x, y) {
-  const tpl = dfPatternTemplates.find(t => t.key === patternKey);
+  const tpl = dfResolvePattern(patternKey);
   if (!tpl || !dfEditor) return;
   if (tpl.complexity !== 'COMPLEX') return dfAddPatternFromTemplate(patternKey, x, y);
   const steps = JSON.parse(JSON.stringify(tpl.steps));
@@ -10456,7 +10711,8 @@ function renderPromptsWorkbench(prompts) {
   };
   Actions.on('dragstart', {
     'bench.drag': benchDrag,
-    'bench.add-agent': benchDrag  // agent cards: click adds, drag still works
+    'bench.add-agent': benchDrag,  // agent cards: click adds, drag still works
+    'bench.inspect-pattern': benchDrag  // PT-1 pattern cards: hover inspects, drag scaffolds
   });
   Actions.click({
     'bench.add-agent': el => composerAddAgentAtCenter(el.dataset.agentId),
@@ -10594,10 +10850,23 @@ function _benchCapResolve(el) {
     if (!rec) return;
     _benchInspectDebounced('libtask:' + rec.key, () => ComposerWorkstream.inspectTemplate(rec));
   };
+  // PT-1 — pattern cards (statics + Library rows) drill down into a read-only
+  // structure view painted into #df-config-panel (node-selection still wins).
+  const inspectPatternCard = el => {
+    const key = el.dataset.inspectKey || el.dataset.dragValue || el.dataset.pattern;
+    const tpl = dfResolvePattern(key);
+    if (!tpl) return;
+    _benchInspectDebounced('pattern:' + key, () =>
+      ComposerWorkstream.inspectPattern({
+        title: tpl.name || tpl.key || key,
+        html: dfRenderPatternStructure(tpl),
+      }));
+  };
   Actions.on('mouseover', {
     'bench.add-agent':       inspectAgentCard,   // hover inspects; click still adds (parity)
     'bench.inspect-template': inspectTemplateCard,
     'bench.inspect-library-task': inspectLibraryTaskCard,
+    'bench.inspect-pattern': inspectPatternCard, // PT-1 pattern drill-down
     'bench.inspect-cap':     inspectCapCard,     // plugin / MCP cards (not draggable)
     'bench.drag':            inspectCapCard      // skill cards + nested tool rows
   });
@@ -12139,6 +12408,7 @@ window.PromptsLibrary = PromptsLibrary;
 export {
   AgentGen,
   ComposerSplit,
+  PatternsPanel,
   Projects,
   WorkflowIndex,
   _agentCtxAdd,
@@ -12242,11 +12512,16 @@ export {
   dfRemoveSkill,
   dfRemoveTool,
   dfRenderConfigPanel,
+  dfRenderPatternStructure,
+  dfResolvePattern,
   dfRunWorkflow,
   dfRunWorkflowFromComposer,
   dfRunWorkflowLive,
   dfSave,
+  dfSaveCanvasAsPattern,
   dfScaffoldPattern,
+  dfSendPatternToComposer,
+  fetchComposerPatterns,
   dfScheduleAnchorRefresh,
   dfToggleFullscreen,
   dfUpdateDecisionBranch,
