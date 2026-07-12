@@ -1304,7 +1304,20 @@
           <button class="action-btn xs ghost" onclick="Kanban.refresh()" title="Refresh tasks">⟲</button>
         </span>
       </div>
-      <div class="kanban-board" id="kanban-board">
+      <div class="kanban-board kanban-board-5" id="kanban-board">
+        <!-- Additive columns (U3): backlog + review flank the legacy
+             todo/doing/done trio. The backend column enum is
+             backlog·todo·doing·review·done — legacy trio kept verbatim. -->
+        <div class="kanban-col" data-column="backlog">
+          <header class="kanban-col-head">
+            <span class="kanban-col-title">Backlog</span>
+            <span class="kanban-col-count" data-count></span>
+          </header>
+          <div class="kanban-col-body"
+               data-action="kanban.dropzone" data-status="backlog"></div>
+          <button class="action-btn xs ghost full kanban-col-add"
+                  data-action="kanban.add" data-status="backlog">+ Add task</button>
+        </div>
         <div class="kanban-col" data-column="todo">
           <header class="kanban-col-head">
             <span class="kanban-col-title">To do</span>
@@ -1324,6 +1337,16 @@
                data-action="kanban.dropzone" data-status="doing"></div>
           <button class="action-btn xs ghost full kanban-col-add"
                   data-action="kanban.add" data-status="doing">+ Add task</button>
+        </div>
+        <div class="kanban-col" data-column="review">
+          <header class="kanban-col-head">
+            <span class="kanban-col-title">Review</span>
+            <span class="kanban-col-count" data-count></span>
+          </header>
+          <div class="kanban-col-body"
+               data-action="kanban.dropzone" data-status="review"></div>
+          <button class="action-btn xs ghost full kanban-col-add"
+                  data-action="kanban.add" data-status="review">+ Add task</button>
         </div>
         <div class="kanban-col" data-column="done">
           <header class="kanban-col-head">
@@ -1981,10 +2004,88 @@
         <code>data/projects/&lt;project&gt;/</code>.
       </div>
     </div>
-    <!-- The Kanban panel relocates here at DOMContentLoaded. The
-         placeholder below renders before the relocator runs to avoid
-         a flash of empty space on first paint. -->
-    <div id="projects-tab-placeholder" class="model-empty" style="font-size:0.72rem">Loading projects…</div>
+    <!-- Segmented control (U3): Board · Backlog · Timeline · Docs. The
+         four segments are additive views over the SAME per-project task
+         log. All chrome is data-action delegated (proj.*). -->
+    <div class="projects-segmented" role="tablist" aria-label="Projects views">
+      <button class="proj-seg-btn active" data-action="proj.segment" data-segment="board"
+              role="tab" aria-selected="true" aria-controls="projects-seg-board">Board</button>
+      <button class="proj-seg-btn" data-action="proj.segment" data-segment="backlog"
+              role="tab" aria-selected="false" aria-controls="projects-seg-backlog">Backlog</button>
+      <button class="proj-seg-btn" data-action="proj.segment" data-segment="timeline"
+              role="tab" aria-selected="false" aria-controls="projects-seg-timeline">Timeline</button>
+      <button class="proj-seg-btn" data-action="proj.segment" data-segment="docs"
+              role="tab" aria-selected="false" aria-controls="projects-seg-docs">Docs</button>
+    </div>
+
+    <!-- Board segment — the relocated Kanban panel is re-adopted here by
+         ProjectsBoard.init() (the main.js relocator lands #kanban-panel in
+         #tab-projects first; init() moves it into this segment). The
+         placeholder renders until the relocator + re-adopt run. -->
+    <div class="proj-seg-panel active" id="projects-seg-board" role="tabpanel" aria-labelledby="board">
+      <div id="projects-tab-placeholder" class="model-empty" style="font-size:0.72rem">Loading projects…</div>
+    </div>
+
+    <!-- Backlog segment — grooming table + bulk ops over every task. -->
+    <div class="proj-seg-panel" id="projects-seg-backlog" role="tabpanel" hidden>
+      <div class="proj-backlog-toolbar" id="proj-backlog-toolbar" hidden>
+        <span class="proj-backlog-sel" id="proj-backlog-sel">0 selected</span>
+        <span style="flex:1"></span>
+        <label class="kanban-project-label" for="proj-backlog-bulk-col">move to</label>
+        <select id="proj-backlog-bulk-col" class="model-select" style="font-size:0.7rem;padding:3px 8px">
+          <option value="">— column —</option>
+          <option value="backlog">Backlog</option>
+          <option value="todo">To do</option>
+          <option value="doing">In progress</option>
+          <option value="review">Review</option>
+          <option value="done">Done</option>
+        </select>
+        <button class="action-btn xs" data-action="proj.backlog-bulk-move">Move</button>
+        <label class="kanban-project-label" for="proj-backlog-bulk-prio">priority</label>
+        <select id="proj-backlog-bulk-prio" class="model-select" style="font-size:0.7rem;padding:3px 8px">
+          <option value="">— p —</option>
+          <option value="p0">p0</option>
+          <option value="p1">p1</option>
+          <option value="p2">p2</option>
+          <option value="p3">p3</option>
+        </select>
+        <button class="action-btn xs" data-action="proj.backlog-bulk-prio">Set</button>
+        <button class="action-btn xs danger" data-action="proj.backlog-bulk-delete">Delete</button>
+      </div>
+      <div id="projects-backlog-body" class="proj-backlog-body">
+        <div class="model-empty" style="font-size:0.72rem">Pick a project on the Board segment first.</div>
+      </div>
+    </div>
+
+    <!-- Timeline segment — scheduled tasks laid out by due date, with a
+         dedicated Unscheduled lane for tasks lacking a due_date. -->
+    <div class="proj-seg-panel" id="projects-seg-timeline" role="tabpanel" hidden>
+      <div id="projects-timeline-body" class="proj-timeline-body">
+        <div class="model-empty" style="font-size:0.72rem">Pick a project on the Board segment first.</div>
+      </div>
+    </div>
+
+    <!-- Docs segment — file tree + markdown editor over the project's bound
+         context Workspace (proj-&lt;id&gt;). Writes carry admin headers. -->
+    <div class="proj-seg-panel" id="projects-seg-docs" role="tabpanel" hidden>
+      <div id="projects-docs-body" class="proj-docs-body">
+        <div class="model-empty" style="font-size:0.72rem">Pick a project on the Board segment first.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task drawer (U3) — opens on a deferred single-click of a card
+       (dblclick still opens the edit modal). Shows the full field set,
+       the status/column history trail, linked runs, and docs links. -->
+  <div id="proj-task-drawer" class="proj-drawer" hidden aria-hidden="true">
+    <div class="proj-drawer-scrim" data-action="proj.drawer-close"></div>
+    <aside class="proj-drawer-panel" role="dialog" aria-modal="true" aria-label="Task detail">
+      <header class="proj-drawer-head">
+        <span class="proj-drawer-title" id="proj-drawer-title">Task</span>
+        <button class="proj-drawer-x" data-action="proj.drawer-close" title="Close" aria-label="Close">×</button>
+      </header>
+      <div class="proj-drawer-body" id="proj-drawer-body"></div>
+    </aside>
   </div>
 
   <!-- ═══ TAB: CONTEXT (Operate) ════════════════════════════════════

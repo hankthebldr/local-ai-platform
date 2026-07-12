@@ -22,6 +22,8 @@ import { AssetPeek } from './library/asset-peek.js';
 import { SkillsPanel } from './library/skills.js';
 import { PluginsPanel } from './library/plugins.js';
 import { Kanban } from './library/kanban.js';
+import { ProjectsBoard } from './library/projects-board.js';
+import { ProjectsDocs } from './library/projects-docs.js';
 import { WorkflowIndex } from './library/workflow-index.js';
 import { AgentGen, AgentsPanel } from './library/agents.js';
 import { CatalogPage, CatalogModelsShare } from './library/models.js';
@@ -87,6 +89,8 @@ window.CatalogModelsShare = CatalogModelsShare;
 window.SkillsPanel = SkillsPanel;
 window.PluginsPanel = PluginsPanel;
 window.Kanban = Kanban;
+window.ProjectsBoard = ProjectsBoard;
+window.ProjectsDocs = ProjectsDocs;
 window.Net = Net;
 window.Theme = Theme;
 window.Toast = Toast;
@@ -181,6 +185,10 @@ function switchTab(name, el) {
   // Projects tab — refresh the Kanban (lists projects + the active
   // board) on every visit. Updates the count chip in the nav too.
   if (name === 'projects') {
+    // U3: re-adopt the relocated Kanban panel into the Board segment and
+    // reveal the active segment (Board · Backlog · Timeline · Docs) before
+    // the board fetches, so the segment switcher governs visibility.
+    try { ProjectsBoard.activate(); } catch (_) {}
     if (window.Kanban) {
       try { Kanban.refresh(); } catch (_) {}
     }
@@ -10255,18 +10263,29 @@ Actions.click({ 'shortcuts.close': () => Shortcuts.toggle(false) });
     const card = el.closest('[data-task-id]');
     return card ? card.dataset.taskId : '';
   };
+  // Deferred single-click opens the task drawer; a dblclick (edit modal)
+  // cancels the pending drawer so the two gestures don't both fire. 220ms
+  // is comfortably under the OS double-click threshold on the surfaces we
+  // target and imperceptible for a single click.
+  let _cardTimer = null;
+  const _cancelCardTimer = () => { if (_cardTimer) { clearTimeout(_cardTimer); _cardTimer = null; } };
   Actions.on('dragstart', {
-    'kanban.card': (el, e) => Kanban._dragStart(e, taskIdOf(el))
+    'kanban.card': (el, e) => { _cancelCardTimer(); Kanban._dragStart(e, taskIdOf(el)); }
   });
   Actions.on('dragend', {
     'kanban.card': (el, e) => Kanban._dragEnd(e)
   });
   Actions.on('dblclick', {
-    'kanban.card': el => Kanban.showEditTask(taskIdOf(el))
+    'kanban.card': el => { _cancelCardTimer(); Kanban.showEditTask(taskIdOf(el)); }
   });
   Actions.click({
-    'kanban.edit':   el => Kanban.showEditTask(taskIdOf(el)),
-    'kanban.delete': el => Kanban.deleteTask(taskIdOf(el)),
+    'kanban.card':   el => {
+      const id = taskIdOf(el);
+      _cancelCardTimer();
+      _cardTimer = setTimeout(() => { _cardTimer = null; try { ProjectsBoard.openDrawer(id); } catch (_) {} }, 220);
+    },
+    'kanban.edit':   el => { _cancelCardTimer(); Kanban.showEditTask(taskIdOf(el)); },
+    'kanban.delete': el => { _cancelCardTimer(); Kanban.deleteTask(taskIdOf(el)); },
     'kanban.add':    el => Kanban.showCreateTask(el.dataset.status)
   });
   Actions.on('dragover', {
@@ -10277,6 +10296,30 @@ Actions.click({ 'shortcuts.close': () => Shortcuts.toggle(false) });
   });
   Actions.on('drop', {
     'kanban.dropzone': (el, e) => Kanban.drop(e, el.dataset.status)
+  });
+
+  // ── Projects segments (U3): Board · Backlog · Timeline · Docs ──────────
+  // All proj.* chrome is data-action delegated. The drawer, backlog bulk
+  // ops, timeline cards, and docs editor route here.
+  Actions.click({
+    'proj.segment':             el => ProjectsBoard.segment(el.dataset.segment),
+    'proj.drawer-close':        () => ProjectsBoard.closeDrawer(),
+    'proj.drawer-save':         () => ProjectsBoard.saveDrawer(),
+    'proj.open-run':            el => { const id = el.dataset.run; if (id) { switchTab('runs'); try { if (window.RunsTab && RunsTab.select) RunsTab.select(id); } catch (_) {} } },
+    'proj.open-docs':           () => { ProjectsBoard.closeDrawer(); ProjectsBoard.segment('docs'); },
+    'proj.backlog-open':        el => ProjectsBoard.openDrawer(el.dataset.taskId),
+    'proj.backlog-bulk-move':   () => ProjectsBoard.backlogBulkMove(),
+    'proj.backlog-bulk-prio':   () => ProjectsBoard.backlogBulkPrio(),
+    'proj.backlog-bulk-delete': () => ProjectsBoard.backlogBulkDelete(),
+    'proj.docs-bind':           () => ProjectsDocs.bind(),
+    'proj.docs-open':           el => ProjectsDocs.openFile(el.dataset.path),
+    'proj.docs-save':           () => ProjectsDocs.save(),
+    'proj.docs-new':            () => ProjectsDocs.newFile(),
+    'proj.docs-refresh':        () => ProjectsDocs.refresh(),
+  });
+  Actions.change({
+    'proj.backlog-toggle':      el => ProjectsBoard.backlogToggle(el),
+    'proj.backlog-toggle-all':  el => ProjectsBoard.backlogToggleAll(el),
   });
 })();
 

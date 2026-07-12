@@ -112,7 +112,15 @@ def test_kanban_board_renders_in_projects_tab(signed_in_page):
     page.wait_for_selector("#tab-projects", state="visible", timeout=5_000)
     page.wait_for_selector("#kanban-board", state="visible", timeout=5_000)
     cols = page.locator(".kanban-col[data-column]")
-    assert cols.count() == 3
+    # U3: the board grew two additive columns (backlog + review) flanking the
+    # legacy todo/doing/done trio. Assert the legacy trio is present by its
+    # durable data-column ids rather than pinning an exact count — the enum is
+    # additive and may keep growing.
+    assert cols.count() >= 3
+    for col in ("todo", "doing", "done"):
+        assert page.locator(f'.kanban-col[data-column="{col}"]').count() == 1, (
+            f"legacy column '{col}' must remain present"
+        )
     labels = [c.locator(".kanban-col-title").inner_text().lower() for c in cols.all()]
     assert any("to do" in l for l in labels)
     assert any("in progress" in l for l in labels)

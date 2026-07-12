@@ -54,7 +54,8 @@ export const Kanban = (function () {
     });
     try {
       const tasks = await Net.getJson('/api/projects/' + encodeURIComponent(_activeProject) + '/tasks');
-      const byCol = { todo: [], doing: [], done: [] };
+      // Additive 5-column enum (U3): backlog·todo·doing·review·done.
+      const byCol = { backlog: [], todo: [], doing: [], review: [], done: [] };
       (tasks || []).forEach(t => {
         const col = byCol[t.column] ? t.column : 'todo';
         byCol[col].push(t);
@@ -89,6 +90,21 @@ export const Kanban = (function () {
     }
   }
 
+  // Metadata chips shared by the board card and the drawer header. Only
+  // renders chips for fields that carry a value (U2 extra fields:
+  // priority / due_date / start_date / estimate / milestone / assignee).
+  function chipsHtml(t) {
+    const chips = [];
+    if (t.priority) chips.push(`<span class="kanban-chip prio prio-${esc(t.priority)}">${esc(t.priority)}</span>`);
+    if (t.due_date) chips.push(`<span class="kanban-chip due" title="Due ${esc(t.due_date)}">▸ ${esc(t.due_date)}</span>`);
+    else if (t.start_date) chips.push(`<span class="kanban-chip" title="Starts ${esc(t.start_date)}">◃ ${esc(t.start_date)}</span>`);
+    if (t.estimate != null && t.estimate !== '') chips.push(`<span class="kanban-chip est" title="Estimate">${esc(String(t.estimate))}pt</span>`);
+    if (t.milestone) chips.push(`<span class="kanban-chip ms" title="Milestone">◈ ${esc(String(t.milestone))}</span>`);
+    if (t.assignee) chips.push(`<span class="kanban-chip who" title="Assignee">@${esc(t.assignee)}</span>`);
+    if (t.origin === 'agent') chips.push(`<span class="kanban-chip agent" title="Proposed by an agent">ai</span>`);
+    return chips.length ? `<div class="kanban-card-chips">${chips.join('')}</div>` : '';
+  }
+
   function _renderCard(t) {
     const labels = (t.labels || []).map(l => `<span class="kanban-label">${esc(l)}</span>`).join('');
     const desc = t.description ? `<div class="kanban-card-desc">${esc(t.description.slice(0, 200))}${t.description.length > 200 ? '…' : ''}</div>` : '';
@@ -98,6 +114,7 @@ export const Kanban = (function () {
            data-action="kanban.card">
         <div class="kanban-card-title">${esc(t.title || '')}</div>
         ${desc}
+        ${chipsHtml(t)}
         ${labels ? `<div class="kanban-card-labels">${labels}</div>` : ''}
         <div class="kanban-card-actions">
           <button class="kanban-card-btn" title="Edit"
@@ -283,5 +300,9 @@ export const Kanban = (function () {
     setActive, refresh,
     showCreateTask, showEditTask, showCreateProject, deleteTask, drop,
     _dragStart, _dragEnd, _cancelModal, _submitModal,
+    // U3: exposed for the Board/Backlog/Timeline/Docs segments so they can
+    // read the active project + reuse the metadata-chip rendering.
+    activeProject: () => _activeProject,
+    chipsHtml,
   };
 })();
