@@ -8,7 +8,18 @@ import { Actions } from '../shell/actions.js';
 
 export const RunsTab = (function () {
   let _rows = [];
-  let _activeFilter = 'all';
+  let _activeFilter = 'all';   // Health axis (four inline chips + delegated Degraded)
+  let _typeFilter = 'all';     // Type axis (delegated Type row)
+  let _cursor = null;          // keyset next_cursor from runs-index (null ⇒ page 1)
+  let _exhausted = false;      // server reported no more pages
+  let _scanned = 0;            // cumulative run dirs the server examined across pages
+  let _legacyMode = false;     // runs-index 404'd → fell back to the flat /runs array
+  let _paging = false;         // in-flight page fetch guard (button + sentinel share it)
+  let _gen = 0;                // fetch generation — a reset bumps it so an in-flight
+                               // append (auto-sentinel) can't clobber a fresh filter
+  let _servedQ = '';           // last q value actually sent to the server (debounce anchor)
+  let _qTimer = null;          // debounce handle for search → server refetch
+  let _sentinelObs = null;     // IntersectionObserver over the load-more sentinel
   let _selectedId = null;
   let _editor = null;          // separate drawflow instance for this tab
   let _idMap = {};             // logical step id → drawflow node id
@@ -35,32 +46,122 @@ export const RunsTab = (function () {
     requestAnimationFrame(() => load());
   }
 
-  async function load(retry) {
+  const PAGE_SIZE = 30;
+
+  // Public entry point + the "reset to page 1" path. Every caller that wants a
+  // fresh list (init, Refresh button, a completed poll, cross-tab jumps) rides
+  // this; it clears the cursor and re-fetches from the top.
+  function load(retry) {
+    return _fetchPage({ reset: true, retry });
+  }
+
+  // Append the next keyset page. Shared by the Load-more button and the
+  // IntersectionObserver sentinel (button = the a11y path).
+  function loadMore() {
+    if (_paging || _exhausted || _legacyMode || !_cursor) return Promise.resolve();
+    return _fetchPage({ reset: false });
+  }
+
+  function _queryParams() {
+    const p = new URLSearchParams();
+    p.set('limit', String(PAGE_SIZE));
+    if (_activeFilter && _activeFilter !== 'all') p.set('health', _activeFilter);
+    if (_typeFilter && _typeFilter !== 'all') p.set('type', _typeFilter);
+    const q = ((document.getElementById('runs-tab-search') || {}).value || '').trim();
+    if (q) p.set('q', q);
+    return { params: p, q };
+  }
+
+  async function _fetchPage({ reset, retry }) {
     const box = document.getElementById('runs-tab-rows');
     if (!box) return;
-    // Surface loading explicitly so the "Loading…" placeholder can't
-    // linger if a previous render flushed it.
-    box.innerHTML = '<div class="model-empty">Loading runs…</div>';
+    // Appends coalesce (button + sentinel share the guard); a reset ALWAYS
+    // proceeds and bumps the generation so an in-flight append can't overwrite
+    // the fresh filter when its response finally lands.
+    if (!reset && _paging) return;
+    const myGen = reset ? ++_gen : _gen;
+    _paging = true;
+    if (reset) {
+      _cursor = null;
+      _exhausted = false;
+      _scanned = 0;
+      _teardownSentinel();
+      box.innerHTML = '<div class="model-empty">Loading runs…</div>';
+    }
+    const { params, q } = _queryParams();
+    _servedQ = q;
+    if (_cursor) params.set('cursor', _cursor);
     try {
       // Net.call (not getJson): the 401 branch below needs the status code.
       // retries:0 so Net's backoff doesn't delay the 401 auth-bootstrap retry.
-      const r = await Net.call('/api/workflows/runs?limit=40', { retries: 0 });
+      const r = await Net.call(`/api/workflows/runs-index?${params.toString()}`, { retries: 0, silent: true });
+      // Superseded by a newer reset while this request was in flight — drop the
+      // stale response untouched (the newer fetch owns _paging + the DOM).
+      if (myGen !== _gen) return;
       if (r.status === 401) {
-        // Auth hadn't initialized when the tab first opened. Retry
-        // once after a beat — the global fetch wrapper will inject
-        // the Bearer header now that Auth has bootstrapped.
-        if (!retry) {
+        // Auth hadn't initialized when the tab first opened. Retry once after
+        // a beat — the global fetch wrapper injects the Bearer header now.
+        if (!retry && reset) {
           await new Promise(res => setTimeout(res, 600));
           return load(true);
         }
         box.innerHTML = `<div class="model-empty" style="color:var(--red)">Not signed in — visit Admin to enter your license key.</div>`;
         return;
       }
+      // Legacy fallback: an older backend without runs-index 404s → fetch the
+      // flat /runs array once and render it client-filtered (no paging).
+      if (r.status === 404) {
+        return _loadLegacy(retry);
+      }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = r.data || {};
+      _legacyMode = false;
+      const page = Array.isArray(data.runs) ? data.runs : [];
+      _rows = reset ? page : _rows.concat(page);
+      _cursor = data.next_cursor || null;
+      if (data.exhausted === true || !_cursor) _exhausted = true;
+      _scanned += Number(data.scanned || 0);
+      _updateCount();
+      render();
+    } catch (e) {
+      if (myGen !== _gen) return;
+      if (reset) {
+        box.innerHTML =
+          `<div class="model-empty" style="color:var(--red)">Failed to load runs: ${esc(e.message)}.
+            <br><br><button class="action-btn xs" data-action="runs.load">Retry</button></div>`;
+      } else {
+        // A failed append should not wipe the page already on screen — surface
+        // it on the load-more row and let the operator retry.
+        const btn = document.getElementById('runs-tab-loadmore-btn');
+        if (btn) { btn.disabled = false; btn.textContent = 'Load more — retry'; }
+      }
+    } finally {
+      // Only the current generation owns _paging; a superseded fetch leaves it
+      // to the newer one that already claimed it.
+      if (myGen === _gen) _paging = false;
+    }
+  }
+
+  // Legacy backend path — the flat, unpaged /api/workflows/runs array. Kept as
+  // a graceful fallback; filtering happens client-side in render().
+  async function _loadLegacy(retry) {
+    const box = document.getElementById('runs-tab-rows');
+    if (!box) return;
+    _legacyMode = true;
+    _exhausted = true;
+    _cursor = null;
+    try {
+      const r = await Net.call('/api/workflows/runs?limit=40', { retries: 0 });
+      if (r.status === 401) {
+        if (!retry) { await new Promise(res => setTimeout(res, 600)); return _loadLegacy(true); }
+        box.innerHTML = `<div class="model-empty" style="color:var(--red)">Not signed in — visit Admin to enter your license key.</div>`;
+        return;
+      }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = r.data;
       _rows = Array.isArray(data) ? data : (data.runs || []);
-      const chip = document.getElementById('runs-tab-count');
-      if (chip) chip.textContent = _rows.length ? `(${_rows.length})` : '';
+      _scanned = _rows.length;
+      _updateCount();
       render();
     } catch (e) {
       box.innerHTML =
@@ -69,44 +170,140 @@ export const RunsTab = (function () {
     }
   }
 
+  function _updateCount() {
+    const chip = document.getElementById('runs-tab-count');
+    if (!chip) return;
+    if (!_rows.length) { chip.textContent = ''; return; }
+    // loaded/scanned — the count badge doubles as the scan-progress readout.
+    chip.textContent = _legacyMode ? `(${_rows.length})` : `(${_rows.length}/${_scanned})`;
+  }
+
+  // Health filter — the four inline setFilter chips (All·Running·Completed·Failed)
+  // AND the delegated Degraded chip all route here. Body reroutes to the server
+  // `health=` param and refetches page 1; the inline handler symbol set is
+  // unchanged (golden-pinned), only the body moved from client-filter to server.
   function setFilter(f) {
     _activeFilter = f;
     document.querySelectorAll('.runs-tab-filter').forEach(b => {
       b.classList.toggle('active', b.dataset.filter === f);
     });
-    render();
+    if (_legacyMode) { render(); return; }
+    load();
+  }
+
+  // Type filter — the delegated Type row (All·Manual·Scheduled·Autonomous·Test).
+  function setTypeFilter(t) {
+    _typeFilter = t;
+    document.querySelectorAll('.runs-tab-typechip').forEach(b => {
+      b.classList.toggle('active', b.dataset.type === t);
+    });
+    if (_legacyMode) { render(); return; }
+    load();
+  }
+
+  // Search debounce — the inline `oninput="RunsTab.render()"` calls render()
+  // on every keystroke; render() schedules this when q actually changed so the
+  // server sees a settled query (page-1 refetch), while the already-loaded rows
+  // stay client-filtered for instant feedback in the gap.
+  function _scheduleQRefetch() {
+    if (_qTimer) clearTimeout(_qTimer);
+    _qTimer = setTimeout(() => { _qTimer = null; if (!_legacyMode) load(); }, 280);
+  }
+
+  // Diagnosis line (O6d) — the "why is this row unhealthy" one-liner. Failed
+  // rows name the failing step + error class; degraded rows enumerate the
+  // (non-caveat) reasons. Returns '' for clean rows so healthy runs stay quiet.
+  function _diagnosisText(r) {
+    const health = (r.health || '').toLowerCase();
+    if (health === 'failed') {
+      const parts = [];
+      if (r.failing_step) parts.push(esc(r.failing_step));
+      if (r.error_class) parts.push(esc(r.error_class));
+      return parts.length ? `⚠ ${parts.join(' · ')}` : '⚠ failed';
+    }
+    if (health === 'degraded') {
+      const reasons = (r.degraded_reasons || []).filter(x => x && x !== 'stats_pending');
+      return reasons.length ? `degraded — ${esc(reasons.join(', '))}` : 'degraded';
+    }
+    return '';
   }
 
   function render() {
     const box = document.getElementById('runs-tab-rows');
     if (!box) return;
     const q = (document.getElementById('runs-tab-search') || {}).value || '';
+    // Server mode: q is a server param. When it changed, schedule a debounced
+    // page-1 refetch; the loaded rows below stay client-filtered in the gap.
+    if (!_legacyMode && q.trim() !== _servedQ) _scheduleQRefetch();
     const ql = q.toLowerCase();
     const filtered = _rows.filter(r => {
-      const s = (r.status || '').toLowerCase();
-      if (_activeFilter === 'running'   && !['running', 'queued'].includes(s)) return false;
-      if (_activeFilter === 'completed' && s !== 'completed') return false;
-      if (_activeFilter === 'failed'    && !['failed', 'error'].includes(s)) return false;
+      // Legacy backend carries no health axis — keep the original client-side
+      // status filter for the four chips (Degraded/Type inert in that mode).
+      if (_legacyMode) {
+        const s = (r.status || '').toLowerCase();
+        if (_activeFilter === 'running'   && !['running', 'queued'].includes(s)) return false;
+        if (_activeFilter === 'completed' && s !== 'completed') return false;
+        if (_activeFilter === 'failed'    && !['failed', 'error'].includes(s)) return false;
+        if (_activeFilter === 'degraded') return false;
+      }
       if (!ql) return true;
       const hay = [r.workflow_id, r.run_id, r.status].filter(Boolean).join(' ').toLowerCase();
       return hay.includes(ql);
     });
     if (!filtered.length) {
       box.innerHTML = '<div class="model-empty">No runs match.</div>';
+      _teardownSentinel();
       return;
     }
-    box.innerHTML = filtered.map(r => {
+    const rowsHtml = filtered.map(r => {
       const s = (r.status || 'unknown').toLowerCase();
+      const health = (r.health || '').toLowerCase();
       const ts = r.started_at || r.created_at || '';
       const sel = r.run_id === _selectedId ? ' selected' : '';
+      const diag = _diagnosisText(r);
+      const badge = (health === 'degraded')
+        ? ` <span class="runs-tab-row-health degraded">degraded</span>` : '';
+      const diagLine = diag
+        ? `<span class="runs-tab-row-diag ${esc(health)}">${diag}</span>` : '';
       return `<button type="button" class="btn-unstyled runs-tab-row${sel}" style="width:100%" data-run-id="${esc(r.run_id)}"
                    aria-pressed="${r.run_id === _selectedId}"
                    data-action="runs.select">
         <span class="runs-tab-row-title">${esc(r.workflow_id || '?')}</span>
-        <span class="runs-tab-row-status ${esc(s)}">${esc(s)}</span>
+        <span class="runs-tab-row-status ${esc(s)}">${esc(s)}${badge}</span>
         <span class="runs-tab-row-meta">${esc((r.run_id || '').slice(0, 12))} · ${esc(ts)}</span>
+        ${diagLine}
       </button>`;
     }).join('');
+    // Load-more affordance — button is the a11y path; the sentinel below it
+    // triggers the same handler on scroll (IntersectionObserver). Only in the
+    // server-paged mode with more pages available.
+    const moreRow = (!_legacyMode && !_exhausted)
+      ? `<div class="runs-tab-loadmore-row">
+           <button type="button" class="action-btn xs ghost" id="runs-tab-loadmore-btn"
+                   data-action="runs.load-more">Load more</button>
+           <span class="runs-tab-loadmore-meta">Loaded ${_rows.length} · scanned ${_scanned}</span>
+           <span id="runs-tab-sentinel" aria-hidden="true"></span>
+         </div>`
+      : '';
+    box.innerHTML = rowsHtml + moreRow;
+    _wireSentinel();
+  }
+
+  // (Re)attach the IntersectionObserver to the freshly-rendered sentinel so a
+  // scroll to the bottom of the list auto-loads the next page.
+  function _wireSentinel() {
+    _teardownSentinel();
+    const sentinel = document.getElementById('runs-tab-sentinel');
+    if (!sentinel || typeof IntersectionObserver === 'undefined') return;
+    const root = document.getElementById('runs-tab-rows');
+    _sentinelObs = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) loadMore();
+    }, { root: root || null, rootMargin: '120px' });
+    _sentinelObs.observe(sentinel);
+  }
+
+  function _teardownSentinel() {
+    if (_sentinelObs) { try { _sentinelObs.disconnect(); } catch (_) {} _sentinelObs = null; }
   }
 
   async function select(runId) {
@@ -527,6 +724,17 @@ export const RunsTab = (function () {
       const tag = zombie ? `${run.status || '?'} (stalled)` : (run.status || '?');
       meta.textContent = `${run.workflow_id || '?'} · ${tag} · ${completed}/${planned.length} steps`;
       meta.dataset.status = statusLower;
+    }
+    // Detail-head diagnosis line (O6d) — mirror the row's health readout at the
+    // top of the detail pane, sourced from the cached runs-index row (the run
+    // detail payload has no health axis of its own).
+    const diagEl = document.getElementById('runs-tab-detail-diag');
+    if (diagEl) {
+      const row = _rows.find(r => r.run_id === (run.run_id || _selectedId));
+      const diag = row ? _diagnosisText(row) : '';
+      diagEl.textContent = diag;
+      diagEl.hidden = !diag;
+      diagEl.dataset.health = row ? (row.health || '') : '';
     }
     // Zombie banner above the steps strip — gives the operator a
     // clear surface to mark the run as failed.
@@ -1643,7 +1851,7 @@ export const RunsTab = (function () {
     }
   });
 
-  return { init, load, render, setFilter, select,
+  return { init, load, loadMore, render, setFilter, setTypeFilter, select,
     resumeCurrent, cancelCurrent, pauseCurrent, rerunCurrent, openInComposer,
     toggleStepExpand, toggleStepOutput, toggleBottomDrawer, markFailed,
     openStepDetail, closeStepDetail, openAnchorDetail, pivotResearch, pivotContextGraph,

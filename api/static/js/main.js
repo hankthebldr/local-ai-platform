@@ -12166,6 +12166,11 @@ window.composerStopRun = composerStopRun;
   };
   Actions.click({
     'runs.load':        () => RunsTab.load(),
+    'runs.load-more':   () => RunsTab.loadMore(),
+    // Additive filter chips (F3): the four inline setFilter chips stay verbatim;
+    // the delegated Degraded chip + the whole Type row route here.
+    'runs.filter-health': el => RunsTab.setFilter(el.dataset.health),
+    'runs.filter-type':   el => RunsTab.setTypeFilter(el.dataset.type),
     'runs.select':      el => RunsTab.select(el.dataset.runId),
     'runs.mark-failed': () => RunsTab.markFailed(),
     // CH-1 round-trip pivot: open the current run's workflow on the canvas,

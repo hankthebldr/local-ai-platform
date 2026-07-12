@@ -1812,6 +1812,17 @@
           <button type="button" class="runs-tab-filter" data-filter="running" onclick="RunsTab.setFilter('running')">Running</button>
           <button type="button" class="runs-tab-filter" data-filter="completed" onclick="RunsTab.setFilter('completed')">Completed</button>
           <button type="button" class="runs-tab-filter" data-filter="failed" onclick="RunsTab.setFilter('failed')">Failed</button>
+          <!-- Degraded joins the Health row as a DELEGATED chip (no inline handler) —
+               the four chips above stay byte-for-byte (F3, golden-pinned). -->
+          <button type="button" class="runs-tab-filter" data-filter="degraded" data-health="degraded" data-action="runs.filter-health">Degraded</button>
+        </div>
+        <!-- Type axis — entirely delegated, orthogonal to Health (O6d). -->
+        <div class="runs-tab-type-row">
+          <button type="button" class="runs-tab-typechip active" data-type="all" data-action="runs.filter-type">All</button>
+          <button type="button" class="runs-tab-typechip" data-type="manual" data-action="runs.filter-type">Manual</button>
+          <button type="button" class="runs-tab-typechip" data-type="scheduled" data-action="runs.filter-type">Scheduled</button>
+          <button type="button" class="runs-tab-typechip" data-type="autonomous" data-action="runs.filter-type">Autonomous</button>
+          <button type="button" class="runs-tab-typechip" data-type="test" data-action="runs.filter-type">Test</button>
         </div>
         <div id="runs-tab-rows" class="runs-tab-rows">
           <div class="model-empty">Loading…</div>
@@ -1824,6 +1835,9 @@
         <div class="runs-tab-detail-head" id="runs-tab-detail-head">
           <div class="panel-label" style="margin:0;flex:1">Run Detail</div>
           <span class="ws-run-meta" id="runs-tab-detail-meta" data-testid="run-status" data-status="">Pick a run on the left</span>
+          <!-- Diagnosis line (O6d) — health readout mirrored from the runs-index
+               row; hidden for healthy runs. -->
+          <span class="runs-tab-detail-diag" id="runs-tab-detail-diag" data-health="" hidden></span>
           <!-- Run management toolbar — buttons enable/disable based on
                the run's status. Pause is currently shown disabled with
                a tooltip until the engine grows a step-level pause
