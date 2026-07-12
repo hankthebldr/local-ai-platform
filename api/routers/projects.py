@@ -362,23 +362,47 @@ async def list_project_runs(project_id: str):
     return _read_runs(project_id)
 
 
-@router.post("/{project_id}/runs", dependencies=[Depends(require_master_key)])
-async def add_project_run(project_id: str, body: Dict[str, Any]):
-    run_id = (body.get("run_id") or "").strip()
+def _append_run_ref(
+    project_id: str,
+    *,
+    run_id: str,
+    workflow_id: str | None = None,
+    label: str | None = None,
+    task_id: str | None = None,
+    origin: str = "operator",
+) -> dict:
+    """Append a project-side run ref. Shared by the router endpoint and the
+    enclave-pm plugin's ``pm_log_run`` so both write the identical shape."""
+    run_id = (run_id or "").strip()
     if not run_id:
-        raise HTTPException(status_code=400, detail="run_id is required")
+        raise ValueError("run_id is required")
     ref = {
         "run_id": run_id[:120],
-        "workflow_id": (body.get("workflow_id") or "").strip()[:120] or None,
-        "label": (body.get("label") or "").strip()[:200] or None,
-        "task_id": (body.get("task_id") or "").strip()[:120] or None,
-        "origin": (body.get("origin") or "operator").strip()[:40] or "operator",
+        "workflow_id": (workflow_id or "").strip()[:120] or None,
+        "label": (label or "").strip()[:200] or None,
+        "task_id": (task_id or "").strip()[:120] or None,
+        "origin": (origin or "operator").strip()[:40] or "operator",
         "ts": _dt.utcnow().isoformat() + "Z",
     }
     p = _runs_path(project_id)
     with p.open("a", encoding="utf-8") as f:
         f.write(_json.dumps(ref, default=str) + "\n")
     return ref
+
+
+@router.post("/{project_id}/runs", dependencies=[Depends(require_master_key)])
+async def add_project_run(project_id: str, body: Dict[str, Any]):
+    try:
+        return _append_run_ref(
+            project_id,
+            run_id=body.get("run_id") or "",
+            workflow_id=body.get("workflow_id"),
+            label=body.get("label"),
+            task_id=body.get("task_id"),
+            origin=body.get("origin") or "operator",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ── Docs context workspace bind (C3) ───────────────────────────────────────
@@ -396,6 +420,300 @@ async def bind_context_workspace(project_id: str, body: Dict[str, Any] | None = 
         raise HTTPException(status_code=404, detail="project not found")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+# ── Plan-ops contract (U12 — the O3 AI-PM deliverable) ─────────────────────
+# AI/agent-authored task mutations never touch the board silently. A plan is an
+# array of typed ops; POST /plan/apply lands each op as a PROPOSED event in the
+# same tasks.jsonl (origin:"agent", state:"proposed", shared proposal_id) so
+# normal replay ignores it. The operator reviews via GET /proposals and
+# accepts/rejects; accept re-appends the effective (non-proposed) event so the
+# board materialises it. This module-level surface is what both the router
+# endpoints AND the enclave-pm plugin drive — one contract, no bypass.
+#
+# PLAN_OPS_SCHEMA is the single source of truth for op STRUCTURE. It is mirrored
+# verbatim into docs/superpowers/skills/enclave-pm/SKILL.md and pinned by the
+# drift test (tests/test_project_plan_ops.py) — edit both or neither.
+
+PLAN_OPS_SCHEMA: Dict[str, Any] = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "enclave-pm plan-ops",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "required": ["op"],
+        "additionalProperties": False,
+        "properties": {
+            "op": {
+                "type": "string",
+                "enum": ["add_task", "update_task", "set_status", "set_milestone"],
+            },
+            "id": {"type": "string"},
+            "title": {"type": "string", "maxLength": 240},
+            "description": {"type": "string", "maxLength": 4000},
+            "column": {
+                "type": "string",
+                "enum": ["backlog", "todo", "doing", "review", "done"],
+            },
+            "priority": {"type": "string", "enum": ["p0", "p1", "p2", "p3"]},
+            "due_date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+            "start_date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+            "estimate": {"type": "number", "minimum": 0, "maximum": 16},
+            "milestone": {"type": "string", "maxLength": 80},
+            "labels": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+        },
+        "allOf": [
+            {
+                "if": {"properties": {"op": {"const": "add_task"}}},
+                "then": {"required": ["op", "title"]},
+            },
+            {
+                "if": {"properties": {"op": {"const": "update_task"}}},
+                "then": {"required": ["op", "id"]},
+            },
+            {
+                "if": {"properties": {"op": {"const": "set_status"}}},
+                "then": {"required": ["op", "id", "column"]},
+            },
+            {
+                "if": {"properties": {"op": {"const": "set_milestone"}}},
+                "then": {"required": ["op", "id", "milestone"]},
+            },
+        ],
+    },
+}
+
+
+class ProposalCapError(Exception):
+    """Raised when a project is already at the 50-pending-proposal cap."""
+
+
+def _validate_plan_structure(ops: Any) -> None:
+    """jsonschema-validate the ops array STRUCTURE. Raises ValueError (→400)."""
+    import jsonschema
+
+    try:
+        jsonschema.validate(ops, PLAN_OPS_SCHEMA)
+    except jsonschema.ValidationError as exc:
+        raise ValueError(f"plan schema violation: {exc.message}")
+
+
+def _op_fields(op: Dict[str, Any], evt: dict) -> None:
+    """Copy the whitelisted mutable fields from an op onto an event, reusing the
+    same coercion the REST task routes use. HTTPException(400) from the coercer
+    is converted to ValueError so it surfaces as a PER-OP error, not a 400."""
+    try:
+        _coerce_extra_fields(op, evt)
+    except HTTPException as exc:
+        raise ValueError(str(exc.detail))
+
+
+def _op_to_event(op: Dict[str, Any], current: dict) -> dict:
+    """Turn one validated op into a persistable task event (without the
+    proposed/proposal_id stamping, which the caller adds). Raises ValueError for
+    semantic failures (unknown target id, bad column) → per-op error."""
+    kind = op["op"]
+    if kind == "add_task":
+        title = (op.get("title") or "").strip()
+        if not title:
+            raise ValueError("add_task requires a non-empty title")
+        column = op.get("column") or "todo"
+        if column not in COLUMNS:
+            raise ValueError("column must be " + "|".join(COLUMNS))
+        tid = f"task_{int(_dt.utcnow().timestamp() * 1000):x}_{_uuid.uuid4().hex[:6]}"
+        evt = {
+            "id": tid,
+            "title": title[:240],
+            "description": (op.get("description") or "")[:4000],
+            "column": column,
+            "position": int(op.get("position") or _dt.utcnow().timestamp()),
+            "labels": list(op.get("labels") or [])[:8],
+            "created_at": _dt.utcnow().isoformat() + "Z",
+        }
+        _op_fields(op, evt)
+        return evt
+    tid = (op.get("id") or "").strip()
+    if not tid:
+        raise ValueError(f"{kind} requires a task id")
+    if tid not in current:
+        raise ValueError(f"unknown task id '{tid}'")
+    if kind == "update_task":
+        evt = {"id": tid}
+        for k in ("title", "description", "labels"):
+            if k in op:
+                evt[k] = op[k]
+        if "column" in op:
+            if op["column"] not in COLUMNS:
+                raise ValueError("column must be " + "|".join(COLUMNS))
+            evt["column"] = op["column"]
+        _op_fields(op, evt)
+        return evt
+    if kind == "set_status":
+        col = op.get("column")
+        if col not in COLUMNS:
+            raise ValueError("column must be " + "|".join(COLUMNS))
+        return {"id": tid, "column": col}
+    if kind == "set_milestone":
+        ms = (str(op.get("milestone") or "").strip())[:80]
+        if not ms:
+            raise ValueError("set_milestone requires a milestone")
+        return {"id": tid, "milestone": ms}
+    raise ValueError(f"unknown op '{kind}'")
+
+
+def apply_plan(
+    project_id: str, ops: Any, source: Dict[str, Any] | None = None
+) -> dict:
+    """Land a plan as a single PROPOSED batch. Structural failures raise
+    ValueError (→400); the 50-pending cap raises ProposalCapError (→409);
+    semantically-invalid ops are skipped and returned in ``errors``.
+
+    Shared by POST /plan/apply and the enclave-pm plugin's ``pm_plan_apply``."""
+    if not isinstance(ops, list):
+        raise ValueError("plan must be an array of ops")
+    _validate_plan_structure(ops)
+    if _pending_proposal_count(project_id) >= MAX_PENDING_PROPOSALS:
+        raise ProposalCapError(
+            f"project '{project_id}' has {MAX_PENDING_PROPOSALS} pending proposals"
+        )
+    current = {t["id"]: t for t in _read_tasks(project_id)}
+    proposal_id = _new_proposal_id()
+    src = {
+        "run_id": (source or {}).get("run_id"),
+        "agent": (source or {}).get("agent"),
+    }
+    events: list[dict] = []
+    errors: list[dict] = []
+    for i, op in enumerate(ops):
+        try:
+            evt = _op_to_event(op, current)
+        except ValueError as exc:
+            errors.append({"index": i, "op": op.get("op"), "error": str(exc)})
+            continue
+        evt["origin"] = "agent"
+        evt["state"] = "proposed"
+        evt["proposal_id"] = proposal_id
+        evt["plan_op"] = op["op"]
+        evt["source"] = src
+        events.append(evt)
+    for evt in events:
+        _append_event(project_id, evt)
+    return {
+        "proposal_id": proposal_id if events else None,
+        "ops_accepted": len(events),
+        "errors": errors,
+        "pending_count": _pending_proposal_count(project_id),
+    }
+
+
+def read_proposals(project_id: str) -> list[dict]:
+    """Return pending (un-accepted, un-rejected) proposals with their ops and,
+    for mutate ops, the current before-state so the diff panel can render."""
+    props: dict[str, dict] = {}
+    resolved: set[str] = set()
+    for evt in _iter_events(project_id):
+        pid = evt.get("proposal_id")
+        if not pid:
+            continue
+        if evt.get("op") == "reject" or evt.get("approved_at"):
+            resolved.add(pid)
+            continue
+        if evt.get("state") == "proposed":
+            p = props.setdefault(
+                pid,
+                {
+                    "proposal_id": pid,
+                    "ts": evt.get("ts"),
+                    "source": evt.get("source") or {},
+                    "ops": [],
+                },
+            )
+            op = {
+                k: v
+                for k, v in evt.items()
+                if k not in ("state", "proposal_id", "plan_op")
+            }
+            op["op"] = evt.get("plan_op")
+            p["ops"].append(op)
+    current = {t["id"]: t for t in _read_tasks(project_id)}
+    out = []
+    for pid, p in props.items():
+        if pid in resolved:
+            continue
+        for op in p["ops"]:
+            tid = op.get("id")
+            op["before"] = current.get(tid) if tid in current else None
+        out.append(p)
+    out.sort(key=lambda p: p.get("ts") or "")
+    return out
+
+
+def accept_proposal(project_id: str, proposal_id: str) -> dict:
+    """Materialise a pending proposal: re-append each proposed event stripped of
+    its ``state`` flag and stamped ``approved_at`` so normal replay picks it up."""
+    pending = {p["proposal_id"] for p in read_proposals(project_id)}
+    if proposal_id not in pending:
+        raise KeyError(proposal_id)
+    now = _dt.utcnow().isoformat() + "Z"
+    count = 0
+    for evt in list(_iter_events(project_id)):
+        if evt.get("proposal_id") != proposal_id or evt.get("state") != "proposed":
+            continue
+        eff = {k: v for k, v in evt.items() if k not in ("state", "ts", "plan_op")}
+        eff["approved_at"] = now
+        _append_event(project_id, eff)
+        count += 1
+    return {"accepted": proposal_id, "ops": count}
+
+
+def reject_proposal(project_id: str, proposal_id: str) -> dict:
+    """Annul a pending proposal with a single reject marker (auditable)."""
+    pending = {p["proposal_id"] for p in read_proposals(project_id)}
+    if proposal_id not in pending:
+        raise KeyError(proposal_id)
+    _append_event(project_id, {"proposal_id": proposal_id, "op": "reject"})
+    return {"rejected": proposal_id}
+
+
+@router.post(
+    "/{project_id}/plan/apply", dependencies=[Depends(require_master_key)]
+)
+async def plan_apply(project_id: str, body: Dict[str, Any]):
+    ops = body.get("ops") if isinstance(body, dict) else None
+    source = body.get("source") if isinstance(body, dict) else None
+    try:
+        return apply_plan(project_id, ops, source=source)
+    except ProposalCapError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/{project_id}/proposals")
+async def list_proposals(project_id: str):
+    return read_proposals(project_id)
+
+
+@router.post(
+    "/{project_id}/proposals/{proposal_id}/accept",
+    dependencies=[Depends(require_master_key)],
+)
+async def accept_proposal_ep(project_id: str, proposal_id: str):
+    try:
+        return accept_proposal(project_id, proposal_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="proposal not found or resolved")
+
+
+@router.post(
+    "/{project_id}/proposals/{proposal_id}/reject",
+    dependencies=[Depends(require_master_key)],
+)
+async def reject_proposal_ep(project_id: str, proposal_id: str):
+    try:
+        return reject_proposal(project_id, proposal_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="proposal not found or resolved")
 
 
 @router.post("/import")

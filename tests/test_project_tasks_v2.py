@@ -315,8 +315,9 @@ def test_master_gated_writes_401_with_auth_on(client, isolate, monkeypatch):
 
 
 def test_read_routes_carry_no_master_gate():
-    """No project READ route declares require_master_key; only runs-POST and
-    context-workspace do."""
+    """No project READ route declares require_master_key; only the write
+    surfaces do (runs-POST + context-workspace from U2; plan/apply + proposal
+    accept/reject from U12)."""
     from api.middleware import require_master_key
     from api.routers import projects as pr
 
@@ -332,6 +333,9 @@ def test_read_routes_carry_no_master_gate():
     assert gated == {
         "POST /api/projects/{project_id}/runs",
         "POST /api/projects/{project_id}/context-workspace",
+        "POST /api/projects/{project_id}/plan/apply",
+        "POST /api/projects/{project_id}/proposals/{proposal_id}/accept",
+        "POST /api/projects/{project_id}/proposals/{proposal_id}/reject",
     }
 
 

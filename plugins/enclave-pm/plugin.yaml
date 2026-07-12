@@ -1,0 +1,55 @@
+id: enclave-pm
+name: "Enclave PM"
+version: "1.0.0"
+description: >-
+  Drive the Enclave project board from a workflow step or external agent.
+  Proposals-only: every mutation lands as a state:"proposed" plan-op that the
+  operator must accept — there is no silent-write path. In-process thin wrappers
+  over the same service the /api/projects plan-ops router uses.
+author: "enclave"
+
+tools:
+  - id: "pm_plan_apply"
+    file: "tools.py"
+    function: "pm_plan_apply"
+    description: >-
+      Submit a plan-ops JSON array against a project. Each op lands PROPOSED
+      (never applied) pending operator accept. Returns proposal_id, ops_accepted
+      and a per-op errors array.
+    parameters:
+      project_id:
+        type: string
+        required: true
+        description: "Target project id."
+      ops_json:
+        type: string
+        required: true
+        description: >-
+          A JSON array of plan-ops. Ops: add_task | update_task | set_status |
+          set_milestone. See the enclave-pm SKILL.md for the full schema.
+  - id: "pm_list_tasks"
+    file: "tools.py"
+    function: "pm_list_tasks"
+    description: "List the current (accepted) tasks on a project board."
+    parameters:
+      project_id:
+        type: string
+        required: true
+        description: "Target project id."
+  - id: "pm_log_run"
+    file: "tools.py"
+    function: "pm_log_run"
+    description: "Record a workflow run ref against a project (best-effort trace)."
+    parameters:
+      project_id:
+        type: string
+        required: true
+        description: "Target project id."
+      run_id:
+        type: string
+        required: true
+        description: "The run id to log."
+      label:
+        type: string
+        required: false
+        description: "A human label for the run."

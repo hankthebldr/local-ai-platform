@@ -1,0 +1,83 @@
+# Project Plan — Draft a plan-ops proposal for a project board
+#
+# The backend of the Projects "Draft plan" action (U12). A single local LLM step
+# reads the project's bound docs + goal and emits a plan-ops JSON array (the
+# enclave-pm contract). The step's output_schema IS the plan-ops schema, so the
+# engine's built-in JsonSchemaHook auto-gates the model output — no engine code,
+# just YAML + the frozen hook. The frontend takes the validated array and POSTs
+# it to POST /api/projects/{id}/plan/apply, where every op lands PROPOSED for
+# operator review (nothing mutates the board silently).
+#
+#   START (seed.project_id, seed.docs, seed.goal)
+#     → plan  (role_ref: pm-plan-ops → plan-ops array)
+#   END (plan)
+
+id: project-plan
+name: "Project Plan (plan-ops)"
+schema_version: 1
+description: |
+  Turn a project's docs + a goal into a reviewable plan-ops proposal for its
+  task board. Pure local LLM; output is a plan-ops JSON array gated by the
+  step's output_schema. Dispatched by the Projects "Draft plan" action.
+
+context:
+  inputs:
+    - key: project_id
+      description: "The project whose board the plan targets"
+    - key: goal
+      description: "What the operator wants planned"
+    - key: docs
+      description: "Concatenated bound-docs context (optional)"
+
+defaults:
+  role: reasoning
+  temperature: 0.4
+  max_tokens: 4096
+  retries: 1
+
+steps:
+  - id: plan
+    name: "Draft plan-ops"
+    depends_on: []
+    prompt:
+      role_ref: pm-plan-ops
+      task: |
+        Read the project goal and any provided docs context, then propose a
+        small, ordered plan for the board. Emit ONLY the plan-ops JSON array as
+        specified by your role — no prose, no code fence.
+      constraints:
+        - "Output ONLY a JSON array of plan-ops. No prose, no markdown fence."
+        - "Prefer 3–8 ordered ops a person could act on today."
+        - "Use add_task for new work; reference existing tasks by exact id."
+    inputs:
+      - seed.project_id
+      - seed.goal
+      - seed.docs
+    outputs:
+      - plan
+    output_format: json
+    output_schema:
+      type: array
+      items:
+        type: object
+        required: [op]
+        additionalProperties: false
+        properties:
+          op:
+            type: string
+            enum: [add_task, update_task, set_status, set_milestone]
+          id: {type: string}
+          title: {type: string, maxLength: 240}
+          description: {type: string, maxLength: 4000}
+          column:
+            type: string
+            enum: [backlog, todo, doing, review, done]
+          priority: {type: string, enum: [p0, p1, p2, p3]}
+          due_date: {type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$"}
+          start_date: {type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$"}
+          estimate: {type: number, minimum: 0, maximum: 16}
+          milestone: {type: string, maxLength: 80}
+          labels:
+            type: array
+            items: {type: string}
+            maxItems: 8
