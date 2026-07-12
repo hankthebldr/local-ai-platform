@@ -40,9 +40,27 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 class PromptComposer:
     """Composes a 5-part prompt from role, context, task, constraints, schema."""
 
-    def __init__(self, roles_dir: Path, templates_dir: Path):
+    def __init__(
+        self,
+        roles_dir: Path,
+        templates_dir: Path,
+        user_roles_dir: Path | None = None,
+    ):
         self.roles_dir = Path(roles_dir)
         self.templates_dir = Path(templates_dir)
+        # GP-2 / P0-9 (Blocker 1): layered role resolution at RUN time — a
+        # user-layer role (LB0-U3 copy-on-write, written to
+        # user_storage_root/prompts/roles by prompts.py) must SHADOW the
+        # shipped oob role, the same user>oob order prompts.py::_resolve uses.
+        # The engine constructs PromptComposer(roles_dir, templates_dir) with
+        # no user layer (that construction line stays byte-clean / frozen), so
+        # when the arg is None we resolve the user layer OURSELVES via the same
+        # deployment resolver prompts.py consults. A missing/undetectable dir
+        # is a silent no-op (oob-only behavior, identical to before).
+        if user_roles_dir is not None:
+            self.user_roles_dir: Path | None = Path(user_roles_dir)
+        else:
+            self.user_roles_dir = self._default_user_roles_dir()
         self._env = Environment(
             loader=FileSystemLoader(str(self.templates_dir)),
             autoescape=select_autoescape(disabled_extensions=("jinja",), default=False),
@@ -98,18 +116,53 @@ class PromptComposer:
         user = self._build_user_message(resolved_inputs or {})
         return ComposedPrompt(system=system, user=user, params=params or {})
 
+    @staticmethod
+    def _default_user_roles_dir() -> Path | None:
+        """user_storage_root/prompts/roles via the deployment resolver — the
+        same layer prompts.py writes copy-on-write edits into. None when no
+        deployment is detected (bare unit tests), which degrades to oob-only."""
+        try:
+            from .deployment import _get_current
+
+            return _get_current().user_storage_root / "prompts" / "roles"
+        except Exception:  # noqa: BLE001 — no deployment / import cycle guard
+            return None
+
+    @staticmethod
+    def _resolve_in_layer(base: Path, ref: str) -> Path | None:
+        """Return base/<ref>.md IFF it exists AND is contained in base (per-
+        layer containment: a crafted ref can never escape either root). None
+        when absent so the caller can fall through to the next layer."""
+        root = base.resolve()
+        path = (base / f"{ref}.md").resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:
+            raise ValueError(f"role_ref '{ref}' resolves outside roles directory")
+        return path if path.is_file() else None
+
     def _load_role(self, ref: str | None, inline: str | None) -> str:
         if ref:
             cached = self._role_cache.get(ref)
             if cached is not None:
                 return cached
-            roles_root = self.roles_dir.resolve()
-            path = (self.roles_dir / f"{ref}.md").resolve()
-            # Containment check: reject role_ref values that escape roles_dir
-            try:
-                path.relative_to(roles_root)
-            except ValueError:
-                raise ValueError(f"role_ref '{ref}' resolves outside roles directory")
+            # Layered resolution: user shadows oob (mirrors prompts.py::_resolve).
+            path: Path | None = None
+            if self.user_roles_dir is not None:
+                path = self._resolve_in_layer(self.user_roles_dir, ref)
+            if path is None:
+                # oob layer. Containment is enforced here too; a missing oob
+                # file surfaces as the same read error the pre-layered code
+                # raised (FileNotFoundError), preserving the caller contract.
+                root = self.roles_dir.resolve()
+                candidate = (self.roles_dir / f"{ref}.md").resolve()
+                try:
+                    candidate.relative_to(root)
+                except ValueError:
+                    raise ValueError(
+                        f"role_ref '{ref}' resolves outside roles directory"
+                    )
+                path = candidate
             text = path.read_text(encoding="utf-8")
             self._role_cache[ref] = text
             return text
