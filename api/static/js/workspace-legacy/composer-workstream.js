@@ -178,6 +178,17 @@ export const ComposerWorkstream = (function () {
             _inspBlock('Description', cap.tool.description || '')
           : _inspChips('Tools', (srv.tools || []).map(t => t.name || t.id)) +
             _inspBlock('Description', srv.description || ''));
+    } else if (cap.kind === 'prompt') {
+      // PB-1 — a saved role/template. Reads its summary record (no body on
+      // the list endpoint) so the inspector stays a cheap, read-only peek.
+      const p = cap.prompt || {};
+      title = p.name || p.id || 'prompt';
+      html =
+        _inspKv('Kind', p.kind || 'role') +
+        _inspKv('Ref', p.id || '?') +
+        _inspKv('Provenance', p.provenance || 'oob') +
+        _inspChips('Variables', p.variables || []) +
+        _inspBlock('Summary', p.summary || '');
     } else {
       return;
     }

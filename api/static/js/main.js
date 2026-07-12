@@ -7832,11 +7832,20 @@ function dfRenderConfigPanel(nodeId) {
             </select>
           </div>
         </div>
-        ${data._from_agent ? `<div style="margin-top:6px;font-size:0.56rem;color:var(--text-muted);letter-spacing:0.04em">forked from agent <code style="color:var(--accent)">${esc(data._from_agent)}</code></div>` : ''}
+        ${data._from_agent ? `<div class="df-provenance-chip">forked from agent <code>${esc(data._from_agent)}</code></div>` : ''}
+        ${data._from_prompt ? `<div class="df-provenance-chip">prompt <code>${esc(data._from_prompt)}</code></div>` : ''}
       </div>
       ${dfSafetyRailsHtml(nodeId, data)}
       <div style="padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="font-size:0.56rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600">Prompt</div>
+        ${!(data.kind && data.kind !== 'llm') ? `<div style="display:flex;gap:4px;margin-bottom:6px">
+          <select class="model-select" style="font-size:0.64rem;padding:3px 6px;width:100%"
+                  data-action="prompt.pick-config"
+                  title="Inline a saved prompt as this step's system prompt — a point-in-time snapshot, not a live reference.">
+            <option value="">Attach a saved prompt…</option>
+            ${(_benchPrompts || []).map(p => `<option value="${esc(p.kind + ':' + p.id)}">${esc(p.name || p.id)} · ${esc(p.kind)}</option>`).join('')}
+          </select>
+        </div>` : ''}
         <textarea class="chat-input" style="min-height:80px;font-size:0.66rem;resize:vertical"
           data-action="df.node-field" data-field="system_prompt">${esc(data.system_prompt)}</textarea>
       </div>
@@ -8208,14 +8217,30 @@ function dfDeleteNode(nodeId) {
     return root ? Number(root.dataset.nodeId) : NaN;
   };
   const fieldOpts = e => e.type === 'input' ? { live: true } : { commit: true };
-  const nodeField = (el, e) => dfUpdateNodeData(nodeIdOf(el), el.dataset.field, el.value, fieldOpts(e));
+  const nodeField = (el, e) => {
+    const nid = nodeIdOf(el);
+    // PB-1 — a manual edit of the system prompt breaks the saved-prompt link,
+    // so the provenance chip must not keep claiming the (now-diverged) source.
+    if (el.dataset.field === 'system_prompt' && dfNodeData[nid] && dfNodeData[nid]._from_prompt) {
+      delete dfNodeData[nid]._from_prompt;
+    }
+    dfUpdateNodeData(nid, el.dataset.field, el.value, fieldOpts(e));
+  };
   const branch    = (el, e) => dfUpdateDecisionBranch(nodeIdOf(el), Number(el.dataset.idx), el.value, fieldOpts(e));
   Actions.input({ 'df.node-field': nodeField, 'df.branch': branch });
   Actions.change({
     'df.node-field': nodeField,
     'df.branch': branch,
     'df.node-set':    el => dfUpdateNodeData(nodeIdOf(el), el.dataset.field, el.value),
-    'df.gate-update': el => dfUpdateGate(nodeIdOf(el), Number(el.dataset.idx), el.dataset.field, el.value)
+    'df.gate-update': el => dfUpdateGate(nodeIdOf(el), Number(el.dataset.idx), el.dataset.field, el.value),
+    // PB-1 — node-config prompt picker: inline the chosen saved prompt via the
+    // same dfAttachPromptToNode seam the bench drag uses; reset to placeholder.
+    'prompt.pick-config': el => {
+      const val = el.value;
+      if (!val) return;
+      dfAttachPromptToNode(nodeIdOf(el), val);
+      el.value = '';
+    }
   });
   Actions.click({
     'df.gate-add':      el => dfAddGate(nodeIdOf(el)),
@@ -9978,6 +10003,14 @@ function composerSwitchBench(bench, el) {
 // resolve ids → objects here, handing the object to
 // ComposerWorkstream.inspect*() — no cross-module state, no globals.
 let _benchAgents = [];
+// PB-1 — the Prompts bench cache. Holds the merged (oob+user) role/template
+// summaries the 7th bench renders + drag-attaches; hooks are excluded (they
+// are engine presets, not composable system prompts). The hover-inspector
+// resolves cards back to these records in _benchCapResolve.
+let _benchPrompts = [];
+// Drag MIME for the Prompts bench (parity with SKILL_DRAG_MIME). Value is
+// `<kind>:<id>`; the drop handler + node-config picker both key off it.
+const PROMPT_DRAG_MIME = 'application/df-prompt';
 const _benchCaps = { plugins: [], mcps: [] };
 
 async function loadWorkbenches() {
@@ -10031,6 +10064,21 @@ async function loadWorkbenches() {
   } catch (e) {
     renderWorkbenchError('bench-agents-list', e.message);
   }
+
+  // Prompts (PB-1) — the saved role/template library. Reads are open (no
+  // master key); hooks are filtered client-side. Populates the bench cards
+  // AND the node-config prompt picker's option list (both read _benchPrompts).
+  try {
+    const r = await Net.call('/api/prompts');
+    if (r.ok) {
+      _benchPrompts = (r.data || []).filter(p => p && p.kind !== 'hook');
+      renderPromptsWorkbench(_benchPrompts);
+    } else {
+      renderWorkbenchError('bench-prompts-list', `HTTP ${r.status}`);
+    }
+  } catch (e) {
+    renderWorkbenchError('bench-prompts-list', e.message);
+  }
 }
 
 // ── AgentIcons ─────────────────────────────────────────────────────────────
@@ -10078,6 +10126,7 @@ const AgentIcons = (() => {
     plugin:     _S('<path d="M9 3v4H5v6h4v4M15 3v4h4v6h-4v4M9 7h6M9 17h6"/>'),
     mcp:        _S('<rect x="3" y="5" width="18" height="6" rx="1"/><rect x="3" y="13" width="18" height="6" rx="1"/><circle cx="7" cy="8" r="0.8" fill="currentColor"/><circle cx="7" cy="16" r="0.8" fill="currentColor"/><path d="M11 8h7M11 16h7"/>'),
     tool:       _S('<path d="M14.7 5.3a4 4 0 00-5.3 5.3l-6 6 2.7 2.7 6-6a4 4 0 005.3-5.3l-2 2-1.4-1.4 2-2z"/>'),
+    prompt:     _S('<rect x="4" y="4" width="16" height="13" rx="2"/><path d="M8 9h8M8 12.5h5"/><path d="M8 17l-2.5 3v-3"/>'),
     server:     'mcp',
     extension:  'plugin',
     // Aliases that map common YAML keywords from older configs.
@@ -10167,6 +10216,7 @@ const AgentIcons = (() => {
     plugin:      'green',
     mcp:         'purple',
     tool:        'cyan',
+    prompt:      'accent',
     server:      'purple',
     extension:   'green',
   };
@@ -10364,6 +10414,38 @@ function renderMcpsWorkbench(servers) {
   }).join('');
 }
 
+// PB-1 — Prompts bench. Saved roles/templates render as draggable cap-cards
+// sharing the agent-card grammar. Drag payload: mime application/df-prompt,
+// value `<kind>:<id>` (e.g. `role:python_developer`). Dropping onto an LLM
+// step inlines the RESOLVED prompt body into data.system_prompt as a
+// point-in-time snapshot (dfAttachPromptToNode) — never a live role_ref.
+function renderPromptsWorkbench(prompts) {
+  const el = document.getElementById('bench-prompts-list');
+  if (!el) return;
+  if (!prompts || !prompts.length) {
+    el.innerHTML = '<div class="model-empty" style="font-size:0.62rem">No saved prompts yet. Author one under Library → Prompts.</div>';
+    return;
+  }
+  el.innerHTML = prompts.map(p => {
+    const val = `${p.kind}:${p.id}`;
+    const tok = p.token_estimate ? `<span class="cap-card-meta">~${esc(String(p.token_estimate))} tok</span>` : '';
+    return _capCard({
+      iconKey: 'prompt',
+      title: p.name || p.id,
+      subtitle: p.summary || '',
+      pill: p.kind,
+      pillKind: p.provenance === 'user' ? '' : 'dim',
+      drag: { mime: PROMPT_DRAG_MIME, value: val },
+      inspect: { kind: 'prompt', id: val },
+      titleAttr: 'Drag onto an LLM step to inline this prompt as its system prompt',
+      body: `<div class="cap-card-foot">
+        <code class="cap-card-id">${esc(p.id)}</code>
+        ${tok}
+      </div>`,
+    });
+  }).join('');
+}
+
 // Delegated actions for the composer benches (agents / skills / plugins /
 // MCP rails). One generic dragstart reads data-drag-mime/data-drag-value;
 // agent cards also add-on-click (with keyboard parity for the role=button
@@ -10455,6 +10537,11 @@ function _benchCapResolve(el) {
   if (kind === 'mcp') {
     const s = _benchCaps.mcps.find(x => x.id === el.dataset.capId);
     return s ? { kind: 'mcp', server: s } : null;
+  }
+  if (kind === 'prompt' || el.dataset.dragMime === PROMPT_DRAG_MIME) {
+    const val = el.dataset.capId || el.dataset.dragValue || '';
+    const p = _benchPrompts.find(x => `${x.kind}:${x.id}` === val);
+    return p ? { kind: 'prompt', prompt: p } : null;
   }
   if (kind === 'skill' || el.dataset.dragMime === 'application/df-skill') {
     const [pluginId, skillId] = (el.dataset.capId || el.dataset.dragValue || '').split('::');
@@ -10557,10 +10644,11 @@ function _benchCapResolve(el) {
   document.addEventListener('drop', (e) => {
     const canvas = document.getElementById('drawflow-canvas');
     if (!canvas || !canvas.contains(e.target)) return;
-    const skillRef = e.dataTransfer.getData('application/df-skill');
-    const toolRef  = e.dataTransfer.getData('application/df-tool');
-    const mcpRef   = e.dataTransfer.getData('application/df-mcp');
-    if (!skillRef && !toolRef && !mcpRef) return;
+    const skillRef  = e.dataTransfer.getData('application/df-skill');
+    const toolRef   = e.dataTransfer.getData('application/df-tool');
+    const mcpRef    = e.dataTransfer.getData('application/df-mcp');
+    const promptRef = e.dataTransfer.getData(PROMPT_DRAG_MIME);
+    if (!skillRef && !toolRef && !mcpRef && !promptRef) return;
     // Find the node under the cursor
     const nodeEl = e.target.closest('.drawflow-node');
     if (!nodeEl) {
@@ -10572,6 +10660,9 @@ function _benchCapResolve(el) {
     const nodeId = parseInt(nodeIdMatch[1], 10);
     const data = dfNodeData[nodeId];
     if (!data) return;
+    // PB-1 — a saved prompt inlines into system_prompt (its own attach seam +
+    // llm-only guard); it never touches skills/tools, so branch out early.
+    if (promptRef) { dfAttachPromptToNode(nodeId, promptRef); return; }
     data.skills = data.skills || [];
     data.tools  = data.tools  || [];
     if (skillRef) { if (!data.skills.includes(skillRef)) data.skills.push(skillRef); }
@@ -10588,6 +10679,48 @@ function _benchCapResolve(el) {
     }
   }, true);
 })();
+
+// PB-1 — attach a saved prompt to a step as its system prompt.
+// promptRef is `<kind>:<id>` (role/template). We inline the RESOLVED body as
+// a point-in-time snapshot into data.system_prompt (identical to the Agents
+// fork, which copies a.system_prompt) — NOT a live role_ref, so the step
+// never re-resolves against the layered prompt library at run time and edits
+// stay local. data._from_prompt records provenance for the config-panel chip;
+// a manual textarea edit clears it (see the df.node-field handler). Guarded to
+// LLM steps only: seed + composite (ralph/loop/parallel) nodes have no
+// system-prompt slot, so a drop there toasts and bails. Shared by the bench
+// drag-drop path AND the node-config prompt picker.
+async function dfAttachPromptToNode(nodeId, promptRef) {
+  const data = dfNodeData[nodeId];
+  if (!data) return;
+  // llm-only: seed nodes render their own config; composite kinds carry a
+  // nested sub-DAG, not a prompt (mirror the is-pattern-composite test).
+  if (data.is_seed || (data.kind && data.kind !== 'llm')) {
+    Toast.warn('Prompts attach to LLM steps only',
+      'Seed and composite (loop / parallel / ralph) steps have no system prompt.');
+    return;
+  }
+  const sep = String(promptRef).indexOf(':');
+  if (sep < 0) return;
+  const kind = promptRef.slice(0, sep);
+  const pid = promptRef.slice(sep + 1);
+  if (kind === 'hook') {
+    Toast.warn('Hooks are not system prompts', 'Attach a role or template instead.');
+    return;
+  }
+  try {
+    const r = await Net.call(`/api/prompts/${encodeURIComponent(kind)}/${encodeURIComponent(pid)}`);
+    if (!r.ok) { Toast.danger(`Could not load prompt '${pid}'`, `HTTP ${r.status}`); return; }
+    const body = (r.data && r.data.body) || '';
+    data._from_prompt = `${kind}:${pid}`;
+    // commit:true repaints the canvas card + (if selected) re-renders the
+    // config panel, so the provenance chip + textarea reflect the snapshot.
+    dfUpdateNodeData(nodeId, 'system_prompt', body, { commit: true });
+    Toast.success('Prompt attached', `${pid} inlined as the system prompt for ${data.id}.`);
+  } catch (e) {
+    Toast.danger('Attach failed', e.message);
+  }
+}
 
 // Detach helpers — used by the chips on the canvas node + the config
 // panel's attachments section. Both write back through dfUpdateNodeData
@@ -12080,6 +12213,7 @@ export {
   dfAddPatternFromTemplate,
   dfAddSkill,
   dfAddTool,
+  dfAttachPromptToNode,
   dfAutoChain,
   dfAutoLayout,
   dfClearConfigPanel,
@@ -12203,6 +12337,7 @@ export {
   renderMarkdownBasic,
   renderMcpsWorkbench,
   renderPluginsWorkbench,
+  renderPromptsWorkbench,
   renderProvenanceRail,
   renderResearchResults,
   renderRunsPerfBand,

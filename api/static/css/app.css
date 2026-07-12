@@ -5393,6 +5393,10 @@ button.ws-signal-chip { cursor: pointer; transition: border-color 0.15s, backgro
   100% { box-shadow: none; }
 }
 .df-config-label { font-size: 0.54rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
+/* PB-1 — step provenance chips (forked-from-agent, attached saved prompt).
+   One shared style; the mono ref reads in the teal accent. */
+.df-provenance-chip { margin-top: 6px; font-size: 0.56rem; color: var(--text-muted); letter-spacing: 0.04em; }
+.df-provenance-chip code { color: var(--accent); font-family: var(--mono); }
 .df-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; background: var(--cyan-ghost); border: 1px solid var(--cyan-dim); font-size: 0.58rem; color: var(--cyan); margin: 2px; border-radius: 2px; }
 .df-tag-remove { cursor: pointer; opacity: 0.6; font-size: 0.7rem; }
 .df-tag-remove:hover { opacity: 1; color: var(--red); }

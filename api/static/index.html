@@ -738,6 +738,8 @@
             <button type="button" class="workbench-tab"        data-bench="mcps"    onclick="composerSwitchBench('mcps', this)">MCPs</button>
             <!-- BU4: wired via the Actions router (bench.switch), not inline -->
             <button type="button" class="workbench-tab"        data-bench="patterns" data-action="bench.switch">Patterns</button>
+            <!-- PB-1: 7th bench — saved prompts (roles/templates), Actions-wired -->
+            <button type="button" class="workbench-tab"        data-bench="prompts"  data-action="bench.switch">Prompts</button>
           </div>
           <div class="workbench-body">
             <div class="workbench-pane" id="bench-steps">
@@ -765,6 +767,10 @@
             <div class="workbench-pane" id="bench-patterns" hidden>
               <div class="workbench-hint">A pattern is a deployment topology. Drag a SIMPLE card for one step of that kind; a COMPLEX card scaffolds a pre-wired, editable sub-DAG.</div>
               <div class="df-palette" id="patterns-palette"></div>
+            </div>
+            <div class="workbench-pane" id="bench-prompts" hidden>
+              <div class="workbench-hint">A saved prompt is a reusable persona. Drag one onto an LLM step to inline its text as that step's system prompt — a point-in-time snapshot, not a live reference. Edit the prompt on the step to break the link.</div>
+              <div id="bench-prompts-list"><div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line short"></div></div>
             </div>
           </div>
         </div>
