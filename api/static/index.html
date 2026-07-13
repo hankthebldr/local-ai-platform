@@ -456,6 +456,10 @@
       </button>
     </div>
   </header>
+  </div><!-- /.shell — closes here so .tab-nav / #main-content / .footer remain
+             direct <body> children; the left-rail grid targets body>.tab-nav etc.
+             (regression fix: .shell had been left open, wrapping the whole app,
+             which killed the sidebar grid + the internal main scroll). -->
 
   <!-- TAB NAVIGATION — flat list with Build / Operate / Library section
        labels. The labels orient the operator; they carry real meaning for
@@ -3465,8 +3469,6 @@
       <div class="footer-meta" id="footer-version">Enclave v1.1.1 · by Henry Reed</div>
     </div>
   </div>
-
-</div>
 
 <script type="module" src="/static/js/shell/legacy-bridge.js"></script>
 <div class="scaffold-modal-backdrop" id="scaffold-modal-backdrop">
