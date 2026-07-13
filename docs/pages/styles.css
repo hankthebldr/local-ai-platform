@@ -682,3 +682,35 @@ footer a:hover { color: var(--accent); }
   .cta { flex-direction: column; align-items: flex-start; }
   .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
 }
+
+/* ── CONSOLE (feature screenshots) ─────────────────────────────────── */
+.shots { display: flex; flex-direction: column; gap: 1.75rem; margin-top: 2.5rem; }
+.shot {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+.shot img { display: block; width: 100%; height: auto; }
+.shot figcaption {
+  padding: 1rem 1.25rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border-soft);
+}
+.shot figcaption strong { color: var(--text); font-weight: 500; }
+/* The rail is a tall portrait capture — cap it and sit its caption beside it. */
+.shot-rail { display: grid; grid-template-columns: minmax(0, 230px) 1fr; align-items: stretch; }
+.shot-rail img { max-height: 560px; width: auto; margin: 1.25rem auto; align-self: center; }
+.shot-rail figcaption {
+  border-top: none;
+  border-left: 1px solid var(--border-soft);
+  align-self: center;
+}
+@media (max-width: 640px) {
+  .shot-rail { grid-template-columns: 1fr; }
+  .shot-rail img { max-height: 460px; }
+  .shot-rail figcaption { border-left: none; border-top: 1px solid var(--border-soft); }
+}
