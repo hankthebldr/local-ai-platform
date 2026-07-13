@@ -208,3 +208,6 @@ workflows-private/
 agents-private/
 plugins-private/
 docs/seed-private/
+
+# DR-1 draft-publish e2e test artifact
+workflows/dr1-e2e-publish.yaml
