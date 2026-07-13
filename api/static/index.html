@@ -945,7 +945,10 @@
          Active Run shows progress for whatever run was last kicked
          off; History tails the run log. All three are populated by
          the same JS module so the bottom strip stays in sync. -->
-    <div class="panel composer-workstream" id="composer-workstream" style="margin-top:12px">
+    <!-- Defaults to minimized (tabs-only preview) to free canvas space;
+         clicking a tab or selecting a canvas node auto-expands it for detail
+         (ComposerWorkstream._ensureExpanded), and ▾/▴ toggles manually. -->
+    <div class="panel composer-workstream collapsed" id="composer-workstream" style="margin-top:12px">
       <span class="corner-tr"></span><span class="corner-bl"></span>
       <div class="workstream-tabs" role="tablist">
         <button type="button" class="workstream-tab active" data-ws="step"
@@ -985,7 +988,8 @@
         <button type="button" class="action-btn xs ghost panel-collapse-btn"
                 id="workstream-collapse-btn"
                 onclick="toggleComposerWorkstream()"
-                title="Collapse / expand this panel">▾</button>
+                aria-controls="composer-workstream" aria-expanded="false"
+                title="Expand / collapse this panel">▴</button>
       </div>
 
       <div class="workstream-body">

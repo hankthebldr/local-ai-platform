@@ -11872,7 +11872,10 @@ function toggleComposerWorkstream(force) {
   const willCollapse = force === undefined ? !panel.classList.contains('collapsed') : !!force;
   panel.classList.toggle('collapsed', willCollapse);
   const btn = document.getElementById('workstream-collapse-btn');
-  if (btn) btn.textContent = willCollapse ? '▴' : '▾';
+  if (btn) {
+    btn.textContent = willCollapse ? '▴' : '▾';
+    btn.setAttribute('aria-expanded', String(!willCollapse));
+  }
 }
 
 // ── ComposerSplit ────────────────────────────────────────────────────
