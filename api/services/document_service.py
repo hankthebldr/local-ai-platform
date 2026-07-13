@@ -29,6 +29,21 @@ SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
 COLLECTION_NAME = "enclave-docs"
 
 
+def _auto_reindex_enabled() -> bool:
+    """Opt-in self-heal: when the persisted Chroma collection is incompatible
+    with the active embedding backend (e.g. its dimension changed after a
+    switch from sentence-transformers 384-dim to Ollama nomic 768-dim), drop
+    the dead collection and rebuild it empty at the active dimension instead
+    of hard-failing RAG init. Default OFF — a dim-incompatible collection is
+    unqueryable, so this trades unrecoverable vectors for a working RAG, and
+    the operator opts in explicitly."""
+    return os.getenv("ENCLAVE_EMBEDDING_AUTO_REINDEX", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
 class UnsupportedFormat(Exception):
     """Raised when an uploaded file's extension is not supported."""
 
@@ -116,15 +131,34 @@ class DocumentService:
             existing = self._client.get_collection(name=COLLECTION_NAME)
             compatible, warning = collection_compatible(existing.metadata, desc)
             if not compatible:
-                raise EmbeddingBackendMismatch(
-                    f"Collection '{COLLECTION_NAME}' was created with {existing.metadata}, "
-                    f"but EmbeddingService reports {desc}. Restore the original backend, "
-                    f"set ENCLAVE_EMBEDDING_ALLOW_REBIND=true to reuse a same-family "
-                    f"collection, or delete {self._chroma_dir} to re-ingest."
-                )
-            if warning:
-                logger.warning(warning)
-            self._collection = existing
+                if _auto_reindex_enabled():
+                    logger.warning(
+                        "Embedding backend changed (collection=%s, active=%s). "
+                        "ENCLAVE_EMBEDDING_AUTO_REINDEX is on — dropping the "
+                        "incompatible '%s' collection and rebuilding it empty at "
+                        "the active dimension. Previously-ingested documents must "
+                        "be re-ingested.",
+                        existing.metadata,
+                        desc,
+                        COLLECTION_NAME,
+                    )
+                    self._client.delete_collection(name=COLLECTION_NAME)
+                    self._collection = self._client.create_collection(
+                        name=COLLECTION_NAME, metadata=desc
+                    )
+                else:
+                    raise EmbeddingBackendMismatch(
+                        f"Collection '{COLLECTION_NAME}' was created with {existing.metadata}, "
+                        f"but EmbeddingService reports {desc}. Restore the original backend, "
+                        f"set ENCLAVE_EMBEDDING_ALLOW_REBIND=true to reuse a same-family "
+                        f"collection, set ENCLAVE_EMBEDDING_AUTO_REINDEX=true to drop + "
+                        f"rebuild the collection at the new dimension, or delete "
+                        f"{self._chroma_dir} to re-ingest."
+                    )
+            else:
+                if warning:
+                    logger.warning(warning)
+                self._collection = existing
         except Exception as e:
             if isinstance(e, EmbeddingBackendMismatch):
                 raise
