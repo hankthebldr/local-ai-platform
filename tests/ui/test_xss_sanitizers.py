@@ -17,6 +17,24 @@ import pytest
 BASE_URL = os.environ.get("ENCLAVE_PLAYWRIGHT_BASE_URL", "http://localhost:8000")
 
 
+def _server_up() -> bool:
+    import requests
+
+    try:
+        return requests.get(f"{BASE_URL}/health", timeout=3).status_code == 200
+    except Exception:
+        return False
+
+
+# These are live-browser tests. Without this guard the pytest-playwright `page`
+# fixture ERRORs at setup when no dev server / browser is available (e.g. CI),
+# instead of skipping — matches the tests/ui/_server_up() convention used by
+# every other Playwright suite here (the module docstring already promises it).
+pytestmark = pytest.mark.skipif(
+    not _server_up(), reason=f"Enclave dev server not reachable at {BASE_URL}"
+)
+
+
 @pytest.fixture()
 def dom_module(page):
     page.goto(f"{BASE_URL}/")

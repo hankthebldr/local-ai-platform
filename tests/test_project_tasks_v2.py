@@ -318,7 +318,6 @@ def test_read_routes_carry_no_master_gate():
     """No project READ route declares require_master_key; only the write
     surfaces do (runs-POST + context-workspace from U2; plan/apply + proposal
     accept/reject from U12)."""
-    from api.middleware import require_master_key
     from api.routers import projects as pr
 
     gated = set()
@@ -326,8 +325,16 @@ def test_read_routes_carry_no_master_gate():
         dep = getattr(route, "dependant", None)
         if not dep:
             continue
-        calls = [getattr(d, "call", None) for d in dep.dependencies]
-        if require_master_key in calls:
+        # Compare by function NAME, not object identity: when another test in
+        # the session reloads api.middleware, require_master_key is rebound to a
+        # new object while the router's already-built routes still reference the
+        # original — an identity `in` check then yields an empty set (a test-
+        # pollution flake that only bites in the full suite). Name is reload-proof.
+        call_names = [
+            getattr(getattr(d, "call", None), "__name__", "")
+            for d in dep.dependencies
+        ]
+        if "require_master_key" in call_names:
             for m in getattr(route, "methods", set()) or set():
                 gated.add(f"{m} {route.path}")
     assert gated == {
