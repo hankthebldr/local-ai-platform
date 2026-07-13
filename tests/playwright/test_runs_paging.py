@@ -64,6 +64,15 @@ def test_pager_navigates_pages(signed_in_page, base_url):
     # Page 1: Prev disabled (we're at the top), pager pinned below the rows.
     first_run = page.locator(".runs-tab-row").first.get_attribute("data-run-id")
     assert first_run, "no rows on first page"
+
+    # Unfiltered view shows the total page count ("Page 1 of M") derived from the
+    # run-index total; skip the assert if the pager is a single hidden page.
+    pager = page.locator("#runs-tab-pager")
+    if pager.count() == 1 and not pager.is_hidden():
+        import re as _re
+
+        label = page.locator(".runs-tab-pager-label").inner_text()
+        assert _re.search(r"Page 1 of \d+", label), f"expected 'Page 1 of M', got {label!r}"
     assert (
         page.locator('[data-action="runs.prev-page"]:disabled').count() == 1
         or page.locator("#runs-tab-pager[hidden]").count() == 1

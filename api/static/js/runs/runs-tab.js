@@ -16,6 +16,7 @@ export const RunsTab = (function () {
   let _pageIdx = 0;            // 0-based index of the page on screen (discrete paging)
   let _exhausted = false;      // current page is the last (no next_cursor)
   let _scanned = 0;            // run dirs the server examined to build THIS page
+  let _total = 0;             // total (unfiltered) run count — for "Page N of M"
   let _legacyMode = false;     // runs-index 404'd → fell back to the flat /runs array
   let _paging = false;         // in-flight page fetch guard (button + sentinel share it)
   let _gen = 0;                // fetch generation — a reset bumps it so an in-flight
@@ -139,6 +140,7 @@ export const RunsTab = (function () {
       // return without re-deriving it.
       if (_cursor) _pageCursors[_pageIdx + 1] = _cursor;
       _scanned = Number(data.scanned || 0);
+      _total = Number(data.total || 0);
       _updateCount();
       render();
     } catch (e) {
@@ -303,11 +305,20 @@ export const RunsTab = (function () {
       return;
     }
     el.hidden = false;
+    // "Page N of M" for the default (unfiltered) view — M is derived from the
+    // total run count. Under a health/type/search filter the filtered total
+    // isn't cheaply known, so drop "of M" and show just the page number.
+    const filtered = _activeFilter !== 'all' || _typeFilter !== 'all'
+      || (((document.getElementById('runs-tab-search') || {}).value || '').trim() !== '');
+    const totalPages = (!filtered && _total > 0) ? Math.max(1, Math.ceil(_total / PAGE_SIZE)) : 0;
+    const label = totalPages
+      ? `Page ${_pageIdx + 1} of ${totalPages}`
+      : `Page ${_pageIdx + 1}`;
     el.innerHTML = `
       <button type="button" class="action-btn xs ghost runs-tab-pager-btn"
               data-action="runs.prev-page" ${_pageIdx === 0 ? 'disabled' : ''}
               aria-label="Previous page of runs">&lsaquo; Prev</button>
-      <span class="runs-tab-pager-label">Page ${_pageIdx + 1}${_scanned ? ` &middot; scanned ${_scanned}` : ''}</span>
+      <span class="runs-tab-pager-label">${label}${_total ? ` &middot; ${_total} runs` : ''}</span>
       <button type="button" class="action-btn xs ghost runs-tab-pager-btn"
               data-action="runs.next-page" ${_exhausted ? 'disabled' : ''}
               aria-label="Next page of runs">Next &rsaquo;</button>`;

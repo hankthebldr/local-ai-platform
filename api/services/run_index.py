@@ -648,6 +648,11 @@ def scan_runs(
     limit = max(1, min(int(limit or 30), 200))
     root = _run_root()
     index = _load_index(root)
+    # Total run count (unfiltered) — the keyset index is already materialized, so
+    # this is free. Lets the client show "Page N of M" for the default view; the
+    # exact filtered total isn't cheaply knowable, so the UI drops "of M" when a
+    # server-side filter/search narrows the set.
+    total = len(index)
 
     after = decode_cursor(cursor)
     if after is not None:
@@ -700,4 +705,5 @@ def scan_runs(
         "scanned": scanned,
         "exhausted": exhausted,
         "stats_ready": stats_ready,
+        "total": total,
     }
