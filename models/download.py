@@ -68,6 +68,14 @@ MODEL_REGISTRY = {
         "description": "Latest Dolphin, 128K context, proven uncensored",
         "tags": ["uncensored", "fast", "reasoning", "128k-context", "ms01-recommended"],
         "installed": True,
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 8.0,
+        "arch_family": "llama",
+        "context_tokens": 131072,
+        "size_gb": 4.9,
+        "min_arch": None,
+        "task_tags": ["fast_extract", "retriever", "uncensored"],
     },
     "dolphin3-abliterated": {
         "name": "Dolphin 3 Abliterated (Llama 3.1 8B)",
@@ -77,6 +85,14 @@ MODEL_REGISTRY = {
         "context": "128K",
         "description": "Dolphin3 with refusal neurons surgically removed — most unrestricted 8B",
         "tags": ["uncensored", "abliterated", "fast", "ms01-recommended"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 8.0,
+        "arch_family": "llama",
+        "context_tokens": 131072,
+        "size_gb": 4.9,
+        "min_arch": None,
+        "task_tags": ["uncensored", "fast_extract"],
     },
     "qwen3.5-uncensored-9b": {
         "name": "Qwen 3.5 9B Uncensored",
@@ -88,6 +104,14 @@ MODEL_REGISTRY = {
         "description": "Newest architecture, strong reasoning, multilingual",
         "tags": ["uncensored", "reasoning", "multilingual", "2026", "ms01-recommended"],
         "installed": True,
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 9.0,
+        "arch_family": "qwen3",
+        "context_tokens": 131072,
+        "size_gb": 7.4,
+        "min_arch": None,
+        "task_tags": ["analyzer", "classifier", "uncensored"],
     },
     "qwen2.5-7b-abliterated": {
         "name": "Qwen 2.5 7B Abliterated",
@@ -97,6 +121,14 @@ MODEL_REGISTRY = {
         "context": "128K",
         "description": "Qwen 2.5 with abliteration — excellent reasoning, zero refusals",
         "tags": ["uncensored", "abliterated", "reasoning", "ms01-recommended"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 7.6,
+        "arch_family": "qwen2",
+        "context_tokens": 131072,
+        "size_gb": 4.7,
+        "min_arch": None,
+        "task_tags": ["analyzer", "classifier", "uncensored"],
     },
     "qwen2.5-coder-7b-abliterated": {
         "name": "Qwen 2.5 Coder 7B Abliterated",
@@ -106,6 +138,14 @@ MODEL_REGISTRY = {
         "context": "128K",
         "description": "Best uncensored coding model at 7B — 86 languages",
         "tags": ["uncensored", "abliterated", "coding", "ms01-recommended"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 7.6,
+        "arch_family": "qwen2",
+        "context_tokens": 131072,
+        "size_gb": 4.7,
+        "min_arch": None,
+        "task_tags": ["code_gen", "rule_writer", "uncensored"],
     },
     "llama3.3-8b-abliterated": {
         "name": "Llama 3.3 8B Abliterated",
@@ -115,6 +155,14 @@ MODEL_REGISTRY = {
         "context": "128K",
         "description": "Meta Llama 3.3 with refusal neurons removed, high reasoning",
         "tags": ["uncensored", "abliterated", "reasoning", "2026"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 8.0,
+        "arch_family": "llama",
+        "context_tokens": 131072,
+        "size_gb": 4.9,
+        "min_arch": None,
+        "task_tags": ["analyzer", "reviewer", "uncensored"],
     },
     # ═══════════════════════════════════════════════════════════════
     # Tier 2: Quality Sweet Spot (13B-14B — best quality/speed balance)
@@ -128,6 +176,14 @@ MODEL_REGISTRY = {
         "context": "128K",
         "description": "Sweet spot: strong reasoning + abliterated, fits easily on MS-01",
         "tags": ["uncensored", "abliterated", "reasoning", "ms01-recommended"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 14.7,
+        "arch_family": "qwen2",
+        "context_tokens": 131072,
+        "size_gb": 9.0,
+        "min_arch": None,
+        "task_tags": ["analyzer", "planner", "validator", "uncensored"],
     },
     "wizardlm-uncensored-13b": {
         "name": "WizardLM-13B-Uncensored",
@@ -139,6 +195,14 @@ MODEL_REGISTRY = {
         "context": "4K",
         "description": "Classic uncensored, proven for creative writing",
         "tags": ["uncensored", "creative", "classic"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 13.0,
+        "arch_family": "llama",
+        "context_tokens": 4096,
+        "size_gb": 7.4,
+        "min_arch": None,
+        "task_tags": ["composer", "uncensored"],
     },
     # ═══════════════════════════════════════════════════════════════
     # Tier 3: Power Models (26B-35B — slower but impressive quality)
@@ -154,6 +218,14 @@ MODEL_REGISTRY = {
         "context": "32K",
         "description": "MoE powerhouse — activates ~13B per token, faster than dense 26B",
         "tags": ["uncensored", "reasoning", "creative", "moe", "ms01-fits"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 46.7,
+        "arch_family": "mixtral",
+        "context_tokens": 32768,
+        "size_gb": 26.0,
+        "min_arch": None,
+        "task_tags": ["composer", "analyzer", "uncensored"],
     },
     "qwen3.5-uncensored-35b": {
         "name": "Qwen 3.5 35B Uncensored",
@@ -163,6 +235,14 @@ MODEL_REGISTRY = {
         "context": "128K",
         "description": "Largest uncensored Qwen — fits on MS-01, optimal on BD790i",
         "tags": ["uncensored", "large", "reasoning", "2026", "ms01-fits"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 35.0,
+        "arch_family": "qwen3",
+        "context_tokens": 131072,
+        "size_gb": 22.0,
+        "min_arch": None,
+        "task_tags": ["analyzer", "planner", "reviewer", "uncensored"],
     },
     "gemma3-27b-abliterated": {
         "name": "Gemma 3 27B Abliterated",
@@ -179,6 +259,14 @@ MODEL_REGISTRY = {
             "2026",
             "ms01-fits",
         ],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 27.0,
+        "arch_family": "gemma3",
+        "context_tokens": 131072,
+        "size_gb": 17.0,
+        "min_arch": None,
+        "task_tags": ["analyzer", "validator", "uncensored"],
     },
     "llama3.2-moe-18b": {
         "name": "Llama 3.2 8x3B MOE Dark Champion 18.4B",
@@ -188,6 +276,14 @@ MODEL_REGISTRY = {
         "context": "128K",
         "description": "MoE architecture, creative writing champion",
         "tags": ["uncensored", "abliterated", "moe", "creative", "ms01-fits"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 18.4,
+        "arch_family": "llama",
+        "context_tokens": 131072,
+        "size_gb": 12.0,
+        "min_arch": None,
+        "task_tags": ["composer", "uncensored"],
     },
     # ═══════════════════════════════════════════════════════════════
     # Tier 4: Specialized (Coding, Creative, Niche)
@@ -202,6 +298,14 @@ MODEL_REGISTRY = {
         "context": "32K",
         "description": "Classic fast uncensored, great for coding",
         "tags": ["uncensored", "fast", "coding", "classic"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 7.0,
+        "arch_family": "mistral",
+        "context_tokens": 32768,
+        "size_gb": 4.1,
+        "min_arch": None,
+        "task_tags": ["code_gen", "fast_extract", "uncensored"],
     },
     "nous-hermes2-mixtral": {
         "name": "Nous Hermes 2 Mixtral 8x7B",
@@ -213,6 +317,14 @@ MODEL_REGISTRY = {
         "context": "32K",
         "description": "Excellent instruction following, balanced",
         "tags": ["uncensored", "balanced", "instruction", "ms01-fits"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 46.7,
+        "arch_family": "mixtral",
+        "context_tokens": 32768,
+        "size_gb": 26.0,
+        "min_arch": None,
+        "task_tags": ["composer", "validator", "uncensored"],
     },
     "qwen3-8b-hivemind": {
         "name": "Qwen 3 8B Hivemind Abliterated",
@@ -222,6 +334,14 @@ MODEL_REGISTRY = {
         "context": "256K",
         "description": "256K context, heretic abliterated, all-purpose",
         "tags": ["uncensored", "abliterated", "256k-context", "2026"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 8.2,
+        "arch_family": "qwen3",
+        "context_tokens": 262144,
+        "size_gb": 5.0,
+        "min_arch": None,
+        "task_tags": ["retriever", "analyzer", "uncensored"],
     },
     "deepseek-r1-32b": {
         "name": "DeepSeek R1 32B",
@@ -231,6 +351,14 @@ MODEL_REGISTRY = {
         "context": "128K",
         "description": "Chain-of-thought reasoning powerhouse (not uncensored but very capable)",
         "tags": ["reasoning", "chain-of-thought", "ms01-fits"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 32.0,
+        "arch_family": "qwen2",
+        "context_tokens": 131072,
+        "size_gb": 20.0,
+        "min_arch": None,
+        "task_tags": ["planner", "reviewer", "decision"],
     },
     "deepseek-coder-33b": {
         "name": "DeepSeek Coder 33B",
@@ -242,6 +370,14 @@ MODEL_REGISTRY = {
         "context": "16K",
         "description": "Best coding model, supports 86 languages",
         "tags": ["coding", "programming", "technical", "ms01-fits"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 33.0,
+        "arch_family": "llama",
+        "context_tokens": 16384,
+        "size_gb": 20.0,
+        "min_arch": None,
+        "task_tags": ["code_gen", "rule_writer"],
     },
     "mythomax": {
         "name": "MythoMax L2 13B",
@@ -253,6 +389,14 @@ MODEL_REGISTRY = {
         "context": "4K",
         "description": "Best for creative writing and roleplay",
         "tags": ["creative", "roleplay", "storytelling"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_K_M",
+        "params_b": 13.0,
+        "arch_family": "llama",
+        "context_tokens": 4096,
+        "size_gb": 7.4,
+        "min_arch": None,
+        "task_tags": ["composer"],
     },
     "dolphin-phi": {
         "name": "Dolphin Phi 2.7B",
@@ -262,6 +406,14 @@ MODEL_REGISTRY = {
         "context": "2K",
         "description": "Smallest uncensored, edge/embedded use",
         "tags": ["uncensored", "tiny", "fast", "edge"],
+        # Intrinsic metadata (LB4-U1) — mirrored in MODELS.md.
+        "quant": "Q4_0",
+        "params_b": 2.7,
+        "arch_family": "phi2",
+        "context_tokens": 2048,
+        "size_gb": 1.6,
+        "min_arch": None,
+        "task_tags": ["fast_extract", "uncensored"],
     },
 }
 

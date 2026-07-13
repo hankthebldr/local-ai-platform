@@ -58,3 +58,57 @@ class TestSetupEndpoints:
         """APP_DIR must match desktop/app.py so the Mac app sees the flag."""
         import api.routers.setup as setup_module
         assert setup_module.APP_DIR == os.path.expanduser("~/.enclave")
+
+
+class TestLocalClientGuard:
+    """GP-2 (P0-14): only a client we can PROVE is on the box may fetch the
+    first-run master key. A naive '172.'-prefix check wrongly trusted public
+    172.x, and a proxied request's peer address is the proxy — both refused."""
+
+    @staticmethod
+    def _req(host, headers=None):
+        from types import SimpleNamespace
+
+        class _Req:
+            def __init__(self, host, headers):
+                self.client = SimpleNamespace(host=host) if host is not None else None
+                self.headers = headers or {}
+
+        return _Req(host, headers)
+
+    def test_loopback_allowed(self):
+        from api.routers.setup import _is_local_client
+
+        assert _is_local_client(self._req("127.0.0.1")) is True
+        assert _is_local_client(self._req("::1")) is True
+        assert _is_local_client(self._req("localhost")) is True
+
+    def test_docker_bridge_rfc1918_allowed(self):
+        from api.routers.setup import _is_local_client
+
+        assert _is_local_client(self._req("172.17.0.1")) is True  # docker bridge
+        assert _is_local_client(self._req("192.168.1.5")) is True
+        assert _is_local_client(self._req("10.0.0.4")) is True
+
+    def test_public_172_refused(self):
+        from api.routers.setup import _is_local_client
+
+        # 172.5.x is PUBLIC (only 172.16.0.0/12 is private) — the old prefix
+        # check wrongly trusted it.
+        assert _is_local_client(self._req("172.5.4.3")) is False
+        assert _is_local_client(self._req("172.32.0.1")) is False
+        assert _is_local_client(self._req("8.8.8.8")) is False
+
+    def test_forwarding_header_refused_even_from_loopback(self):
+        from api.routers.setup import _is_local_client
+
+        for h in ("X-Forwarded-For", "Forwarded", "X-Real-IP"):
+            assert (
+                _is_local_client(self._req("127.0.0.1", {h: "203.0.113.9"})) is False
+            ), h
+
+    def test_no_client_refused(self):
+        from api.routers.setup import _is_local_client
+
+        assert _is_local_client(self._req(None)) is False
+        assert _is_local_client(self._req("not-an-ip")) is False

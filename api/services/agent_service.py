@@ -38,6 +38,21 @@ def _validate_agent_id(agent_id: str) -> None:
         )
 
 
+def _dump_agent_yaml_atomic(path: Path, data: Dict[str, Any]) -> None:
+    """Serialize an agent definition to YAML with a tmp+os.replace so a crash
+    mid-write can never leave a half-written (unparseable) agent file on disk.
+    os.replace is atomic within a filesystem; the tmp sits alongside the target
+    so it shares one. Mirrors prompts.py::_write_atomic / workflows save (GP-2
+    commit 4)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w") as f:
+        yaml.dump(
+            data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+        )
+    os.replace(tmp, path)
+
+
 class AgentService:
     """
     Service for managing custom agent definitions.
@@ -115,10 +130,7 @@ class AgentService:
         yaml_path = self.agents_dir / f"{defn.id}.yaml"
         data = defn.model_dump(mode="json")
 
-        with open(yaml_path, "w") as f:
-            yaml.dump(
-                data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
-            )
+        _dump_agent_yaml_atomic(yaml_path, data)
 
         logger.info(f"Created agent '{defn.id}' at {yaml_path}")
         return str(yaml_path)
@@ -144,10 +156,7 @@ class AgentService:
 
         data = defn.model_dump(mode="json")
 
-        with open(yaml_path, "w") as f:
-            yaml.dump(
-                data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
-            )
+        _dump_agent_yaml_atomic(yaml_path, data)
 
         logger.info(f"Updated agent '{agent_id}'")
         return True

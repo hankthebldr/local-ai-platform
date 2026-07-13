@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import os
+import re
 import shutil
 import sys
 import tarfile
@@ -40,6 +42,31 @@ def _parse_skill_md(path: Path) -> dict:
     }
 
 
+# ── LB5-U2 version helpers ───────────────────────────────────────────────
+# plugin.yaml `version` is the single source of truth. The setter is a
+# targeted top-level line replacement (never a safe_dump round-trip) so an
+# auto-bump can't clobber the operator's comments/formatting.
+
+_VERSION_LINE_RE = re.compile(r"(?m)^version:\s*.*$")
+
+
+def _bump_patch(version: str) -> str:
+    """0.1.0 → 0.1.1; tolerant of short/odd versions (1.0 → 1.0.1)."""
+    parts = str(version or "0.0.0").strip().split(".")
+    if parts and parts[-1].isdigit() and len(parts) >= 3:
+        parts[-1] = str(int(parts[-1]) + 1)
+        return ".".join(parts)
+    return f"{'.'.join(parts)}.1" if parts and parts[0] else "0.0.1"
+
+
+def _set_manifest_version(text: str, version: str) -> str:
+    """Rewrite (or add) the top-level ``version:`` line in manifest text."""
+    line = f'version: "{version}"'
+    if _VERSION_LINE_RE.search(text):
+        return _VERSION_LINE_RE.sub(line, text, count=1)
+    return text.rstrip("\n") + "\n" + line + "\n"
+
+
 class PluginService:
     """Discovers and manages plugins from a directory convention.
 
@@ -65,6 +92,7 @@ class PluginService:
         # explicit layer is provided. Default falls back to the deployment-
         # resolved storage roots; if detection failed, plugins/ relative
         # to cwd (pre-Phase-1 behavior).
+        self._auto_resolve = False
         if system_dir is not None or user_dir is not None:
             self._system_dir = Path(system_dir) if system_dir else None
             self._user_dir = Path(user_dir) if user_dir else None
@@ -81,12 +109,50 @@ class PluginService:
                 self._system_dir = d.system_storage_root / "plugins"
                 self._user_dir = d.user_storage_root / "plugins"
             except Exception:
+                # Deployment singleton not installed yet — plugins.py builds
+                # this service at import time, BEFORE api/main.py's startup
+                # event runs detect_deployment(). Fall back to the pre-Phase-1
+                # cwd layout for now and retry lazily (LB5-U3): without the
+                # retry a live server has NO writable user layer and every
+                # user-layer write (install, forge, file PUT) 500s.
                 self._system_dir = Path("plugins")
                 self._user_dir = None
+                self._auto_resolve = True
         # Legacy alias for code paths that still call self._dir
         self._dir = self._system_dir or Path("plugins")
         self._plugins: dict = {}
         self._tools: dict = {}
+        # LB5-U2 version policy: ids saved since the last reload. The FIRST
+        # save in a reload cycle patch-bumps plugin.yaml's version; further
+        # saves ride the same bump until scan_plugins() clears the flag.
+        self._dirty: set = set()
+
+    def _maybe_resolve_layers(self) -> None:
+        """Late-bind the deployment storage layers (LB5-U3).
+
+        Only active for the auto-resolve constructor path that raced app
+        startup (see __init__). The first scan or user_dir access after
+        detect_deployment() has installed the singleton picks up the real
+        (system, user) layers — the object identity of the router/chat
+        shared singleton never changes.
+        """
+        if not self._auto_resolve:
+            return
+        try:
+            from .deployment import _get_current as _get_dep
+
+            d = _get_dep()
+        except Exception:
+            return  # still pre-startup — keep the cwd fallback for now
+        self._system_dir = d.system_storage_root / "plugins"
+        self._user_dir = d.user_storage_root / "plugins"
+        self._dir = self._system_dir
+        self._auto_resolve = False
+        logger.info(
+            "Plugin layers late-bound from deployment: system=%s user=%s",
+            self._system_dir,
+            self._user_dir,
+        )
 
     def scan_plugins(self) -> list:
         """Walk both layers (system first, then user). User overrides on id.
@@ -94,8 +160,10 @@ class PluginService:
         Returns the union as a list of plugin dicts. Each carries `origin`
         and `overrides_system` so the UI can render which layer won.
         """
+        self._maybe_resolve_layers()
         self._plugins.clear()
         self._tools.clear()
+        self._dirty.clear()  # reload closes the version-bump cycle (LB5-U2)
 
         layers = []
         if self._system_dir is not None:
@@ -287,6 +355,207 @@ class PluginService:
                 return skill
         return None
 
+    # ── user layer access (LB3-U1 skills promote) ───────────────────
+
+    @property
+    def user_dir(self) -> Optional[Path]:
+        """Writable user-layer plugins directory (None when not configured)."""
+        self._maybe_resolve_layers()
+        return self._user_dir
+
+    def ensure_user_plugin(
+        self,
+        plugin_id: str,
+        name: Optional[str] = None,
+        description: str = "",
+    ) -> Path:
+        """Create a minimal user-layer plugin skeleton when absent.
+
+        Idempotent — an existing plugin directory (any content) is returned
+        as-is. The manifest is written atomically (tmp+replace). Raises
+        RuntimeError when no writable user layer is configured. Callers
+        should re-scan afterwards if they need the plugin discoverable.
+        """
+        self._maybe_resolve_layers()
+        if self._user_dir is None:
+            raise RuntimeError(
+                "no writable user plugin layer; deployment not initialised"
+            )
+        pdir = self._user_dir / plugin_id
+        manifest_path = pdir / "plugin.yaml"
+        if manifest_path.exists():
+            return pdir
+        (pdir / "skills").mkdir(parents=True, exist_ok=True)
+        doc = {
+            "id": plugin_id,
+            "name": name or plugin_id.replace("-", " ").replace("_", " ").title(),
+            "version": "0.1.0",
+            "description": description
+            or "User-layer plugin holding operator-promoted skills.",
+            "author": "operator",
+            "skills": [],
+        }
+        tmp = manifest_path.with_suffix(".yaml.tmp")
+        tmp.write_text(
+            yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        tmp.replace(manifest_path)  # atomic
+        logger.info("Created user-layer plugin skeleton: %s", pdir)
+        return pdir
+
+    # ── file management plane (LB5-U2) ───────────────────────────────
+    # User layer ONLY (PermissionError for system plugins, mirroring
+    # uninstall): the system layer is read-only image content. Every
+    # id→path resolution is containment-checked — this repo had a real
+    # glob-traversal incident, so belt AND suspenders on file routes.
+
+    def _user_plugin_dir(self, plugin_id: str) -> Path:
+        """Plugin dir for the management plane. KeyError when unknown,
+        PermissionError when the winning copy is system-layer."""
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            raise KeyError(plugin_id)
+        if plugin.get("origin") != "user":
+            raise PermissionError(
+                f"system-layer plugin files are read-only image content: {plugin_id}"
+            )
+        return Path(plugin["path"]).resolve()
+
+    @staticmethod
+    def _contained(plugin_dir: Path, rel: str) -> Path:
+        """Resolve rel against the plugin dir; ValueError when it escapes."""
+        target = (plugin_dir / rel).resolve()
+        root = plugin_dir.resolve()
+        if target != root and not str(target).startswith(str(root) + os.sep):
+            raise ValueError("path escapes plugin dir")
+        return target
+
+    @staticmethod
+    def _write_atomic(p: Path, text: str) -> None:
+        """tmp+replace write — same discipline as prompts.py."""
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(p.suffix + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(p)  # atomic
+
+    def list_files(self, plugin_id: str) -> list:
+        """Relative paths (files only) under a user-layer plugin dir.
+        Dotfiles / __pycache__ / tmp remnants are skipped; listing errors
+        degrade to what was walkable — never raise mid-walk."""
+        pdir = self._user_plugin_dir(plugin_id)
+        out = []
+        try:
+            entries = sorted(pdir.rglob("*"))
+        except OSError:
+            entries = []
+        for p in entries:
+            if not p.is_file():
+                continue
+            rel = p.relative_to(pdir)
+            if any(part.startswith(".") or part == "__pycache__" for part in rel.parts):
+                continue
+            if rel.suffix == ".tmp":
+                continue
+            try:
+                size = p.stat().st_size
+            except OSError:
+                size = 0
+            out.append({"path": rel.as_posix(), "size": size})
+        return out
+
+    def read_file(self, plugin_id: str, rel_path: str) -> dict:
+        """Single file body from a user-layer plugin (containment-checked)."""
+        pdir = self._user_plugin_dir(plugin_id)
+        target = self._contained(pdir, rel_path)
+        if not target.is_file():
+            raise FileNotFoundError(rel_path)
+        size = target.stat().st_size
+        return {
+            "path": rel_path,
+            "name": target.name,
+            "size": size,
+            "body": target.read_text(encoding="utf-8", errors="replace"),
+        }
+
+    def write_file(
+        self,
+        plugin_id: str,
+        rel_path: str,
+        content: str,
+        explicit_version: Optional[str] = None,
+    ) -> dict:
+        """Write one file into a user-layer plugin, atomically.
+
+        plugin.yaml saves are YAML-validated first (ValueError → 400) so a
+        bad edit can never break scan_plugins. Version policy (LB5-U2):
+        plugin.yaml `version` is the source of truth; the FIRST save since
+        the last reload patch-bumps it (dirty flag), an explicit version —
+        request-body field or a changed version line inside a saved
+        plugin.yaml — is always honored as-is.
+
+        Returns {version, reload_required: True}.
+        """
+        pdir = self._user_plugin_dir(plugin_id)
+        target = self._contained(pdir, rel_path)
+        manifest_path = (pdir / "plugin.yaml").resolve()
+        known = str((self._plugins.get(plugin_id) or {}).get("version") or "")
+
+        if target == manifest_path:
+            try:
+                doc = yaml.safe_load(content)
+            except yaml.YAMLError as exc:
+                raise ValueError(f"invalid plugin.yaml: {exc}") from exc
+            if not isinstance(doc, dict):
+                raise ValueError("plugin.yaml must be a YAML mapping")
+            in_file = str(doc.get("version") or "")
+            if explicit_version:
+                content = _set_manifest_version(content, explicit_version)
+                new_version = explicit_version
+            elif in_file and in_file != known:
+                new_version = in_file  # operator changed it in the file — honored
+            elif plugin_id not in self._dirty:
+                new_version = _bump_patch(in_file or known)
+                content = _set_manifest_version(content, new_version)
+            else:
+                new_version = in_file or known
+            self._write_atomic(target, content)
+        else:
+            self._write_atomic(target, content)
+            manifest_text = manifest_path.read_text(encoding="utf-8")
+            if explicit_version:
+                new_version = explicit_version
+                self._write_atomic(
+                    manifest_path, _set_manifest_version(manifest_text, new_version)
+                )
+            else:
+                # Current on-disk version — the registry copy is stale for
+                # the rest of the reload cycle (that is the point of the
+                # reload_required flag).
+                try:
+                    on_disk = str(
+                        (yaml.safe_load(manifest_text) or {}).get("version") or known
+                    )
+                except yaml.YAMLError:
+                    on_disk = known
+                if plugin_id not in self._dirty:
+                    new_version = _bump_patch(on_disk)
+                    self._write_atomic(
+                        manifest_path,
+                        _set_manifest_version(manifest_text, new_version),
+                    )
+                else:
+                    new_version = on_disk
+
+        self._dirty.add(plugin_id)
+        logger.info(
+            "Plugin file saved: %s/%s (v%s, reload required)",
+            plugin_id,
+            rel_path,
+            new_version,
+        )
+        return {"version": new_version, "reload_required": True}
+
     # ── install / uninstall (Phase 1.4) ─────────────────────────────
 
     def install_plugin(self, archive_path: Path) -> dict:
@@ -297,6 +566,7 @@ class PluginService:
         rejected. Re-scans afterwards so the new plugin is immediately
         discoverable. Returns the installed plugin dict.
         """
+        self._maybe_resolve_layers()
         if self._user_dir is None:
             raise RuntimeError(
                 "no writable user plugin layer; deployment not initialised"
@@ -336,7 +606,15 @@ class PluginService:
 
             self._user_dir.mkdir(parents=True, exist_ok=True)
             dest = self._user_dir / plugin_id
+            replaced_version = None
             if dest.exists():
+                # Reinstall keeps silent replace (only-add), but the previous
+                # version is surfaced so the UI can flag a downgrade (LB5-U2).
+                try:
+                    prev = yaml.safe_load((dest / "plugin.yaml").read_text()) or {}
+                    replaced_version = prev.get("version")
+                except Exception:  # noqa: BLE001 — a broken prior copy is fine
+                    replaced_version = None
                 shutil.rmtree(dest)
             shutil.copytree(plugin_src, dest)
             logger.info("Installed plugin %s to user layer: %s", plugin_id, dest)
@@ -345,7 +623,8 @@ class PluginService:
         installed = self._plugins.get(plugin_id)
         if installed is None:
             raise RuntimeError(f"plugin {plugin_id} installed but not discoverable")
-        return installed
+        # Copy — replaced_version is response metadata, never registry state.
+        return dict(installed, replaced_version=replaced_version)
 
     def uninstall_plugin(self, plugin_id: str) -> None:
         """Remove a user-layer plugin. Raises PermissionError for a plugin that

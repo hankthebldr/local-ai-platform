@@ -71,6 +71,12 @@ data/models/*.ckpt
 data/vectors/chroma_db/
 data/cache/**
 data/logs/*.log
+data/workspaces/
+# Runtime state written by the app (scheduler defs, research store, RAG index).
+data/schedules/
+data/research/
+data/rag/
+data/config/schedules.json
 
 # Workflow memory stores (kind=consolidate runtime artifacts)
 data/playbooks/
@@ -130,6 +136,10 @@ data/conversations/
 data/config/api_keys.yaml
 # First-run master key sentinel (raw value, mode 0600)
 data/config/first-run-key.txt
+# Discovery source config — may hold a GitHub token (raw value, mode 0600)
+data/config/discovery_sources.json
+# User-layer prompts (LB0-U3) — runtime-mutable, never commit
+data/prompts/
 # User-pinned memories and session summaries
 data/memory/sessions/
 data/memory/facts.yaml
@@ -198,3 +208,6 @@ workflows-private/
 agents-private/
 plugins-private/
 docs/seed-private/
+
+# DR-1 draft-publish e2e test artifact
+workflows/dr1-e2e-publish.yaml

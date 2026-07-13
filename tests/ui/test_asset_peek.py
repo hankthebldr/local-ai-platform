@@ -9,7 +9,9 @@ import re
 
 
 def test_assetpeek_module_defined(index_html_text):
-    assert "window.AssetPeek = (function" in index_html_text
+    # phase-2 U4: AssetPeek carved to library/asset-peek.js (ES module) + window-bridged.
+    assert "export const AssetPeek = (function" in index_html_text
+    assert "window.AssetPeek = AssetPeek" in index_html_text
 
 
 def test_assetpeek_modal_structure_present(index_soup):

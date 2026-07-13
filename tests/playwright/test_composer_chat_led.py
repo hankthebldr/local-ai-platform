@@ -15,6 +15,20 @@ import json
 
 import pytest
 
+# RETIRED 2026-07-10 by the four-surface separation. This module smoke-tests the
+# chat-LED Composer (#agent-chat-dock + #composer-divider + #composer-split with a
+# draggable chat|canvas split and the spine-dormant "start in chat" ghost). That
+# design is superseded: the Composer is now a canvas-DOMINANT node builder
+# (palette + DAG), and chat + the config header + seed->Promote + BootSequence
+# moved to their own #tab-chat. Every assertion here targets deleted structure
+# (#composer-split/#composer-divider/#composer-spine-dormant/--chat-frac), so the
+# module is skipped rather than asserting a design we intentionally removed.
+# The moved behaviours are exercised by test_chat.py + the Chat-tab smokes; a
+# dedicated #tab-chat promote/boot suite is a tracked follow-up.
+pytestmark = pytest.mark.skip(
+    reason="chat-led Composer retired by the four-surface separation; chat/promote/boot moved to #tab-chat"
+)
+
 
 def test_split_layout_renders(signed_in_page, no_console_errors):
     """The chat-led split, dormant spine, and mgmt drawer all render, and

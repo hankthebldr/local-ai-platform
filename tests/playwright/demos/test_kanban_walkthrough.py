@@ -1,5 +1,5 @@
 """
-Demo recording walkthrough for the Kanban board inside Workflow Index.
+Demo recording walkthrough for the Kanban board inside Workflows.
 Set ENCLAVE_PLAYWRIGHT_RECORD=1 to capture WebM video.
 """
 
@@ -15,7 +15,7 @@ def _settle(page, ms: int = 900):
 
 
 def test_demo_kanban_create_and_move(signed_in_page, base_url, api_headers):
-    """Walkthrough: pick the Workflow Index tab → see the Kanban board →
+    """Walkthrough: pick the Workflows tab → see the Kanban board →
     create a project → add 3 tasks across columns → move one via the UI."""
     proj_id = f"demo-kanban-{int(time.time() * 1000) & 0xFFFF:04x}"
     requests.delete(
@@ -45,7 +45,7 @@ def test_demo_kanban_create_and_move(signed_in_page, base_url, api_headers):
         )
 
     page = signed_in_page
-    # IA refresh: Kanban moved out of the Workflow Index card grid into
+    # IA refresh: Kanban moved out of the Workflows card grid into
     # its own first-class Projects tab.
     page.click('button[data-tab="projects"]')
     _settle(page, 1400)

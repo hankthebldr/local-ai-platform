@@ -58,11 +58,45 @@ SCOPE_MAP = {
     "/v1/completions": "completions",
     "/v1/models": "models",
     "/api/documents": "documents",
+    # GP-2 (P0-13 corrected): chat-session markdown exports are a data-action
+    # write surface (save/list/read/zip/delete). Gate the whole /api/exports
+    # prefix on an `exports` scope — parity with /api/documents. A scoped SPA
+    # key can save exports; an unscoped key is 403'd. NOT require_master_key:
+    # that runs before scope resolution and would 401 a legitimately
+    # exports-scoped key, making this entry dead config.
+    "/api/exports": "exports",
     "/api/memory": "memory",
     "/api/context": "context",
     "/api/profiles": "profiles",
     "/api/plugins": "plugins",
     "/api/workflows": "workflows",
+    # DR-1: composer draft store (opaque canvas snapshots) is a data-action
+    # write surface. Gate the whole /api/composer prefix on the `workflows`
+    # scope (parity with /api/workflows) — a draft is a pre-publish workflow,
+    # so a key that can author workflows can author drafts. Master key + the
+    # auth-off dev path bypass this before scope resolution.
+    "/api/composer": "workflows",
+    # RX-2: the shared `research` workspace (saved sources/notes + MOCs) is a
+    # data-action write surface. Gate the whole /api/workspaces prefix on a
+    # `workspaces` scope (parity with /api/documents) so a scoped SPA key can
+    # write notes but an unscoped key is 403'd. Operate U11 also writes here.
+    "/api/workspaces": "workspaces",
+    # Operate U4: the local scheduler read surface (list/detail/history/summary)
+    # serves the same run-provenance bytes as /api/workflows. Gate reads on the
+    # `workflows` scope (data-action tier, parity with /api/workflows) — writes
+    # are separately require_master_key'd in the router. NOT master here: that
+    # runs before scope resolution and would 401 a legitimately workflows-scoped
+    # SPA key reading the Schedules rail.
+    "/api/schedules": "workflows",
+    # Operate U10 (F9): the artifacts inventory (run/feedback/export bytes) and
+    # the format-sets library serve run-provenance content already scope-gated at
+    # /api/workflows. Ship their SCOPE_MAP entries IN THIS UNIT rather than
+    # deferring them — a deferred scope entry is a bypass. Reads ride the
+    # `workflows` scope (data-action tier); format-set WRITES are separately
+    # require_master_key'd in the router. NOT master here — that runs before
+    # scope resolution and would 401 a legitimately workflows-scoped SPA key.
+    "/api/artifacts": "workflows",
+    "/api/format-sets": "workflows",
     "/api/keys": "keys",  # master key bypasses this before scope check
     "/a2a": "a2a",  # A2A JSON-RPC dispatch
 }
@@ -193,8 +227,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if self.rpm <= 0:
             return await call_next(request)
 
-        # Skip rate limiting on public paths
-        if request.url.path in PUBLIC_PATHS:
+        # Skip rate limiting on public paths and static assets — a cold SPA
+        # boot fetches the whole ES-module fan-out (~60 files) from one IP,
+        # which would otherwise blow the 60-rpm budget and self-429 the app's
+        # own API calls. Mirrors the AuthMiddleware exemption (see dispatch above).
+        path = request.url.path
+        if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"

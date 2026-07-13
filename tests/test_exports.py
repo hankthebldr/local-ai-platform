@@ -215,5 +215,77 @@ class TestZipEndpoint:
         assert resp.status_code == 404
 
 
+# ── Scope gating (GP-2 commit 1 / P0-13 corrected) ──────────────────────────
+# /api/exports is a data-action write surface gated on the `exports` scope via
+# SCOPE_MAP (parity with /api/documents) — NOT require_master_key. A scoped key
+# saves; an unscoped key is 403'd; the auto-provisioned master key (ALL_SCOPES
+# incl. `exports`) keeps the SPA save flow working.
+
+
+@pytest.fixture()
+def scope_client(tmp_path, monkeypatch):
+    import importlib
+
+    cfg = tmp_path / "keycfg"
+    cfg.mkdir()
+    monkeypatch.setenv("DATA_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("ENABLE_API_AUTH", "true")
+    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("MASTER_API_KEY", raising=False)
+    monkeypatch.setenv("RATE_LIMIT_RPM", "0")
+
+    from api.services.api_key_service import ALL_SCOPES, APIKeyService
+
+    svc = APIKeyService(config_dir=str(cfg))
+    scoped = svc.create_key(name="exp", scopes=["exports"])["key"]
+    unscoped = svc.create_key(name="chatonly", scopes=["chat"])["key"]
+    master = svc.create_key(name="master", scopes=ALL_SCOPES)["key"]
+
+    import api.middleware
+
+    importlib.reload(api.middleware)
+    import api.main
+
+    importlib.reload(api.main)
+    from api.main import app
+
+    client = TestClient(app)
+    try:
+        yield client, scoped, unscoped, master
+    finally:
+        monkeypatch.setenv("ENABLE_API_AUTH", "false")
+
+
+def test_exports_write_requires_scope(scope_client):
+    client, scoped, unscoped, master = scope_client
+    body = {"filename": "test-scope.md", "content": "# hi"}
+
+    # No key → 401.
+    assert client.post("/api/exports/save", json=body).status_code == 401
+
+    # Unscoped (chat-only) key → 403 insufficient_scope, NOT 401.
+    r_no = client.post(
+        "/api/exports/save", json=body, headers={"Authorization": f"Bearer {unscoped}"}
+    )
+    assert r_no.status_code == 403
+    assert r_no.json()["error"]["code"] == "insufficient_scope"
+
+    # An `exports`-scoped key succeeds (SPA save flow).
+    r_yes = client.post(
+        "/api/exports/save", json=body, headers={"Authorization": f"Bearer {scoped}"}
+    )
+    assert r_yes.status_code == 200
+    assert r_yes.json()["status"] == "saved"
+
+    # The master key (ALL_SCOPES incl. exports) also lists — the auto-signed-in
+    # SPA path is not locked out.
+    r_list = client.get("/api/exports", headers={"Authorization": f"Bearer {master}"})
+    assert r_list.status_code == 200
+
+    from api.routers.exports import EXPORTS_DIR
+
+    (EXPORTS_DIR / "test-scope.md").unlink(missing_ok=True)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

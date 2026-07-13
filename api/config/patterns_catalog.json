@@ -1,0 +1,446 @@
+{
+  "_comment": "PT-1 curated Pattern presets \u2014 the 8 dfPatternTemplates (api/static/js/main.js) mirrored as PatternSchema records with source:builtin. Repo-shipped in the COPY'd tree (persistence seam 1): updates land with the code and reach every deployment on image upgrade, never shadowed by the api_data volume. The frozen main.js dfPatternTemplates array is UNTOUCHED \u2014 these seeds ARE the oob layer of the Patterns library and feed its list/merge; the Composer Patterns bench still renders from dfPatternTemplates. Each record's steps construct through WorkflowDefinition (the frozen model IS the scaffoldability validator). Generated from dfPatternTemplates \u2014 keep in sync (test_pattern_presets.py::test_catalog_matches_statics pins it).",
+  "patterns": [
+    {
+      "id": "llm_step",
+      "name": "LLM step",
+      "complexity": "SIMPLE",
+      "kind": "llm",
+      "desc": "One model call \u2014 the atomic unit. Exactly one prompt in, text out.",
+      "tags": [
+        "llm",
+        "simple"
+      ],
+      "steps": [
+        {
+          "id": "llm_step",
+          "name": "LLM Step",
+          "kind": "llm",
+          "role": "general",
+          "system_prompt": "You are a capable assistant. Complete the task described by your inputs and reply with the result.",
+          "inputs": [
+            "seed.query"
+          ],
+          "outputs": [
+            "text"
+          ]
+        }
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "orchestrator",
+      "name": "Orchestrator (dynamic)",
+      "complexity": "SIMPLE",
+      "kind": "orchestrator",
+      "desc": "A lead agent plans and spawns workers from a catalog at run time. Ships with one pre-filled worker; worker inputs are always seed.* refs.",
+      "tags": [
+        "orchestrator",
+        "simple"
+      ],
+      "steps": [
+        {
+          "id": "orchestrator",
+          "name": "Orchestrator",
+          "kind": "orchestrator",
+          "role": "reasoning",
+          "inputs": [
+            "seed.query"
+          ],
+          "outputs": [
+            "result"
+          ],
+          "planner": {
+            "role_inline": "You are the lead agent. Decompose the goal, spawn workers from the catalog, and integrate their results.",
+            "task": "Plan the work, dispatch workers, and emit the complete directive once the goal is met.",
+            "constraints": [
+              "Spawn the fewest workers that cover the goal."
+            ]
+          },
+          "workers": {
+            "worker": {
+              "id": "worker",
+              "name": "Worker",
+              "kind": "llm",
+              "role": "reasoning",
+              "system_prompt": "You are a focused worker agent. Complete the assigned sub-task and reply with your findings.",
+              "inputs": [
+                "seed.task"
+              ],
+              "outputs": [
+                "findings"
+              ]
+            }
+          }
+        }
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "remote_agent",
+      "name": "Remote agent",
+      "complexity": "SIMPLE",
+      "kind": "a2a",
+      "desc": "Delegate to an external A2A-protocol agent by agent card + skill. The remote agent owns its own model and prompt.",
+      "tags": [
+        "a2a",
+        "simple"
+      ],
+      "steps": [
+        {
+          "id": "remote_agent",
+          "name": "Remote Agent",
+          "kind": "a2a",
+          "agent_card_url": "http://localhost:9100/.well-known/agent.json",
+          "skill": "answer",
+          "inputs": [
+            "seed.query"
+          ],
+          "outputs": [
+            "result"
+          ]
+        }
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "consolidate_learn",
+      "name": "Consolidate (learn)",
+      "complexity": "SIMPLE",
+      "kind": "consolidate",
+      "desc": "Distill upstream outputs into durable cross-run memory (playbook, semantic, or episodic store).",
+      "tags": [
+        "consolidate",
+        "simple"
+      ],
+      "steps": [
+        {
+          "id": "consolidate_learn",
+          "name": "Consolidate",
+          "kind": "consolidate",
+          "inputs": [],
+          "outputs": [
+            "lessons"
+          ],
+          "consolidate": {
+            "target": "playbook",
+            "target_name": "workflow-lessons",
+            "system_prompt": "Distill the inputs into concise, durable lessons worth keeping in the playbook."
+          }
+        }
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "code_sandbox",
+      "name": "Code sandbox",
+      "complexity": "SIMPLE",
+      "kind": "code",
+      "desc": "Run Python in the sandboxed executor. Inline source \u2014 edit the code in the config panel.",
+      "tags": [
+        "code",
+        "simple"
+      ],
+      "steps": [
+        {
+          "id": "code_sandbox",
+          "name": "Code Sandbox",
+          "kind": "code",
+          "outputs": [
+            "result"
+          ],
+          "code": {
+            "language": "python",
+            "source": "inline",
+            "code": "print('hello from the sandbox')"
+          }
+        }
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "ralph_loop",
+      "name": "Ralph loop",
+      "complexity": "COMPLEX",
+      "kind": "ralph",
+      "desc": "Autonomous plan \u2192 execute \u2192 verify \u2192 consolidate loop with a journal and halt rails. Pick a budget preset before dropping \u2014 long-running raises the caps for overnight automation.",
+      "tags": [
+        "complex",
+        "ralph"
+      ],
+      "steps": [
+        {
+          "id": "ralph",
+          "name": "Ralph Loop",
+          "kind": "ralph",
+          "inputs": [
+            "seed.query"
+          ],
+          "outputs": [
+            "progress"
+          ],
+          "ralph": {
+            "journal_path": "data/ralph/composer-journal.jsonl",
+            "halt": {
+              "max_iterations": 25,
+              "max_wall_seconds": 3600,
+              "max_total_tokens": 1000000,
+              "max_consecutive_failures": 3,
+              "goal_gate": "verify.approved == True"
+            }
+          },
+          "body": [
+            {
+              "id": "plan",
+              "name": "Plan",
+              "kind": "llm",
+              "role": "reasoning",
+              "system_prompt": "You are the planner. Read the goal and the playbook lessons, then emit this iteration's plan as an ordered list of concrete actions.",
+              "inputs": [
+                "seed.query",
+                "$memory.playbook.workflow-lessons"
+              ],
+              "outputs": [
+                "plan"
+              ]
+            },
+            {
+              "id": "execute",
+              "name": "Execute",
+              "kind": "llm",
+              "role": "general",
+              "system_prompt": "You are the executor. Carry out the plan and report exactly what you produced.",
+              "inputs": [
+                "plan.plan"
+              ],
+              "outputs": [
+                "work"
+              ]
+            },
+            {
+              "id": "verify",
+              "name": "Verify",
+              "kind": "llm",
+              "role": "reasoning",
+              "system_prompt": "You are the verifier. Check the work against the goal. Emit JSON: {\"approved\": true|false, \"progress\": \"<one-line status>\"}.",
+              "inputs": [
+                "plan.plan",
+                "execute.work"
+              ],
+              "outputs": [
+                "approved",
+                "progress"
+              ]
+            },
+            {
+              "id": "consolidate",
+              "name": "Consolidate",
+              "kind": "consolidate",
+              "inputs": [
+                "verify.progress"
+              ],
+              "outputs": [
+                "lessons"
+              ],
+              "consolidate": {
+                "target": "playbook",
+                "target_name": "workflow-lessons",
+                "system_prompt": "Record what worked and what failed this iteration as short playbook lessons."
+              }
+            }
+          ]
+        }
+      ],
+      "source": "builtin",
+      "budget_presets": {
+        "standard": {
+          "max_iterations": 25,
+          "max_wall_seconds": 3600,
+          "max_total_tokens": 1000000,
+          "max_consecutive_failures": 3
+        },
+        "long_running": {
+          "max_iterations": 200,
+          "max_wall_seconds": 28800,
+          "max_total_tokens": 5000000,
+          "max_consecutive_failures": 5
+        }
+      }
+    },
+    {
+      "id": "research_fanout",
+      "name": "Research fan-out",
+      "complexity": "COMPLEX",
+      "kind": "parallel",
+      "desc": "Index splits the question into angles, three subagents research in parallel, gather synthesizes one report. Gather's outputs mirror the parent's contract exactly.",
+      "tags": [
+        "complex",
+        "parallel"
+      ],
+      "steps": [
+        {
+          "id": "index",
+          "name": "Index",
+          "kind": "llm",
+          "role": "reasoning",
+          "system_prompt": "Break the research question into three distinct, non-overlapping angles. Emit JSON: {\"angles\": [\"<angle 1>\", \"<angle 2>\", \"<angle 3>\"]}.",
+          "inputs": [
+            "seed.query"
+          ],
+          "outputs": [
+            "angles"
+          ]
+        },
+        {
+          "id": "fan_out",
+          "name": "Research Fan-out",
+          "kind": "parallel",
+          "depends_on": [
+            "index"
+          ],
+          "outputs": [
+            "report"
+          ],
+          "execution": {
+            "mode": "auto",
+            "failure_policy": "continue_on_partial"
+          },
+          "branches": [
+            {
+              "id": "researcher_1",
+              "name": "Researcher 1",
+              "kind": "llm",
+              "role": "reasoning",
+              "system_prompt": "You are research subagent 1. Take the first angle from the index and research it thoroughly.",
+              "inputs": [
+                "index.angles"
+              ],
+              "outputs": [
+                "findings"
+              ]
+            },
+            {
+              "id": "researcher_2",
+              "name": "Researcher 2",
+              "kind": "llm",
+              "role": "reasoning",
+              "system_prompt": "You are research subagent 2. Take the second angle from the index and research it thoroughly.",
+              "inputs": [
+                "index.angles"
+              ],
+              "outputs": [
+                "findings"
+              ]
+            },
+            {
+              "id": "researcher_3",
+              "name": "Researcher 3",
+              "kind": "llm",
+              "role": "reasoning",
+              "system_prompt": "You are research subagent 3. Take the third angle from the index and research it thoroughly.",
+              "inputs": [
+                "index.angles"
+              ],
+              "outputs": [
+                "findings"
+              ]
+            }
+          ],
+          "gather": {
+            "id": "gather",
+            "name": "Gather",
+            "kind": "llm",
+            "role": "reasoning",
+            "system_prompt": "Synthesize the three researchers' findings into one coherent report.",
+            "inputs": [
+              "researcher_1.findings",
+              "researcher_2.findings",
+              "researcher_3.findings"
+            ],
+            "outputs": [
+              "report"
+            ]
+          }
+        }
+      ],
+      "source": "builtin"
+    },
+    {
+      "id": "tdd_loop",
+      "name": "TDD loop",
+      "complexity": "COMPLEX",
+      "kind": "loop",
+      "desc": "Write \u2192 test (sandboxed) \u2192 critic, repeated until the critic approves. The critic is the last body step and produces every loop output.",
+      "tags": [
+        "complex",
+        "loop"
+      ],
+      "steps": [
+        {
+          "id": "tdd",
+          "name": "TDD Loop",
+          "kind": "loop",
+          "inputs": [
+            "seed.query"
+          ],
+          "outputs": [
+            "code",
+            "approved"
+          ],
+          "max_iterations": 5,
+          "until": {
+            "type": "gate",
+            "gate": "critic.approved == True"
+          },
+          "body": [
+            {
+              "id": "write",
+              "name": "Write",
+              "kind": "llm",
+              "role": "coding",
+              "system_prompt": "You are the implementer. Write or revise the code to satisfy the requirements and fix any prior test failures.",
+              "inputs": [
+                "seed.query"
+              ],
+              "outputs": [
+                "code"
+              ]
+            },
+            {
+              "id": "test",
+              "name": "Test",
+              "kind": "code",
+              "inputs": [
+                "write.code"
+              ],
+              "outputs": [
+                "test_output"
+              ],
+              "code": {
+                "language": "python",
+                "source": "inline",
+                "code": "print('replace with the test harness for this loop')"
+              }
+            },
+            {
+              "id": "critic",
+              "name": "Critic",
+              "kind": "llm",
+              "role": "reasoning",
+              "system_prompt": "You are the critic. Review the code against the test output. Emit JSON: {\"approved\": true|false, \"code\": \"<the final code>\"}.",
+              "inputs": [
+                "write.code",
+                "test.test_output"
+              ],
+              "outputs": [
+                "code",
+                "approved"
+              ]
+            }
+          ]
+        }
+      ],
+      "source": "builtin"
+    }
+  ]
+}

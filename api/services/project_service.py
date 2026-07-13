@@ -144,6 +144,104 @@ class ProjectService:
             ProjectUpdate(artifacts=ProjectArtifacts(**artifacts)),
         )
 
+    # ── Context workspace bind (C3 — Docs "Bind context directory") ──
+
+    def bind_context_workspace(
+        self, project_id: str, root: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Bind (or reuse) a durable docs Workspace for this project.
+
+        - Absent ``root`` → ``data/projects/<id>/docs/`` (the local default).
+        - An explicit path that is (or lives inside) an Obsidian vault — detected
+          by a ``.obsidian`` marker at the path or an ancestor — is re-rooted at
+          ``<vault>/00-Inbox/``, enforcing the operator's 00-Inbox-only write rule
+          purely through workspace path containment (no new policy machinery).
+        - Registers workspace ``proj-<id>`` in the existing registry (idempotent —
+          an existing binding is reused), sets ``ProjectDefinition.context_workspace``,
+          and idempotently seeds the skeleton (index.md MOC, specs/, plans/,
+          notes/status.md, decisions/log.md with ``##`` headings for expand()).
+
+        Idempotent: calling twice yields the same workspace and never clobbers
+        existing seeded files.
+        """
+        from .workspace import WorkspaceError, get_workspace_registry
+
+        proj = self.get_project(project_id)
+        if proj is None:
+            raise KeyError(project_id)
+
+        ws_name = f"proj-{project_id}".lower()
+        # Workspace names are lowercase alnum/._- and ≤64 chars.
+        if len(ws_name) > 64:
+            raise ValueError("project id too long to derive a workspace name")
+
+        resolved_root = self._resolve_docs_root(project_id, root)
+
+        registry = get_workspace_registry()
+        existing = {m.name for m in registry.list()}
+        if ws_name in existing:
+            ws = registry.get(ws_name)
+        else:
+            try:
+                ws = registry.create(
+                    ws_name,
+                    str(resolved_root),
+                    description=f"Docs context for project {project_id}",
+                )
+            except WorkspaceError as exc:
+                raise ValueError(str(exc))
+
+        self._seed_skeleton(ws, proj.get("name") or project_id)
+
+        # Persist the binding on the project record.
+        path = self._dir / f"{project_id}.yaml"
+        cur_def = ProjectDefinition(**self._read(path))
+        data = cur_def.model_dump(mode="json")
+        data["context_workspace"] = ws_name
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self._write(path, ProjectDefinition(**data))
+
+        return {
+            "project_id": project_id,
+            "workspace": ws_name,
+            "root": str(ws.root),
+            "seeded": True,
+        }
+
+    def _resolve_docs_root(self, project_id: str, root: Optional[str]) -> Path:
+        """Resolve the docs workspace root, applying the vault→00-Inbox re-root."""
+        if not root or not str(root).strip():
+            return (self._dir / project_id / "docs").resolve()
+        candidate = Path(os.path.expanduser(str(root).strip())).resolve()
+        vault = self._detect_vault(candidate)
+        if vault is not None:
+            return (vault / "00-Inbox").resolve()
+        return candidate
+
+    @staticmethod
+    def _detect_vault(path: Path) -> Optional[Path]:
+        """Return the vault root if ``path`` is (or is inside) an Obsidian vault,
+        identified by a ``.obsidian`` directory at the path or any ancestor."""
+        for base in (path, *path.parents):
+            if (base / ".obsidian").is_dir():
+                return base
+        return None
+
+    def _seed_skeleton(self, ws: Any, project_name: str) -> None:
+        """Idempotently seed the docs skeleton. Never overwrites existing files."""
+        ws.mkdir("specs")
+        ws.mkdir("plans")
+        if not ws.exists("index.md"):
+            ws.write(
+                "index.md",
+                f"# {project_name} — Map of Content\n\n"
+                "## Specs\n\n## Plans\n\n## Notes\n\n## Decisions\n",
+            )
+        if not ws.exists("notes/status.md"):
+            ws.write("notes/status.md", "# Status\n\n## Current\n\n## History\n")
+        if not ws.exists("decisions/log.md"):
+            ws.write("decisions/log.md", "# Decision Log\n\n## Decisions\n")
+
     # ── Bundle export ──────────────────────────────────────────────
 
     def export_bundle(self, project_id: str) -> Dict[str, Any]:

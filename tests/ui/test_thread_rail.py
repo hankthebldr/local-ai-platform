@@ -14,8 +14,9 @@ def test_thread_bar_markup_present(index_soup):
 
 
 def test_thread_module_present(index_html_text):
-    assert "window.Threads" in index_html_text
-    assert 'id="enclave-threads-js"' in index_html_text
+    assert (
+        "window.Threads" in index_html_text
+    )  # module code (phase-2: now in js/main.js)
     assert 'id="enclave-threads-styles"' in index_html_text
 
 

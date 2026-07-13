@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import json
+import ipaddress
 
 import requests as http_requests
 from fastapi import APIRouter, HTTPException, Request
@@ -23,21 +24,40 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 
 # Hosts considered "local" for the auto-license-delivery endpoint. Docker
 # Compose puts the browser behind a bridge so client.host shows up as an
-# RFC1918 address (172.x typically). Anything outside loopback or RFC1918
-# gets a 403 — that's where remote license activation will eventually
-# replace the local-key handoff.
-_LOCAL_CLIENT_HOSTS = {"127.0.0.1", "::1", "localhost"}
+# RFC1918 address (172.16.0.0/12 typically). Anything outside loopback or
+# RFC1918 gets a 403 — that's where remote license activation will
+# eventually replace the local-key handoff.
+_LOCAL_CLIENT_HOSTS = {"localhost"}
+
+# GP-2 (P0-14): a request that traversed a reverse proxy carries a forwarding
+# header, and request.client.host is then the PROXY's address (often loopback
+# or a bridge IP) — NOT the real remote client. We cannot trust the peer
+# address to prove locality in that case, so the presence of ANY of these is a
+# hard refusal: the operator's first-run master key must never be handed to a
+# client we can't prove is on the box.
+_FORWARDING_HEADERS = ("X-Forwarded-For", "Forwarded", "X-Real-IP")
 
 
 def _is_local_client(request: Request) -> bool:
+    # Proxied request → the peer address is the proxy, not the client. Refuse.
+    for h in _FORWARDING_HEADERS:
+        if request.headers.get(h):
+            return False
     if not request.client:
         return False
     host = request.client.host or ""
+    # The literal "localhost" is not parseable as an IP but is loopback by
+    # name (some ASGI servers report it verbatim).
     if host in _LOCAL_CLIENT_HOSTS:
         return True
-    return (
-        host.startswith("172.") or host.startswith("192.168.") or host.startswith("10.")
-    )
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    # Loopback (127.0.0.0/8, ::1) or RFC1918 private (incl. the Docker-bridge
+    # parity path 172.16.0.0/12). is_private correctly EXCLUDES public ranges
+    # like 172.5.x that a naive "172." prefix check wrongly trusted.
+    return ip.is_loopback or ip.is_private
 
 
 @router.get("/api/setup/local-license")

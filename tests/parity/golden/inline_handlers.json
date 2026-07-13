@@ -2,8 +2,8 @@
   "_meta": {
     "source": "static markup of api/static/index.html (<script>/<style> stripped)",
     "purpose": "Every symbol here is invoked by an inline on*= handler. After the ES-module split each MUST be reachable as a window global (legacy-bridge.js), or the handler silently no-ops. 'must_bridge' lists symbols reachable today ONLY via a classic-script global lexical const/let/function \u2014 these break under modules unless explicitly assigned to window.",
-    "handler_count": 196,
-    "symbol_count": 81,
+    "handler_count": 211,
+    "symbol_count": 90,
     "must_bridge_count": 57,
     "unknown_count": 0
   },
@@ -12,34 +12,44 @@
     "AdminMenu",
     "AgentGen",
     "ApiKeysPanel",
+    "AssetPeek",
     "CatalogPage",
     "CloudPanel",
+    "Compare",
     "ComposerWorkstream",
+    "DfSeedSchema",
     "ExportsPanel",
+    "InstallWizard",
     "Kanban",
     "MCPPanel",
-    "PluginsPanel",
+    "Pins",
     "Projects",
+    "ResearchFlow",
+    "RunLens",
     "RunsTab",
+    "ScaffoldModal",
     "Shortcuts",
     "SkillsBuilder",
     "SkillsDiscover",
-    "SkillsPanel",
     "Theme",
+    "Threads",
+    "WorkflowBuilder",
     "WorkflowIndex",
     "WorkflowMemory",
     "addFact",
     "applyRoleAsSystemPrompt",
     "cleanupStaleSessions",
     "clearSystemPrompt",
-    "closeAgentChat",
     "closeStepConfigPopup",
     "composerClearWithConfirm",
     "composerExitStepEngage",
     "composerExportBundle",
     "composerLoadFromIndex",
     "composerNewWorkflow",
+    "composerSeedAgent",
+    "composerStopRun",
     "composerSwitchBench",
+    "composerTestStepInChat",
     "dfAutoLayout",
     "dfExportYaml",
     "dfImportBundle",
@@ -56,10 +66,11 @@
     "graphZoomIn",
     "graphZoomOut",
     "loadActiveSessions",
-    "loadAgentsTab",
-    "loadInstalledLocal",
+    "loadStatus",
     "markSettingsDirty",
     "onAgentSelectionChanged",
+    "onChatModelChanged",
+    "openWorkflowInComposer",
     "rebuildGraph",
     "refreshArchitectureDetection",
     "refreshDiscovery",
@@ -73,11 +84,9 @@
     "saveSystemPrompt",
     "searchDocuments",
     "searchMemory",
-    "sendAgentMessage",
     "sendMessage",
     "setDiscFilter",
     "setFilter",
-    "showCreateAgentModal",
     "switchTab",
     "toggleAgentDock",
     "toggleComposerWorkstream",
@@ -95,34 +104,44 @@
     "AdminMenu": "window",
     "AgentGen": "lexical",
     "ApiKeysPanel": "window",
+    "AssetPeek": "window",
     "CatalogPage": "window",
     "CloudPanel": "window",
+    "Compare": "window",
     "ComposerWorkstream": "window",
+    "DfSeedSchema": "window",
     "ExportsPanel": "window",
+    "InstallWizard": "window",
     "Kanban": "window",
     "MCPPanel": "window",
-    "PluginsPanel": "window",
+    "Pins": "window",
     "Projects": "lexical",
+    "ResearchFlow": "window",
+    "RunLens": "window",
     "RunsTab": "window",
+    "ScaffoldModal": "window",
     "Shortcuts": "window",
     "SkillsBuilder": "window",
     "SkillsDiscover": "window",
-    "SkillsPanel": "window",
     "Theme": "window",
+    "Threads": "window",
+    "WorkflowBuilder": "window",
     "WorkflowIndex": "lexical",
     "WorkflowMemory": "window",
     "addFact": "lexical",
     "applyRoleAsSystemPrompt": "lexical",
     "cleanupStaleSessions": "lexical",
     "clearSystemPrompt": "lexical",
-    "closeAgentChat": "lexical",
     "closeStepConfigPopup": "window",
     "composerClearWithConfirm": "lexical",
     "composerExitStepEngage": "lexical",
     "composerExportBundle": "lexical",
     "composerLoadFromIndex": "lexical",
     "composerNewWorkflow": "lexical",
+    "composerSeedAgent": "lexical",
+    "composerStopRun": "window",
     "composerSwitchBench": "lexical",
+    "composerTestStepInChat": "lexical",
     "dfAutoLayout": "lexical",
     "dfExportYaml": "lexical",
     "dfImportBundle": "lexical",
@@ -139,10 +158,11 @@
     "graphZoomIn": "window",
     "graphZoomOut": "window",
     "loadActiveSessions": "lexical",
-    "loadAgentsTab": "lexical",
-    "loadInstalledLocal": "lexical",
+    "loadStatus": "lexical",
     "markSettingsDirty": "lexical",
     "onAgentSelectionChanged": "lexical",
+    "onChatModelChanged": "lexical",
+    "openWorkflowInComposer": "lexical",
     "rebuildGraph": "lexical",
     "refreshArchitectureDetection": "lexical",
     "refreshDiscovery": "lexical",
@@ -156,11 +176,9 @@
     "saveSystemPrompt": "lexical",
     "searchDocuments": "lexical",
     "searchMemory": "lexical",
-    "sendAgentMessage": "lexical",
     "sendMessage": "lexical",
     "setDiscFilter": "lexical",
     "setFilter": "lexical",
-    "showCreateAgentModal": "lexical",
     "switchTab": "lexical",
     "toggleAgentDock": "lexical",
     "toggleComposerWorkstream": "lexical",
@@ -181,13 +199,14 @@
     "applyRoleAsSystemPrompt",
     "cleanupStaleSessions",
     "clearSystemPrompt",
-    "closeAgentChat",
     "composerClearWithConfirm",
     "composerExitStepEngage",
     "composerExportBundle",
     "composerLoadFromIndex",
     "composerNewWorkflow",
+    "composerSeedAgent",
     "composerSwitchBench",
+    "composerTestStepInChat",
     "dfAutoLayout",
     "dfExportYaml",
     "dfImportBundle",
@@ -202,10 +221,11 @@
     "exportSession",
     "filterCatalog",
     "loadActiveSessions",
-    "loadAgentsTab",
-    "loadInstalledLocal",
+    "loadStatus",
     "markSettingsDirty",
     "onAgentSelectionChanged",
+    "onChatModelChanged",
+    "openWorkflowInComposer",
     "rebuildGraph",
     "refreshArchitectureDetection",
     "refreshDiscovery",
@@ -218,11 +238,9 @@
     "saveSystemPrompt",
     "searchDocuments",
     "searchMemory",
-    "sendAgentMessage",
     "sendMessage",
     "setDiscFilter",
     "setFilter",
-    "showCreateAgentModal",
     "switchTab",
     "toggleAgentDock",
     "toggleComposerWorkstream",
@@ -246,16 +264,28 @@
     "ApiKeysPanel": [
       "click"
     ],
+    "AssetPeek": [
+      "click"
+    ],
     "CatalogPage": [
       "click"
     ],
     "CloudPanel": [
       "click"
     ],
+    "Compare": [
+      "click"
+    ],
     "ComposerWorkstream": [
       "click"
     ],
+    "DfSeedSchema": [
+      "click"
+    ],
     "ExportsPanel": [
+      "click"
+    ],
+    "InstallWizard": [
       "click"
     ],
     "Kanban": [
@@ -266,16 +296,25 @@
       "change",
       "click"
     ],
-    "PluginsPanel": [
+    "Pins": [
       "click"
     ],
     "Projects": [
       "change",
       "click"
     ],
+    "ResearchFlow": [
+      "click"
+    ],
+    "RunLens": [
+      "click"
+    ],
     "RunsTab": [
       "click",
       "input"
+    ],
+    "ScaffoldModal": [
+      "click"
     ],
     "Shortcuts": [
       "click"
@@ -288,12 +327,15 @@
       "click",
       "input"
     ],
-    "SkillsPanel": [
-      "change",
-      "click"
-    ],
     "Theme": [
       "click"
+    ],
+    "Threads": [
+      "click"
+    ],
+    "WorkflowBuilder": [
+      "click",
+      "input"
     ],
     "WorkflowIndex": [
       "click"
@@ -311,9 +353,6 @@
       "click"
     ],
     "clearSystemPrompt": [
-      "click"
-    ],
-    "closeAgentChat": [
       "click"
     ],
     "closeStepConfigPopup": [
@@ -334,7 +373,16 @@
     "composerNewWorkflow": [
       "click"
     ],
+    "composerSeedAgent": [
+      "click"
+    ],
+    "composerStopRun": [
+      "click"
+    ],
     "composerSwitchBench": [
+      "click"
+    ],
+    "composerTestStepInChat": [
       "click"
     ],
     "dfAutoLayout": [
@@ -385,10 +433,7 @@
     "loadActiveSessions": [
       "click"
     ],
-    "loadAgentsTab": [
-      "click"
-    ],
-    "loadInstalledLocal": [
+    "loadStatus": [
       "click"
     ],
     "markSettingsDirty": [
@@ -397,6 +442,12 @@
     ],
     "onAgentSelectionChanged": [
       "change"
+    ],
+    "onChatModelChanged": [
+      "change"
+    ],
+    "openWorkflowInComposer": [
+      "click"
     ],
     "rebuildGraph": [
       "click"
@@ -437,9 +488,6 @@
     "searchMemory": [
       "input"
     ],
-    "sendAgentMessage": [
-      "click"
-    ],
     "sendMessage": [
       "click"
     ],
@@ -447,9 +495,6 @@
       "click"
     ],
     "setFilter": [
-      "click"
-    ],
-    "showCreateAgentModal": [
       "click"
     ],
     "switchTab": [

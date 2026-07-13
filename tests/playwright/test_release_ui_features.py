@@ -16,8 +16,6 @@ auto-forces dark theme + injects the license key.
 
 from __future__ import annotations
 
-
-
 # ── Catalog Models tab populates (#73) ───────────────────────────────────
 
 
@@ -30,13 +28,11 @@ def test_catalog_models_section_populates_inventory_grid(signed_in_page):
     page = signed_in_page
     page.evaluate("() => window.switchTab && switchTab('workflows')")
     page.wait_for_timeout(3500)
-    cards = page.evaluate(
-        """() => {
+    cards = page.evaluate("""() => {
             const mount = document.getElementById('catalog-models-mount');
             const grid = mount?.querySelector('#inv-grid');
             return grid ? grid.children.length : 0;
-        }"""
-    )
+        }""")
     assert cards > 0, (
         "Catalog Models section is empty. Either CatalogModelsShare didn't "
         "fire on switchTab('workflows') or the inventory loader didn't populate "
@@ -84,8 +80,7 @@ def test_mini_dag_silhouettes_stack_parallel_ranks(signed_in_page):
     # xsiam-normalization-pipeline has a fan-in pattern; its silhouette
     # should have multiple distinct y-positions (= parallel siblings
     # stacked vertically).
-    info = page.evaluate(
-        """() => {
+    info = page.evaluate("""() => {
             const slot = document.querySelector(
                 '.wfi-card-dag[data-wf-id="xsiam-normalization-pipeline"]');
             if (!slot) return {err: 'workflow not in index'};
@@ -95,8 +90,7 @@ def test_mini_dag_silhouettes_stack_parallel_ranks(signed_in_page):
                 circle_count: circles.length,
                 distinct_y_positions: new Set(ys).size,
             };
-        }"""
-    )
+        }""")
     assert "err" not in info, info["err"]
     assert info["circle_count"] >= 10, (
         f"xsiam-normalization-pipeline silhouette should have >=10 circles; "
@@ -122,13 +116,11 @@ def test_agent_chat_persists_to_localstorage(signed_in_page):
     page.evaluate("() => window.openAgentChat && openAgentChat('xql-snippet-curator')")
     page.wait_for_timeout(1200)
     # Push fake history (avoid waiting on a real model call here).
-    page.evaluate(
-        """() => {
+    page.evaluate("""() => {
             _agentHistory.push({role:'user', content:'persistence test'});
             _agentHistory.push({role:'assistant', content:'reply'});
             _persistAgentChat();
-        }"""
-    )
+        }""")
     has_ls = page.evaluate("() => !!localStorage.getItem('enclave.agentChat.v1')")
     assert has_ls, "Chat state did not persist to localStorage"
 
@@ -137,8 +129,7 @@ def test_agent_chat_persists_to_localstorage(signed_in_page):
     page.wait_for_selector("#tab-dashboard", state="visible", timeout=10_000)
     page.evaluate("() => switchTab('agents')")
     page.wait_for_timeout(2500)
-    info = page.evaluate(
-        """() => ({
+    info = page.evaluate("""() => ({
             panel_visible: getComputedStyle(
                 document.getElementById('agent-chat-panel')
             ).display !== 'none',
@@ -146,8 +137,7 @@ def test_agent_chat_persists_to_localstorage(signed_in_page):
             bubble_count: document.querySelectorAll(
                 '#agent-chat-messages > div'
             ).length,
-        })"""
-    )
+        })""")
     assert info["panel_visible"], "Chat panel did not re-appear after reload"
     assert info["header_name"], "Chat header name was empty after restore"
     assert (
@@ -163,12 +153,10 @@ def test_composer_description_is_autosizing_textarea(signed_in_page):
     auto-resizes to fit content. Single-line <input> truncated multi-
     paragraph workflow descriptions."""
     page = signed_in_page
-    info = page.evaluate(
-        """() => {
+    info = page.evaluate("""() => {
             const el = document.getElementById('df-wf-desc');
             return el ? {tag: el.tagName, has_oninput: !!el.oninput} : null;
-        }"""
-    )
+        }""")
     assert info is not None, "#df-wf-desc not present on the dashboard"
     assert (
         info["tag"] == "TEXTAREA"
@@ -194,20 +182,28 @@ def test_composer_clear_button_exists_and_clears(signed_in_page):
     page.evaluate(
         "() => { const d = document.querySelector('.composer-mgmt-drawer'); if (d) d.open = true; }"
     )
-    # Auto-accept the confirm dialog the Clear button triggers.
-    page.on("dialog", lambda d: d.accept())
     btn = page.locator('button[onclick="composerClearWithConfirm()"]')
     assert btn.count() == 1, "Clear button not present in the composer actions row"
     btn.click()
+    # The dialog-unification rework retired native window.confirm() in favour of
+    # the in-app Confirm modal (window.Confirm.ask → #enclave-confirm-ok). The
+    # Clear only fires once that button is clicked, so accept it explicitly —
+    # a `page.on("dialog", …)` handler never triggers for the custom modal.
+    ok = page.locator("#enclave-confirm-ok")
+    ok.wait_for(state="visible", timeout=5000)
+    ok.click()
     page.wait_for_timeout(1200)
     # The composer now keeps always-present editable START/END anchors, so an
-    # empty canvas legitimately holds those two __start__/__end__ nodes. Count
-    # only the real (non-anchor) steps when asserting the wipe.
-    state = page.evaluate(
-        """() => {
+    # empty canvas legitimately holds those two __start__/__end__ nodes. The
+    # agentic-composer revamp additionally auto-seeds an editable __seed__
+    # node on every empty canvas (dfEnsureSeedNode via dfRefreshAnchors), so
+    # it too is part of the legitimate empty state. Count only the real
+    # (non-anchor, non-seed) steps when asserting the wipe.
+    state = page.evaluate("""() => {
             const data = dfEditor?.drawflow?.drawflow?.Home?.data || {};
             const realNodes = Object.values(data).filter(
                 n => n.name !== '__start__' && n.name !== '__end__'
+                  && n.name !== '__seed__'
             ).length;
             return {
                 id: document.getElementById('df-wf-id').value,
@@ -215,8 +211,7 @@ def test_composer_clear_button_exists_and_clears(signed_in_page):
                 desc: document.getElementById('df-wf-desc').value,
                 realNodes,
             };
-        }"""
-    )
+        }""")
     assert state == {
         "id": "",
         "name": "",
@@ -235,8 +230,7 @@ def test_runs_progress_chip_lives_in_header_not_canvas(signed_in_page):
     page = signed_in_page
     page.evaluate("() => switchTab('runs')")
     page.wait_for_timeout(2500)
-    info = page.evaluate(
-        """() => {
+    info = page.evaluate("""() => {
             const chip = document.getElementById('runs-tab-progress-chip');
             const head = document.getElementById('runs-tab-detail-head');
             const graph = document.querySelector('.runs-tab-graph');
@@ -245,8 +239,7 @@ def test_runs_progress_chip_lives_in_header_not_canvas(signed_in_page):
                 in_canvas: !!graph?.contains(chip),
                 position: getComputedStyle(chip).position,
             };
-        }"""
-    )
+        }""")
     assert info["in_head"], "Progress chip is not in #runs-tab-detail-head"
     assert not info["in_canvas"], (
         "Progress chip is inside .runs-tab-graph — that re-introduces the "
@@ -268,8 +261,7 @@ def test_brand_selection_rule_covers_form_fields(signed_in_page):
     rules so Chrome doesn't drop the base rule when it can't parse
     ::-moz-selection."""
     page = signed_in_page
-    rules = page.evaluate(
-        """() => {
+    rules = page.evaluate("""() => {
             const found = [];
             for (const ss of document.styleSheets) {
                 let list;
@@ -281,8 +273,7 @@ def test_brand_selection_rule_covers_form_fields(signed_in_page):
                 }
             }
             return found;
-        }"""
-    )
+        }""")
     # Must include both the base ::selection AND the form-field variant.
     has_base = any(s == "::selection" for s in rules)
     has_form = any("input::selection" in s for s in rules)
@@ -313,14 +304,12 @@ def test_workbench_agent_card_has_click_to_add(signed_in_page):
     # The card must carry the delegated click action that spawns the agent
     # (inline onclick became data-action="bench.add-agent" when the composer
     # surfaces moved to delegated events; accept either shape).
-    has_handler = page.evaluate(
-        """() => {
+    has_handler = page.evaluate("""() => {
             const cards = document.querySelectorAll('#bench-agents-list .workbench-item.agent-card');
             return Array.from(cards).every(c =>
                 (c.getAttribute('data-action') || '') === 'bench.add-agent'
                 || (c.getAttribute('onclick') || '').includes('composerAddAgentAtCenter'));
-        }"""
-    )
+        }""")
     assert has_handler, (
         "Agent cards lack the bench.add-agent click action (or legacy "
         "composerAddAgentAtCenter onclick). Drag-only fallback regressed."
@@ -343,6 +332,7 @@ def test_composer_chat_parses_agent_endpoint_response(
     parser must read both. Before PR #81 it only knew the OpenAI shape
     and rendered every agent reply as literal '(empty response)'."""
     page = signed_in_page
+    page.evaluate("switchTab('chat')")  # chat dock (#prompt/#send-btn/#messages) moved to #tab-chat
     # Wire the chat dock to an agent.
     page.evaluate("() => { window._chatAgent = 'xql-snippet-curator'; }")
     page.evaluate(
@@ -367,8 +357,7 @@ def test_composer_chat_parses_agent_endpoint_response(
         # Fall back to assert: if the timeout hit, the test fails with the
         # literal '(empty response)' check below — clearer diagnostic.
         pass
-    info = page.evaluate(
-        """() => {
+    info = page.evaluate("""() => {
             const msgs = document.querySelectorAll('#messages .msg.assistant');
             const last = msgs.length ? msgs[msgs.length - 1] : null;
             return {
@@ -376,8 +365,7 @@ def test_composer_chat_parses_agent_endpoint_response(
                 preview: last ? last.innerText.trim().slice(0, 80) : null,
                 empty_literal: last ? last.innerText.includes('(empty response)') : null,
             };
-        }"""
-    )
+        }""")
     assert info["count"] >= 1, "No assistant bubble was rendered"
     assert not info["empty_literal"], (
         "Composer chat rendered '(empty response)' — agent endpoint response "

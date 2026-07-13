@@ -54,6 +54,11 @@ class ProjectDefinition(BaseModel):
         description="Optional master system prompt applied to chats opened "
         "from this project's context.",
     )
+    context_workspace: Optional[str] = Field(
+        None,
+        description="Name of the bound docs Workspace (proj-<id>) registered "
+        "via POST /api/projects/{id}/context-workspace. None until bound.",
+    )
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

@@ -339,3 +339,40 @@ class TestMessageBuilding:
         assert "Context A" in context_msg
         assert "### Second" in context_msg
         assert "Context B" in context_msg
+
+
+class TestAtomicWrites:
+    """GP-2 commit 4: create/update use tmp+os.replace, so a crash mid-write
+    can never leave a half-written (unparseable) agent file on disk."""
+
+    def test_create_leaves_no_tmp_on_success(self, service, sample_agent):
+        service.create_agent(sample_agent)
+        agents_dir = Path(service.agents_dir)
+        assert (agents_dir / "test-agent.yaml").exists()
+        assert not list(agents_dir.glob("*.tmp"))
+
+    def test_update_failure_preserves_prior_file(self, service, sample_agent, monkeypatch):
+        # Land a good version first.
+        service.create_agent(sample_agent)
+        path = Path(service.agents_dir) / "test-agent.yaml"
+        good = path.read_text()
+
+        # Now make the serializer blow up mid-write and attempt an update.
+        import api.services.agent_service as mod
+
+        def _boom(*a, **k):
+            raise IOError("disk full")
+
+        monkeypatch.setattr(mod.yaml, "dump", _boom)
+        sample_agent.name = "Mutated"
+        with pytest.raises(IOError):
+            service.update_agent("test-agent", sample_agent)
+
+        # The original file is intact (os.replace never ran) and no tmp lingers
+        # to shadow it as a corrupt half-write.
+        assert path.read_text() == good
+        # The tmp may exist as a partial, but the CANONICAL file was untouched;
+        # importantly the target is still fully parseable.
+        import yaml as real_yaml
+
+        assert real_yaml.safe_load(path.read_text())["name"] == "Test Agent"

@@ -284,6 +284,12 @@ def _build_workflow_nodes(nodes: List[Dict], links: List[Dict], topic_set: set) 
                 "id": f"run:{run_id[:12]}",
                 "type": "workflow_run",
                 "name": workflow_id,
+                # Full, untruncated ids so the Context rail (U14) can pivot to
+                # the exact run / workflow. The node "id" stays truncated so the
+                # produced-link source/target keys below still match — never
+                # collapse these into the id.
+                "run_id": run_id,
+                "workflow_id": workflow_id,
                 "status": status,
                 "duration": round(total_duration, 3),
                 "tokens": total_tokens,
@@ -345,6 +351,10 @@ def _build_provenance_nodes(nodes: List[Dict], links: List[Dict]) -> int:
             {
                 "id": rnode_id,
                 "type": "response",
+                # Full response id alongside the truncated node "id" so the
+                # Context rail can fetch the exact provenance chain. Node "id"
+                # stays truncated so the grounding links above still resolve.
+                "response_id": prov.response_id,
                 "label": (prov.content_preview or prov.response_id)[:48],
                 "model": prov.model,
                 "conversation_id": prov.conversation_id,

@@ -34,8 +34,15 @@ def test_models_tab_lists_locally_installed_models(
     page = signed_in_page
     page.click('button[data-tab="inventory"]')
     page.wait_for_selector("#tab-inventory", state="visible", timeout=5_000)
+    # The grid renders the curated catalog first (satisfying a naive
+    # innerText-length wait instantly), then the async loadInstalledLocal()
+    # cross-references Ollama and injects the installed rows with their real
+    # ollama ids. Wait for an actual installed id to appear so we don't race
+    # that second pass.
     page.wait_for_function(
-        "() => document.getElementById('tab-inventory').innerText.length > 100",
+        "(names) => { const t = document.getElementById('tab-inventory').innerText;"
+        " return names.some(n => t.includes(n)); }",
+        arg=installed,
         timeout=15_000,
     )
     panel_text = page.locator("#tab-inventory").inner_text()

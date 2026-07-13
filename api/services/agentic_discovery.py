@@ -38,13 +38,176 @@ bound and we don't want to fan out to every upstream on every page hit.
 
 from __future__ import annotations
 
+import json
+import os
 import time
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from ..logging_config import logger
 
-CACHE_TTL = 300  # seconds — discovery feeds cache for 5 min
+CACHE_TTL = 300  # seconds — default feed cache when the config has no override
+
+
+# ── Discovery sources config (LB0-U2) ────────────────────────────────
+#
+# ``data/config/discovery_sources.json`` is the single operator-owned
+# source of truth for every fetch-source knob: the skills-sh repo
+# allowlist, plugin marketplace allowlists, prompt-digest sources,
+# remote catalog URLs, per-source cache TTLs (the max age applied to
+# operator-triggered refreshes — nothing here is a poller), and an
+# optional GitHub token. Merge order: file > env > default (the
+# search_settings pattern). Providers consult it AT FETCH TIME — never
+# at import-time registration — so a PUT via ``/api/discover/config``
+# takes effect without a restart.
+
+_CONFIG_DIR = Path(__file__).parent.parent.parent / "data" / "config"
+_SOURCES_CONFIG_FILE = _CONFIG_DIR / "discovery_sources.json"
+
+# 'config' is reserved so GET /api/discover/config can never collide
+# with a provider feed at GET /api/discover/{source}.
+RESERVED_SOURCES = frozenset({"config"})
+
+DEFAULT_SKILL_REPOS = [
+    "anthropics/skills",
+    "obra/superpowers",
+    "vercel-labs/skills",
+]
+DEFAULT_PLUGIN_MARKETPLACES = [
+    "anthropics/claude-plugins-official",
+    "anthropics/claude-code",
+    "anthropics/skills",
+    "anthropics/knowledge-work-plugins",
+]
+DEFAULT_PROMPT_DIGEST_SOURCES = [
+    "anthropics/claude-cookbooks",
+    "openai/openai-cookbook",
+    "google-gemini/cookbook",
+]
+
+
+def _env_csv(name: str) -> List[str]:
+    raw = os.getenv(name, "").strip()
+    return [r.strip() for r in raw.split(",") if r.strip()] if raw else []
+
+
+def _read_sources_file() -> Dict[str, Any]:
+    """Raw file layer (no env/default merge). {} when absent or corrupt."""
+    try:
+        if _SOURCES_CONFIG_FILE.exists():
+            data = json.loads(_SOURCES_CONFIG_FILE.read_text())
+            if isinstance(data, dict):
+                return data
+    except Exception:  # noqa: BLE001 — corrupt file degrades to env/defaults
+        logger.warning("discovery_sources.json unreadable — using env/defaults")
+    return {}
+
+
+def load_sources_config() -> Dict[str, Any]:
+    """Effective source config: file > env > default.
+
+    Cheap enough to call on every fetch — which is exactly the point:
+    a PUT through the admin route is live on the very next refresh.
+    """
+    f = _read_sources_file()
+    urls = f.get("catalog_urls") if isinstance(f.get("catalog_urls"), dict) else {}
+    ttls = f.get("cache_ttls") if isinstance(f.get("cache_ttls"), dict) else {}
+
+    # GP-2 commit 7 (config-integrity, None-vs-empty): distinguish "key ABSENT"
+    # (fall through to env/default) from "key present but EMPTY" (the operator
+    # deliberately cleared the allowlist — honor it, don't resurrect defaults).
+    # The old `f.get(key) or DEFAULT` treated a stored `[]` as falsy and
+    # silently re-populated the shipped defaults, so an operator could never
+    # empty an allowlist through the admin route.
+    def _layered_list(key: str, env_name: str | None, default: List[str]) -> List[str]:
+        if key in f and isinstance(f[key], list):
+            return [str(v) for v in f[key]]  # present (even []) → authoritative
+        if env_name:
+            env_vals = _env_csv(env_name)
+            if env_vals:
+                return env_vals
+        return list(default)
+
+    return {
+        "skill_repos": _layered_list(
+            "skill_repos", "ENCLAVE_SKILL_REPOS", DEFAULT_SKILL_REPOS
+        ),
+        "plugin_marketplaces": _layered_list(
+            "plugin_marketplaces", None, DEFAULT_PLUGIN_MARKETPLACES
+        ),
+        "prompt_digest_sources": _layered_list(
+            "prompt_digest_sources", None, DEFAULT_PROMPT_DIGEST_SOURCES
+        ),
+        "catalog_urls": {
+            "skills": (urls.get("skills") or "").strip()
+            or os.getenv("ENCLAVE_SKILLS_CATALOG_URL", "").strip(),
+            "mcp": (urls.get("mcp") or "").strip()
+            or os.getenv("ENCLAVE_MCP_CATALOG_URL", "").strip(),
+        },
+        "cache_ttls": {"default": CACHE_TTL, **ttls},
+        "github_token": (
+            f.get("github_token")
+            or os.getenv("ENCLAVE_GITHUB_TOKEN", "").strip()
+            or os.getenv("GITHUB_TOKEN", "").strip()
+        ),
+    }
+
+
+def masked_sources_config() -> Dict[str, Any]:
+    """Effective config with the token masked — the only shape the API
+    ever returns on read. The raw token never leaves the box."""
+    cfg = load_sources_config()
+    tok = cfg.pop("github_token", "") or ""
+    cfg["github_token_set"] = bool(tok)
+    cfg["github_token_masked"] = (
+        f"***{tok[-4:]}" if len(tok) > 4 else ("set" if tok else "")
+    )
+    return cfg
+
+
+def update_sources_config(changes: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge operator-provided fields over the FILE layer and persist.
+
+    Only keys present in ``changes`` are written; untouched knobs keep
+    falling through to env/default. Token semantics: absent/None → keep,
+    masked echo ('***…'/'set') → keep, '' → clear, else → set. Atomic
+    tmp+replace with chmod 0600 (the file may hold a GitHub token).
+    """
+    raw = _read_sources_file()
+    for key in ("skill_repos", "plugin_marketplaces", "prompt_digest_sources"):
+        if changes.get(key) is not None:
+            raw[key] = [str(v).strip() for v in changes[key] if str(v).strip()]
+    if changes.get("catalog_urls") is not None:
+        merged = dict(raw.get("catalog_urls") or {})
+        merged.update({k: (v or "").strip() for k, v in changes["catalog_urls"].items()})
+        raw["catalog_urls"] = merged
+    if changes.get("cache_ttls") is not None:
+        merged = dict(raw.get("cache_ttls") or {})
+        merged.update(changes["cache_ttls"])
+        raw["cache_ttls"] = merged
+    if changes.get("github_token") is not None:
+        tok = str(changes["github_token"])
+        if tok == "":
+            raw.pop("github_token", None)
+        elif not tok.startswith("***") and tok != "set":
+            raw["github_token"] = tok
+        # masked echo → keep the stored token untouched
+    _SOURCES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _SOURCES_CONFIG_FILE.with_name(_SOURCES_CONFIG_FILE.name + ".tmp")
+    tmp.write_text(json.dumps(raw, indent=2))
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, _SOURCES_CONFIG_FILE)
+    return masked_sources_config()
+
+
+def cache_ttl_for(source: str) -> float:
+    """Per-source feed cache TTL in seconds, consulted at fetch time."""
+    ttls = load_sources_config().get("cache_ttls") or {}
+    try:
+        return float(ttls.get(source, ttls.get("default", CACHE_TTL)))
+    except (TypeError, ValueError):
+        return float(CACHE_TTL)
 
 
 # ── Unified schema ───────────────────────────────────────────────────
@@ -117,6 +280,7 @@ class _ProviderEntry:
         kinds: List[str],
         fetch: Callable[[], DiscoveryFeed],
         implemented: bool = True,
+        refresh: Optional[Callable[[], Any]] = None,
     ):
         self.source = source
         self.name = name
@@ -125,6 +289,11 @@ class _ProviderEntry:
         self.kinds = kinds
         self.fetch = fetch
         self.implemented = implemented
+        # Optional operator-refresh hook (LB5-U1): digest-backed providers
+        # register fetch() as a persisted-digest READ (zero network) and put
+        # their network ingestion here — invoked ONLY from the master-key
+        # gated POST /api/discover/{source}/refresh route via refresh_feed().
+        self.refresh = refresh
         self._cached: Optional[DiscoveryFeed] = None
         self._fetched_at: float = 0.0
 
@@ -134,7 +303,7 @@ class _ProviderEntry:
         if (
             not force
             and self._cached is not None
-            and now - self._fetched_at < CACHE_TTL
+            and now - self._fetched_at < cache_ttl_for(self.source)
         ):
             return self._cached
         try:
@@ -168,7 +337,13 @@ def register_provider(
     kinds: List[str],
     fetch: Callable[[], DiscoveryFeed],
     implemented: bool = True,
+    refresh: Optional[Callable[[], Any]] = None,
 ) -> None:
+    if source in RESERVED_SOURCES:
+        raise ValueError(
+            f"'{source}' is a reserved discovery source name "
+            "(collides with /api/discover/config)"
+        )
     _REGISTRY[source] = _ProviderEntry(
         source=source,
         name=name,
@@ -177,6 +352,7 @@ def register_provider(
         kinds=kinds,
         fetch=fetch,
         implemented=implemented,
+        refresh=refresh,
     )
 
 
@@ -201,6 +377,23 @@ def get_feed(source: str, *, force: bool = False) -> DiscoveryFeed:
     if source not in _REGISTRY:
         raise KeyError(source)
     return _REGISTRY[source].get(force=force)
+
+
+def refresh_feed(source: str) -> DiscoveryFeed:
+    """Operator-triggered refresh (the POST .../refresh route's one entry
+    point). Digest-backed providers run their network refresh hook first —
+    fail-soft, the hook persists what it can — then the feed is rebuilt
+    bypassing the cache (for hook providers that re-read is a digest read,
+    zero network). Providers without a hook keep force-refetch semantics."""
+    if source not in _REGISTRY:
+        raise KeyError(source)
+    entry = _REGISTRY[source]
+    if entry.refresh is not None:
+        try:
+            entry.refresh()
+        except Exception as exc:  # noqa: BLE001 — refresh must never 500
+            logger.warning("Discovery provider %s refresh failed: %s", source, exc)
+    return entry.get(force=True)
 
 
 def get_all_feeds(*, force: bool = False) -> List[Dict[str, Any]]:

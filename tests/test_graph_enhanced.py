@@ -140,6 +140,36 @@ class TestWorkflowRunNodes:
         assert node["tokens"] == 150
         assert node["duration"] == 1.5
 
+    def test_workflow_run_carries_full_ids(self, tmp_path):
+        """U13: node id stays truncated (edges rely on it) but the node now
+        carries the FULL run_id + workflow_id so the Context rail can pivot to
+        the exact run."""
+        workflows_dir = tmp_path / "workflows"
+        full_run_id = "abc12345-1234-1234-1234-123456789abc"
+        run_dir = workflows_dir / full_run_id
+        run_dir.mkdir(parents=True)
+        run_dir.joinpath("run.json").write_text(json.dumps({
+            "run_id": full_run_id,
+            "workflow_id": "xsiam-normalize",
+            "status": "completed",
+            "context": {"seed": {}, "workspace": {}, "shared": {}, "metadata": {}},
+            "step_results": [],
+            "started_at": "2026-07-08T00:00:00",
+            "completed_at": "2026-07-08T00:00:01",
+            "error": None,
+        }))
+
+        with patch("api.services.graph_service.WORKFLOWS_DIR", workflows_dir):
+            graph = build_graph(force=True)
+
+        node = next(n for n in graph["nodes"] if n.get("type") == "workflow_run")
+        # Full ids present and untruncated…
+        assert node["run_id"] == full_run_id
+        assert node["workflow_id"] == "xsiam-normalize"
+        # …while the node id (edge key) stays the truncated form.
+        assert node["id"] == "run:abc12345-123"
+        assert node["id"] != node["run_id"]
+
     def test_workflow_run_limit_20(self, tmp_path):
         """Only the 20 most recent runs should appear."""
         workflows_dir = tmp_path / "workflows"

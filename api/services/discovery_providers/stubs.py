@@ -163,26 +163,9 @@ register_provider(
 
 
 # ── Plugins / Tool Ecosystems ────────────────────────────────────────
-
-register_provider(
-    source="claude-marketplaces",
-    name="Claude Plugin Marketplaces",
-    description=(
-        "Aggregator of official + community plugin marketplaces — "
-        "high-density packages from Composio + independent devs."
-    ),
-    homepage="https://claudemarketplaces.com",
-    kinds=["plugin"],
-    fetch=stub_fetch(
-        source="claude-marketplaces",
-        name="Claude Plugin Marketplaces",
-        description="aggregated Claude plugin marketplaces",
-        homepage="https://claudemarketplaces.com",
-        kinds=["plugin"],
-        note="Stub. Scrape the marketplace listings; each card → DiscoveryItem.",
-    ),
-    implemented=False,
-)
+#
+# claude-marketplaces graduated to a real digest-backed provider
+# (claude_marketplaces.py, LB5-U1) — its stub is gone.
 
 register_provider(
     source="composio",

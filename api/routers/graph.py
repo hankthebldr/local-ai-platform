@@ -55,6 +55,12 @@ class DeepDiveRequest(BaseModel):
     topic: str = Field(..., description="Research topic or question")
     model: str = Field("dolphin3:latest", description="Ollama model to use")
     depth: int = Field(3, ge=1, le=5, description="Number of sub-questions to explore")
+    # RX-1: optional session to continue. When present the fresh synthesis is
+    # appended to that session; when absent a new session is minted. The
+    # response always carries the resulting `session_id`.
+    session_id: Optional[str] = Field(
+        None, description="Existing ResearchSession id to continue (optional)"
+    )
 
 
 @router.post("/api/research/deep-dive")
@@ -152,6 +158,26 @@ async def deep_dive(req: DeepDiveRequest):
             unique_sources.append(src)
             seen_urls.add(url)
 
+    # ── RX-1: mint (or continue) a stateful research session ─────────────
+    # Turns the one-shot deep-dive into a resumable, followable session and
+    # writes a human-readable MOC into the shared `research` workspace. Best
+    # effort: a session-store failure never fails the research response.
+    session_id: Optional[str] = None
+    try:
+        from ..services import research_session
+
+        session = research_session.record_deep_dive(
+            topic=req.topic,
+            model=req.model,
+            source_ids=[s.get("url", "") for s in unique_sources if s.get("url")],
+            synthesis=synthesis,
+            sub_questions=sub_questions,
+            session_id=req.session_id,
+        )
+        session_id = session.id
+    except Exception as e:  # noqa: BLE001 — session mint is additive
+        logger.warning(f"Research session mint failed: {e}")
+
     return {
         "topic": req.topic,
         "model": req.model,
@@ -159,4 +185,5 @@ async def deep_dive(req: DeepDiveRequest):
         "research": research_sections,
         "synthesis": synthesis,
         "sources": unique_sources,
+        "session_id": session_id,
     }

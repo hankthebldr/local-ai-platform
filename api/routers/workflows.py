@@ -316,7 +316,12 @@ async def save_workflow(req: WorkflowSaveRequest):
         default_flow_style=False,
         allow_unicode=True,
     )
-    target.write_text(yaml_text, encoding="utf-8")
+    # Atomic write (GP-2 commit 4): tmp + os.replace so a crash mid-write can
+    # never leave a half-written (unparseable) workflow yaml. The tmp sits in
+    # the same dir as the target so os.replace stays within one filesystem.
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(yaml_text, encoding="utf-8")
+    os.replace(tmp, target)
     logger.info(f"Saved workflow '{wf_id}' to {target}")
     return {
         "saved": True,
@@ -347,6 +352,41 @@ class StepTestRequest(BaseModel):
     user_message: str
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    # LB1-U1 — explicit skill refs ("<plugin_id>.<skill_id>") injected
+    # router-side before the model call, mirroring the skill_injector
+    # builtin's explicit-mode semantics. Optional and additive: absent or
+    # empty leaves test-step behavior byte-identical to before.
+    skills: Optional[List[str]] = None
+
+
+def _apply_skill_injection(
+    system_prompt: str, user_message: str, skill_refs: List[str]
+) -> tuple[str, str, List[Dict[str, Any]]]:
+    """Router-side skill injection for test-step (engine files untouched).
+
+    Delegates to the SkillInjectorHook builtin itself (explicit mode) on a
+    synthetic HookContext, so the injected text can never drift from what a
+    real workflow run produces — parity is pinned by
+    tests/parity/test_skill_injection_parity.py. Returns the augmented
+    (system, user) pair plus the SkillActivation records as dicts. Never
+    raises: the builtin swallows its own failures (action=continue).
+    """
+    from types import SimpleNamespace
+
+    from ..hooks.builtins.skill_injector import SkillInjectorHook
+    from ..services.hook_bus import HookContext
+    from ..services.prompt_composer import ComposedPrompt
+
+    prompt = ComposedPrompt(system=system_prompt, user=user_message)
+    result_handle = SimpleNamespace(skills_activated=[], extension_overhead_ms=0.0)
+    ctx = HookContext(
+        step=SimpleNamespace(id="test-step", skills=list(skill_refs)),
+        prompt=prompt,
+        step_result=result_handle,
+    )
+    SkillInjectorHook(mode="explicit")(ctx)
+    activations = [a.model_dump() for a in result_handle.skills_activated]
+    return prompt.system, prompt.user, activations
 
 
 @router.post("/test-step")
@@ -373,9 +413,16 @@ async def test_step(req: StepTestRequest):
     except APIError:
         raise
 
+    user_message = req.user_message
+    skills_activated: List[Dict[str, Any]] = []
+    if req.skills:
+        system_prompt, user_message, skills_activated = _apply_skill_injection(
+            system_prompt, user_message, req.skills
+        )
+
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": req.user_message},
+        {"role": "user", "content": user_message},
     ]
     temperature = req.temperature if req.temperature is not None else 0.7
     max_tokens = req.max_tokens if req.max_tokens is not None else 2048
@@ -402,6 +449,10 @@ async def test_step(req: StepTestRequest):
             ),
         },
     }
+    # Only-add: the key appears only when the caller asked for injection, so
+    # pre-existing test-step consumers see an unchanged payload.
+    if req.skills:
+        response["skills_activated"] = skills_activated
     # Surface model_fallback when the pinned model wasn't found (mirrors
     # /api/agents/{id}/chat shape so the dashboard can reuse its banner).
     pinned = step.get("model") or None
@@ -499,64 +550,35 @@ async def run_workflow_async(
     Use this when you want live UI updates. The sync /run endpoint is
     still the right call for short workflows that return quickly.
     """
-    import uuid as _uuid
-    from datetime import datetime as _dt
-    from ..models.workflow_models import WorkflowRun, WorkflowContext
+    from ..services.run_dispatch import (
+        RunPrepareError,
+        WorkflowNotFound,
+        dispatch_blocking,
+        prepare_run,
+    )
 
     engine = get_engine()
 
-    if req.definition:
-        defn = engine.load_from_dict(req.definition)
-    elif req.workflow_id:
-        yaml_path = engine.resolve_workflow_path(req.workflow_id, WORKFLOWS_DIR)
-        if not yaml_path:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Workflow '{req.workflow_id}' not found in public or private overlay",
-            )
-        defn = engine.load(yaml_path)
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Provide either 'workflow_id' or 'definition'",
-        )
-
+    # prepare_run expresses BOTH branches (workflow_id AND inline definition,
+    # the Composer Run ▶ live path) + validation + queued placeholder + origin
+    # sidecar. The response contract below stays byte-identical; the only new
+    # observable is data/workflows/<run_id>/origin.json.
     try:
-        engine.validate(defn, seed_keys=list(req.seed.keys()) if req.seed else None)
+        defn, run_id = prepare_run(
+            workflow_id=req.workflow_id,
+            definition=req.definition,
+            seed=req.seed,
+            origin={"origin": "manual"},
+            engine=engine,
+        )
+    except WorkflowNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except WorkflowValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except RunPrepareError as e:
+        raise HTTPException(status_code=e.http_status, detail=str(e))
 
-    # Pre-create the run id + checkpoint a "queued" record so the client
-    # can immediately poll /runs/{id}. The engine generates its own
-    # internal run_id otherwise; we hand it in so the URL is stable.
-    run_id = str(_uuid.uuid4())
-    ctx = WorkflowContext(seed=dict(req.seed or {}))
-    placeholder = WorkflowRun(
-        run_id=run_id,
-        workflow_id=defn.id,
-        status="queued",
-        context=ctx,
-        started_at=_dt.utcnow(),
-    )
-    try:
-        engine._checkpoint(placeholder)
-    except Exception:
-        pass
-
-    def _run_in_background():
-        from ..logging_config import logger as _logger
-
-        try:
-            engine.run(defn, seed=req.seed, run_id=run_id)
-        except TypeError:
-            # Older engine signature without run_id kwarg — fall back and
-            # accept the engine's auto-generated id. The pre-checkpoint
-            # placeholder is then orphaned (harmless; cleanup elsewhere).
-            engine.run(defn, seed=req.seed)
-        except Exception as e:
-            _logger.error(f"Background workflow run {run_id} failed: {e}")
-
-    background_tasks.add_task(_run_in_background)
+    background_tasks.add_task(dispatch_blocking, defn, req.seed, run_id, engine)
     return {
         "run_id": run_id,
         "workflow_id": defn.id,
@@ -570,6 +592,39 @@ async def list_runs(limit: int = 20):
     """List recent workflow runs"""
     engine = get_engine()
     return engine.list_runs(limit=limit)
+
+
+# Registered inside the /runs block (Operate-plane spec §3.2, F15) so it resolves
+# BEFORE the `GET /{workflow_id}` catch-all at the tail of this module — a literal
+# path registered here always wins over that parameterized route, and the legacy
+# `GET /runs` above is byte-unchanged (frontend 404 fallback). The frozen engine's
+# own list_runs is deliberately NOT used by this path — run_index scans the run
+# root directly, read-only.
+@router.get("/runs-index")
+async def runs_index(
+    limit: int = 30,
+    cursor: Optional[str] = None,
+    status: Optional[str] = None,
+    type: Optional[str] = None,  # noqa: A002 — public query-param name (type chip)
+    health: Optional[str] = None,
+    q: Optional[str] = None,
+):
+    """Keyset-paged, filterable, health-tagged index over the run root.
+
+    ``(started_at, run_id)`` descending cursor, server-side status/type/health/q
+    filters, a bounded per-request scan, and per-workflow anomaly stats from an
+    amortized cache. Read-only; the frozen engine is untouched.
+    """
+    from ..services import run_index
+
+    return run_index.scan_runs(
+        limit=limit,
+        cursor=cursor,
+        status=status,
+        type_=type,
+        health=health,
+        q=q,
+    )
 
 
 @router.get("/runs/{run_id}")
@@ -683,6 +738,137 @@ async def cancel_run(run_id: str):
         "status": "cancel_requested",
         "accepted": newly_marked,
         "reason": None if newly_marked else "cancel already pending",
+    }
+
+
+def _valid_run_id(run_id: str) -> bool:
+    """Run ids are engine-minted uuid4 hex/strings. Constrain to a filename-
+    safe charset so a crafted id can never traverse out of the run store
+    (``get_run`` joins it onto DATA_DIR). Mirrors the ``/{workflow_id}`` guard.
+    """
+    return bool(run_id) and all(c.isalnum() or c in "_-" for c in run_id)
+
+
+@router.post("/runs/{run_id}/resume-from-failed")
+def resume_from_failed(run_id: str):
+    """Re-dispatch a FAILED run from its first non-completed step (CH-1).
+
+    Plain ``/resume`` is a no-op on a failed run — ``engine.resume`` short-
+    circuits on terminal status (completed/failed/canceled) and returns the
+    snapshot unchanged. The Fix&Resume loop needs the opposite: after the
+    operator edits the failing step and re-saves, flip the run back to
+    ``running`` (so ``resume`` re-executes) and resume. Modeled byte-for-byte
+    on ``resolve_approval``'s flip-then-resume: set ``status="running"``,
+    ``engine._checkpoint``, then ``engine.resume(run_id)`` with no explicit
+    definition so the engine reloads the SAVED workflow yaml (picking up the
+    operator's edits). Completed steps keep their earlier outputs; only the
+    failed tail re-runs.
+
+    Add-only. Idempotency mirrors ``cancel_run``/``resolve_approval``: a
+    missing run is 404; a run that isn't failed is 409 (only failed runs can
+    resume-from-failed — a completed/running run has nothing to re-dispatch).
+
+    Composite step kinds (parallel/loop/ralph/orchestrator) resume natively —
+    the engine executes them from the reloaded definition, and the composer's
+    composite hydration (GP-1a / P0-2, landed) keeps the round-tripped yaml
+    faithful, so composite Fix&Resume is safe.
+    """
+    if not _valid_run_id(run_id):
+        raise HTTPException(status_code=400, detail="invalid run id")
+
+    engine = get_engine()
+    snapshot = engine.get_run(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    current = (snapshot.get("status") or "").lower()
+    if current not in {"failed", "error"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"run is not failed (status={current or 'unknown'}); "
+            "only a failed run can resume-from-failed",
+        )
+
+    from ..models.workflow_models import WorkflowRun
+
+    run = WorkflowRun.model_validate(snapshot)
+    # Flip off the terminal state so resume() re-dispatches instead of short-
+    # circuiting. Checkpoint first so a crash between flip and resume leaves a
+    # consistent (running) snapshot the plain /resume path can still pick up.
+    run.status = "running"
+    engine._checkpoint(run)
+
+    try:
+        # definition=None → engine reloads ./workflows/<workflow_id>.yaml, so
+        # the operator's just-saved edits to the failing step take effect.
+        resumed = engine.resume(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return {
+        "run_id": resumed.run_id,
+        "workflow_id": resumed.workflow_id,
+        "status": resumed.status,
+        "error": resumed.error,
+        "resumed_from_failed": True,
+    }
+
+
+@router.post("/runs/{run_id}/mark-failed")
+def mark_run_failed(run_id: str):
+    """Persist a stalled/zombie run as FAILED (GP-2 commit 7).
+
+    A run whose ``status`` is still ``running``/``queued`` after the engine
+    restarted mid-flight is a zombie: nothing is executing it, but the store
+    says it's alive, so the Runs UI polls it forever and it never becomes
+    Fix&Resume-able (resume-from-failed 409s a non-failed run). This route
+    flips the persisted ``run.json`` to ``failed`` so the operator can then
+    resume-from-failed (or archive it) — the terminal state the crash never
+    got to write.
+
+    Add-only, idempotent like ``cancel_run``: a missing run is 404; a run that
+    is ALREADY terminal (completed/failed/canceled/error) is a no-op that
+    returns its current status (no clobber of a legitimately-completed run).
+    """
+    if not _valid_run_id(run_id):
+        raise HTTPException(status_code=400, detail="invalid run id")
+
+    engine = get_engine()
+    snapshot = engine.get_run(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    current = (snapshot.get("status") or "").lower()
+    if current in {"completed", "failed", "canceled", "error"}:
+        return {
+            "run_id": run_id,
+            "status": current,
+            "changed": False,
+            "reason": f"run already terminal: {current}",
+        }
+
+    from datetime import datetime
+
+    from ..models.workflow_models import WorkflowRun
+
+    run = WorkflowRun.model_validate(snapshot)
+    run.status = "failed"
+    if not run.error:
+        run.error = (
+            "Run marked failed by operator: the engine restarted while this "
+            "run was in flight (stalled/zombie), so it never reached a terminal "
+            "state on its own."
+        )
+    if run.completed_at is None:
+        run.completed_at = datetime.utcnow()
+    engine._checkpoint(run)
+
+    return {
+        "run_id": run.run_id,
+        "workflow_id": run.workflow_id,
+        "status": run.status,
+        "error": run.error,
+        "changed": True,
     }
 
 
@@ -921,3 +1107,27 @@ async def schedule_preview(workflow_id: str):
         ],
         "notes": preview.notes,
     }
+
+
+@router.get("/{workflow_id}/runs")
+async def list_workflow_runs(workflow_id: str, limit: int = 20):
+    """Runs for ONE workflow, newest first (CH-1 read-model seam).
+
+    The generic ``/runs`` endpoint lists every run across all workflows; this
+    scopes to a single workflow so the composer can paint a last-run health
+    chip and a workflow-scoped History without pulling the whole run index.
+    Read-only, no engine mutation, no network egress.
+
+    This is the canonical read-model seam the Operate plane's run-index unit
+    (U5) is amended to CONSUME rather than re-implement its own ``/runs``
+    filter (see the CH-1 ↔ U5 binding in the hardening spec).
+    """
+    if not workflow_id or not all(c.isalnum() or c in "_-" for c in workflow_id):
+        raise HTTPException(status_code=400, detail="invalid workflow id")
+    limit = max(1, min(int(limit), 200))
+    engine = get_engine()
+    # Over-scan then filter+cap: list_runs returns cross-workflow summaries, so
+    # widen the scan window so a busy fleet doesn't starve this workflow's rows.
+    scan = engine.list_runs(limit=max(limit * 10, 200))
+    runs = [r for r in scan if r.get("workflow_id") == workflow_id][:limit]
+    return {"workflow_id": workflow_id, "count": len(runs), "runs": runs}

@@ -161,8 +161,11 @@ class Deployment(Protocol):
         ...
 
     def ensure_user_storage(self) -> None:
-        """Create user_storage_root/{plugins,mcp/binaries,cache,workflows}
-        with chmod 0700 if any are missing. Idempotent.
+        """Create user_storage_root/{plugins,mcp/binaries,cache,workflows,
+        config,prompts/{roles,templates,hooks},tasks,patterns} with chmod 0700
+        if any are missing. Idempotent. prompts/ is the writable user prompt
+        layer (LB0-U3; hooks/ added in LB2-U1); tasks/ holds operator task
+        schemas (LB6); patterns/ holds operator pattern presets (PT-1).
         """
         ...
 

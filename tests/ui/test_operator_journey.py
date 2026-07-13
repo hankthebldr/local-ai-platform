@@ -17,8 +17,9 @@ def test_journey_markup_anchors_present(index_soup):
 
 
 def test_journey_module_and_css_present(index_html_text):
-    assert "window.OpPath" in index_html_text
-    assert 'id="enclave-journey-js"' in index_html_text
+    assert (
+        "window.OpPath" in index_html_text
+    )  # module code (phase-2: now in js/main.js)
     assert 'id="enclave-journey-styles"' in index_html_text
     assert ".op-stage.done" in index_html_text
     assert ".op-stage.hot" in index_html_text

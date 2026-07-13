@@ -6,7 +6,9 @@ the fail-silent-in-text-input guard, the tab-jump action, and the trigger button
 
 
 def test_shortcuts_module_defined(index_html_text):
-    assert "window.Shortcuts = (function" in index_html_text
+    # phase-2 U2: Shortcuts carved to core/shortcuts.js (ES module) + window-bridged.
+    assert "export const Shortcuts = (function" in index_html_text
+    assert "window.Shortcuts = Shortcuts" in index_html_text
 
 
 def test_shortcuts_toggle_exists(index_html_text):

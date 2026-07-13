@@ -28,7 +28,7 @@ Output (gitignored): playwright-results/videos/<hash>.webm — rename to
 Storyboard (~4:00 wall-clock):
     0:00  Boot reveal — dark-mode composer + workbench
     0:15  Top-level tab fade tour (all promoted IA surfaces)
-    0:40  Workflow Index — vertical-stack mini-DAG silhouettes
+    0:40  Workflows — vertical-stack mini-DAG silhouettes
           (code-review fan-in, xsiam-normalization-pipeline mesh)
     0:55  Compose `xsiam-data-model-rules` — fan-in DAG in composer
     1:10  HERO — Data-rule generation:
@@ -115,8 +115,8 @@ def test_demo_comprehensive(signed_in_page, base_url, api_headers):
         page.evaluate(f"() => window.switchTab && window.switchTab('{tab}')")
         _settle(page, 750)
 
-    # ── 2. Workflow Index — mini-DAG silhouettes ───────────────────
-    _scene(page, "2 · Workflow Index — vertical-stack mini-DAGs")
+    # ── 2. Workflows — mini-DAG silhouettes ───────────────────
+    _scene(page, "2 · Workflows — vertical-stack mini-DAGs")
     page.evaluate("() => window.switchTab && switchTab('workflow-index')")
     _settle(page, 1400)
     try:

@@ -20,6 +20,7 @@ from .routers import (
     chat,
     completions,
     models,
+    model_registry,  # noqa: F401 — runner-aware model selection (/api/models)
     inventory,
     exports,
     graph,
@@ -44,6 +45,8 @@ from .routers import (
     system,  # noqa: F401 — architecture-aware orchestration (Phase 1)
     provenance,  # noqa: F401 — response→source grounding chains
     conversations,  # noqa: F401 — durable chat threads
+    workspaces,  # noqa: F401 — durable local dirs for autonomous workflows (C2)
+    prompts,  # noqa: F401 — Prompts library object (roles + templates CRUD + render)
 )
 from .services.ollama_service import OllamaService
 from .services.workflow_engine import WorkflowEngine
@@ -236,8 +239,33 @@ async def lifespan(app: FastAPI):
 
     get_run_event_bus().bind_loop(asyncio.get_running_loop())
 
+    # ── Local scheduler dispatch loop (Operate U4) ──────────────────────
+    # Single-worker, in-process, zero egress. Wrapped so an induced error
+    # never blocks boot (never-block-boot convention); cancelled + gathered
+    # after yield.
+    scheduler_task = None
+    try:
+        from .services.schedule_service import get_schedule_service, run_dispatch_loop
+
+        _sched_service = get_schedule_service()
+        scheduler_task = asyncio.create_task(run_dispatch_loop(_sched_service))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Scheduler failed to start; running in degraded mode: %s", e)
+        _sched_service = None
+
     yield
     logger.info("Shutting down Enclave API")
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
+    if _sched_service is not None:
+        try:
+            await _sched_service.shutdown()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _bootstrap_auth_if_needed() -> None:
@@ -311,6 +339,7 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(completions.router)
 app.include_router(models.router)
+app.include_router(model_registry.router)
 app.include_router(inventory.router)
 app.include_router(exports.router)
 app.include_router(graph.router)
@@ -335,9 +364,37 @@ app.include_router(discover.router)
 app.include_router(system.router)
 app.include_router(provenance.router)
 app.include_router(conversations.router)
+app.include_router(workspaces.router)
+app.include_router(prompts.router)
+from .routers import tasks as _tasks_router  # noqa: E402 — Task Menu library (LB6)
+
+app.include_router(_tasks_router.router)
+from .routers import (
+    patterns as _patterns_router,
+)  # noqa: E402 — Patterns library (PT-1)
+
+app.include_router(_patterns_router.router)
 from .routers import projects as _projects_router  # noqa: E402
 
 app.include_router(_projects_router.router)
+from .routers import research as _research_router  # noqa: E402 — RX-1 sessions
+
+app.include_router(_research_router.router)
+from .routers import (
+    schedules as _schedules_router,
+)  # noqa: E402 — Operate U4 local scheduler
+
+app.include_router(_schedules_router.router)
+from .routers import (
+    artifacts as _artifacts_router,
+)  # noqa: E402 — Operate U10 artifacts inventory
+
+app.include_router(_artifacts_router.router)
+from .routers import (
+    format_sets as _format_sets_router,
+)  # noqa: E402 — Operate U10 format-sets library
+
+app.include_router(_format_sets_router.router)
 
 
 # ── Public Endpoints ───────────────────────────────────────────────────────

@@ -1,11 +1,14 @@
 """
-Admin dropdown — after the IA reorg the dropdown is intentionally lean:
+Admin dropdown — after the IA reorg the dropdown stays intentionally lean:
 
-    System  ·  Cloud Models  ·  Exports
+    System  ·  Cloud Models  ·  Exports  ·  Sources
 
 System is a HUB spanning Memory · License Keys · Runs, surfaced via an
 in-panel sub-nav. Plugins, Skills, and MCP are now top-level tabs and are
-covered in `test_top_level_tabs.py`.
+covered in `test_top_level_tabs.py`. Sources (LB0-U2) is dropdown-only in
+v1 — the Admin ▸ Sources discovery-config panel has no top-level tab, so
+the dropdown is its sole entry point (see the library-alignment design,
+docs/superpowers/specs/2026-07-10-library-alignment-design.md:88,284).
 """
 
 from __future__ import annotations
@@ -20,13 +23,14 @@ def _open_admin(page):
 
 
 def test_admin_dropdown_has_expected_menu_order(signed_in_page):
-    """Lean three-item dropdown: System (hub) · Cloud Models · Exports.
-    If this drifts, somebody re-promoted a panel into the dropdown that
-    should live elsewhere."""
+    """Lean dropdown: System (hub) · Cloud Models · Exports · Sources.
+    Sources is dropdown-only per LB0-U2 (no top-level tab). If this drifts,
+    somebody re-promoted a panel into the dropdown that should live
+    elsewhere, or dropped Sources' only entry point."""
     page = signed_in_page
     _open_admin(page)
     items = page.locator("#admin-menu .admin-menu-item").all_inner_texts()
-    expected = ["System", "Cloud Models", "Exports"]
+    expected = ["System", "Cloud Models", "Exports", "Sources"]
     cleaned = [t.strip() for t in items if t.strip()]
     assert (
         cleaned == expected

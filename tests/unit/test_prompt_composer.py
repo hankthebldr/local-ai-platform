@@ -156,6 +156,119 @@ def test_composer_rejects_role_ref_path_traversal(composer, tmp_path):
         )
 
 
+def test_composer_user_layer_shadows_oob_role(tmp_path):
+    """GP-2 / P0-9: an edited user-layer role must shadow the shipped oob role
+    at RUN time — the same user>oob order prompts.py::_resolve uses. Before the
+    fix the engine's composer read oob only, so copy-on-write edits were a
+    silent no-op on live runs."""
+    oob_roles = tmp_path / "oob" / "roles"
+    oob_roles.mkdir(parents=True)
+    (oob_roles / "analyst.md").write_text("OOB analyst persona.\n")
+    user_roles = tmp_path / "user" / "roles"
+    user_roles.mkdir(parents=True)
+    (user_roles / "analyst.md").write_text("EDITED analyst persona.\n")
+    templates = tmp_path / "templates"
+    templates.mkdir()
+    (templates / "five_part.jinja").write_text("{{ role }}\n{{ task }}")
+
+    c = PromptComposer(
+        roles_dir=oob_roles, templates_dir=templates, user_roles_dir=user_roles
+    )
+    out = c.compose(
+        role_ref="analyst",
+        role_inline=None,
+        context="",
+        task="t",
+        constraints=[],
+        output_schema={},
+    )
+    assert "EDITED analyst persona." in out.system
+    assert "OOB analyst persona." not in out.system
+
+
+def test_composer_falls_back_to_oob_when_no_user_copy(tmp_path):
+    """A role that exists ONLY in oob still resolves when a user layer is
+    configured but has no copy of it (fall-through)."""
+    oob_roles = tmp_path / "oob" / "roles"
+    oob_roles.mkdir(parents=True)
+    (oob_roles / "critic.md").write_text("OOB critic.\n")
+    user_roles = tmp_path / "user" / "roles"
+    user_roles.mkdir(parents=True)  # empty — no critic.md
+    templates = tmp_path / "templates"
+    templates.mkdir()
+    (templates / "five_part.jinja").write_text("{{ role }}\n{{ task }}")
+
+    c = PromptComposer(
+        roles_dir=oob_roles, templates_dir=templates, user_roles_dir=user_roles
+    )
+    out = c.compose(
+        role_ref="critic",
+        role_inline=None,
+        context="",
+        task="t",
+        constraints=[],
+        output_schema={},
+    )
+    assert "OOB critic." in out.system
+
+
+def test_composer_user_layer_traversal_rejected(tmp_path):
+    """Per-layer containment: a crafted ref can't escape the user root either."""
+    oob_roles = tmp_path / "oob" / "roles"
+    oob_roles.mkdir(parents=True)
+    user_roles = tmp_path / "user" / "roles"
+    user_roles.mkdir(parents=True)
+    (tmp_path / "user" / "secret.md").write_text("SECRET")
+    templates = tmp_path / "templates"
+    templates.mkdir()
+    (templates / "five_part.jinja").write_text("{{ role }}\n{{ task }}")
+
+    c = PromptComposer(
+        roles_dir=oob_roles, templates_dir=templates, user_roles_dir=user_roles
+    )
+    with pytest.raises(ValueError, match="outside roles directory"):
+        c.compose(
+            role_ref="../secret",
+            role_inline=None,
+            context="",
+            task="t",
+            constraints=[],
+            output_schema={},
+        )
+
+
+def test_composer_default_user_layer_is_noop_without_deployment(tmp_path, monkeypatch):
+    """When no deployment is detected (bare unit test), the default user layer
+    is None and behavior is oob-only — the engine's zero-arg construction path
+    must never crash or shadow."""
+    import api.services.prompt_composer as pc
+
+    def _boom():
+        raise RuntimeError("no deployment")
+
+    monkeypatch.setattr(
+        "api.services.deployment._get_current", _boom, raising=False
+    )
+    roles = tmp_path / "roles"
+    roles.mkdir()
+    (roles / "r.md").write_text("only oob\n")
+    templates = tmp_path / "templates"
+    templates.mkdir()
+    (templates / "five_part.jinja").write_text("{{ role }}\n{{ task }}")
+
+    c = pc.PromptComposer(roles_dir=roles, templates_dir=templates)
+    assert c.user_roles_dir is None
+    out = c.compose(
+        role_ref="r",
+        role_inline=None,
+        context="",
+        task="t",
+        constraints=[],
+        output_schema={},
+    )
+    assert "only oob" in out.system
+
+
 def test_composer_caches_role_file_reads(composer, tmp_path):
     """The same role_ref used by many steps in a workflow should read
     from disk only once. Workflow engines that wire one PromptComposer
