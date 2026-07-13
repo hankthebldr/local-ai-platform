@@ -3,8 +3,8 @@ Runs tab — cursor paging + additive filter chips (U6, op4-runs-ui).
 
 Verifies the client half of the runs-index contract landed in U5:
   - the list renders server-paged rows from /api/workflows/runs-index
-  - "Load more" (and the shared sentinel handler) APPENDS the next keyset page
-    rather than replacing the current one
+  - the discrete Prev/Next pager REPLACES the current page (bounded list that
+    fits the frame) and walks the keyset cursor forward + back
   - the four inline setFilter chips (golden-pinned, byte-for-byte) still drive a
     server refetch through the new health= param — clicking Failed yields only
     failed/error rows
@@ -55,32 +55,49 @@ def test_chips_render(signed_in_page, base_url):
     )
 
 
-def test_load_more_appends(signed_in_page, base_url):
-    """Load more grows the list (append, not replace) and advances the
-    loaded/scanned count."""
+def test_pager_navigates_pages(signed_in_page, base_url):
+    """The discrete pager REPLACES the list on Next (bounded page), advances the
+    page label, and Prev returns to the original page-1 rows."""
     page = signed_in_page
     _open_runs(page, base_url)
 
-    initial = page.locator(".runs-tab-row").count()
-    assert initial >= 1, "no rows on first page"
+    # Page 1: Prev disabled (we're at the top), pager pinned below the rows.
+    first_run = page.locator(".runs-tab-row").first.get_attribute("data-run-id")
+    assert first_run, "no rows on first page"
 
-    load_more = page.locator("#runs-tab-loadmore-btn")
-    if load_more.count() == 0:
-        pytest.skip("corpus fit in a single page — no second page to append")
+    # Unfiltered view shows the total page count ("Page 1 of M") derived from the
+    # run-index total; skip the assert if the pager is a single hidden page.
+    pager = page.locator("#runs-tab-pager")
+    if pager.count() == 1 and not pager.is_hidden():
+        import re as _re
 
-    load_more.click()
-    # The next keyset page appends: strictly more rows than before.
+        label = page.locator(".runs-tab-pager-label").inner_text()
+        assert _re.search(r"Page 1 of \d+", label), f"expected 'Page 1 of M', got {label!r}"
+    assert (
+        page.locator('[data-action="runs.prev-page"]:disabled').count() == 1
+        or page.locator("#runs-tab-pager[hidden]").count() == 1
+    ), "Prev should be disabled on page 1"
+
+    next_btn = page.locator('[data-action="runs.next-page"]:not([disabled])')
+    if next_btn.count() == 0:
+        pytest.skip("corpus fit in a single page — no second page to navigate")
+
+    next_btn.click()
+    # Next REPLACES the list with page 2 and the label advances.
     page.wait_for_function(
-        "(n) => document.querySelectorAll('.runs-tab-row').length > n",
-        arg=initial,
+        "() => /Page 2/.test((document.querySelector('.runs-tab-pager-label')||{}).textContent||'')",
         timeout=15_000,
     )
-    after = page.locator(".runs-tab-row").count()
-    assert after > initial, f"Load more did not append ({initial} -> {after})"
-
-    # The count badge reads loaded/scanned in server-paged mode.
+    # Prev is now enabled; clicking it returns to page 1's first row.
+    page.locator('[data-action="runs.prev-page"]').click()
+    page.wait_for_function(
+        "(id) => { const r = document.querySelector('.runs-tab-row'); return r && r.getAttribute('data-run-id') === id; }",
+        arg=first_run,
+        timeout=15_000,
+    )
+    # Count badge is per-page rows now (no loaded/scanned slash).
     badge = page.locator("#runs-tab-count").inner_text()
-    assert "/" in badge, f"count badge not in loaded/scanned form: {badge!r}"
+    assert "/" not in badge, f"count badge should be per-page, got {badge!r}"
 
 
 def test_inline_failed_chip_refetches(signed_in_page, base_url):

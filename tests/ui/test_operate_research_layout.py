@@ -222,3 +222,20 @@ def test_research_node_rail_mount_exists():
     assert res.find(id="research-node-rail") is not None, (
         "#research-node-rail mount missing (research/research-node-rail.js target)"
     )
+
+
+def test_runs_list_has_pinned_pager_mount():
+    """The Runs list uses a discrete pager pinned below the scrolling rows
+    (#runs-tab-pager is a sibling of #runs-tab-rows inside .runs-tab-list), so
+    the list stays bounded and the page fits the frame — guards against a
+    regression back to an unbounded/infinite list."""
+    soup = _soup()
+    lst = soup.select_one("#tab-runs .runs-tab-list")
+    assert lst is not None, ".runs-tab-list missing from #tab-runs"
+    rows = lst.select_one("#runs-tab-rows")
+    pager = lst.select_one("#runs-tab-pager")
+    assert rows is not None, "#runs-tab-rows missing"
+    assert pager is not None, "#runs-tab-pager (discrete pager mount) missing"
+    # Pager is a sibling that follows the scrolling rows (pinned bottom).
+    kids = [c for c in lst.find_all(recursive=False)]
+    assert kids.index(rows) < kids.index(pager), "pager must sit after the rows"

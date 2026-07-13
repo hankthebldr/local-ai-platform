@@ -48,6 +48,10 @@ export const LibraryShell = (function () {
   // v1 verb enum — deliberately NO 'version' verb (version is display metadata;
   // history/rollback is a named follow-up).
   const VERBS = ['install', 'test', 'edit', 'promote', 'delete'];
+  // Sidebar page size — bounds the list to a fixed height so the panel fits the
+  // frame (the library grid grows with content otherwise). Client-side: the full
+  // list is in memory, so "Page N of M" is exact.
+  const LIB_PAGE = 14;
 
   const _adapters = Object.create(null);
   const _state = Object.create(null);
@@ -58,6 +62,7 @@ export const LibraryShell = (function () {
     _state[adapter.kind] = {
       side: 'installed',        // 'installed' | 'discovered'
       filter: '',
+      page: 0,                  // discrete sidebar page (client-side, LIB_PAGE rows)
       collapsed: Object.create(null),
       selected: null,
       subnav: 'overview',
@@ -201,7 +206,8 @@ export const LibraryShell = (function () {
     return `${tabs}
       <input type="search" class="lib-filter" data-action="lib.filter" data-kind="${esc(kind)}"
         placeholder="filter…" aria-label="Filter ${esc(kind)} list">
-      <div class="lib-rows"></div>`;
+      <div class="lib-rows"></div>
+      <div class="lib-pager" hidden></div>`;
   }
 
   function renderSidebar(kind) {
@@ -247,12 +253,20 @@ export const LibraryShell = (function () {
         ? (a.emptyDiscoveredText || 'Nothing discovered yet.')
         : (a.emptyText || 'Nothing here yet.'));
       rowsEl.appendChild(empty);
+      _renderLibPager(kind, 0, 0);
       return;
     }
+    // Discrete client-side paging — bound the list to LIB_PAGE rows so the panel
+    // fits the frame. The full list is in memory, so total pages is exact.
+    const total = items.length;
+    const pages = Math.max(1, Math.ceil(total / LIB_PAGE));
+    if (st.page >= pages) st.page = pages - 1;
+    if (st.page < 0) st.page = 0;
+    const pageItems = items.slice(st.page * LIB_PAGE, st.page * LIB_PAGE + LIB_PAGE);
     // Group by item.group preserving first-seen order; '' group renders flat.
     const order = [];
     const byGroup = Object.create(null);
-    items.forEach(it => {
+    pageItems.forEach(it => {
       const g = it.group || '';
       if (!(g in byGroup)) { byGroup[g] = []; order.push(g); }
       byGroup[g].push(it);
@@ -279,6 +293,27 @@ export const LibraryShell = (function () {
       }
       byGroup[g].forEach(it => target.appendChild(_buildRow(a, it, st)));
     });
+    _renderLibPager(kind, total, pages);
+  }
+
+  // Discrete Prev/Next pager pinned below the sidebar rows. "Page N of M" is
+  // exact because the whole list is client-side. Hidden when a single page holds
+  // everything, so short catalogs stay clean.
+  function _renderLibPager(kind, total, pages) {
+    const els = _els(kind);
+    const el = els.list && els.list.querySelector('.lib-pager');
+    if (!el) return;
+    const st = _state[kind];
+    if (pages <= 1) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML = `
+      <button type="button" class="action-btn xs ghost lib-pager-btn"
+              data-action="lib.prev-page" data-kind="${esc(kind)}"
+              ${st.page === 0 ? 'disabled' : ''} aria-label="Previous page">&lsaquo; Prev</button>
+      <span class="lib-pager-label">Page ${st.page + 1} of ${pages} &middot; ${total}</span>
+      <button type="button" class="action-btn xs ghost lib-pager-btn"
+              data-action="lib.next-page" data-kind="${esc(kind)}"
+              ${st.page >= pages - 1 ? 'disabled' : ''} aria-label="Next page">Next &rsaquo;</button>`;
   }
 
   function _chipHtml(c, cls) {
@@ -499,8 +534,21 @@ export const LibraryShell = (function () {
       const st = _state[el.dataset.kind];
       if (!st) return;
       st.side = el.dataset.side === 'discovered' ? 'discovered' : 'installed';
+      st.page = 0;              // new list → back to page 1
       st.chromeBuilt = false;   // tabs need active-state rebuild
       renderSidebar(el.dataset.kind);
+    },
+    'lib.prev-page': el => {
+      const st = _state[el.dataset.kind];
+      if (!st || st.page === 0) return;
+      st.page -= 1;
+      renderRows(el.dataset.kind);
+    },
+    'lib.next-page': el => {
+      const st = _state[el.dataset.kind];
+      if (!st) return;
+      st.page += 1;             // renderRows clamps to the last page
+      renderRows(el.dataset.kind);
     },
     'lib.group-toggle': el => {
       const st = _state[el.dataset.kind];
@@ -531,6 +579,7 @@ export const LibraryShell = (function () {
       const st = _state[el.dataset.kind];
       if (!st) return;
       st.filter = el.value || '';
+      st.page = 0;              // filtering resets to the first page
       renderRows(el.dataset.kind);
     },
   });

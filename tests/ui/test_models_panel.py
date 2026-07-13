@@ -133,7 +133,9 @@ def test_inventory_tab_activation_single_fetch():
         "is the tab's ONE /api/inventory fetch (F2)"
     )
     assert "CatalogModelsShare.showInModelsTab()" in branch
-    assert "loadInstalledLocal()" in branch
+    # The "Installed Locally" residency panel was retired; the inventory tab no
+    # longer calls its loader (Unload moved into the model drill-down).
+    assert "loadInstalledLocal()" not in branch
     # The Catalog page keeps the legacy loader alive.
     wf = re.search(r"if \(name === 'workflows'\) \{(.*?)\n  \}", MAIN_JS, re.S)
     assert wf and "loadCatalog" in wf.group(1), "Catalog page lost loadCatalog"

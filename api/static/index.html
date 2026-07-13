@@ -190,6 +190,12 @@
 .lib-side-tab.active { color:var(--accent); border-color:var(--accent-dim); background:var(--accent-ghost); }
 .lib-filter { width:100%; box-sizing:border-box; margin:0 0 8px; padding:6px 9px; background:var(--surface-card,var(--bg)); border:1px solid var(--border); border-radius:var(--radius-sm,4px); color:var(--text); font-family:var(--mono); font-size:var(--text-xs,0.7rem); }
 .lib-filter:focus { outline:none; border-color:var(--accent-dim); }
+/* Sidebar list scrolls internally between the filter and the pager so a page of
+   rows never grows the library panel past the frame. */
+.lib-rows { overflow-y:auto; max-height:min(58vh, 620px); }
+.lib-pager { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 2px 2px; margin-top:6px; border-top:1px solid var(--border); }
+.lib-pager-label { font-family:var(--mono); font-size:0.56rem; letter-spacing:0.04em; color:var(--text-muted); white-space:nowrap; }
+.lib-pager-btn[disabled] { opacity:0.38; cursor:default; }
 .lib-group-label { display:flex; align-items:center; gap:6px; width:100%; text-align:left; background:none; border:none; cursor:pointer; padding:0; font-family:var(--mono); font-size:0.6rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:10px 0 4px; }
 .lib-group-label .lib-caret { font-size:0.55rem; color:var(--text-faint,var(--text-dim)); }
 .lib-group.collapsed .lib-group-rows { display:none; }
@@ -1431,21 +1437,11 @@
     <div id="models-rec-strip" class="models-rec-strip" hidden></div>
     <div id="models-shell"></div>
 
-    <!-- Installed Locally — every model actually resident on this box across
-         backends (Ollama + vLLM), catalogued or not. The shell above is for
-         browsing/pulling; this panel MANAGES memory residency. Populated by
-         loadInstalledLocal() from /api/inventory/status (installed_local)
-         cross-referenced with /api/inventory/memory. -->
-    <div class="panel" style="margin:16px 0">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">Installed Locally
-        <span class="tab-count" id="installed-local-count"></span>
-        <button class="action-btn xs" style="float:right" data-action="models.refresh-local">↻ Refresh</button>
-      </div>
-      <div id="installed-local-body">
-        <div class="model-empty">Loading local models…</div>
-      </div>
-    </div>
+    <!-- The former "Installed Locally" residency panel was removed: it duplicated
+         the shell's Installed side-tab, and its one unique operation (Unload) now
+         lives in the model drill-down actions (ModelsPanel.unload, shown only for
+         a loaded Ollama model). Delete / Pull / Install / Tag / Test / Review all
+         live in the drill-down too. -->
 
     <!-- Hidden legacy holder (LB4-U2 / critique F2): the pre-shell catalog
          surface parks here with its ids UNCHANGED (#inv-stats, #inv-grid,
@@ -1867,6 +1863,10 @@
         <div id="runs-tab-rows" class="runs-tab-rows">
           <div class="model-empty">Loading…</div>
         </div>
+        <!-- Discrete pager, pinned to the bottom of the list panel so the run
+             rows scroll above it and the list can never grow the page taller
+             than the frame (replaces the old infinite "Load more"). -->
+        <div id="runs-tab-pager" class="runs-tab-pager" hidden></div>
       </div>
 
       <!-- RIGHT: DAG view + per-step output -->

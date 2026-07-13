@@ -11,16 +11,18 @@ export const RunsTab = (function () {
   let _rows = [];
   let _activeFilter = 'all';   // Health axis (four inline chips + delegated Degraded)
   let _typeFilter = 'all';     // Type axis (delegated Type row)
-  let _cursor = null;          // keyset next_cursor from runs-index (null ⇒ page 1)
-  let _exhausted = false;      // server reported no more pages
-  let _scanned = 0;            // cumulative run dirs the server examined across pages
+  let _cursor = null;          // keyset next_cursor of the CURRENT page (null ⇒ last page)
+  let _pageCursors = [null];   // start-cursor per visited page; index 0 = page 1 (null)
+  let _pageIdx = 0;            // 0-based index of the page on screen (discrete paging)
+  let _exhausted = false;      // current page is the last (no next_cursor)
+  let _scanned = 0;            // run dirs the server examined to build THIS page
+  let _total = 0;             // total (unfiltered) run count — for "Page N of M"
   let _legacyMode = false;     // runs-index 404'd → fell back to the flat /runs array
   let _paging = false;         // in-flight page fetch guard (button + sentinel share it)
   let _gen = 0;                // fetch generation — a reset bumps it so an in-flight
                                // append (auto-sentinel) can't clobber a fresh filter
   let _servedQ = '';           // last q value actually sent to the server (debounce anchor)
   let _qTimer = null;          // debounce handle for search → server refetch
-  let _sentinelObs = null;     // IntersectionObserver over the load-more sentinel
   let _selectedId = null;
   let _editor = null;          // separate drawflow instance for this tab
   let _idMap = {};             // logical step id → drawflow node id
@@ -56,12 +58,22 @@ export const RunsTab = (function () {
     return _fetchPage({ reset: true, retry });
   }
 
-  // Append the next keyset page. Shared by the Load-more button and the
-  // IntersectionObserver sentinel (button = the a11y path).
-  function loadMore() {
-    if (_paging || _exhausted || _legacyMode || !_cursor) return Promise.resolve();
+  // Discrete pagination — each page REPLACES the list (bounded height) instead
+  // of the old infinite append. Forward uses the keyset next_cursor; back walks
+  // the recorded per-page start cursors. `loadMore` is kept as a next-page alias
+  // so the golden-pinned `runs.load-more` action id keeps working.
+  function nextPage() {
+    if (_paging || _legacyMode || _exhausted) return Promise.resolve();
+    if (!_pageCursors[_pageIdx + 1]) return Promise.resolve();  // no recorded next
+    _pageIdx += 1;
     return _fetchPage({ reset: false });
   }
+  function prevPage() {
+    if (_paging || _legacyMode || _pageIdx === 0) return Promise.resolve();
+    _pageIdx -= 1;
+    return _fetchPage({ reset: false });
+  }
+  const loadMore = nextPage;
 
   function _queryParams() {
     const p = new URLSearchParams();
@@ -76,22 +88,25 @@ export const RunsTab = (function () {
   async function _fetchPage({ reset, retry }) {
     const box = document.getElementById('runs-tab-rows');
     if (!box) return;
-    // Appends coalesce (button + sentinel share the guard); a reset ALWAYS
-    // proceeds and bumps the generation so an in-flight append can't overwrite
-    // the fresh filter when its response finally lands.
+    // Page navigations coalesce with the shared guard; a reset ALWAYS proceeds
+    // and bumps the generation so an in-flight page can't overwrite a fresh
+    // filter when its response lands.
     if (!reset && _paging) return;
     const myGen = reset ? ++_gen : _gen;
     _paging = true;
     if (reset) {
+      // Filters / search / refresh return to page 1 and forget the cursor trail.
+      _pageCursors = [null];
+      _pageIdx = 0;
       _cursor = null;
       _exhausted = false;
       _scanned = 0;
-      _teardownSentinel();
-      box.innerHTML = '<div class="model-empty">Loading runs…</div>';
     }
+    box.innerHTML = '<div class="model-empty">Loading runs…</div>';
     const { params, q } = _queryParams();
     _servedQ = q;
-    if (_cursor) params.set('cursor', _cursor);
+    const startCursor = _pageCursors[_pageIdx] || null;
+    if (startCursor) params.set('cursor', startCursor);
     try {
       // Net.call (not getJson): the 401 branch below needs the status code.
       // retries:0 so Net's backoff doesn't delay the 401 auth-bootstrap retry.
@@ -117,25 +132,24 @@ export const RunsTab = (function () {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = r.data || {};
       _legacyMode = false;
-      const page = Array.isArray(data.runs) ? data.runs : [];
-      _rows = reset ? page : _rows.concat(page);
+      // Discrete page: REPLACE the rows (never concat) so the list stays bounded.
+      _rows = Array.isArray(data.runs) ? data.runs : [];
       _cursor = data.next_cursor || null;
-      if (data.exhausted === true || !_cursor) _exhausted = true;
-      _scanned += Number(data.scanned || 0);
+      _exhausted = data.exhausted === true || !_cursor;
+      // Record the next page's start cursor so Next can advance and Prev can
+      // return without re-deriving it.
+      if (_cursor) _pageCursors[_pageIdx + 1] = _cursor;
+      _scanned = Number(data.scanned || 0);
+      _total = Number(data.total || 0);
       _updateCount();
       render();
     } catch (e) {
       if (myGen !== _gen) return;
-      if (reset) {
-        box.innerHTML =
-          `<div class="model-empty" style="color:var(--red)">Failed to load runs: ${esc(e.message)}.
-            <br><br><button class="action-btn xs" data-action="runs.load">Retry</button></div>`;
-      } else {
-        // A failed append should not wipe the page already on screen — surface
-        // it on the load-more row and let the operator retry.
-        const btn = document.getElementById('runs-tab-loadmore-btn');
-        if (btn) { btn.disabled = false; btn.textContent = 'Load more — retry'; }
-      }
+      // The box was cleared to "Loading…" for this page, so surface the error
+      // there with a retry-from-top (page position is cheap to rebuild).
+      box.innerHTML =
+        `<div class="model-empty" style="color:var(--red)">Failed to load runs: ${esc(e.message)}.
+          <br><br><button class="action-btn xs" data-action="runs.load">Retry</button></div>`;
     } finally {
       // Only the current generation owns _paging; a superseded fetch leaves it
       // to the newer one that already claimed it.
@@ -175,8 +189,8 @@ export const RunsTab = (function () {
     const chip = document.getElementById('runs-tab-count');
     if (!chip) return;
     if (!_rows.length) { chip.textContent = ''; return; }
-    // loaded/scanned — the count badge doubles as the scan-progress readout.
-    chip.textContent = _legacyMode ? `(${_rows.length})` : `(${_rows.length}/${_scanned})`;
+    // Rows on the current page (discrete paging — the page number lives in the pager).
+    chip.textContent = `(${_rows.length})`;
   }
 
   // Health filter — the four inline setFilter chips (All·Running·Completed·Failed)
@@ -253,7 +267,7 @@ export const RunsTab = (function () {
     });
     if (!filtered.length) {
       box.innerHTML = '<div class="model-empty">No runs match.</div>';
-      _teardownSentinel();
+      _renderPager();
       return;
     }
     const rowsHtml = filtered.map(r => {
@@ -275,37 +289,41 @@ export const RunsTab = (function () {
         ${diagLine}
       </button>`;
     }).join('');
-    // Load-more affordance — button is the a11y path; the sentinel below it
-    // triggers the same handler on scroll (IntersectionObserver). Only in the
-    // server-paged mode with more pages available.
-    const moreRow = (!_legacyMode && !_exhausted)
-      ? `<div class="runs-tab-loadmore-row">
-           <button type="button" class="action-btn xs ghost" id="runs-tab-loadmore-btn"
-                   data-action="runs.load-more">Load more</button>
-           <span class="runs-tab-loadmore-meta">Loaded ${_rows.length} · scanned ${_scanned}</span>
-           <span id="runs-tab-sentinel" aria-hidden="true"></span>
-         </div>`
-      : '';
-    box.innerHTML = rowsHtml + moreRow;
-    _wireSentinel();
+    box.innerHTML = rowsHtml;
+    _renderPager();
   }
 
-  // (Re)attach the IntersectionObserver to the freshly-rendered sentinel so a
-  // scroll to the bottom of the list auto-loads the next page.
-  function _wireSentinel() {
-    _teardownSentinel();
-    const sentinel = document.getElementById('runs-tab-sentinel');
-    if (!sentinel || typeof IntersectionObserver === 'undefined') return;
-    const root = document.getElementById('runs-tab-rows');
-    _sentinelObs = new IntersectionObserver((entries) => {
-      if (entries.some(e => e.isIntersecting)) loadMore();
-    }, { root: root || null, rootMargin: '120px' });
-    _sentinelObs.observe(sentinel);
+  // Discrete Prev/Next pager, pinned to the bottom of the list panel (rendered
+  // into #runs-tab-pager, a sibling of the scrolling rows). Hidden in legacy
+  // mode and when a single exhausted page is all there is.
+  function _renderPager() {
+    const el = document.getElementById('runs-tab-pager');
+    if (!el) return;
+    if (_legacyMode || (_pageIdx === 0 && _exhausted)) {
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+    el.hidden = false;
+    // "Page N of M" for the default (unfiltered) view — M is derived from the
+    // total run count. Under a health/type/search filter the filtered total
+    // isn't cheaply known, so drop "of M" and show just the page number.
+    const filtered = _activeFilter !== 'all' || _typeFilter !== 'all'
+      || (((document.getElementById('runs-tab-search') || {}).value || '').trim() !== '');
+    const totalPages = (!filtered && _total > 0) ? Math.max(1, Math.ceil(_total / PAGE_SIZE)) : 0;
+    const label = totalPages
+      ? `Page ${_pageIdx + 1} of ${totalPages}`
+      : `Page ${_pageIdx + 1}`;
+    el.innerHTML = `
+      <button type="button" class="action-btn xs ghost runs-tab-pager-btn"
+              data-action="runs.prev-page" ${_pageIdx === 0 ? 'disabled' : ''}
+              aria-label="Previous page of runs">&lsaquo; Prev</button>
+      <span class="runs-tab-pager-label">${label}${_total ? ` &middot; ${_total} runs` : ''}</span>
+      <button type="button" class="action-btn xs ghost runs-tab-pager-btn"
+              data-action="runs.next-page" ${_exhausted ? 'disabled' : ''}
+              aria-label="Next page of runs">Next &rsaquo;</button>`;
   }
 
-  function _teardownSentinel() {
-    if (_sentinelObs) { try { _sentinelObs.disconnect(); } catch (_) {} _sentinelObs = null; }
-  }
 
   async function select(runId) {
     _selectedId = runId;
@@ -1840,7 +1858,7 @@ export const RunsTab = (function () {
     }
   });
 
-  return { init, load, loadMore, render, setFilter, setTypeFilter, select,
+  return { init, load, loadMore, nextPage, prevPage, render, setFilter, setTypeFilter, select,
     resumeCurrent, cancelCurrent, pauseCurrent, rerunCurrent, openInComposer,
     toggleStepExpand, toggleStepOutput, toggleBottomDrawer, markFailed,
     openStepDetail, closeStepDetail, openAnchorDetail, pivotResearch, pivotContextGraph,
