@@ -1867,6 +1867,10 @@
         <div id="runs-tab-rows" class="runs-tab-rows">
           <div class="model-empty">Loading…</div>
         </div>
+        <!-- Discrete pager, pinned to the bottom of the list panel so the run
+             rows scroll above it and the list can never grow the page taller
+             than the frame (replaces the old infinite "Load more"). -->
+        <div id="runs-tab-pager" class="runs-tab-pager" hidden></div>
       </div>
 
       <!-- RIGHT: DAG view + per-step output -->

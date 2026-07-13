@@ -4861,11 +4861,24 @@ textarea.composer-desc-area {
 #asset-peek-backdrop { position: fixed; inset: 0; z-index: 899; background: rgba(0,0,0,0.35); opacity: 0; pointer-events: none; transition: opacity var(--t-med) var(--ease-out); }
 #asset-peek-backdrop.open { opacity: 1; pointer-events: auto; }
 
+/* Fit to frame: #tab-runs fills the scrolling main region as a flex column so
+   the working grid takes exactly the space left below the (optional) perf band,
+   and the list rows + detail panel scroll INTERNALLY. The page never grows
+   taller than the frame. (Was a min-height clamp that let the old infinite run
+   list stretch the whole page — the "way too long" report.) */
+#tab-runs.tab-content.active { display: flex; flex-direction: column; min-height: 0; height: 100%; overflow: hidden; gap: 12px; }
+/* The active mode wrapper (Runs list/DAG or the Schedules rail) fills the space
+   the flex column leaves below the perf band + mode bar. :not([hidden]) so the
+   inactive mode keeps its `hidden` display:none instead of being forced visible. */
+#runs-mode-runs:not([hidden]), #runs-mode-schedules:not([hidden]) {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+}
 .runs-tab-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 12px;
-  min-height: clamp(540px, calc(100vh - 200px), 1600px);
+  flex: 1 1 auto;
+  min-height: 0;   /* allow the flex item to shrink so the panels scroll internally */
   /* O6a — centre the working area on ultrawide displays instead of stretching
      the DAG pane edge-to-edge. min-width:0 keeps the detail column from being
      forced wider than its grid track by long unbreakable content. */
@@ -4874,6 +4887,18 @@ textarea.composer-desc-area {
   width: 100%;
   min-width: 0;
 }
+/* Discrete pager pinned to the bottom of the list panel (sibling of the
+   scrolling rows). Rows scroll above it; the page stays a fixed height. */
+.runs-tab-pager {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  flex: 0 0 auto; padding: 8px 2px 4px; margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.runs-tab-pager-label {
+  font-family: var(--mono); font-size: 0.56rem; letter-spacing: 0.04em;
+  color: var(--text-muted); white-space: nowrap;
+}
+.runs-tab-pager-btn[disabled] { opacity: 0.38; cursor: default; }
 @media (max-width: 980px) {
   .runs-tab-layout { grid-template-columns: 1fr; min-height: 0; }
 }

@@ -12544,7 +12544,9 @@ window.composerStopRun = composerStopRun;
   };
   Actions.click({
     'runs.load':        () => RunsTab.load(),
-    'runs.load-more':   () => RunsTab.loadMore(),
+    'runs.load-more':   () => RunsTab.loadMore(),   // legacy id — aliases next-page
+    'runs.next-page':   () => RunsTab.nextPage(),
+    'runs.prev-page':   () => RunsTab.prevPage(),
     // Additive filter chips (F3): the four inline setFilter chips stay verbatim;
     // the delegated Degraded chip + the whole Type row route here.
     'runs.filter-health': el => RunsTab.setFilter(el.dataset.health),
