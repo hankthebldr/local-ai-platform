@@ -497,7 +497,17 @@
          from the retired Library "Context" (documents), whose RAG surface
          now lives in Research under Build. -->
     <button class="tab-btn" data-tab="context" data-action="switch-tab" data-tab-target="context">Context</button>
-    <div class="nav-section">Library</div>
+    <!-- Library section header carries the global "⟳ Refresh installed"
+         control: reloads every LibraryShell adapter (models/skills/mcp/plugins/
+         agents/prompts/tasks/patterns) and its rail count badge in one click.
+         Local read only — network discovery stays behind per-panel Discover.
+         Delegated via data-action (no inline handler); handled in shell.js. -->
+    <div class="nav-section nav-section-library">Library
+      <button type="button" class="nav-refresh" id="lib-refresh-all"
+              data-action="lib.refresh-all"
+              title="Reload installed models, skills, MCP &amp; all Library inventory"
+              aria-label="Refresh installed inventory">⟳</button>
+    </div>
     <button class="tab-btn" data-tab="agents" onclick="switchTab('agents', this)">Agents<span class="tab-count" id="agents-count"></span></button>
     <button class="tab-btn" data-tab="prompts" data-action="switch-tab" data-tab-target="prompts">Prompts<span class="tab-count" id="prompts-count"></span></button>
     <button class="tab-btn" data-tab="tasks" data-action="switch-tab" data-tab-target="tasks">Tasks<span class="tab-count" id="tasks-count"></span></button>

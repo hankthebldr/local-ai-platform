@@ -49,6 +49,7 @@ def test_shell_registers_all_lib_actions():
         "'lib.subnav'",
         "'lib.action'",
         "'lib.refresh'",
+        "'lib.refresh-all'",
     ]:
         assert action in SHELL_JS, f"shell missing delegated action {action}"
     for action in [
@@ -58,6 +59,34 @@ def test_shell_registers_all_lib_actions():
         "'lib.wizard.submit'",
     ]:
         assert action in WIZARD_JS, f"wizard missing delegated action {action}"
+
+
+def test_global_refresh_control_present_and_wired():
+    """The left-rail 'Library' header hosts a global ⟳ refresh button that
+    reloads every registered LibraryShell adapter (models/skills/mcp/plugins/…)
+    and its count badge in one click. Guards: the button ships in the rail with
+    the delegated data-action (no inline handler), shell.js exposes reloadAll()
+    and the lib.refresh-all handler calls it, and the CSS chrome exists."""
+    index = (STATIC / "index.html").read_text(encoding="utf-8")
+    css = (STATIC / "css" / "app.css").read_text(encoding="utf-8")
+
+    # Button rides the Library nav-section, delegated (no inline on*= handler).
+    assert 'data-action="lib.refresh-all"' in index
+    assert 'id="lib-refresh-all"' in index
+    assert 'class="nav-section nav-section-library"' in index
+    btn = index[index.index('id="lib-refresh-all"') - 200: index.index('id="lib-refresh-all"') + 200]
+    assert "onclick" not in btn, "rail refresh button must stay delegated (no inline handler)"
+
+    # shell.js: the handler calls reloadAll(), which is exported.
+    assert "async function reloadAll()" in SHELL_JS
+    assert "reloadAll," in SHELL_JS  # public export list
+    handler = SHELL_JS[SHELL_JS.index("'lib.refresh-all'"): SHELL_JS.index("'lib.refresh-all'") + 400]
+    assert "reloadAll()" in handler
+    assert "spinning" in handler, "expected the spin/disabled busy-state affordance"
+
+    # CSS chrome for the control + its spin animation.
+    assert ".nav-refresh" in css
+    assert "@keyframes nav-refresh-spin" in css
 
 
 def test_shell_verb_enum_has_no_version_verb():

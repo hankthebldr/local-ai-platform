@@ -7291,6 +7291,38 @@ body.bs-show-hint .bs-dispatch:hover::after {
     user-select: none;
   }
   body > .tab-nav .nav-section:first-child { margin-top: 2px; }
+  /* Library header hosts the global "⟳ Refresh installed" control, pushed
+     to the right edge of the section label. */
+  body > .tab-nav .nav-section-library {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  body > .tab-nav .nav-refresh {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 0.82rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.12s ease, background 0.12s ease;
+  }
+  body > .tab-nav .nav-refresh:hover { color: var(--text); background: var(--accent-ghost); }
+  body > .tab-nav .nav-refresh:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  body > .tab-nav .nav-refresh[disabled] { cursor: default; opacity: 0.7; }
+  body > .tab-nav .nav-refresh.spinning { color: var(--accent); animation: nav-refresh-spin 0.8s linear infinite; }
+  @keyframes nav-refresh-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    body > .tab-nav .nav-refresh.spinning { animation: none; }
+  }
   body > .tab-nav .tab-btn {
     display: flex;
     align-items: center;

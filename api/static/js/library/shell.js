@@ -35,7 +35,7 @@
 // import in tests resolves to this same instance).
 import { esc } from '../core/dom.js';
 import { Net } from '../core/net.js';
-import { Confirm, ErrorPanel, Skeleton } from '../core/ui.js';
+import { Confirm, ErrorPanel, Skeleton, Toast } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
 
 export const LibraryShell = (function () {
@@ -179,6 +179,21 @@ export const LibraryShell = (function () {
       }
     })();
     return st.loading;
+  }
+
+  // Reload EVERY registered kind at once — the rail's global "⟳ Refresh
+  // installed" control. Each reload() re-reads that kind's installed
+  // inventory and refreshes its count badge even when the tab isn't mounted
+  // (renderSidebar/renderDetail no-op without DOM; _updateCount writes the
+  // badge by id). reload() swallows its own errors into the panel's
+  // ErrorPanel, so this never rejects — it reports how many kinds ran.
+  // Deliberately does NOT touch any discovered()/network-discovery path:
+  // "what's installed" is the local read; HF/marketplace discovery stays
+  // behind the explicit per-panel ⟳ Discover buttons (privacy design).
+  async function reloadAll() {
+    const kinds = Object.keys(_adapters);
+    await Promise.all(kinds.map(k => reload(k)));
+    return { total: kinds.length };
   }
 
   function _updateCount(kind) {
@@ -560,6 +575,20 @@ export const LibraryShell = (function () {
     'lib.select': el => select(el.dataset.kind, el.dataset.id),
     'lib.subnav': el => setSubnav(el.dataset.kind, el.dataset.section),
     'lib.refresh': el => reload(el.dataset.kind),
+    'lib.refresh-all': async el => {
+      if (el.classList.contains('spinning')) return;   // dedupe re-clicks
+      el.classList.add('spinning');
+      el.setAttribute('disabled', '');
+      try {
+        const { total } = await reloadAll();
+        Toast.success('Inventory refreshed', `Reloaded ${total} librar${total === 1 ? 'y' : 'ies'}.`);
+      } catch (e) {
+        Toast.danger('Refresh failed', e && e.message ? e.message : String(e));
+      } finally {
+        el.classList.remove('spinning');
+        el.removeAttribute('disabled');
+      }
+    },
     'lib.action': async el => {
       const a = _adapters[el.dataset.kind];
       if (!a || el.hasAttribute('disabled')) return;
@@ -585,7 +614,7 @@ export const LibraryShell = (function () {
   });
 
   return {
-    register, adapter, state, mount, reload, open, select, setSubnav,
+    register, adapter, state, mount, reload, reloadAll, open, select, setSubnav,
     renderSidebar, renderRows, renderDetail, renderActions, refreshSection,
     fetch, headers, guard,
   };
