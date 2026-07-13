@@ -459,6 +459,8 @@ export const SkillsPanel = (function () {
     Toast.success('Skill uninstalled', `${it.skill_id} ↛ ${it.plugin_id}`);
     LibraryShell.select('skill', null);
     await load();
+    // The host plugin's skill-count meta changed — refresh Plugins too.
+    LibraryShell.notifyChanged(['plugin']);
   }
 
   async function promote(id) {

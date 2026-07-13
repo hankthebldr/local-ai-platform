@@ -196,6 +196,46 @@ export const LibraryShell = (function () {
     return { total: kinds.length };
   }
 
+  // ── Cross-kind "inventory changed" signal ─────────────────────────────
+  // A mutation in one kind can change ANOTHER kind's installed set: importing
+  // skills from a marketplace plugin adds skills; a plugin reload/install/
+  // delete makes the backend rescan and surface (or drop) the skills / MCP
+  // servers / agents that plugin bundles. Same-kind refresh is already handled
+  // by each panel's own load(); this is the missing cross-panel piece.
+  //
+  // Callers announce the kinds they may have touched — notifyChanged('skill')
+  // or notifyChanged(['skill','mcp','agent']); notifyChanged() / '*' reloads
+  // everything. Reloads are DEBOUNCED (a loop-import that calls it repeatedly
+  // collapses to one reload per kind) and ride the same reload() path, so the
+  // count badge updates even when that tab isn't mounted. reload() never emits
+  // this signal, so there is no feedback loop.
+  let _notifyTimer = null;
+  const _notifyKinds = new Set();
+  let _notifyAll = false;
+
+  function notifyChanged(kinds) {
+    if (kinds == null || kinds === '*') _notifyAll = true;
+    else (Array.isArray(kinds) ? kinds : [kinds]).forEach(k => k && _notifyKinds.add(k));
+    if (_notifyTimer !== null) return;
+    _notifyTimer = setTimeout(() => {
+      _notifyTimer = null;
+      if (_notifyAll) { _notifyAll = false; _notifyKinds.clear(); reloadAll(); return; }
+      const ks = [..._notifyKinds];
+      _notifyKinds.clear();
+      ks.forEach(k => { if (_adapters[k]) reload(k); });
+    }, 250);
+  }
+
+  // Decoupled DOM bridge — code that doesn't import LibraryShell (or wants to
+  // stay loosely coupled) can announce the same signal:
+  //   document.dispatchEvent(new CustomEvent('enclave:inventory-changed',
+  //     { detail: { kinds: ['skill','mcp'] } }));
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('enclave:inventory-changed', (e) => {
+      notifyChanged(e && e.detail ? e.detail.kinds : null);
+    });
+  }
+
   function _updateCount(kind) {
     const a = _adapters[kind];
     if (!a || !a.countBadgeId) return;
@@ -614,7 +654,7 @@ export const LibraryShell = (function () {
   });
 
   return {
-    register, adapter, state, mount, reload, reloadAll, open, select, setSubnav,
+    register, adapter, state, mount, reload, reloadAll, notifyChanged, open, select, setSubnav,
     renderSidebar, renderRows, renderDetail, renderActions, refreshSection,
     fetch, headers, guard,
   };

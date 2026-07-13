@@ -5,6 +5,16 @@ import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
 import { LibraryWizard } from './wizard.js';
 
+// Announce a cross-kind inventory change without coupling this helper module
+// to LibraryShell — the shell listens for this event and reloads the named
+// kinds' badges/panels. Installing/uninstalling a skill writes into a plugin,
+// so both the skill and plugin surfaces are affected.
+function _announceInventory(kinds) {
+  try {
+    document.dispatchEvent(new CustomEvent('enclave:inventory-changed', { detail: { kinds } }));
+  } catch (_) { /* non-DOM context (tests) — no-op */ }
+}
+
 export const ExtDiscover = (function () {
   async function _toggle(detailsEl) {
     if (!detailsEl.open) return;
@@ -126,6 +136,7 @@ export const ExtDiscover = (function () {
       if (window.SkillsDiscover && typeof SkillsDiscover.load === 'function') { try { SkillsDiscover.load(true); } catch (_) {} }
       if (typeof loadCatalogPage === 'function') { try { loadCatalogPage(); } catch (_) {} }
       if (typeof loadComposerCatalogs === 'function') { try { loadComposerCatalogs(); } catch (_) {} }
+      _announceInventory(['skill', 'plugin']);
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
       if (window.Toast) Toast.error('Install failed: ' + e.message);
@@ -288,6 +299,7 @@ export const SkillsDiscover = (function () {
         // composer's Skills tab without a full page reload.
         if (typeof loadComposerCatalogs === 'function') loadComposerCatalogs();
         if (onDone) { try { onDone(); } catch (_) {} }
+        _announceInventory(['skill', 'plugin']);
         return { ok: true, message: `${skillId} → ${target}` };
       },
     });
@@ -309,6 +321,7 @@ export const SkillsDiscover = (function () {
     if (window.Toast) Toast.success('Skill uninstalled', `${skillId} ↛ ${pluginId}`);
     await load(true);
     if (typeof loadComposerCatalogs === 'function') loadComposerCatalogs();
+    _announceInventory(['skill', 'plugin']);
   }
 
   async function _availablePlugins() {
@@ -404,6 +417,7 @@ export const SkillsDiscover = (function () {
       try { await Net.postJson('/api/plugins/reload', {}, { retries: 0, silent: true }); } catch (_) {}
       btn.textContent = '✓ Installed'; btn.classList.remove('accent');
       load(true);
+      _announceInventory(['skill', 'plugin']);
     } catch (e) {
       btn.disabled = false; btn.textContent = 'Retry';
       if (window.Toast) Toast.danger('Install failed', e.message);
@@ -458,6 +472,7 @@ export const SkillsDiscover = (function () {
           Toast.info(msg);
           load(true);
           if (onDone) { try { onDone(); } catch (_) {} }
+          _announceInventory(['skill', 'plugin']);
           return { ok: true, message: msg };
         } catch (e) {
           _setMeta('');

@@ -197,6 +197,9 @@ export const AgentGen = (function () {
     }
     try {
       await Net.postJson('/api/agents/generate/save', { draft, overwrite: true }, { retries: 0 });
+      // Refresh the Agents rail badge/panel — this generator path otherwise
+      // only touches the legacy loadAgentsTab/selector globals.
+      LibraryShell.notifyChanged(['agent']);
       if (closeAfter) {
         close();
         if (typeof loadAgentsTab === 'function') loadAgentsTab();
