@@ -231,9 +231,9 @@ def test_legacy_toolbars_migrated_to_data_action(index_soup):
         "plain Plugins Refresh must be delegated"
     )
     models_tab = index_soup.find(id="tab-inventory")
-    assert models_tab.find(attrs={"data-action": "models.refresh-local"}) is not None, (
-        "Installed-Locally Refresh must be delegated"
-    )
+    # The "Installed Locally" panel (and its delegated Refresh) was retired — its
+    # Unload op moved into the model drill-down. Just assert the tab still has no
+    # inline onclick for the migrated verbs (below).
     # the migrated toolbars carry no inline handler for these verbs
     for tab in (mcp_tab, plugins_tab, models_tab):
         for btn in tab.find_all("button"):

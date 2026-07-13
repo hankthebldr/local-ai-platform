@@ -42,6 +42,7 @@ import { TestPane } from './test-pane.js';
 export const ModelsPanel = (function () {
   let _models = [];        // /api/inventory/catalog models
   let _hardware = {};      // /api/inventory/catalog hardware block
+  let _running = new Set(); // served names currently loaded in memory (for Unload)
   let _discovered = [];    // HF discovery rows — filled ONLY by ⟳ Discover
   let _discoveredAt = null;
   let _recRank = {};       // model id -> {rank, score} for the active intent
@@ -154,6 +155,16 @@ export const ModelsPanel = (function () {
       _models = (r.data && r.data.models) || [];
       _hardware = (r.data && r.data.hardware) || {};
       _detailCache = {};
+      // Best-effort memory-residency read so the drill-down can offer Unload
+      // only for models actually loaded in memory (migrated from the retired
+      // "Installed Locally" panel). Never fails the catalog load.
+      _running = new Set();
+      try {
+        const mr = await LibraryShell.fetch('model', '/api/inventory/memory');
+        if (mr.ok && mr.data) {
+          (mr.data.running_models || []).forEach(m => m && m.name && _running.add(m.name));
+        }
+      } catch (_) { /* memory endpoint optional */ }
     },
 
     list() {
@@ -249,6 +260,15 @@ export const ModelsPanel = (function () {
       acts.push({ action: 'models.edit-tags', label: 'Edit tags', verb: 'edit', data: { shell: 'models' } });
       if (m.installed) {
         const vllm = _runner(m) === 'vllm';
+        // Memory residency (migrated from the retired "Installed Locally" panel):
+        // Unload frees VRAM/RAM for a loaded Ollama model. vLLM pins its model at
+        // server start, so there is nothing to unload there.
+        if (!vllm && _running.has(_servedName(m))) {
+          acts.push({
+            action: 'models.unload', label: 'Unload', verb: 'edit',
+            data: { shell: 'models', model: _servedName(m) },
+          });
+        }
         acts.push({
           action: 'models.remove', label: 'Remove', verb: 'delete', danger: true,
           enabled: !vllm,
@@ -652,6 +672,30 @@ export const ModelsPanel = (function () {
     } catch (e) { Toast.danger('Remove failed', e.message); return false; }
   }
 
+  // Unload a loaded model from memory (frees VRAM/RAM) — the residency op the
+  // retired "Installed Locally" panel used to own. Reloads so the drill-down's
+  // Unload button disappears once the model is no longer resident.
+  async function unload(name) {
+    if (!name) return false;
+    try {
+      const r = await Net.call('/api/inventory/unload', {
+        retries: 0,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ..._headers() },
+          body: JSON.stringify({ model: name }),
+        },
+      });
+      if (!r.ok) {
+        Toast.danger('Unload failed', (r.data && r.data.detail) || r.error || `HTTP ${r.status}`);
+        return false;
+      }
+      Toast.success('Model unloaded', name);
+      await LibraryShell.reload('model');
+      return true;
+    } catch (e) { Toast.danger('Unload failed', e.message); return false; }
+  }
+
   // ── Intent recommender (deterministic, instant, explainable) ─────────
   async function setIntent(intent) {
     _intent = intent || '';
@@ -749,6 +793,6 @@ export const ModelsPanel = (function () {
     'models.intent': el => setIntent(el.value || ''),
   });
 
-  return { activate, select, test, pull, remove, editTags, saveTags, cancelTags,
+  return { activate, select, test, pull, remove, unload, editTags, saveTags, cancelTags,
            setIntent, refreshDiscover, adapter };
 })();

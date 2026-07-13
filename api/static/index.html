@@ -1437,21 +1437,11 @@
     <div id="models-rec-strip" class="models-rec-strip" hidden></div>
     <div id="models-shell"></div>
 
-    <!-- Installed Locally — every model actually resident on this box across
-         backends (Ollama + vLLM), catalogued or not. The shell above is for
-         browsing/pulling; this panel MANAGES memory residency. Populated by
-         loadInstalledLocal() from /api/inventory/status (installed_local)
-         cross-referenced with /api/inventory/memory. -->
-    <div class="panel" style="margin:16px 0">
-      <span class="corner-tr"></span><span class="corner-bl"></span>
-      <div class="panel-label">Installed Locally
-        <span class="tab-count" id="installed-local-count"></span>
-        <button class="action-btn xs" style="float:right" data-action="models.refresh-local">↻ Refresh</button>
-      </div>
-      <div id="installed-local-body">
-        <div class="model-empty">Loading local models…</div>
-      </div>
-    </div>
+    <!-- The former "Installed Locally" residency panel was removed: it duplicated
+         the shell's Installed side-tab, and its one unique operation (Unload) now
+         lives in the model drill-down actions (ModelsPanel.unload, shown only for
+         a loaded Ollama model). Delete / Pull / Install / Tag / Test / Review all
+         live in the drill-down too. -->
 
     <!-- Hidden legacy holder (LB4-U2 / critique F2): the pre-shell catalog
          surface parks here with its ids UNCHANGED (#inv-stats, #inv-grid,

@@ -208,7 +208,8 @@ function switchTab(name, el) {
     // ONE inventory fetch — loadCatalog now runs only for the Catalog page.
     if (window.CatalogModelsShare) CatalogModelsShare.showInModelsTab();
     ModelsPanel.activate();
-    loadInstalledLocal();
+    // The "Installed Locally" panel was retired — its residency op (Unload)
+    // moved into the model drill-down; no separate loader to run here.
   }
   // Catalog (legacy `workflows` data-tab): pull the shared inventory
   // DOM into the Catalog Models mount on demand. Only happens when
@@ -2574,7 +2575,9 @@ async function unloadModel(name) {
 (function () {
   const closeModal = el => { const m = el.closest('div[style*=fixed]'); if (m) m.remove(); };
   Actions.click({
-    'models.unload':       el => unloadModel(el.dataset.model),
+    'models.unload':       el => el.dataset.shell === 'models'
+                                   ? ModelsPanel.unload(el.dataset.model)
+                                   : unloadModel(el.dataset.model),
     'models.remove-local': el => removeLocalModel(el.dataset.model),
     // Shared action ids (only-add): the legacy catalog grid keeps its
     // handlers byte-identical; buttons born inside the Models library shell
