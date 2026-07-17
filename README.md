@@ -41,6 +41,31 @@ Enclave runs LLMs on your hardware. OpenAI-compatible API, Ollama backend, zero 
 - **macOS app** — native desktop wrapper with setup wizard
 - **No telemetry by default** — no data leaves your machine unless you opt in; optional, operator-owned error reporting (your own sink, redaction mandatory — see [docs/deployment/error-reporting.md](docs/deployment/error-reporting.md)). No internet required for inference
 
+## Console
+
+A single-operator web console (warm-charcoal + teal) runs the whole local stack — Composer, workflows, runs, and a Library of models, skills, MCP servers, plugins, agents, prompts, tasks, and patterns. See it live on the [product page](https://hankthebldr.github.io/local-ai-platform/#console).
+
+**Recent UI work:**
+
+- **One-click inventory refresh** — the Library rail reloads every installed kind and its count badges from a single ⟳. Installing from the marketplace or generating an agent now auto-refreshes the affected badges, so the counts always reflect what's actually installed.
+- **Collapsible Composer workstream** — the bottom strip (Step Config · Active Run · History · Logs · In Progress) defaults to a tabs-only preview and expands *in place* — on a tab click or a canvas-node select — for full detail.
+
+<p>
+  <img src="docs/pages/screenshots/library-rail.png" width="230" align="right" alt="Library rail with a one-click inventory-refresh control and live count badges">
+</p>
+
+The Library rail: a global **⟳** refresh on the section header, and per-kind count badges that stay truthful as you install, generate, or uninstall components.
+
+<br clear="all">
+
+<img src="docs/pages/screenshots/composer-workstream-minimized.png" alt="Composer workstream collapsed to a tabs-only preview">
+
+<sub>**Composer workstream — minimized** to a tabs-only preview, giving the canvas the vertical room.</sub>
+
+<img src="docs/pages/screenshots/composer-workstream-expanded.png" alt="Composer workstream expanded in place to show a step's live configuration">
+
+<sub>**… expands for detail** — selecting a canvas node opens that step's live configuration in place.</sub>
+
 ## Quick start
 
 Three paths — pick one:

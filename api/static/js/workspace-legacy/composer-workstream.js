@@ -19,7 +19,21 @@ export const ComposerWorkstream = (function () {
     });
   }
 
+  // The workstream defaults to minimized (tabs-only preview). A DELIBERATE
+  // selection — clicking a tab or selecting a canvas node — expands it so the
+  // detail is actually visible; otherwise switching a hidden pane looks dead.
+  // Background/hover updates (polling, bench inspectors) call _setActive
+  // directly and intentionally do NOT expand, so a manual collapse sticks.
+  function _ensureExpanded() {
+    const panel = document.getElementById('composer-workstream');
+    if (!panel || !panel.classList.contains('collapsed')) return;
+    panel.classList.remove('collapsed');
+    const btn = document.getElementById('workstream-collapse-btn');
+    if (btn) { btn.textContent = '▾'; btn.setAttribute('aria-expanded', 'true'); }
+  }
+
   function switchTab(name, _el) {
+    _ensureExpanded();
     _setActive(name);
     if (name === 'run')     _refreshRun();
     if (name === 'history') _refreshHistory();
@@ -34,6 +48,7 @@ export const ComposerWorkstream = (function () {
   function focusStep(stepId) {
     // Called by the canvas node-click handler so the bottom strip pulls
     // attention to Step Config whenever a node is selected.
+    _ensureExpanded();
     _setActive('step');
     const meta = document.getElementById('ws-step-meta');
     if (meta) {

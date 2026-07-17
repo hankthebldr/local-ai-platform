@@ -360,6 +360,9 @@ export const PluginsPanel = (function () {
     Toast.success('Plugins reloaded',
       `${d.plugins ?? '?'} plugins · ${d.skills ?? '?'} skills · ${d.tools ?? '?'} tools`);
     await load();
+    // A reload rescans the registry — the toast's skills/tools counts can
+    // shift — so refresh the kinds a plugin can bundle.
+    LibraryShell.notifyChanged(['skill', 'mcp', 'agent']);
     if (cur && !_isDisc(cur)) select(cur);
   }
 
@@ -385,6 +388,8 @@ export const PluginsPanel = (function () {
     if (st && st.selected === id) st.selected = null;
     Toast.success('Plugin deleted', id);
     await load();
+    // Deleting a plugin also drops the skills/MCP/agents it bundled.
+    LibraryShell.notifyChanged(['skill', 'mcp', 'agent']);
   }
 
   // ── Discovered detail (Overview) ────────────────────────────────────
@@ -492,6 +497,9 @@ export const PluginsPanel = (function () {
           } catch (e) { errors.push(`${s.name || s.path}: ${e.message}`); }
         }
         await load();
+        // Cross-kind: skills were written into a plugin — refresh the Skills
+        // rail badge/panel too (this path only reloads Plugins otherwise).
+        if (done) LibraryShell.notifyChanged(['skill']);
         if (done && !errors.length) return { ok: true, message: `${done} skill(s) imported into ${target}.` };
         if (done) return { ok: true, message: `${done} imported, ${errors.length} failed — ${errors[0]}` };
         return { ok: false, detail: errors[0] || 'import failed' };
@@ -754,6 +762,8 @@ export const PluginsPanel = (function () {
     const pid = _forgeFiles.plugin_id;
     _forgeSeed = null;
     await load();
+    // A scaffolded plugin can bundle skills / tool stubs — fan the refresh out.
+    LibraryShell.notifyChanged(['skill', 'mcp', 'agent']);
     select(pid);
     return { ok: true, message: `Installed ${pid} — registered and live (skills inject on the next matching chat turn).` };
   }

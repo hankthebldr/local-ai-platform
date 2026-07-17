@@ -35,6 +35,10 @@ WIZARD_JS = (STATIC / "js" / "library" / "wizard.js").read_text(encoding="utf-8"
 PROMPTS_JS = (STATIC / "js" / "library" / "prompts.js").read_text(encoding="utf-8")
 MCP_JS = (STATIC / "js" / "library" / "mcp.js").read_text(encoding="utf-8")
 MAIN_JS = (STATIC / "js" / "main.js").read_text(encoding="utf-8")
+PLUGINS_JS = (STATIC / "js" / "library" / "plugins.js").read_text(encoding="utf-8")
+AGENTS_JS = (STATIC / "js" / "library" / "agents.js").read_text(encoding="utf-8")
+SKILLS_JS = (STATIC / "js" / "library" / "skills.js").read_text(encoding="utf-8")
+DISCOVER_JS = (STATIC / "js" / "library" / "discover.js").read_text(encoding="utf-8")
 
 
 # ── 1. Static: shell grammar ships ─────────────────────────────────────────
@@ -49,6 +53,7 @@ def test_shell_registers_all_lib_actions():
         "'lib.subnav'",
         "'lib.action'",
         "'lib.refresh'",
+        "'lib.refresh-all'",
     ]:
         assert action in SHELL_JS, f"shell missing delegated action {action}"
     for action in [
@@ -58,6 +63,67 @@ def test_shell_registers_all_lib_actions():
         "'lib.wizard.submit'",
     ]:
         assert action in WIZARD_JS, f"wizard missing delegated action {action}"
+
+
+def test_global_refresh_control_present_and_wired():
+    """The left-rail 'Library' header hosts a global ⟳ refresh button that
+    reloads every registered LibraryShell adapter (models/skills/mcp/plugins/…)
+    and its count badge in one click. Guards: the button ships in the rail with
+    the delegated data-action (no inline handler), shell.js exposes reloadAll()
+    and the lib.refresh-all handler calls it, and the CSS chrome exists."""
+    index = (STATIC / "index.html").read_text(encoding="utf-8")
+    css = (STATIC / "css" / "app.css").read_text(encoding="utf-8")
+
+    # Button rides the Library nav-section, delegated (no inline on*= handler).
+    assert 'data-action="lib.refresh-all"' in index
+    assert 'id="lib-refresh-all"' in index
+    assert 'class="nav-section nav-section-library"' in index
+    btn = index[index.index('id="lib-refresh-all"') - 200: index.index('id="lib-refresh-all"') + 200]
+    assert "onclick" not in btn, "rail refresh button must stay delegated (no inline handler)"
+
+    # shell.js: the handler calls reloadAll(), which is exported.
+    assert "async function reloadAll()" in SHELL_JS
+    assert "reloadAll," in SHELL_JS  # public export list
+    handler = SHELL_JS[SHELL_JS.index("'lib.refresh-all'"): SHELL_JS.index("'lib.refresh-all'") + 400]
+    assert "reloadAll()" in handler
+    assert "spinning" in handler, "expected the spin/disabled busy-state affordance"
+
+    # CSS chrome for the control + its spin animation.
+    assert ".nav-refresh" in css
+    assert "@keyframes nav-refresh-spin" in css
+
+
+def test_cross_kind_inventory_signal_present_and_wired():
+    """Adding a component or installing from the marketplace must keep OTHER
+    kinds' badges truthful — a plugin bundles skills/mcp/agents, a generated
+    agent must bump the Agents badge, etc. The shell exposes notifyChanged()
+    (debounced cross-kind reload) + a decoupled 'enclave:inventory-changed'
+    DOM event bridge; the mutation sites announce the kinds they touched."""
+    # shell.js: the primitive + the decoupled bridge, exported.
+    assert "function notifyChanged(" in SHELL_JS
+    assert "notifyChanged," in SHELL_JS  # public export list
+    assert "'enclave:inventory-changed'" in SHELL_JS
+    assert "addEventListener('enclave:inventory-changed'" in SHELL_JS
+    # reload() must NOT itself emit the signal (no feedback loop).
+    reload_fn = SHELL_JS[SHELL_JS.index("async function reload(kind)"):
+                         SHELL_JS.index("async function reloadAll(")]
+    assert "notifyChanged" not in reload_fn, "reload() must not re-emit the change signal"
+
+    # plugins.js — the marketplace/cross-kind hotspot: importing skills bumps
+    # the skill badge; reload/delete/scaffold-install fan out to skill+mcp+agent.
+    assert "LibraryShell.notifyChanged(['skill'])" in PLUGINS_JS
+    assert PLUGINS_JS.count("LibraryShell.notifyChanged(['skill', 'mcp', 'agent'])") >= 3
+
+    # agents.js — the generator save path bumps the Agents badge.
+    assert "LibraryShell.notifyChanged(['agent'])" in AGENTS_JS
+
+    # skills.js — uninstalling a skill refreshes its host plugin's meta.
+    assert "LibraryShell.notifyChanged(['plugin'])" in SKILLS_JS
+
+    # discover.js — the decoupled helper module signals via the DOM event
+    # (it does not import LibraryShell) on every skill install/import/uninstall.
+    assert "enclave:inventory-changed" in DISCOVER_JS
+    assert DISCOVER_JS.count("_announceInventory(['skill', 'plugin'])") >= 4
 
 
 def test_shell_verb_enum_has_no_version_verb():

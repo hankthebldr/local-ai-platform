@@ -230,3 +230,37 @@ def test_canvas_panel_is_inside_the_center_column():
     assert center.find_parent(class_="composer-grid") is not None, (
         ".composer-center must itself live under .composer-grid"
     )
+
+
+def test_workstream_defaults_minimized_and_auto_expands():
+    """The bottom workstream defaults to MINIMIZED (tabs-only preview) to free
+    canvas space, and a deliberate selection re-expands it for detail:
+      * #composer-workstream ships with the `collapsed` class,
+      * its ▴/▾ toggle reports the collapsed state via aria-expanded="false",
+      * ComposerWorkstream.switchTab (tab click) and focusStep (node select)
+        both call _ensureExpanded() so switching a hidden pane isn't a dead-end.
+    Background updates (polling, bench-hover inspectors) use _setActive directly
+    and must NOT force-expand, so a manual collapse sticks."""
+    s = _soup()
+    ws = s.find(id="composer-workstream")
+    assert ws is not None and _has_class(ws, "collapsed"), (
+        "#composer-workstream must default to the minimized (collapsed) state"
+    )
+    btn = s.find(id="workstream-collapse-btn")
+    assert btn is not None and btn.get("aria-expanded") == "false", (
+        "collapse toggle must advertise the collapsed state via aria-expanded=false"
+    )
+
+    js = (Path(__file__).resolve().parents[2] / "api" / "static" / "js"
+          / "workspace-legacy" / "composer-workstream.js").read_text(encoding="utf-8")
+    assert "function _ensureExpanded()" in js
+    # Both deliberate-selection entry points expand; _setActive itself does not.
+    switch_fn = js[js.index("function switchTab("): js.index("function focusStep(")]
+    assert "_ensureExpanded()" in switch_fn, "switchTab must expand on tab click"
+    focus_fn = js[js.index("function focusStep("): js.index("function focusStep(") + 400]
+    assert "_ensureExpanded()" in focus_fn, "focusStep must expand on node select"
+    setactive_fn = js[js.index("function _setActive("): js.index("function _ensureExpanded(")]
+    assert "_ensureExpanded" not in setactive_fn, (
+        "_setActive must stay expand-neutral so background/hover updates don't "
+        "fight a manual collapse"
+    )
