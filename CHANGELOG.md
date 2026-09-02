@@ -10,6 +10,55 @@ Composer + the Enclave design-system rebrand** (branch `feat/chat-led-composer`)
 — a candidate `1.2.0` UX cut — and **Architecture-aware orchestration**
 earmarked for `1.3.0`.
 
+### Fixed — Fail-safe persistence & resume (next-wave Theme A)
+
+> Retires the top continuous-improvement finding of the 2026-07-12 next-wave
+> backlog (`docs/roadmap/2026-07-12-next-wave-backlog.md`): three surfaces
+> persisted a local-model **failure sentinel as durable success**. One
+> convention now holds everywhere (see CLAUDE.md → Conventions): *never write
+> a failure sentinel to a durable store; never return HTTP 200 on a
+> local-model exception.*
+
+- **Composer `resume-from-failed` zombie + 500 (P1).** The route flipped the
+  run to `running` and checkpointed *before* the engine tried to reload
+  `workflows/<id>.yaml`; for an unsaved Composer run that raised
+  `FileNotFoundError` (an `OSError`, not the `ValueError` being caught) →
+  HTTP 500 with the run stranded neither failed nor resumable. Now the
+  definition is resolved **first** (`_load_resume_definition`: saved yaml,
+  private overlay first, else the new inline sidecar), a run with none is a
+  clean 404 that leaves the snapshot untouched, an invalid one is 422, and if
+  `engine.resume` itself blows up the pre-flip snapshot is restored
+  (`_resume_or_restore`). `resolve_approval` gets the identical treatment (a
+  missing definition leaves the gate pending + undecided).
+- **Inline definition sidecar.** `prepare_run` now persists the originating
+  inline definition as `data/workflows/<run_id>/definition.json` (atomic,
+  best-effort, next to `origin.json`) so unsaved "Run ▶ live" runs can be
+  Fix&Resume'd; `read_definition_sidecar` is the resume-side reader. Runs
+  started from a saved yaml write no sidecar.
+- **Research `graph-walk` persist-error-as-success (P1).** On a model outage
+  the claimed node was marked `done`, the failure string written as a store
+  note + MOC section + RAG-ingested, and `requeue_stale` (in_progress only)
+  could never retry it. Now the item is set to `error`, nothing durable is
+  written, the call surfaces the model's 503, and a new `retry_errors`
+  request flag (backed by additive `WorkspaceIndex.requeue_errors()`)
+  requeues errored items once the box is healthy — no hot-loop on a
+  persistently failing node.
+- **Research `followup` / `compare-node` error persistence (P2).** A model
+  exception returned 200 with `_Answer unavailable — …_` / `_Comparison
+  unavailable — …_`, appended as a durable session turn (+ MOC +
+  ConversationStore mirror) or saved/ingested as a note. Both now raise
+  `503` with `X-Enclave-Error: model_unavailable` via a shared
+  `_chat_or_503` helper; nothing is persisted; the existing UI handlers
+  already toast on non-2xx.
+- **`/api/research` scope gate.** The prefix had no `SCOPE_MAP` entry, so any
+  valid key could write the shared `research` workspace + trigger the
+  operator-ticked web egress when auth was on. Now rides the `workspaces`
+  scope, parity with `/api/workspaces` (which writes the same store).
+- Tests: `tests/test_resume_from_failed.py` (rewritten around the load-first
+  contract; sidecar round-trip; restore-on-blow-up), failure-path coverage in
+  `tests/test_research_rx2.py` / `tests/test_research_session.py`, the scope
+  gate, and `WorkspaceIndex.requeue_errors` in `tests/test_workspace_index.py`.
+
 ### Added — Gap-closure: provenance, persistence & capabilities (`feat/chat-led-composer`)
 
 > Closes the highest-priority findings from the 88-gap flow audit

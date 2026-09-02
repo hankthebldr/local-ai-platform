@@ -224,6 +224,35 @@ def test_followup_web_search_opt_in_egresses_once(client):
     assert client._search_calls["search"] == 1
 
 
+def test_followup_model_failure_is_503_and_not_persisted(client, monkeypatch):
+    """Theme A: a model exception used to come back as a 200 turn whose answer
+    was `_Answer unavailable — …_`, appended to the session + MOC + mirror.
+    Now it is a 503 and the session is byte-unchanged."""
+    r = client.post(
+        "/api/research/deep-dive",
+        json={"topic": "Failure modes", "model": "dolphin3:latest", "depth": 1},
+    )
+    sid = r.json()["session_id"]
+    before = client.get(f"/api/research/sessions/{sid}").json()
+
+    import api.routers.research as research_mod
+
+    def _down(*a, **k):
+        raise RuntimeError("ollama down")
+
+    monkeypatch.setattr(research_mod._ollama, "chat", _down)
+    fr = client.post(
+        "/api/research/followup", json={"session_id": sid, "question": "Still there?"}
+    )
+    assert fr.status_code == 503, fr.text
+    assert fr.headers.get("X-Enclave-Error") == "model_unavailable"
+    assert "ollama down" in fr.json()["detail"]
+
+    after = client.get(f"/api/research/sessions/{sid}").json()
+    assert after["turns"] == before["turns"]
+    assert not any("unavailable" in (t.get("answer") or "") for t in after["turns"])
+
+
 def test_followup_missing_session_404(client):
     fr = client.post(
         "/api/research/followup",

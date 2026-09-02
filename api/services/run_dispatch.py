@@ -15,8 +15,15 @@ had, factored out so the scheduler loop can reuse it byte-for-byte:
         engine signatures preserved verbatim. Runs on a worker thread — never
         the event loop.
 
-The origin sidecar (data/workflows/<run_id>/origin.json) is the ONLY new
-observable versus the legacy handler; the frozen engine is untouched. In-process
+Two sidecars sit next to the run checkpoint; the frozen engine is untouched:
+
+  * data/workflows/<run_id>/origin.json      — who/what started the run.
+  * data/workflows/<run_id>/definition.json  — the originating INLINE definition
+    (Composer "Run ▶ live" only). An inline run has no workflows/<id>.yaml to
+    reload from, so without this sidecar resume-from-failed / gate-resolve had
+    nothing to rehydrate and 500'd after already flipping the run to
+    ``running`` (a zombie). ``read_definition_sidecar`` is the resume-side
+    reader; saved-yaml runs never write one. In-process
 dispatch deliberately bypasses HTTP auth middleware (that only wraps HTTP) — the
 loop calls the engine directly rather than loopback-POSTing with a stored key.
 Zero network I/O: privacy-first.
@@ -89,6 +96,51 @@ def _write_origin_sidecar(
         logger.warning(f"origin sidecar write failed for run {run_id}: {exc}")
 
 
+def _run_dir(run_id: str) -> Path:
+    # Read DATA_DIR live off the engine module so the run root honours env /
+    # test overrides — matching engine._checkpoint's own dynamic lookup.
+    from ..services import workflow_engine as _we
+
+    return Path(_we.DATA_DIR) / run_id
+
+
+def write_definition_sidecar(run_id: str, definition: Dict[str, Any]) -> None:
+    """Atomic tmp+replace write of data/workflows/<run_id>/definition.json.
+
+    Persists the originating inline definition so an unsaved (Composer
+    "Run ▶ live") run can be resumed later. Best-effort like the origin
+    sidecar: a write failure logs and the run still executes — it just can't
+    be Fix&Resume'd until the operator saves the workflow.
+    """
+    run_dir = _run_dir(run_id)
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        tmp_path = run_dir / "definition.json.tmp"
+        final_path = run_dir / "definition.json"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(definition, f, indent=2, default=str)
+        os.replace(tmp_path, final_path)
+    except OSError as exc:
+        logger.warning(f"definition sidecar write failed for run {run_id}: {exc}")
+
+
+def read_definition_sidecar(run_id: str) -> Optional[Dict[str, Any]]:
+    """Return the persisted inline definition for ``run_id``, or ``None`` when
+    the run was started from a saved yaml (no sidecar) or the file is
+    unreadable. Malformed JSON is treated as absent (logged) — the caller
+    decides how a missing definition surfaces."""
+    path = _run_dir(run_id) / "definition.json"
+    if not path.exists():
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as exc:
+        logger.warning(f"definition sidecar unreadable for run {run_id}: {exc}")
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def prepare_run(
     *,
     workflow_id: Optional[str] = None,
@@ -144,6 +196,10 @@ def prepare_run(
         pass
 
     _write_origin_sidecar(run_id, defn.id, origin)
+    if definition:
+        # Inline runs keep their originating definition next to the checkpoint
+        # so resume-from-failed can rehydrate them (there is no yaml to reload).
+        write_definition_sidecar(run_id, definition)
     return defn, run_id
 
 

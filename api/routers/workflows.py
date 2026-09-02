@@ -749,6 +749,80 @@ def _valid_run_id(run_id: str) -> bool:
     return bool(run_id) and all(c.isalnum() or c in "_-" for c in run_id)
 
 
+def _load_resume_definition(engine: WorkflowEngine, run_id: str, workflow_id: str):
+    """Resolve the definition a resume will execute — BEFORE any status flip.
+
+    Order: the saved ``workflows/<id>.yaml`` (private overlay first, so the
+    operator's just-saved Fix&Resume edits win), else the inline definition
+    sidecar ``prepare_run`` persisted for a Composer "Run ▶ live" run. A run
+    with neither cannot be resumed; that is a 404 the caller surfaces WITHOUT
+    having touched the persisted run (the zombie-on-500 defect this replaces:
+    the status was flipped to ``running`` first, then ``FileNotFoundError``
+    — an OSError, not the ValueError being caught — escaped as a 500 and the
+    run was stranded neither failed nor resumable).
+    """
+    from ..services.run_dispatch import read_definition_sidecar
+
+    yaml_path = engine.resolve_workflow_path(workflow_id, WORKFLOWS_DIR)
+    try:
+        if yaml_path:
+            return engine.load(yaml_path)
+        inline = read_definition_sidecar(run_id)
+        if inline is not None:
+            return engine.load_from_dict(inline)
+    except WorkflowValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"workflow definition for run {run_id} is invalid: {exc}",
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"workflow definition for run {run_id} is unreadable: {exc}",
+        )
+    raise HTTPException(
+        status_code=404,
+        detail=(
+            f"no definition to resume run {run_id}: workflow '{workflow_id}' has "
+            "no saved yaml and the run kept no inline definition — save the "
+            "workflow from the Composer, then resume"
+        ),
+    )
+
+
+def _resume_or_restore(engine: WorkflowEngine, run_id: str, definition, pristine):
+    """``engine.resume`` with the pre-flip snapshot restored on failure.
+
+    By the time this runs the snapshot has been flipped to ``running`` (so the
+    engine re-dispatches instead of short-circuiting). If resume itself blows
+    up before the engine persists a terminal state of its own, put the run
+    back exactly as it was (``pristine`` is the ``WorkflowRun`` validated from
+    the ORIGINAL snapshot — a failed run stays failed, an awaiting gate stays
+    awaiting and undecided) rather than leaving a ``running`` zombie nothing
+    is executing.
+    """
+    try:
+        return engine.resume(run_id, definition=definition)
+    except ValueError as exc:
+        _restore_snapshot(engine, pristine)
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 — never strand a zombie
+        _restore_snapshot(engine, pristine)
+        logger.error(f"resume of run {run_id} failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"resume failed: {exc}")
+
+
+def _restore_snapshot(engine: WorkflowEngine, pristine) -> None:
+    """Best-effort: only rewrite the snapshot if the engine hasn't already
+    persisted a terminal state of its own (that record is the truth)."""
+    try:
+        current = (engine.get_run(pristine.run_id) or {}).get("status", "")
+        if (current or "").lower() == "running":
+            engine._checkpoint(pristine)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"could not restore snapshot of run {pristine.run_id}: {exc}")
+
+
 @router.post("/runs/{run_id}/resume-from-failed")
 def resume_from_failed(run_id: str):
     """Re-dispatch a FAILED run from its first non-completed step (CH-1).
@@ -757,12 +831,13 @@ def resume_from_failed(run_id: str):
     circuits on terminal status (completed/failed/canceled) and returns the
     snapshot unchanged. The Fix&Resume loop needs the opposite: after the
     operator edits the failing step and re-saves, flip the run back to
-    ``running`` (so ``resume`` re-executes) and resume. Modeled byte-for-byte
-    on ``resolve_approval``'s flip-then-resume: set ``status="running"``,
-    ``engine._checkpoint``, then ``engine.resume(run_id)`` with no explicit
-    definition so the engine reloads the SAVED workflow yaml (picking up the
-    operator's edits). Completed steps keep their earlier outputs; only the
-    failed tail re-runs.
+    ``running`` (so ``resume`` re-executes) and resume. The definition is
+    resolved FIRST (saved yaml, else the inline sidecar ``prepare_run`` kept
+    for an unsaved Composer run — see ``_load_resume_definition``); only once
+    it loads is the status flipped + checkpointed and ``engine.resume`` called
+    with that definition. A run with no loadable definition is a 404 that
+    leaves the persisted run untouched. Completed steps keep their earlier
+    outputs; only the failed tail re-runs.
 
     Add-only. Idempotency mirrors ``cancel_run``/``resolve_approval``: a
     missing run is 404; a run that isn't failed is 409 (only failed runs can
@@ -792,18 +867,17 @@ def resume_from_failed(run_id: str):
     from ..models.workflow_models import WorkflowRun
 
     run = WorkflowRun.model_validate(snapshot)
+    pristine = WorkflowRun.model_validate(snapshot)
+    # Confirm the definition loads BEFORE touching the persisted run.
+    definition = _load_resume_definition(engine, run_id, run.workflow_id)
+
     # Flip off the terminal state so resume() re-dispatches instead of short-
     # circuiting. Checkpoint first so a crash between flip and resume leaves a
     # consistent (running) snapshot the plain /resume path can still pick up.
     run.status = "running"
     engine._checkpoint(run)
 
-    try:
-        # definition=None → engine reloads ./workflows/<workflow_id>.yaml, so
-        # the operator's just-saved edits to the failing step take effect.
-        resumed = engine.resume(run_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    resumed = _resume_or_restore(engine, run_id, definition, pristine)
 
     return {
         "run_id": resumed.run_id,
@@ -884,10 +958,11 @@ def resolve_approval(run_id: str, gate_id: str, body: ApprovalRequest):
     Idempotent like ``cancel_run``: a missing run is 404; a gate that doesn't
     match ``gate_id`` or has already been decided is 409.
 
-    Definition handling mirrors ``resume_run`` exactly — we call
-    ``engine.resume(run_id)`` with no explicit definition, so the engine
-    reloads the workflow from ``./workflows/<workflow_id>.yaml`` (resume needs
-    the definition to re-dispatch the remaining steps).
+    Definition handling mirrors ``resume_from_failed``: the definition is
+    resolved FIRST (saved ``./workflows/<workflow_id>.yaml``, else the inline
+    sidecar an unsaved Composer run kept) and only then is the gate decision
+    recorded + the status flipped, so a missing definition is a clean 404
+    that leaves the pending gate intact instead of a zombie ``running`` run.
     """
     engine = get_engine()
     snapshot = engine.get_run(run_id)
@@ -914,6 +989,9 @@ def resolve_approval(run_id: str, gate_id: str, body: ApprovalRequest):
     from ..models.workflow_models import WorkflowRun
 
     run = WorkflowRun.model_validate(snapshot)
+    pristine = WorkflowRun.model_validate(snapshot)
+    # Confirm the definition loads BEFORE recording the decision / flipping.
+    definition = _load_resume_definition(engine, run_id, run.workflow_id)
     decision = {"approve": "approved", "edit": "edited", "reject": "rejected"}[
         body.action
     ]
@@ -939,10 +1017,7 @@ def resolve_approval(run_id: str, gate_id: str, body: ApprovalRequest):
         step_id=step_id,
     )
 
-    try:
-        resumed = engine.resume(run_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    resumed = _resume_or_restore(engine, run_id, definition, pristine)
 
     return {
         "run_id": run_id,
