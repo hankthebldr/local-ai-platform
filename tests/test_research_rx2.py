@@ -81,6 +81,16 @@ def _stub_model(monkeypatch, content):
     monkeypatch.setattr(research._ollama, "chat", lambda **kw: {"content": content})
 
 
+def _fail_model(monkeypatch, msg="ollama down"):
+    """Stub a DOWN local model — every chat raises (the cold-box path)."""
+    import api.routers.research as research
+
+    def _boom(**kw):
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(research._ollama, "chat", _boom)
+
+
 def _forbid_search(monkeypatch):
     """Fail loudly if a web search egresses when it must not."""
     import api.routers.research as research
@@ -182,7 +192,66 @@ def test_compare_node_save_persists_note(client, monkeypatch):
     assert ws.exists(saved)
 
 
+def test_compare_node_model_failure_is_503_and_nothing_saved(client, monkeypatch):
+    """Theme A: a model exception is a 503, never a 200 carrying a sentinel
+    answer — and with save=True NOTHING lands in the store or RAG."""
+    _wire_rag(monkeypatch)
+    _fail_model(monkeypatch)
+    _forbid_search(monkeypatch)
+    resp = client.post(
+        "/api/research/compare-node", json={"focus": "Dead node", "save": True}
+    )
+    assert resp.status_code == 503, resp.text
+    assert resp.headers.get("X-Enclave-Error") == "model_unavailable"
+    assert "ollama down" in resp.json()["detail"]
+    ws = research_session.ensure_research_workspace()
+    assert not ws.exists("notes/compare-dead-node.md")
+    import api.routers.documents as docs
+
+    assert docs.document_service.uploaded == []
+
+
 # ── graph-walk (resumable) ──────────────────────────────────────────────────
+
+
+def test_graph_walk_model_failure_marks_error_not_done(client, monkeypatch):
+    """Theme A (P1): on a model outage the claimed item is marked `error` —
+    NOT `done` — no note / MOC section / RAG doc is written, the call is a
+    503, and `retry_errors` requeues it so the walk really is resumable."""
+    _wire_rag(monkeypatch)
+    _forbid_search(monkeypatch)
+    _fail_model(monkeypatch)
+    r1 = client.post("/api/research/graph-walk", json={"nodes": ["Delta"]})
+    assert r1.status_code == 503, r1.text
+    assert "Delta" in r1.json()["detail"]
+    assert "retry_errors" in r1.json()["detail"]
+
+    ws = research_session.ensure_research_workspace()
+    assert not ws.exists("notes/graph-walk-delta.md")
+    assert not ws.exists("notes/graph-walk-report.md")
+    import api.routers.documents as docs
+
+    assert docs.document_service.uploaded == []
+
+    idx = client.get("/api/workspaces/research/index/graph-walk").json()
+    assert idx["counts"]["error"] == 1
+    assert idx["counts"]["done"] == 0
+    assert idx["counts"]["in_progress"] == 0  # not stranded as claimed either
+
+    # A plain follow-up walk does NOT hot-loop on the broken node …
+    r2 = client.post("/api/research/graph-walk", json={})
+    assert r2.status_code == 200
+    assert r2.json()["item"] is None
+
+    # … but once the model is back, retry_errors requeues + completes it.
+    _stub_model(monkeypatch, _STRUCTURED)
+    r3 = client.post("/api/research/graph-walk", json={"retry_errors": True})
+    assert r3.status_code == 200, r3.text
+    assert r3.json()["item"]["label"] == "Delta"
+    assert r3.json()["counts"] == {**r3.json()["counts"], "done": 1, "error": 0}
+    assert ws.exists("notes/graph-walk-delta.md")
+    assert ws.exists("notes/graph-walk-report.md")
+    assert len(docs.document_service.uploaded) == 1
 
 
 def test_graph_walk_is_resumable(client, monkeypatch):
@@ -258,6 +327,18 @@ def auth_client(isolated, tmp_path, monkeypatch):
         yield client, scoped, unscoped
     finally:
         monkeypatch.setenv("ENABLE_API_AUTH", "false")
+
+
+def test_research_requires_workspaces_scope(auth_client):
+    """/api/research writes the same `research` workspace (and carries the only
+    operator-ticked egress) — it rides the same `workspaces` scope gate."""
+    client, scoped, unscoped = auth_client
+    r_no = client.get("/api/research/sessions", headers={"Authorization": f"Bearer {unscoped}"})
+    assert r_no.status_code == 403
+    assert r_no.json()["error"]["code"] == "insufficient_scope"
+    r_yes = client.get("/api/research/sessions", headers={"Authorization": f"Bearer {scoped}"})
+    assert r_yes.status_code == 200
+    assert client.get("/api/research/sessions").status_code == 401
 
 
 def test_workspaces_write_requires_scope(auth_client):

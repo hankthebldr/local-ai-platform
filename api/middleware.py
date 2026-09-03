@@ -81,6 +81,12 @@ SCOPE_MAP = {
     # `workspaces` scope (parity with /api/documents) so a scoped SPA key can
     # write notes but an unscoped key is 403'd. Operate U11 also writes here.
     "/api/workspaces": "workspaces",
+    # Theme A (next-wave backlog): /api/research writes the SAME `research`
+    # workspace (save-source / compare-node save / graph-walk notes + MOC) and
+    # carries the only operator-ticked web egress. It had no entry, so any
+    # valid key could write + egress when auth was on. Same tier + scope as
+    # /api/workspaces; master key + the auth-off dev path bypass as usual.
+    "/api/research": "workspaces",
     # Operate U4: the local scheduler read surface (list/detail/history/summary)
     # serves the same run-provenance bytes as /api/workflows. Gate reads on the
     # `workflows` scope (data-action tier, parity with /api/workflows) — writes
