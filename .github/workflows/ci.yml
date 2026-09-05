@@ -206,19 +206,41 @@ jobs:
           API_PID=$!
           trap "kill $API_PID 2>/dev/null || true" EXIT
 
-          for _ in $(seq 1 30); do
-              if curl -sf -m 2 http://127.0.0.1:8765/health >/dev/null; then
+          # Wait for readiness, and say so explicitly when it never arrives.
+          # The old loop fell through silently after 15s, so a slow or dead
+          # boot surfaced later as an opaque curl timeout instead of a
+          # diagnosis. 60s: the bundle is ~1.5G and cold-starts off a fresh
+          # runner disk, and this step has been observed at 20s on a good day.
+          ready=""
+          for _ in $(seq 1 120); do
+              if curl -sf -m 2 http://127.0.0.1:8765/health >/dev/null 2>&1; then
+                  ready=1
                   break
+              fi
+              if ! kill -0 "$API_PID" 2>/dev/null; then
+                  echo "::error::Bundled API exited during startup"
+                  echo "--- api log ---"; tail -80 api.log
+                  exit 1
               fi
               sleep 0.5
           done
 
+          if [ -z "$ready" ]; then
+              echo "::error::Bundled API never became healthy within 60s"
+              echo "--- api log ---"; tail -80 api.log
+              exit 1
+          fi
+
           # Hard-fail if any of the user-facing surfaces 404 or refuse.
+          # `code=$(curl ...) || true` matters: under `set -e` a curl timeout
+          # (exit 28) would abort the step before the diagnostic below ever
+          # ran, which is exactly how the previous failure reported nothing
+          # but "exit code 28". Capture it, then report it.
           for path in /health / /static/index.html /setup /api/info; do
-              code=$(curl -s -o /dev/null -w '%{http_code}' \
-                  -m 5 "http://127.0.0.1:8765${path}")
+              code="$(curl -s -o /dev/null -w '%{http_code}' \
+                  -m 15 "http://127.0.0.1:8765${path}")" || code="curl-exit-$?"
               if [ "$code" != "200" ]; then
-                  echo "::error::UX route ${path} returned HTTP ${code}"
+                  echo "::error::UX route ${path} returned ${code}"
                   echo "--- api log ---"; tail -80 api.log
                   exit 1
               fi
