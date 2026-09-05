@@ -15,6 +15,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from dotenv import load_dotenv
 
+from .logging_config import logger
+
 load_dotenv()
 
 # ── Configuration ──────────────────────────────────────────────────────────
@@ -198,7 +200,33 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
                     },
                 )
             request.state.api_key_meta = meta
-            return await call_next(request)
+
+            response = await call_next(request)
+
+            # ── Usage tracking ─────────────────────────────────────────
+            # `update_usage` has existed on APIKeyService since the keystore
+            # landed but nothing ever called it, so `total_requests` sat at 0
+            # and `last_used_at` at null for the life of every key — the
+            # /api/keys/{id}/usage surface reported dead numbers. Count here,
+            # where every authenticated request already passes through.
+            #
+            # Counted regardless of response status: a 4xx/5xx still consumed
+            # the key, and "last used" means last presented, not last
+            # succeeded. Token counts are opt-in — an endpoint that knows its
+            # token spend sets `X-Tokens-Used` on the response; everything
+            # else records the request only.
+            try:
+                tokens_used = int(response.headers.get("X-Tokens-Used") or 0)
+            except (TypeError, ValueError):
+                tokens_used = 0
+            try:
+                svc.update_usage(meta["id"], tokens_used=tokens_used)
+            except Exception:  # pragma: no cover - never fail a served request
+                logger.warning(
+                    "usage tracking failed for key %s", meta.get("id"), exc_info=True
+                )
+
+            return response
 
         return JSONResponse(
             status_code=401,
