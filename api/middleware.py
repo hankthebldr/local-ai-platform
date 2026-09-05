@@ -103,6 +103,20 @@ SCOPE_MAP = {
     # scope resolution and would 401 a legitimately workflows-scoped SPA key.
     "/api/artifacts": "workflows",
     "/api/format-sets": "workflows",
+    # Theme B read-route sweep. Three data surfaces were reachable by ANY
+    # valid key when auth was on, because a missing prefix means "base auth
+    # only". Each rides the scope of its nearest already-gated sibling rather
+    # than minting a new scope name (a new name would 403 every existing key,
+    # since bootstrap mints ALL_SCOPES and that list is the contract):
+    #   · response provenance = run/answer provenance bytes — exact parity
+    #     with /api/artifacts, which serves the same run record.
+    #   · agent definitions are authored workflow personas, and the composer
+    #     draft store (/api/composer) already rides `workflows`.
+    #   · saved chat threads are the same durable chat-session content that
+    #     /api/exports serves as markdown.
+    "/api/provenance": "workflows",
+    "/api/agents": "workflows",
+    "/api/conversations": "exports",
     "/api/keys": "keys",  # master key bypasses this before scope check
     "/a2a": "a2a",  # A2A JSON-RPC dispatch
 }
