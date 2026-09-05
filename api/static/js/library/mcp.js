@@ -278,6 +278,26 @@ export const MCPPanel = (function () {
   }
 
   // ── Marketplace — browse + one-click register a catalog MCP server ──
+  // Theme B: GET /api/mcp/discover is egress-free, so OPENING this modal never
+  // reaches the configured remote catalog. The ⟳ in its header is the operator's
+  // explicit fetch — it POSTs the refresh route, then re-renders from the cache
+  // the refresh just filled. Fail-soft: a dead remote leaves the local curated
+  // catalog on screen.
+  async function refreshMarketplace(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      await Net.call('/api/mcp/discover/refresh', {
+        retries: 0,                   // a refresh egresses; never double-fetch
+        init: { method: 'POST', headers: _headers() },
+      });
+    } catch (_) { /* keep whatever the cache already holds */ }
+    // Tear down THIS overlay (not the edit modal — different element) before
+    // re-opening, or the re-render stacks a second one on top.
+    const overlay = btn && btn.closest ? btn.closest('.mcp-mkt-overlay') : null;
+    (overlay || document.querySelector('.mcp-mkt-overlay') || { remove() {} }).remove();
+    await browseMarketplace();
+  }
+
   async function browseMarketplace() {
     const modal = document.createElement('div');
     modal.className = 'mcp-mkt-overlay';
@@ -315,6 +335,8 @@ export const MCPPanel = (function () {
       inner.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--border)">
           <div style="font-family:var(--mono);font-weight:600;flex:1">MCP Marketplace <span style="color:var(--text-muted);font-weight:400">· ${d.count} server${d.count === 1 ? '' : 's'}</span></div>
+          <button class="action-btn xs ghost" data-action="mcp.mkt-refresh"
+            title="Fetch the configured remote catalog now (the only time this reaches the network)">⟳</button>
           <button class="action-btn xs ghost" data-action="mcp.mkt-close">×</button>
         </div>
         <div style="font-size:0.64rem;color:var(--text-muted);padding:8px 18px 0">Servers run as local processes under your account. Servers needing a path/DSN install with a placeholder — edit the registration afterward. Secrets are collected on install.</div>
@@ -395,6 +417,7 @@ export const MCPPanel = (function () {
     'mcp.create':   () => showCreate(),
     'mcp.browse':   () => browseMarketplace(),
     'mcp.refresh':  () => refresh(),
+    'mcp.mkt-refresh': el => refreshMarketplace(el),
     'mcp.select':   el => select(el.dataset.id),
     'mcp.test':     el => test(el.dataset.id),
     'mcp.discover': el => discoverTools(el.dataset.id),

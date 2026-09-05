@@ -1,0 +1,62 @@
+# Build context hygiene. Two jobs: keep the image small, and make it
+# impossible for a developer tree's runtime state or secrets to be baked in.
+#
+# The Dockerfile COPYs a NAMED subset of data/ (discovery seeds, profiles,
+# search_settings.json). Everything else under data/ is runtime output —
+# run checkpoints, logs, provenance, conversations, the RAG store — and,
+# critically, data/config/api_keys.yaml + first-run-key.txt, which are live
+# credentials. None of it belongs in an image.
+
+# Secrets — never, under any circumstance
+.env
+data/config/api_keys.yaml
+data/config/first-run-key.txt
+**/*.pem
+**/*.key
+
+# Runtime state (the Dockerfile re-creates the empty dirs it needs)
+data/workflows/
+data/logs/
+data/cache/
+data/rag/
+data/research/
+data/provenance/
+data/conversations/
+data/feedback/
+data/schedules/
+data/vectors/
+data/models/
+data/memory/
+data/drafts/
+data/exports/
+data/contexts/
+
+# Local dev tooling / VCS / caches
+.git/
+.github/
+.claude/
+venv/
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+htmlcov/
+.coverage
+coverage.xml
+reports/
+
+# Build + packaging output
+build/
+dist/
+*.egg-info/
+*.dmg
+desktop/build/
+desktop/dist/
+
+# Tests + docs the runtime never reads (docs/seed/ IS copied — it is agent
+# grounding corpus — so it is deliberately NOT excluded here)
+tests/
+evals/

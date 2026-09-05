@@ -22,12 +22,36 @@ APP_DIR = os.path.expanduser("~/.enclave")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
-# Hosts considered "local" for the auto-license-delivery endpoint. Docker
-# Compose puts the browser behind a bridge so client.host shows up as an
-# RFC1918 address (172.16.0.0/12 typically). Anything outside loopback or
-# RFC1918 gets a 403 — that's where remote license activation will
-# eventually replace the local-key handoff.
+# Hosts considered "local" for the auto-license-delivery endpoint.
+#
+# Theme B (hardened-deployment posture): this endpoint hands out the
+# operator's first-run MASTER key, so "local" defaults to LOOPBACK ONLY.
+# The previous ``ip.is_private`` test also matched every RFC1918 LAN address,
+# 169.254.0.0/16 link-local, AND 100.64.0.0/10 — the CGNAT range Tailscale
+# assigns — so any peer on the operator's LAN or tailnet could simply GET the
+# master key. That is precisely the exposure 1.4.x fleet-awareness will widen.
+#
+# Docker Compose puts the browser behind a bridge, so the container sees an
+# RFC1918 peer (172.16.0.0/12 typically) and loopback-only would break its
+# first-run auto-sign-in. That topology is operator-controlled and explicit,
+# so it opts in with ENCLAVE_TRUST_PRIVATE_NET=true (set in
+# docker-compose.yml). Never set it on a host reachable from a LAN or tailnet
+# you do not fully trust.
 _LOCAL_CLIENT_HOSTS = {"localhost"}
+
+_TRUST_PRIVATE_NET_ENV = "ENCLAVE_TRUST_PRIVATE_NET"
+
+
+def _trust_private_net() -> bool:
+    """Read the opt-in at call time (not import time) so tests and a restart-
+    free config change both take effect."""
+    return os.getenv(_TRUST_PRIVATE_NET_ENV, "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
 
 # GP-2 (P0-14): a request that traversed a reverse proxy carries a forwarding
 # header, and request.client.host is then the PROXY's address (often loopback
@@ -54,17 +78,31 @@ def _is_local_client(request: Request) -> bool:
         ip = ipaddress.ip_address(host)
     except ValueError:
         return False
-    # Loopback (127.0.0.0/8, ::1) or RFC1918 private (incl. the Docker-bridge
-    # parity path 172.16.0.0/12). is_private correctly EXCLUDES public ranges
-    # like 172.5.x that a naive "172." prefix check wrongly trusted.
-    return ip.is_loopback or ip.is_private
+    # Loopback (127.0.0.0/8, ::1) is always trusted — that is the box itself.
+    if ip.is_loopback:
+        return True
+    # An IPv4-mapped IPv6 peer (::ffff:127.0.0.1) is loopback in disguise;
+    # ip.is_loopback is False for it, so unwrap before deciding.
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None and mapped.is_loopback:
+        return True
+    # Everything else — LAN, Docker bridge, tailnet — only with the explicit
+    # opt-in. is_private covers RFC1918 + link-local + the 100.64/10 CGNAT
+    # range Tailscale uses.
+    if not _trust_private_net():
+        return False
+    if mapped is not None:
+        return mapped.is_private
+    return ip.is_private
 
 
 @router.get("/api/setup/local-license")
 async def local_license(request: Request) -> dict:
     """
     Return the local first-run / "license" key so the SPA can auto-sign-in
-    on first boot. Localhost / private-network clients only.
+    on first boot. LOOPBACK clients only by default; LAN / Docker-bridge /
+    tailnet peers require the explicit ``ENCLAVE_TRUST_PRIVATE_NET=true``
+    opt-in (see ``_is_local_client``).
 
     The key delivered here is the same master key written to
     ``data/config/first-run-key.txt`` at first boot. It exists today as the
