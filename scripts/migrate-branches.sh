@@ -234,6 +234,38 @@ cat <<'EOF'
   branch, so they will retarget dev automatically once step 3 lands.
 EOF
 
+# ── 8. Drop the transitional `master` CI trigger ──────────────────────────
+# ci.yml lists master alongside dev/main so the consolidation PR itself could
+# run CI while master was still the default. Once the rename has happened that
+# entry is dead config.
+
+step "8. Remove the transitional master CI trigger"
+
+if grep -q 'branches: \[dev, main, master\]' .github/workflows/ci.yml 2>/dev/null; then
+    if [[ $APPLY -eq 1 ]]; then
+        git switch dev
+        git pull --ff-only origin dev
+        sed -i.bak \
+            -e 's/branches: \[dev, main, master\]/branches: [dev, main]/' \
+            .github/workflows/ci.yml
+        # Drop the now-stale explanatory comment block too.
+        sed -i.bak '/# `master` is transitional: it keeps CI running on this PR/,+2d' \
+            .github/workflows/ci.yml
+        rm -f .github/workflows/ci.yml.bak
+        git add .github/workflows/ci.yml
+        git commit -m "chore(ci): drop the transitional master trigger
+
+The dev/main migration has run, so master no longer exists and listing it
+in ci.yml's trigger branches is dead config."
+        git push origin dev
+    else
+        echo "  would run: strip master from ci.yml triggers on dev, commit, push"
+    fi
+else
+    echo "  ok: ci.yml no longer lists master"
+fi
+
+
 step "Done"
 if [[ $APPLY -eq 0 ]]; then
     echo "That was a dry run. Re-run with --apply to execute."

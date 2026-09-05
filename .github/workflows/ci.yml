@@ -1,10 +1,13 @@
 name: CI
 
 on:
+  # `master` is transitional: it keeps CI running on this PR and on the trunk
+  # until scripts/migrate-branches.sh renames master -> main and creates dev.
+  # The migration script removes it as its last step.
   push:
-    branches: [dev, main]
+    branches: [dev, main, master]
   pull_request:
-    branches: [dev, main]
+    branches: [dev, main, master]
 
 jobs:
   test:
