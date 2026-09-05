@@ -2,7 +2,7 @@
 
 Welcome. This wiki is the canonical operator-facing documentation for **Enclave** — self-hosted LLM infrastructure with an OpenAI-compatible API.
 
-Pages are version-controlled under [`docs/wiki/`](https://github.com/hankthebldr/local-ai-platform/tree/master/docs/wiki) in the main repo and synced to this Wiki on every `vX.Y.Z` tag. If you find a mistake, open a PR against `docs/wiki/<page>.md` — do not edit the Wiki directly, your edit will be overwritten on the next release.
+Pages are version-controlled under [`docs/wiki/`](https://github.com/hankthebldr/local-ai-platform/tree/main/docs/wiki) in the main repo and synced to this Wiki on every `vX.Y.Z` tag. If you find a mistake, open a PR against `docs/wiki/<page>.md` — do not edit the Wiki directly, your edit will be overwritten on the next release.
 
 ## Start here
 
@@ -30,14 +30,14 @@ Pages are version-controlled under [`docs/wiki/`](https://github.com/hankthebldr
 
 ## Current release
 
-See [Release-Notes](Release-Notes) for the running list. The repo's [CHANGELOG.md](https://github.com/hankthebldr/local-ai-platform/blob/master/CHANGELOG.md) is the source of truth.
+See [Release-Notes](Release-Notes) for the running list. The repo's [CHANGELOG.md](https://github.com/hankthebldr/local-ai-platform/blob/main/CHANGELOG.md) is the source of truth.
 
 ## External links
 
 - [Product page](https://hankthebldr.github.io/local-ai-platform/)
 - [Source on GitHub](https://github.com/hankthebldr/local-ai-platform)
 - [Releases](https://github.com/hankthebldr/local-ai-platform/releases)
-- [CHANGELOG](https://github.com/hankthebldr/local-ai-platform/blob/master/CHANGELOG.md)
+- [CHANGELOG](https://github.com/hankthebldr/local-ai-platform/blob/main/CHANGELOG.md)
 - [Docker Hub](https://hub.docker.com/r/hankthebldrr/local-ai-platfrom)
 - [GHCR](https://github.com/hankthebldr/local-ai-platform/pkgs/container/enclave)
 - [Discussions](https://github.com/hankthebldr/local-ai-platform/discussions)

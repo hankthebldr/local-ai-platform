@@ -1,6 +1,6 @@
 # Agents
 
-**Agents** in Enclave are YAML-defined personas (Gems-style) — a system prompt, a pinned model, pinned context sources, and a callable identity. They live in [`agents/`](https://github.com/hankthebldr/local-ai-platform/tree/master/agents).
+**Agents** in Enclave are YAML-defined personas (Gems-style) — a system prompt, a pinned model, pinned context sources, and a callable identity. They live in [`agents/`](https://github.com/hankthebldr/local-ai-platform/tree/main/agents).
 
 ## Anatomy of an agent
 
@@ -53,7 +53,7 @@ Three kinds are supported:
 
 ## Tools
 
-`tools:` references plugin-provided callables. The runtime invokes them via the `plugin_tool_invoker` hook in the workflow engine, then injects the result into the next prompt. Plugins live under [`plugins/`](https://github.com/hankthebldr/local-ai-platform/tree/master/plugins).
+`tools:` references plugin-provided callables. The runtime invokes them via the `plugin_tool_invoker` hook in the workflow engine, then injects the result into the next prompt. Plugins live under [`plugins/`](https://github.com/hankthebldr/local-ai-platform/tree/main/plugins).
 
 ## A2A delegation (1.3.0+)
 
@@ -73,7 +73,7 @@ A workflow step with `kind: a2a` can delegate to a different agent — including
 2. Restart the API (the agent registry is loaded at startup).
 3. The agent appears in **Dashboard → Agents** and at `/api/agents`.
 
-See [`agents/xsiam-analyst.yaml`](https://github.com/hankthebldr/local-ai-platform/blob/master/agents/xsiam-analyst.yaml) for a fully-worked example with context sources and tools.
+See [`agents/xsiam-analyst.yaml`](https://github.com/hankthebldr/local-ai-platform/blob/main/agents/xsiam-analyst.yaml) for a fully-worked example with context sources and tools.
 
 ## See also
 

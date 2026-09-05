@@ -1,13 +1,13 @@
 name: Sync Wiki
 
 # Pushes docs/wiki/ → the github.com/hankthebldr/local-ai-platform.wiki
-# repo on every `vX.Y.Z` tag and on any master push that touches the
+# repo on every `vX.Y.Z` tag and on any main push that touches the
 # wiki source tree. Source of truth is the main repo; the rendered Wiki
 # is read-only — direct edits will be overwritten on the next sync.
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - "docs/wiki/**"
       - ".github/workflows/wiki-sync.yml"
@@ -85,5 +85,8 @@ jobs:
           Edit docs/wiki/<page>.md in the main repo, not the wiki UI —
           direct wiki edits will be overwritten on the next sync."
 
+          # `master`, deliberately: this pushes to the WIKI repository
+          # (${REPO}.wiki.git), whose default branch is master and is not
+          # affected by the code repo's dev/main model.
           git push origin master
           echo "::notice::Wiki updated: https://github.com/${REPO}/wiki"

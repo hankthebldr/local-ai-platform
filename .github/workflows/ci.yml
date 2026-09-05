@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [dev, main]
   pull_request:
-    branches: [master]
+    branches: [dev, main]
 
 jobs:
   test:
@@ -55,8 +55,9 @@ jobs:
           exit 0
 
       # Auto-triage: annotations + run-summary on every run; deduped issues ONLY
-      # on master pushes (PR failures are expected during iteration). Fork PRs get
-      # a read-only token, so issue creation is detected + skipped by the CLI.
+      # on trunk pushes -- dev (integration) and main (release). PR failures are
+      # expected during iteration. Fork PRs get a read-only token, so issue
+      # creation is detected + skipped by the CLI.
       # Uses built-in $GITHUB_EVENT_NAME / $GITHUB_REF (no ${{ }} in the shell).
       - name: Auto-triage failures
         if: always()
@@ -66,7 +67,8 @@ jobs:
           TRIAGE_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           EMIT="annotations,summary"
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/master" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && \
+             { [ "$GITHUB_REF" = "refs/heads/dev" ] || [ "$GITHUB_REF" = "refs/heads/main" ]; }; then
             EMIT="annotations,summary,issues"
           fi
           echo "Triage emit set: $EMIT"
@@ -109,8 +111,42 @@ jobs:
         run: flake8 api/ cli/ models/ --max-line-length=120 --extend-ignore=E501,W503 || echo "::warning::Flake8 issues (non-blocking)"
         continue-on-error: true
 
+  release-readiness:
+    # Guards the one shape the branch model cannot recover from silently: a
+    # `dev -> main` release PR opened while `main` carries commits `dev` has
+    # never seen. That happens after a hotfix merges into `main` and the
+    # merge-forward back into `dev` is skipped -- merging the release PR would
+    # then revert the hotfix. Fails the PR until `main` is merged into `dev`.
+    #
+    # Only runs on PRs targeting `main`; every other PR skips it entirely.
+    name: Release readiness (dev is caught up with main)
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check main has no commits missing from the PR head
+        run: |
+          git fetch --no-tags origin main
+          # Commits on main that are not reachable from this PR's head.
+          missing="$(git rev-list --count HEAD..origin/main)"
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::main has $missing commit(s) this branch has not merged." \
+                 "Merge main into ${GITHUB_HEAD_REF} (a plain merge, not a squash)" \
+                 "before releasing, or the merge will revert them."
+            echo "### Missing from this branch" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            git log --oneline HEAD..origin/main >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "main is fully contained in ${GITHUB_HEAD_REF}."
+
   dmg-smoke:
-    # Build the .app bundle on every PR + master push and verify it boots.
+    # Build the .app bundle on every PR + trunk push and verify it boots.
     # Skips final DMG packaging (saves ~1m); release.yml does the full DMG.
     # Catches regressions in scripts/build_mac.sh, desktop/app.py, and
     # api/main.py startup before they ship in a tagged release.

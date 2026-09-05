@@ -1,13 +1,15 @@
 name: Release
 
-# Cuts a stable GitHub Release on every `vX.Y.Z` tag push, and a rolling
-# `nightly` pre-release on every `master` merge. Build jobs run in parallel
-# and upload artifacts; a publish job downloads everything and creates the
-# Release so users get DMG + wheel + sdist + tarball + checksums together.
+# Cuts a stable GitHub Release when a release PR merges into `main` (the
+# branch model's release event -- see docs/BRANCHING.md), and again on a
+# `vX.Y.Z` tag pushed by hand. Pushes to `dev` produce the rolling `nightly`
+# pre-release. Build jobs run in parallel and upload artifacts; a publish job
+# downloads everything and creates the Release so users get DMG + wheel +
+# sdist + tarball + checksums together.
 
 on:
   push:
-    branches: [master]
+    branches: [dev, main]
     tags:
       - "v*.*.*"
   workflow_dispatch:
@@ -32,12 +34,50 @@ jobs:
           fetch-depth: 0
       - name: Determine release kind + version
         id: r
+        # Three entry points:
+        #   refs/tags/v*   -> stable, version comes from the tag (manual cut)
+        #   refs/heads/main-> stable, version read from api/__init__.py and the
+        #                     tag created here. A merge into main IS the release.
+        #                     If that tag already exists the run degrades to a
+        #                     no-op so a docs-only merge cannot re-publish or
+        #                     clobber a shipped release.
+        #   refs/heads/dev -> rolling nightly pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
               version="${GITHUB_REF#refs/tags/}"
               echo "release_kind=stable" >> "$GITHUB_OUTPUT"
               echo "version=${version}" >> "$GITHUB_OUTPUT"
               echo "version_bare=${version#v}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+              bare="$(grep -oP '__version__\s*=\s*["\x27]\K[^"\x27]+' api/__init__.py)"
+              if [ -z "${bare}" ]; then
+                  echo "::error::Could not read __version__ from api/__init__.py"
+                  exit 1
+              fi
+              version="v${bare}"
+
+              if git rev-parse -q --verify "refs/tags/${version}" >/dev/null || \
+                 git ls-remote --exit-code --tags origin "refs/tags/${version}" >/dev/null 2>&1; then
+                  echo "::notice::Tag ${version} already exists -- nothing to release." \
+                       "Bump __version__ in api/__init__.py to cut a new one."
+                  echo "release_kind=none" >> "$GITHUB_OUTPUT"
+                  echo "version=${version}" >> "$GITHUB_OUTPUT"
+                  echo "version_bare=${bare}" >> "$GITHUB_OUTPUT"
+                  exit 0
+              fi
+
+              git config user.name  "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git tag -a "${version}" -m "Release ${version}"
+              git push origin "refs/tags/${version}"
+              echo "::notice::Tagged ${version} from the merge into main."
+
+              echo "release_kind=stable" >> "$GITHUB_OUTPUT"
+              echo "version=${version}" >> "$GITHUB_OUTPUT"
+              echo "version_bare=${bare}" >> "$GITHUB_OUTPUT"
           else
               short_sha="$(git rev-parse --short HEAD)"
               echo "release_kind=nightly" >> "$GITHUB_OUTPUT"
@@ -49,6 +89,7 @@ jobs:
 
   build-macos:
     name: Build macOS DMG
+    if: needs.meta.outputs.release_kind != 'none'
     needs: meta
     runs-on: macos-14
     steps:
@@ -130,6 +171,7 @@ jobs:
 
   build-python:
     name: Build Python wheel + sdist
+    if: needs.meta.outputs.release_kind != 'none'
     needs: meta
     runs-on: ubuntu-latest
     steps:
@@ -174,6 +216,7 @@ jobs:
 
   build-tarball:
     name: Build Linux source tarball
+    if: needs.meta.outputs.release_kind != 'none'
     needs: meta
     runs-on: ubuntu-latest
     env:
@@ -297,7 +340,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Publish rolling nightly (master push) ─────────────────────────────
+  # ── Publish rolling nightly (dev push) ────────────────────────────────
 
   publish-nightly:
     name: Publish nightly pre-release
@@ -329,9 +372,9 @@ jobs:
               --title "Enclave nightly (${VERSION})" \
               --notes "## Nightly build
 
-          Auto-built and smoke-tested from \`master\` @ \`${COMMIT_SHA}\`.
+          Auto-built and smoke-tested from \`dev\` @ \`${COMMIT_SHA}\`.
 
-          **This release is replaced on every \`master\` merge.** For a pinned, immutable build use a numbered \`vX.Y.Z\` release instead.
+          **This release is replaced on every merge into \`dev\`.** For a pinned, immutable build use a numbered \`vX.Y.Z\` release instead.
 
           ### Install
 
@@ -345,7 +388,7 @@ jobs:
 
           **Requirements:** macOS 12.0 (Monterey) or later.
 
-          For Docker, wheel, and tarball downloads, use the latest stable release — the nightly only ships the DMG. See the [README](https://github.com/hankthebldr/local-ai-platform/blob/master/README.md) for full quickstart.
+          For Docker, wheel, and tarball downloads, use the latest stable release — the nightly only ships the DMG. See the [README](https://github.com/hankthebldr/local-ai-platform/blob/main/README.md) for full quickstart.
           " \
               --prerelease \
               --target "${COMMIT_SHA}" \

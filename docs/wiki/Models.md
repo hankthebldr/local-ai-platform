@@ -1,6 +1,6 @@
 # Models
 
-The model catalog lives in [`models/download.py`](https://github.com/hankthebldr/local-ai-platform/blob/master/models/download.py) (`MODEL_REGISTRY`) and is documented in [`MODELS.md`](https://github.com/hankthebldr/local-ai-platform/blob/master/MODELS.md). The registry must stay in sync — a sync hook reminds developers on every PR that touches one without the other.
+The model catalog lives in [`models/download.py`](https://github.com/hankthebldr/local-ai-platform/blob/main/models/download.py) (`MODEL_REGISTRY`) and is documented in [`MODELS.md`](https://github.com/hankthebldr/local-ai-platform/blob/main/MODELS.md). The registry must stay in sync — a sync hook reminds developers on every PR that touches one without the other.
 
 ## Picking a model
 
