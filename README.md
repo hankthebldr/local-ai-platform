@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/hankthebldr/local-ai-platform/releases/latest"><img src="https://img.shields.io/github/v/release/hankthebldr/local-ai-platform?label=release&labelColor=1a1a2e&color=00E87B&style=flat" alt="Latest release"></a>
   <a href="https://github.com/hankthebldr/local-ai-platform/releases?q=prerelease%3Atrue&expanded=true"><img src="https://img.shields.io/github/v/release/hankthebldr/local-ai-platform?include_prereleases&label=nightly&labelColor=1a1a2e&color=FA582D&style=flat" alt="Nightly"></a>
-  <a href="https://github.com/hankthebldr/local-ai-platform/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/hankthebldr/local-ai-platform/ci.yml?branch=master&labelColor=1a1a2e&color=00C0E8&style=flat&label=ci" alt="CI"></a>
+  <a href="https://github.com/hankthebldr/local-ai-platform/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/hankthebldr/local-ai-platform/ci.yml?branch=main&labelColor=1a1a2e&color=00C0E8&style=flat&label=ci" alt="CI"></a>
   <a href="https://hub.docker.com/r/hankthebldrr/local-ai-platfrom"><img src="https://img.shields.io/docker/pulls/hankthebldrr/local-ai-platfrom?labelColor=1a1a2e&color=00C0E8&style=flat&label=docker%20pulls" alt="Docker pulls"></a>
   <a href="https://github.com/hankthebldr/local-ai-platform/pkgs/container/enclave"><img src="https://img.shields.io/badge/ghcr.io-enclave-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="GHCR"></a>
   <img src="https://img.shields.io/badge/macOS%2012%2B-supported-1a1a2e?style=flat&labelColor=1a1a2e&color=00C0E8" alt="macOS">
@@ -73,7 +73,7 @@ Three paths — pick one:
 ### macOS app (DMG) — for end users
 
 1. Download **Enclave.dmg** from the [latest release](https://github.com/hankthebldr/local-ai-platform/releases/latest)
-   *(Or grab the rolling [nightly build](https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly) for the freshest master.)*
+   *(Or grab the rolling [nightly build](https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly) for the freshest `dev`.)*
 2. Open the DMG and drag **Enclave.app** to `/Applications`.
 3. First launch: macOS Gatekeeper will warn — the app is currently **not signed/notarized**. Bypass once with:
    ```bash
@@ -211,14 +211,18 @@ ENCLAVE_VERSION=v1.2.3-local ./scripts/build_mac.sh
 
 ### Release pipeline
 
+`dev` is the integration trunk and the default branch; `main` is the release
+surface. See [docs/BRANCHING.md](docs/BRANCHING.md).
+
 | Trigger | Workflow | Artifact |
 |---|---|---|
-| Tag push `v*.*.*` | [release.yml](.github/workflows/release.yml) | Stable GitHub Release with signed DMG |
-| Push to `master` | [release.yml](.github/workflows/release.yml) | Rolling `nightly` pre-release (replaced each merge) |
-| PR / push to `master` | [ci.yml](.github/workflows/ci.yml) | pytest + lint + macOS `.app` smoke build (boots and probes UX routes) |
-| Tag push or release publish | [pages.yml](.github/workflows/pages.yml) | Updates [hankthebldr.github.io/local-ai-platform](https://hankthebldr.github.io/local-ai-platform/) with the latest release version |
+| PR / push to `dev` or `main` | [ci.yml](.github/workflows/ci.yml) | pytest + lint + macOS `.app` smoke build (boots and probes UX routes) |
+| Push to `dev` | [release.yml](.github/workflows/release.yml) | Rolling `nightly` pre-release (replaced each merge) · Docker `edge`, `dev-<sha>` |
+| **Merge into `main`** | [release.yml](.github/workflows/release.yml) | Tags `vX.Y.Z` and cuts the stable Release: DMG + wheel + sdist + tarball + checksums · Docker `X.Y.Z`, `latest` |
+| Tag push `v*.*.*` | [release.yml](.github/workflows/release.yml) | Same stable Release, cut by hand |
+| Push to `main` or release publish | [pages.yml](.github/workflows/pages.yml) | Updates [hankthebldr.github.io/local-ai-platform](https://hankthebldr.github.io/local-ai-platform/) with the latest release version |
 
-Every master merge re-publishes a freshly smoke-tested DMG to the [`nightly`](https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly) release. Stable releases are cut by pushing a `vX.Y.Z` tag.
+Every merge into `dev` re-publishes a freshly smoke-tested DMG to the [`nightly`](https://github.com/hankthebldr/local-ai-platform/releases/tag/nightly) release. A stable release is cut by merging `dev → main`: CI reads `__version__` from `api/__init__.py`, tags it, and publishes. If that tag already exists the release is skipped rather than overwritten, so a docs-only merge can't clobber a shipped version.
 
 ## Hardware targets
 

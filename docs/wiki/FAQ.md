@@ -17,7 +17,7 @@ Ollama gives you a model server. Enclave gives you:
 
 ## Is it free?
 
-Yes. Source-available, no fee. See the [LICENSE](https://github.com/hankthebldr/local-ai-platform/blob/master/LICENSE) for terms.
+Yes. Source-available, no fee. See the [LICENSE](https://github.com/hankthebldr/local-ai-platform/blob/main/LICENSE) for terms.
 
 ## What hardware do I need?
 
@@ -99,4 +99,4 @@ Enclave is independent. The Cortex Console aesthetic on the web dashboard and th
 
 ## How do I contribute?
 
-PRs welcome. Read [CLAUDE.md](https://github.com/hankthebldr/local-ai-platform/blob/master/CLAUDE.md) first — it documents the conventions and gotchas.
+PRs welcome. Read [CLAUDE.md](https://github.com/hankthebldr/local-ai-platform/blob/main/CLAUDE.md) first — it documents the conventions and gotchas.

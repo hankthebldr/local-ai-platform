@@ -44,13 +44,13 @@ When you launch the DMG, both processes are managed by the desktop wrapper. The 
 
 | Concern | File | What it does |
 |---|---|---|
-| App boot | [`api/main.py`](https://github.com/hankthebldr/local-ai-platform/blob/master/api/main.py) | FastAPI app, CORS, middleware, auth bootstrap, arch detection, router registration. |
+| App boot | [`api/main.py`](https://github.com/hankthebldr/local-ai-platform/blob/main/api/main.py) | FastAPI app, CORS, middleware, auth bootstrap, arch detection, router registration. |
 | OpenAI compat | `api/routers/chat.py`, `completions.py` | Drop-in `/v1/*` endpoints. |
-| Workflow engine | [`api/services/workflow_engine.py`](https://github.com/hankthebldr/local-ai-platform/blob/master/api/services/workflow_engine.py) | DAG orchestrator. Tick-based scheduler (1.3.0+). |
-| Step execution | [`api/services/step_executor.py`](https://github.com/hankthebldr/local-ai-platform/blob/master/api/services/step_executor.py) | Per-step model resolution, prompt render, Ollama call, parse, gate, hook fan-out. |
-| Scheduler | [`api/services/scheduler.py`](https://github.com/hankthebldr/local-ai-platform/blob/master/api/services/scheduler.py) | Wraps `arch.schedule_ready()` + `arch.feasible()`; computes per-tick ready set. |
-| Architecture detection | [`api/services/architecture.py`](https://github.com/hankthebldr/local-ai-platform/blob/master/api/services/architecture.py) | Detects memory + deployment topology at startup. Singleton accessor. |
-| Model catalog | [`models/download.py`](https://github.com/hankthebldr/local-ai-platform/blob/master/models/download.py) | `MODEL_REGISTRY` — 18+ models, mirrors [`MODELS.md`](https://github.com/hankthebldr/local-ai-platform/blob/master/MODELS.md). |
+| Workflow engine | [`api/services/workflow_engine.py`](https://github.com/hankthebldr/local-ai-platform/blob/main/api/services/workflow_engine.py) | DAG orchestrator. Tick-based scheduler (1.3.0+). |
+| Step execution | [`api/services/step_executor.py`](https://github.com/hankthebldr/local-ai-platform/blob/main/api/services/step_executor.py) | Per-step model resolution, prompt render, Ollama call, parse, gate, hook fan-out. |
+| Scheduler | [`api/services/scheduler.py`](https://github.com/hankthebldr/local-ai-platform/blob/main/api/services/scheduler.py) | Wraps `arch.schedule_ready()` + `arch.feasible()`; computes per-tick ready set. |
+| Architecture detection | [`api/services/architecture.py`](https://github.com/hankthebldr/local-ai-platform/blob/main/api/services/architecture.py) | Detects memory + deployment topology at startup. Singleton accessor. |
+| Model catalog | [`models/download.py`](https://github.com/hankthebldr/local-ai-platform/blob/main/models/download.py) | `MODEL_REGISTRY` — 18+ models, mirrors [`MODELS.md`](https://github.com/hankthebldr/local-ai-platform/blob/main/MODELS.md). |
 | RAG | `api/services/rag_service.py`, `chunker_service.py` | Chroma vector store, semantic chunker, document ingestion. |
 
 ## Architecture-aware orchestration (1.3.0+)
@@ -76,10 +76,10 @@ Live snapshots at:
 
 The workflow engine records Ollama load / prompt-eval / eval durations per step (Phase 2) and dispatches a per-tick ready set through `arch.schedule_ready()` (Phase 4b).
 
-Design: [`docs/plans/2026-05-19-architecture-aware-orchestration-design.md`](https://github.com/hankthebldr/local-ai-platform/blob/master/docs/plans/2026-05-19-architecture-aware-orchestration-design.md).
+Design: [`docs/plans/2026-05-19-architecture-aware-orchestration-design.md`](https://github.com/hankthebldr/local-ai-platform/blob/main/docs/plans/2026-05-19-architecture-aware-orchestration-design.md).
 
 ## Read more
 
 - [Workflows](Workflows) — YAML pipeline format
 - [Agents](Agents) — YAML persona format
-- [CLAUDE.md](https://github.com/hankthebldr/local-ai-platform/blob/master/CLAUDE.md) — developer entrypoint
+- [CLAUDE.md](https://github.com/hankthebldr/local-ai-platform/blob/main/CLAUDE.md) — developer entrypoint

@@ -10,9 +10,19 @@ Mac M4 Pro 48GB (dev) · MS-01 64GB (API) · BD790i 96GB (flagship). Authoritati
 ## Core workflow
 
 1. **Always activate venv first:** `source venv/bin/activate`
-2. Edit code → auto-formatter runs (`.claude/hooks/format-python.sh`) → commit (secret scanner runs).
-3. Run API: `python api/main.py` (port 8000). Ollama: `ollama serve` (11434). Mac app: `python desktop/app.py`.
-4. Run tests: `pytest tests/ --ignore=tests/e2e -v`
+2. **Branch from `dev`, never from `main`.** `dev` is the default branch and the
+   integration trunk; `main` is the release surface and a merge into it
+   publishes a release. Name the branch `feature/{X.Y}-{slug}` or
+   `issue/{GH#}-{slug}` and open a **draft PR against `dev` on day one** — an
+   orphaned branch with no PR is invisible, which is how this repo accumulated
+   seven stale branches. Full model: [docs/BRANCHING.md](./docs/BRANCHING.md).
+3. Edit code → auto-formatter runs (`.claude/hooks/format-python.sh`) → commit (secret scanner runs).
+4. Run API: `python api/main.py` (port 8000). Ollama: `ollama serve` (11434). Mac app: `python desktop/app.py`.
+5. Run tests: `pytest tests/ --ignore=tests/e2e -v`
+
+Working several branches at once? Use worktrees — one directory per branch,
+each with **its own venv** (a venv hardcodes absolute paths, so a copied one
+imports from the wrong tree). See [docs/BRANCHING.md §6](./docs/BRANCHING.md#6-worktrees).
 
 ## Architecture
 
@@ -84,6 +94,7 @@ Roadmap (single-operator-appliance track):
 
 ## Pointers
 
+- **Branching, releases, worktrees: [docs/BRANCHING.md](./docs/BRANCHING.md)** · day-to-day commands in [CONTRIBUTING.md](./CONTRIBUTING.md)
 - Enterprise gaps: [ENTERPRISE_DEPLOYMENT_GAPS.md](./ENTERPRISE_DEPLOYMENT_GAPS.md)
 - Workflow engine design: `docs/plans/2026-04-06-multi-agent-workflow-engine-design.md`
 - Prompt framework plan: `docs/superpowers/plans/2026-04-20-workflow-prompt-framework.md`

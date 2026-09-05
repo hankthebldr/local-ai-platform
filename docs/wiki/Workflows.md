@@ -117,11 +117,11 @@ Beyond simple sequential steps, the engine supports:
 - **`kind: loop`** — body executes until a predicate is satisfied.
 - **`kind: a2a`** — outbound A2A agent delegation.
 
-See [docs/plans/](https://github.com/hankthebldr/local-ai-platform/tree/master/docs/plans) for the design notes.
+See [docs/plans/](https://github.com/hankthebldr/local-ai-platform/tree/main/docs/plans) for the design notes.
 
 ## Built-in workflows
 
-Under [`workflows/`](https://github.com/hankthebldr/local-ai-platform/tree/master/workflows):
+Under [`workflows/`](https://github.com/hankthebldr/local-ai-platform/tree/main/workflows):
 
 - `code-review.yaml` — multi-agent PR review
 - `data-model-rules.yaml`, `xsiam-data-model-rules.yaml` — Cortex XSIAM rule authoring

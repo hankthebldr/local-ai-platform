@@ -1,7 +1,8 @@
 name: Docker Publish
 
 # Publishes hankthebldrr/local-ai-platfrom to Docker Hub on every tag push
-# and on every master merge (as :latest). Manual dispatch supports a custom
+# and on every main merge (as :latest). Pushes to dev publish :edge and
+# dev-<sha>, so :latest always means "most recent release". Manual dispatch supports a custom
 # tag for hotfix builds.
 #
 # Required repository configuration:
@@ -20,7 +21,7 @@ name: Docker Publish
 
 on:
   push:
-    branches: [master]
+    branches: [dev, main]
     tags:
       - "v*.*.*"
   workflow_dispatch:
@@ -71,10 +72,17 @@ jobs:
               version="${GITHUB_REF#refs/tags/v}"
               versions="${version},latest"
               kind="tag"
-          else
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+              # A merge into main is a release. `latest` moves here, never on dev.
               short_sha="$(git rev-parse --short HEAD)"
-              versions="master-${short_sha},latest"
-              kind="master"
+              versions="main-${short_sha},latest"
+              kind="main"
+          else
+              # dev: the rolling integration image. `edge` tracks the trunk so
+              # `latest` keeps pointing at the most recent actual release.
+              short_sha="$(git rev-parse --short HEAD)"
+              versions="dev-${short_sha},edge"
+              kind="dev"
           fi
 
           tag_list=""
@@ -145,10 +153,15 @@ jobs:
           severity: "CRITICAL,HIGH"
           exit-code: "0"   # don't fail the publish — surface in logs
 
-      - name: Notify (master push)
-        if: steps.meta.outputs.kind == 'master'
+      - name: Notify (main push)
+        if: steps.meta.outputs.kind == 'main'
         run: |
-          echo "::notice::Published rolling 'latest' image to Docker Hub + GHCR. Pin to master-<sha> for immutable references."
+          echo "::notice::Published rolling 'latest' image to Docker Hub + GHCR. Pin to main-<sha> for immutable references."
+
+      - name: Notify (dev push)
+        if: steps.meta.outputs.kind == 'dev'
+        run: |
+          echo "::notice::Published rolling 'edge' image to Docker Hub + GHCR. Pin to dev-<sha> for immutable references. 'latest' still points at the most recent release."
 
       - name: Notify (tag push)
         if: steps.meta.outputs.kind == 'tag'

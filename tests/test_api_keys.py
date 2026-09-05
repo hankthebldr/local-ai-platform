@@ -256,6 +256,66 @@ class TestMultiKeyAuth:
         assert resp.status_code == 401
 
 
+class TestUsageTracking:
+    """The auth middleware records every authenticated request against its key.
+
+    Asserts on usage counters rather than the response body, so these hold
+    whether or not a model backend is reachable — a request that 503s still
+    consumed the key.
+    """
+
+    MASTER_HEADER = {"Authorization": "Bearer master-test-key-12345"}
+
+    def _make_key(self, api_client, name):
+        resp = api_client.post(
+            "/api/keys",
+            json={"name": name, "scopes": ["models"]},
+            headers=self.MASTER_HEADER,
+        )
+        assert resp.status_code == 201
+        return resp.json()["key"], resp.json()["id"]
+
+    def test_request_count_increments_on_use(self, api_client):
+        raw_key, key_id = self._make_key(api_client, "usage-counter")
+
+        for _ in range(3):
+            api_client.get("/v1/models", headers={"Authorization": f"Bearer {raw_key}"})
+
+        resp = api_client.get(f"/api/keys/{key_id}/usage", headers=self.MASTER_HEADER)
+        assert resp.status_code == 200
+        assert resp.json()["total_requests"] == 3
+
+    def test_last_used_at_updated_on_use(self, api_client):
+        raw_key, key_id = self._make_key(api_client, "last-used-test")
+
+        def entry():
+            keys = api_client.get("/api/keys", headers=self.MASTER_HEADER).json()
+            return next(k for k in keys if k["id"] == key_id)
+
+        assert entry()["last_used_at"] is None
+
+        api_client.get("/v1/models", headers={"Authorization": f"Bearer {raw_key}"})
+
+        assert entry()["last_used_at"] is not None
+
+    def test_scope_rejected_request_is_not_counted(self, api_client):
+        """A 403'd request never reaches call_next, so it never counts."""
+        resp = api_client.post(
+            "/api/keys",
+            json={"name": "wrong-scope", "scopes": ["memory"]},
+            headers=self.MASTER_HEADER,
+        )
+        raw_key, key_id = resp.json()["key"], resp.json()["id"]
+
+        r = api_client.get("/v1/models", headers={"Authorization": f"Bearer {raw_key}"})
+        assert r.status_code == 403
+
+        usage = api_client.get(
+            f"/api/keys/{key_id}/usage", headers=self.MASTER_HEADER
+        ).json()
+        assert usage["total_requests"] == 0
+
+
 def test_require_master_helper_lives_in_middleware():
     """Smoke: helper is importable from middleware so plugins.py can use it."""
     from api.middleware import require_master_key
