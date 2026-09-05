@@ -39,7 +39,7 @@
 // per-file review/edit → install (409 on existing id, server-side denylist
 // lint on every *.py since tool code runs in-process). Seedable from a
 // Discovered digest record via plugins.seed-wizard.
-import { esc, renderMarkdown } from '../core/dom.js';
+import { esc, renderMarkdown, safeUrl } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
@@ -443,7 +443,7 @@ export const PluginsPanel = (function () {
     view.hidden = false;
     view.innerHTML = `
       <div class="skills-tree-meta" style="margin-bottom:4px">
-        manifest entry · <a href="${esc(rec.url || '#')}" target="_blank" rel="noopener"
+        manifest entry · <a href="${safeUrl(rec.url || '#')}" target="_blank" rel="noopener"
           style="color:var(--accent)">${esc(md.path || 'view upstream')}</a></div>
       <pre class="md-code" style="font-size:0.66rem;max-height:280px;overflow:auto">${esc(JSON.stringify(md.manifest_entry || {}, null, 2))}</pre>`;
   }

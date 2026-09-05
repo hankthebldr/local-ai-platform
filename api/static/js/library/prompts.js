@@ -6,7 +6,7 @@
 // #prompts-detail-label/#prompts-count) and selector from the pre-shell panel
 // stays alive; the shell adds the uniform sidebar/subnav/actions grammar on
 // top (`.lib-row` added ALONGSIDE the retained `.mcp-row`).
-import { esc } from '../core/dom.js';
+import { esc, safeUrl } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
@@ -606,7 +606,7 @@ export const PromptsLibrary = (function () {
          <pre class="prompts-body" style="max-height:260px">${esc(rec.body.slice(0, 4000))}${rec.body.length > 4000 ? '\n…' : ''}</pre>`
       : `<p style="color:var(--text-muted);font-size:0.72rem;margin:8px 0">
            Pointer-only record — the license does not permit a body copy.
-           ${src.url ? `Open the source: <a href="${esc(src.url)}" target="_blank" rel="noopener">${esc(src.url)}</a>` : ''}
+           ${src.url ? `Open the source: <a href="${safeUrl(src.url)}" target="_blank" rel="noopener">${esc(src.url)}</a>` : ''}
          </p>`;
     el.innerHTML = `
       <div class="prompts-meta"><code class="prompts-var">${esc(rec.subkind || 'prompt')}</code>
