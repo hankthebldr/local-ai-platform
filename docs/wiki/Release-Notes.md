@@ -1,6 +1,6 @@
 # Release Notes
 
-This page tracks every shipped release. The source of truth is [CHANGELOG.md](https://github.com/hankthebldr/local-ai-platform/blob/master/CHANGELOG.md) in the repo — this page is a summary with links.
+This page tracks every shipped release. The source of truth is [CHANGELOG.md](https://github.com/hankthebldr/local-ai-platform/blob/main/CHANGELOG.md) in the repo — this page is a summary with links.
 
 ## Unreleased — earmarked for v1.3.0
 
@@ -28,7 +28,7 @@ The defining release for **architecture-aware orchestration**. The workflow engi
 
 `1.1.1` and `1.2.x` were prepared in CHANGELOG / docs but never cut as git tags. All of their work shipped together as 1.3.0. Pin to `v1.3.0` or later; earlier intermediate versions are not pullable.
 
-[Full CHANGELOG entry →](https://github.com/hankthebldr/local-ai-platform/blob/master/CHANGELOG.md)
+[Full CHANGELOG entry →](https://github.com/hankthebldr/local-ai-platform/blob/main/CHANGELOG.md)
 
 ---
 
@@ -36,7 +36,7 @@ The defining release for **architecture-aware orchestration**. The workflow engi
 
 Multi-agent workflow engine maturity, model registry expansion, plugin framework.
 
-[CHANGELOG →](https://github.com/hankthebldr/local-ai-platform/blob/master/CHANGELOG.md#110--2026-04-22)
+[CHANGELOG →](https://github.com/hankthebldr/local-ai-platform/blob/main/CHANGELOG.md#110--2026-04-22)
 
 ---
 
@@ -44,14 +44,14 @@ Multi-agent workflow engine maturity, model registry expansion, plugin framework
 
 First public release. Core inference stack, OpenAI-compatible API, 18-model registry, 16 routers / 22 services, multi-agent workflow engine, RAG pipeline.
 
-[CHANGELOG →](https://github.com/hankthebldr/local-ai-platform/blob/master/CHANGELOG.md#100--2026-04-18)
+[CHANGELOG →](https://github.com/hankthebldr/local-ai-platform/blob/main/CHANGELOG.md#100--2026-04-18)
 
 ---
 
 ## How releases happen
 
-1. PR merges to `master` → CI runs → rolling `nightly` pre-release replaced with a fresh smoke-tested DMG.
-2. A `vX.Y.Z` tag pushed to `master` → all build jobs run in parallel → a single `publish` job attaches DMG + wheel + sdist + Linux tarball + checksums to a GitHub Release.
+1. PR merges to `dev` (the integration trunk) → CI runs → rolling `nightly` pre-release replaced with a fresh smoke-tested DMG.
+2. A release PR merges `dev → main` → CI reads `__version__` from `api/__init__.py`, tags `vX.Y.Z`, and all build jobs run in parallel → a single `publish` job attaches DMG + wheel + sdist + Linux tarball + checksums to a GitHub Release. Pushing a `vX.Y.Z` tag by hand does the same thing.
 3. The Docker Hub + GHCR images are published by a separate `docker-publish.yml` workflow on the same tag.
 4. Pages site re-renders with the new version string.
 5. Wiki sync workflow pushes the current `docs/wiki/` to the Wiki repo.
