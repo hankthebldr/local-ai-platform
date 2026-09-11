@@ -25,6 +25,7 @@ from ..middleware import require_master_key
 from ..services.discovery_service import (
     get_cached_or_discover,
     is_cache_fresh,
+    load_discovery_cache,
     TRUSTED_AUTHORS,
 )
 from ..services.search_service import (
@@ -855,17 +856,29 @@ async def warm_model(req: WarmRequest):
 async def discover(force: bool = False):
     """
     Discover new abliterated/uncensored models from HuggingFace.
-    Returns cached results by default; use ?force=true to refresh.
+
+    Theme B (no background egress): a plain read NEVER reaches HuggingFace.
+    It used to — ``get_cached_or_discover`` ran a live discovery whenever the
+    cache was cold or older than the refresh interval, so merely opening the
+    Models tab egressed. Now a stale cache is served AS stale (``cache_fresh``
+    already tells the UI, and ``never_discovered`` distinguishes "cold" from
+    "old" so the panel can degrade honestly); the network is touched only on
+    the operator's explicit ⟳ — ``?force=true`` here, or the background
+    ``POST /discover/refresh``.
     """
     hw = detect_hardware()
     max_ram = hw.get("max_model_ram_gb", 50)
 
-    result = get_cached_or_discover(max_model_ram_gb=max_ram, force=force)
+    if force:
+        result = get_cached_or_discover(max_model_ram_gb=max_ram, force=True)
+    else:
+        result = load_discovery_cache() or {}
     return {
         "models": result.get("models", []),
         "count": result.get("count", 0),
         "timestamp": result.get("timestamp", ""),
         "cache_fresh": is_cache_fresh(),
+        "never_discovered": not result,
         "trusted_authors": TRUSTED_AUTHORS,
         "hardware": hw,
     }

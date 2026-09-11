@@ -558,11 +558,14 @@ class TestDiscoveryService:
 class TestDiscoveryEndpoints:
     """Unit tests for discovery API endpoints"""
 
-    @patch("api.routers.inventory.get_cached_or_discover")
+    @patch("api.routers.inventory.load_discovery_cache")
     @patch("api.routers.inventory.is_cache_fresh")
-    def test_discover_returns_models(self, mock_fresh, mock_discover, client):
+    def test_discover_returns_models(self, mock_fresh, mock_cache, client):
+        # Theme B: a plain GET serves the CACHE and never runs discovery, so
+        # the payload now comes from load_discovery_cache. Response shape is
+        # unchanged (plus the new never_discovered flag).
         mock_fresh.return_value = True
-        mock_discover.return_value = {
+        mock_cache.return_value = {
             "timestamp": "2026-03-28T12:00:00+00:00",
             "count": 2,
             "models": [
@@ -578,6 +581,7 @@ class TestDiscoveryEndpoints:
         assert "count" in data
         assert "trusted_authors" in data
         assert data["count"] == 2
+        assert data["never_discovered"] is False
 
     @patch("api.routers.inventory.get_cached_or_discover")
     @patch("api.routers.inventory.is_cache_fresh")

@@ -498,6 +498,18 @@ export const SkillsPanel = (function () {
   // via the adapter load. Reads on tab activation never trigger this.
   async function refreshDiscovery() {
     Toast.info('Refreshing skills discovery…');
+    // Theme B: GET /api/skills/discover no longer fetches ENCLAVE_SKILLS_
+    // CATALOG_URL on a stale TTL, so the operator's ⟳ is the one place that
+    // may reach it. Both remote sources refresh together here — the
+    // skills.sh discovery provider below, and the configured catalog URL.
+    // Fail-soft and awaited before the re-read, so the cache it fills is the
+    // one the read below serves.
+    try {
+      await Net.call('/api/skills/discover/refresh', {
+        retries: 0,
+        init: { method: 'POST', headers: _headers() },
+      });
+    } catch (_) { /* no catalog URL, or a dead one — keep the cached view */ }
     try {
       // The registered marketplace provider source id is `skills-sh`.
       const r = await Net.call('/api/discover/skills-sh/refresh', {

@@ -33,6 +33,23 @@ COPY plugins/ plugins/
 # "Context file not found" warnings, and the agents run without their
 # grounding knowledge (degraded XQL/XDM output). ~8.9 MB / 88 files.
 COPY docs/seed/ docs/seed/
+
+# Curated discovery seeds + operator profiles + default search settings.
+# These are git-tracked repo data read at runtime from CWD-relative paths
+# (WORKDIR=/app): skills.py reads data/discovery/skills_catalog.json, mcp.py
+# reads data/discovery/mcp_catalog.json, inventory.py reads
+# data/discovery/model_benchmarks.json, ProfileService scans data/profiles/,
+# and search_service reads data/config/search_settings.json. Without these
+# COPYs every container shipped with EMPTY catalogs and no profiles.
+#
+# Named explicitly rather than `COPY data/` on purpose: the build context's
+# data/config/ also holds runtime secrets in a developer tree
+# (api_keys.yaml, first-run-key.txt) which must never be baked into an image.
+# .dockerignore is the second line of defence.
+COPY data/discovery/ data/discovery/
+COPY data/profiles/ data/profiles/
+COPY data/config/search_settings.json data/config/
+
 COPY .env.example .env
 
 # Create data directories

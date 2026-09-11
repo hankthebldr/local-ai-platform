@@ -10,6 +10,69 @@ Composer + the Enclave design-system rebrand** (branch `feat/chat-led-composer`)
 — a candidate `1.2.0` UX cut — and **Architecture-aware orchestration**
 earmarked for `1.3.0`.
 
+### Fixed — Hardened-deployment posture closure (next-wave Theme B)
+
+> Theme B of `docs/roadmap/2026-07-12-next-wave-backlog.md`: five clustered
+> items that made the self-hosted-appliance security story *false*. Landed
+> before 1.4.x fleet-awareness exposes Enclave across a tailnet, where each of
+> these gets materially worse.
+
+- **Curated seeds never reached a container.** The Dockerfile COPY'd no part of
+  `data/`, so every built image shipped an EMPTY MCP catalog, skills catalog and
+  model-benchmark set, and **no profiles** — all three marketplaces and the
+  benchmark panel were blank in Docker while working from a source checkout.
+  Now `data/discovery/`, `data/profiles/` and `data/config/search_settings.json`
+  are copied. Deliberately a **named subset, not `COPY data/`**: the build
+  context's `data/config/` also holds `api_keys.yaml` + `first-run-key.txt` in a
+  developer tree, and a blanket copy would bake live credentials into the image.
+  A new **`.dockerignore`** is the second line of defence (and drops `venv/`,
+  `.git/` and every runtime data dir out of the build context).
+- **No background egress: a GET never reaches the network.** Three discovery
+  surfaces evaluated a freshness TTL *on read*, so merely opening a tab with a
+  cold or stale cache egressed — `GET /api/skills/discover` →
+  `ENCLAVE_SKILLS_CATALOG_URL`, `GET /api/mcp/discover` →
+  `ENCLAVE_MCP_CATALOG_URL`, `GET /api/inventory/discover` → HuggingFace. Reads
+  now serve cache only (`_fetch_remote_catalog(allow_fetch=False)`; inventory
+  returns a stale cache *as* stale plus a new `never_discovered` flag so the
+  panel degrades honestly). The network is reachable only through an explicit
+  operator action: new `POST /api/skills/discover/refresh` +
+  `POST /api/mcp/discover/refresh`, the install paths, and inventory's existing
+  `?force=true` / `POST /discover/refresh`. UI keeps its ⟳: the skills
+  `refreshDiscovery()` now refreshes both remote sources, and the MCP
+  marketplace modal gains a ⟳ — `adapter.load()` stays a pure read, per the
+  shell contract.
+- **Loopback-only first-run key.** `GET /api/setup/local-license` hands out the
+  operator's **master key** and gated on `ip.is_private` — which is RFC1918
+  *plus* link-local *plus* `100.64.0.0/10`, the CGNAT range **Tailscale**
+  assigns. Any LAN or tailnet peer could simply fetch it. Now loopback only
+  (including IPv4-mapped `::ffff:127.0.0.1`), with LAN / Docker-bridge / tailnet
+  behind an explicit `ENCLAVE_TRUST_PRIVATE_NET=true` (set in
+  `docker-compose.yml` for its own bridge, documented in `.env.example`). The
+  proxied-request refusal (GP-2 P0-14) still wins over the opt-in.
+- **Read-route auth sweep.** `/api/provenance`, `/api/agents` and
+  `/api/conversations` had no `SCOPE_MAP` entry, so any valid key — including a
+  `chat`-only one — could read grounding provenance, author/delete agents, or
+  read saved chat transcripts. Each now rides its nearest gated sibling's scope
+  (`workflows`, `workflows`, `exports`) rather than minting a new name, since
+  `bootstrap_first_run_key` mints `ALL_SCOPES` and an unlisted scope would 403
+  every key in the field — an invariant now pinned by a test.
+- **XSS `safeUrl()` sweep completed.** `library/discover.js`,
+  `library/plugins.js` and `library/prompts.js` still interpolated an
+  external-catalog URL into an `href` via `esc()`, which escapes `&<>` but not
+  quotes and does nothing about the scheme — a catalog entry carrying
+  `javascript:` rendered a clickable XSS anchor. All three now use `safeUrl()`.
+  `renderMarkdown`'s link sink (the highest-traffic one — it renders model
+  output) was already scheme-allowlisted and quote-escaping; it is now
+  double-guarded through `safeUrl()` too, so "no `esc()` into an href" holds
+  with **no exception** and is enforced by a source scan.
+- Tests: `tests/test_image_seeds.py`, `tests/test_no_background_egress.py`
+  (every read asserts against a tripwire that fails on egress),
+  `tests/test_local_license_trust.py` (incl. a guard-the-guard test so the
+  refusals can't pass vacuously), `tests/test_read_route_scopes.py`,
+  `tests/ui/test_safeurl_sweep.py` (source scan + node-executed sanitizer units,
+  browser-free so they hold in CI) and
+  `tests/ui/test_marketplace_refresh_wiring.py`.
+
 ### Fixed — Fail-safe persistence & resume (next-wave Theme A)
 
 > Retires the top continuous-improvement finding of the 2026-07-12 next-wave
