@@ -26,16 +26,17 @@
     <div class="container">
       <a href="/" class="logo" aria-label="Enclave home">
         <svg width="30" height="30" viewBox="0 0 80 80" aria-hidden="true">
-          <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="#00CC66" stroke-width="2.5"/>
-          <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="#00CC66" stroke-width="1.5" opacity="0.5"/>
-          <rect x="28" y="28" width="24" height="24" rx="2" fill="#00CC66" opacity="0.2"/>
-          <rect x="34" y="34" width="12" height="12" rx="1" fill="#00CC66" opacity="0.85"/>
+          <rect x="6" y="6" width="68" height="68" rx="6" fill="none" stroke="#2BD4B4" stroke-width="2.5"/>
+          <rect x="18" y="18" width="44" height="44" rx="3" fill="none" stroke="#2BD4B4" stroke-width="1.5" opacity="0.5"/>
+          <rect x="28" y="28" width="24" height="24" rx="2" fill="#2BD4B4" opacity="0.2"/>
+          <rect x="34" y="34" width="12" height="12" rx="1" fill="#2BD4B4" opacity="0.6"/>
         </svg>
         <span class="wordmark">EN<em>CLAVE</em></span>
       </a>
       <nav>
         <a href="#features">Features</a>
         <a href="#console">Console</a>
+        <a href="#composer">Composer</a>
         <a href="#whats-new">What's new</a>
         <a href="#download">Download</a>
         <a href="https://github.com/hankthebldr/local-ai-platform/wiki">Wiki</a>
@@ -192,11 +193,199 @@
             </figcaption>
           </figure>
 
+                  </div>
+      </div>
+    </section>
+
+    <!-- COMPOSER -->
+    <section id="composer" class="features composer">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">THE COMPOSER</div>
+            <h2>A workflow is <em>crystallized conversation</em>.</h2>
+          </div>
+          <div class="index">CHAT &rarr; SPEC &rarr; DAG</div>
+        </div>
+
+        <p class="lede">
+          Most agent builders hand you an empty canvas and a node palette. The
+          Composer starts where the work actually starts &mdash; you talking to a
+          local model about a problem &mdash; and turns that thread into something
+          repeatable. Authoring happens <em>before</em> execution: nothing here
+          touches the workflow engine, and nothing leaves the machine.
+        </p>
+
+        <!-- The pipeline, as it actually runs -->
+        <div class="pipeline">
+          <svg viewBox="0 0 880 236" role="img"
+               aria-labelledby="pipe-t pipe-d" class="pipe-svg">
+            <title id="pipe-t">Composer authoring pipeline</title>
+            <desc id="pipe-d">
+              A chat thread is distilled by capture-spec into an editable spec of
+              goal, inputs and checks. The scaffold step then resolves that spec
+              to a runnable workflow definition by one of three tiers: a template
+              match against the curated workflow index, a local-model plan bound
+              to installed roles and agents, or a deterministic intake-work-validate
+              fallback. Each tier reports itself as the definition's source.
+            </desc>
+
+            <!-- stage 1 -->
+            <rect x="8" y="78" width="150" height="66" rx="8" class="box"/>
+            <text x="83" y="105" class="pl" text-anchor="middle">CHAT THREAD</text>
+            <text x="83" y="124" class="ps" text-anchor="middle">you + a local model</text>
+
+            <path d="M166 111 H206" class="wire"/>
+            <path d="M200 106 l8 5 -8 5 z" class="head"/>
+
+            <!-- stage 2 -->
+            <rect x="214" y="66" width="176" height="90" rx="8" class="box box-a"/>
+            <text x="302" y="90" class="pl pl-a" text-anchor="middle">capture-spec</text>
+            <text x="302" y="111" class="ps" text-anchor="middle">goal &middot; inputs &middot; checks</text>
+            <text x="302" y="130" class="ps ps-f" text-anchor="middle">editable plan card</text>
+
+            <path d="M398 111 H438" class="wire"/>
+            <path d="M432 106 l8 5 -8 5 z" class="head"/>
+
+            <!-- stage 3 — three tiers -->
+            <rect x="446" y="18" width="240" height="200" rx="8" class="group"/>
+            <text x="566" y="38" class="pl" text-anchor="middle">scaffold</text>
+
+            <rect x="462" y="50" width="208" height="42" rx="6" class="tier tier-win"/>
+            <text x="566" y="67" class="ps ps-a" text-anchor="middle">1 &middot; TEMPLATE MATCH</text>
+            <text x="566" y="82" class="ps ps-f" text-anchor="middle">reuse a proven workflow</text>
+
+            <rect x="462" y="100" width="208" height="42" rx="6" class="tier"/>
+            <text x="566" y="117" class="ps ps-a" text-anchor="middle">2 &middot; LOCAL LLM PLAN</text>
+            <text x="566" y="132" class="ps ps-f" text-anchor="middle">bound to installed primitives</text>
+
+            <rect x="462" y="150" width="208" height="42" rx="6" class="tier tier-last"/>
+            <text x="566" y="167" class="ps ps-a" text-anchor="middle">3 &middot; FALLBACK</text>
+            <text x="566" y="182" class="ps ps-f" text-anchor="middle">intake &rarr; work &rarr; validate</text>
+
+            <path d="M694 111 H734" class="wire"/>
+            <path d="M728 106 l8 5 -8 5 z" class="head"/>
+
+            <!-- stage 4 -->
+            <rect x="742" y="78" width="130" height="66" rx="8" class="box box-a"/>
+            <text x="807" y="105" class="pl pl-a" text-anchor="middle">DEFINITION</text>
+            <text x="807" y="124" class="ps" text-anchor="middle">runs on the engine</text>
+          </svg>
+        </div>
+
+        <div class="grid">
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">01</span>
+              <h3>Boot Sequence</h3>
+            </div>
+            <dl>
+              <dt>Synopsis</dt>
+              <dd><code>POST /api/composer/capture-spec</code></dd>
+              <dt>Description</dt>
+              <dd>Reads the <em>whole</em> thread and distills the durable intent into
+                  a structured spec: a <code>goal</code>, the <code>inputs</code> a future
+                  run needs, and the <code>checks</code> that define done-well. It
+                  generalizes lightly so the result is reusable, and it is instructed
+                  not to invent requirements you never implied.</dd>
+              <dt>Where it runs</dt>
+              <dd>On a local model you already have installed. No cloud, no telemetry.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">02</span>
+              <h3>Review the plan card</h3>
+            </div>
+            <dl>
+              <dt>Contract</dt>
+              <dd>The spec is yours to edit before anything is built &mdash; rewrite the
+                  goal, add an input, tighten a check.</dd>
+              <dt>Why it exists</dt>
+              <dd>A distilled spec is a guess about your intent. Making it editable is
+                  cheaper than debugging a fifteen-node DAG that guessed wrong.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">03</span>
+              <h3>Scaffold, three tiers</h3>
+            </div>
+            <dl>
+              <dt>Synopsis</dt>
+              <dd><code>POST /api/composer/scaffold</code></dd>
+              <dt>Resolution order</dt>
+              <dd>A <strong>template match</strong> against the curated workflow index wins
+                  when the spec scores well &mdash; reusing a workflow that already runs
+                  beats generating a new one. Otherwise a <strong>local model</strong>
+                  composes a fresh chain bound to your installed roles and agents. If the
+                  model is down or returns junk, a <strong>deterministic</strong>
+                  intake&nbsp;&rarr;&nbsp;work&nbsp;&rarr;&nbsp;validate chain is
+                  synthesized so the canvas always primes.</dd>
+              <dt>Honesty</dt>
+              <dd>The response carries <code>source</code> &mdash;
+                  <code>template</code>, <code>llm</code> or <code>fallback</code> &mdash;
+                  plus the matched workflow id and the role bindings. You always know
+                  which tier produced the thing on your canvas.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">04</span>
+              <h3>Bound to what you have</h3>
+            </div>
+            <dl>
+              <dt>Primitives</dt>
+              <dd>Generated steps bind to locally installed roles and agents, each labelled
+                  with the local model it will run on &mdash; so the canvas shows who
+                  handles what, on which model, before a single token is spent.</dd>
+              <dt>No phantom steps</dt>
+              <dd>The planner composes from the inventory you actually have, not a catalog
+                  of things you would need to go install.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">05</span>
+              <h3>Node-bound chat</h3>
+            </div>
+            <dl>
+              <dt>Description</dt>
+              <dd>Select a node and the chat pane rebinds to that step &mdash; talk to that
+                  agent, configure it, rate its output. Ratings feed per-agent tuning, so
+                  the surface you debug in is the surface you improve in.</dd>
+            </dl>
+          </article>
+
+          <article class="entry">
+            <div class="head">
+              <span class="num">06</span>
+              <h3>Drafts that survive</h3>
+            </div>
+            <dl>
+              <dt>Synopsis</dt>
+              <dd><code>GET|POST|DELETE /api/composer/drafts</code></dd>
+              <dt>Description</dt>
+              <dd>Canvas snapshots persist on the box, so a half-authored workflow is
+                  still there after a restart. A run started from an unsaved canvas keeps
+                  its originating definition beside the run, which is what makes
+                  fix-and-resume possible later.</dd>
+            </dl>
+          </article>
+
+        </div>
+
+        <div class="shots shots-composer">
           <figure class="shot">
             <img src="screenshots/composer-workstream-minimized.png"
                  alt="Composer workstream collapsed to a tabs-only preview" loading="lazy">
             <figcaption>
-              <strong>Composer workstream — minimized.</strong>
+              <strong>Workstream &mdash; minimized.</strong>
               The bottom strip (Step&nbsp;Config · Active&nbsp;Run · History · Logs ·
               In&nbsp;Progress) defaults to a tabs-only preview, handing the canvas
               the vertical room.
@@ -208,12 +397,20 @@
                  alt="Composer workstream expanded in place to show a step's live configuration"
                  loading="lazy">
             <figcaption>
-              <strong>…&nbsp;expands for detail.</strong>
-              Click a tab or select a node on the canvas and it expands in place to
-              the full detail — here, a step's live configuration.
+              <strong>&hellip;&nbsp;expands for detail.</strong>
+              Click a tab or select a node and it expands in place to the full
+              detail &mdash; here, a step's live configuration.
             </figcaption>
           </figure>
         </div>
+
+        <p class="footnote">
+          Pre-execution authoring only. <code>capture-spec</code> and
+          <code>scaffold</code> never import the workflow engine &mdash; they emit the
+          same <code>WorkflowDefinition</code> the Composer already loads, so an
+          authored workflow and a hand-written one are the same artifact by the time
+          they run.
+        </p>
       </div>
     </section>
 

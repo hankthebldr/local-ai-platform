@@ -1,38 +1,96 @@
 /* ─────────────────────────────────────────────────────────────────
    Enclave — public site
-   Aesthetic: Vault Terminal. Pure black, single green, mono-anchored.
-   Source of truth for tokens lives alongside api/static/index.html;
-   keep this file in sync if --accent or --bg-deep change there.
+   Aesthetic: Vault Terminal, on the Enclave identity — warm charcoal
+   with a green-grey undertone (never blue slate, never pure black),
+   teal as the living primary, mono-anchored.
+
+   TOKENS ARE MIRRORED, NOT INVENTED. The source of truth is the design
+   system at docs/design/project/tokens/ (colors.css, typography.css);
+   the console mirrors the same values in api/static/css/app.css. If a
+   value moves there, move it here — the screenshots on this page come
+   straight out of the console, so a drift shows up as a page whose
+   chrome disagrees with its own screenshots.
    ───────────────────────────────────────────────────────────────── */
 
 :root {
-  --void: #0a0a0a;
-  --bg: #141414;
-  --bg-panel: rgba(20, 20, 20, 0.7);
-  --border: #2a2a2a;
-  --border-soft: #1c1c1c;
+  /* ─ Canvas — warm charcoal (ink-990 … ink-600) ─ */
+  --void: #090B0A;               /* outermost void */
+  --bg: #101413;                 /* primary surface */
+  --bg-elev: #171C1A;            /* elevated card */
+  --bg-panel: rgba(23, 28, 26, 0.72);
+  --border: #28302D;             /* default warm-grey hairline */
+  --border-soft: #1F2522;
+  --border-strong: #36413B;
 
-  --accent: #00CC66;
-  --accent-dim: rgba(0, 204, 102, 0.38);
-  --accent-ghost: rgba(0, 204, 102, 0.08);
-  --accent-ink: #001a0d;
+  /* ─ Primary accent — teal, the signal that something is live ─ */
+  --accent: #2BD4B4;             /* teal-400 */
+  --accent-bright: #5DE9CE;      /* teal-300 — hover / focus */
+  --accent-dim: rgba(43, 212, 180, 0.42);
+  --accent-ghost: rgba(43, 212, 180, 0.12);
+  --accent-trace: rgba(43, 212, 180, 0.06);
+  --accent-ink: #06201B;         /* text on a teal fill */
 
-  --info: #00C0E8;
-  --warn: #F5A623;
-  --danger: #E54B4B;
+  /* ─ Secondary — deep emerald (structure) · ember (sparing warmth) ─ */
+  --accent-2: #149468;
+  --ember: #E08A4C;
 
-  --text: #e6e6e6;
-  --text-dim: #8d8d8d;
-  --text-muted: #555555;
+  /* ─ Semantic status ─ */
+  --success: #1FB983;
+  --info: #57C4D2;               /* soft cyan-teal */
+  --warn: #E0A33C;
+  --danger: #E5685A;             /* warm coral, not harsh red */
 
-  --mono: "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace;
-  --sans: "Space Grotesk", system-ui, sans-serif;
+  /* ─ Text hierarchy — warm greys on charcoal ─ */
+  --text: #ECEFEC;
+  --text-dim: #9CA8A1;
+  --text-muted: #6B776F;
+  --text-faint: #56635B;
 
-  --glow: 0 0 12px rgba(0, 204, 102, 0.22), 0 0 3px rgba(0, 204, 102, 0.18);
+  /* ═ Typography — mirrored from docs/design/project/tokens/typography.css
+     Two faces do all the work: Space Grotesk is the humane geometric sans
+     (the "soft" in the brand); JetBrains Mono is the operator's voice (the
+     "terminal"). The signature move is the caps-tracked mono label. ═ */
+  --mono: "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+  --sans: "Space Grotesk", "TT Hoves", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: var(--sans);
+
+  --fw-light: 300;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* Scale assumes the 14px root set on `html` below — same as the console. */
+  --text-2xs: 0.625rem;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.625rem;
+  --text-2xl: 2.25rem;
+  --text-3xl: 3.25rem;
+  --text-4xl: 4.5rem;
+
+  --leading-tight: 1.1;
+  --leading-snug: 1.28;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --tracking-tight: -0.02em;
+  --tracking-wide: 0.04em;
+  --tracking-label: 0.18em;      /* signature caps-label tracking */
+  --tracking-logo: 0.22em;
+
+  --glow: 0 0 12px rgba(43, 212, 180, 0.22), 0 0 3px rgba(43, 212, 180, 0.18);
   --tick: 14px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Every in-page anchor clears the sticky header (its 18px padding + rule)
+   instead of landing underneath it. */
+section[id], :target { scroll-margin-top: 84px; }
 html { font-size: 14px; scroll-behavior: smooth; }
 
 body {
@@ -69,8 +127,8 @@ body::after {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 60% 45% at 12% 0%, rgba(0, 204, 102, 0.06), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 88% 100%, rgba(0, 204, 102, 0.035), transparent 65%);
+    radial-gradient(ellipse 60% 45% at 12% 0%, rgba(43, 212, 180, 0.07), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 88% 100%, rgba(20, 148, 104, 0.045), transparent 65%);
   pointer-events: none;
   z-index: -1;
 }
@@ -102,7 +160,7 @@ header {
   padding: 18px 0;
   position: sticky;
   top: 0;
-  background: rgba(10, 10, 10, 0.82);
+  background: rgba(9, 11, 10, 0.82);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   z-index: 50;
@@ -114,12 +172,12 @@ header .container {
   gap: 32px;
 }
 .logo { display: flex; align-items: center; gap: 12px; }
-.logo svg { display: block; filter: drop-shadow(0 0 6px rgba(0, 204, 102, 0.35)); }
+.logo svg { display: block; filter: drop-shadow(0 0 6px rgba(43, 212, 180, 0.35)); }
 .wordmark {
   font-family: var(--mono);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   font-size: 0.95rem;
-  letter-spacing: 0.28em;
+  letter-spacing: var(--tracking-logo);
   color: var(--text);
 }
 .wordmark em { font-style: normal; color: var(--accent); }
@@ -128,7 +186,7 @@ nav { display: flex; align-items: center; gap: 28px; }
 nav a {
   font-family: var(--mono);
   font-size: 0.72rem;
-  letter-spacing: 0.18em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--text-dim);
   transition: color 0.18s ease;
@@ -194,11 +252,11 @@ nav a:hover { color: var(--accent); }
 }
 
 .hero h1 {
-  font-family: var(--sans);
-  font-weight: 500;
+  font-family: var(--display);
+  font-weight: var(--fw-medium);
   font-size: clamp(2.4rem, 5.4vw, 4.2rem);
   line-height: 0.98;
-  letter-spacing: -0.025em;
+  letter-spacing: var(--tracking-tight);
   max-width: 18ch;
   color: var(--text);
   opacity: 0;
@@ -262,7 +320,7 @@ nav a:hover { color: var(--accent); }
   box-shadow: var(--glow);
 }
 .btn-primary::before { content: "▸"; font-size: 0.85em; }
-.btn-primary:hover { transform: translateY(-1px); background: #00e074; box-shadow: 0 0 24px rgba(0, 204, 102, 0.45); }
+.btn-primary:hover { transform: translateY(-1px); background: var(--accent-bright); box-shadow: 0 0 24px rgba(43, 212, 180, 0.45); }
 
 .btn-secondary {
   background: transparent;
@@ -362,19 +420,21 @@ nav a:hover { color: var(--accent); }
   box-shadow: var(--glow);
 }
 .section-head .eyebrow {
-  font-size: 0.68rem;
-  letter-spacing: 0.32em;
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.32em;  /* display-scale variant of --tracking-label */
   text-transform: uppercase;
   color: var(--text-dim);
   margin-bottom: 12px;
 }
 .section-head .eyebrow::before { content: "//"; color: var(--text-muted); margin-right: 8px; }
 .section-head h2 {
-  font-family: var(--sans);
-  font-weight: 500;
+  font-family: var(--display);
+  font-weight: var(--fw-medium);
   font-size: clamp(1.7rem, 3vw, 2.4rem);
-  letter-spacing: -0.015em;
-  line-height: 1.05;
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
   max-width: 22ch;
 }
 .section-head h2 em { font-style: italic; color: var(--accent); font-weight: 400; }
@@ -382,7 +442,7 @@ nav a:hover { color: var(--accent); }
   font-family: var(--mono);
   font-size: 0.72rem;
   color: var(--text-muted);
-  letter-spacing: 0.2em;
+  letter-spacing: var(--tracking-label);
 }
 
 .features .grid {
@@ -469,7 +529,7 @@ nav a:hover { color: var(--accent); }
 .download {
   padding: 96px 0;
   background:
-    linear-gradient(180deg, transparent, rgba(0, 204, 102, 0.025), transparent),
+    linear-gradient(180deg, transparent, rgba(43, 212, 180, 0.03), transparent),
     var(--void);
   border-top: 1px solid var(--border-soft);
   border-bottom: 1px solid var(--border-soft);
@@ -713,4 +773,79 @@ footer a:hover { color: var(--accent); }
   .shot-rail { grid-template-columns: 1fr; }
   .shot-rail img { max-height: 460px; }
   .shot-rail figcaption { border-left: none; border-top: 1px solid var(--border-soft); }
+}
+
+/* ── COMPOSER ──────────────────────────────────────────────────────── */
+/* The flagship authoring flow. Reuses .grid/.entry (the man-page idiom)
+   and .shots/.shot from the console section; only the lede, the pipeline
+   diagram and the closing footnote are new here. */
+
+.composer .lede {
+  max-width: 62ch;
+  margin-top: 1.75rem;
+  font-family: var(--sans);
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+  color: var(--text-dim);
+}
+.composer .lede em { font-style: italic; color: var(--text); }
+
+/* Pipeline diagram — scrolls on its own below ~700px rather than forcing
+   the page to scroll sideways. */
+.pipeline {
+  margin-top: 2.5rem;
+  padding: 1.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, var(--accent-trace), transparent 60%),
+    var(--bg-panel);
+  overflow-x: auto;
+}
+.pipe-svg { display: block; width: 100%; min-width: 660px; height: auto; }
+
+/* Shapes are styled here rather than via SVG presentation attributes: a
+   presentation attribute carrying var() is not reliably resolved everywhere,
+   and a class is. */
+.pipe-svg .box   { fill: var(--bg-elev); stroke: var(--border-strong); }
+.pipe-svg .box-a { stroke: var(--accent-dim); }
+.pipe-svg .group { fill: none; stroke: var(--border); stroke-dasharray: 3 4; }
+.pipe-svg .tier  { fill: var(--bg-elev); stroke: var(--border-strong); }
+.pipe-svg .tier-win  { fill: var(--accent-ghost); stroke: var(--accent-dim); }
+.pipe-svg .tier-last { stroke: var(--border); }
+
+.pipe-svg .wire { stroke: var(--border-strong); stroke-width: 1.5; fill: none; }
+.pipe-svg .head { fill: var(--border-strong); }
+.pipe-svg .pl {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.14em;
+  fill: var(--text);
+}
+.pipe-svg .pl-a { fill: var(--accent); }
+.pipe-svg .ps {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  fill: var(--text-dim);
+}
+.pipe-svg .ps-a { fill: var(--text); letter-spacing: 0.12em; }
+.pipe-svg .ps-f { fill: var(--text-muted); }
+
+.shots-composer { margin-top: 2.5rem; }
+
+.composer .footnote {
+  max-width: 68ch;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-soft);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+.composer .footnote code { color: var(--text-dim); }
+
+@media (max-width: 640px) {
+  .pipeline { padding: 1rem 0.75rem; }
 }
