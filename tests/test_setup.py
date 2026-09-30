@@ -83,12 +83,30 @@ class TestLocalClientGuard:
         assert _is_local_client(self._req("::1")) is True
         assert _is_local_client(self._req("localhost")) is True
 
-    def test_docker_bridge_rfc1918_allowed(self):
+    def test_docker_bridge_rfc1918_refused_without_the_opt_in(self, monkeypatch):
+        """Theme B: RFC1918 used to be trusted outright, and `ip.is_private`
+        also spans the 100.64.0.0/10 CGNAT range Tailscale hands out — so any
+        LAN or tailnet peer could fetch the master key. Now refused by
+        default."""
         from api.routers.setup import _is_local_client
 
+        monkeypatch.delenv("ENCLAVE_TRUST_PRIVATE_NET", raising=False)
+        assert _is_local_client(self._req("172.17.0.1")) is False  # docker bridge
+        assert _is_local_client(self._req("192.168.1.5")) is False
+        assert _is_local_client(self._req("10.0.0.4")) is False
+        assert _is_local_client(self._req("100.101.102.103")) is False  # tailnet
+
+    def test_docker_bridge_rfc1918_allowed_with_the_opt_in(self, monkeypatch):
+        """The Docker-compose bridge topology still works — it just has to say
+        so (docker-compose.yml sets ENCLAVE_TRUST_PRIVATE_NET)."""
+        from api.routers.setup import _is_local_client
+
+        monkeypatch.setenv("ENCLAVE_TRUST_PRIVATE_NET", "true")
         assert _is_local_client(self._req("172.17.0.1")) is True  # docker bridge
         assert _is_local_client(self._req("192.168.1.5")) is True
         assert _is_local_client(self._req("10.0.0.4")) is True
+        # The opt-in widens to private ranges — never to the public internet.
+        assert _is_local_client(self._req("8.8.8.8")) is False
 
     def test_public_172_refused(self):
         from api.routers.setup import _is_local_client

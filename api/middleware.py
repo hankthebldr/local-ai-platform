@@ -15,6 +15,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from dotenv import load_dotenv
 
+from .logging_config import logger
+
 load_dotenv()
 
 # ── Configuration ──────────────────────────────────────────────────────────
@@ -81,6 +83,12 @@ SCOPE_MAP = {
     # `workspaces` scope (parity with /api/documents) so a scoped SPA key can
     # write notes but an unscoped key is 403'd. Operate U11 also writes here.
     "/api/workspaces": "workspaces",
+    # Theme A (next-wave backlog): /api/research writes the SAME `research`
+    # workspace (save-source / compare-node save / graph-walk notes + MOC) and
+    # carries the only operator-ticked web egress. It had no entry, so any
+    # valid key could write + egress when auth was on. Same tier + scope as
+    # /api/workspaces; master key + the auth-off dev path bypass as usual.
+    "/api/research": "workspaces",
     # Operate U4: the local scheduler read surface (list/detail/history/summary)
     # serves the same run-provenance bytes as /api/workflows. Gate reads on the
     # `workflows` scope (data-action tier, parity with /api/workflows) — writes
@@ -97,6 +105,20 @@ SCOPE_MAP = {
     # scope resolution and would 401 a legitimately workflows-scoped SPA key.
     "/api/artifacts": "workflows",
     "/api/format-sets": "workflows",
+    # Theme B read-route sweep. Three data surfaces were reachable by ANY
+    # valid key when auth was on, because a missing prefix means "base auth
+    # only". Each rides the scope of its nearest already-gated sibling rather
+    # than minting a new scope name (a new name would 403 every existing key,
+    # since bootstrap mints ALL_SCOPES and that list is the contract):
+    #   · response provenance = run/answer provenance bytes — exact parity
+    #     with /api/artifacts, which serves the same run record.
+    #   · agent definitions are authored workflow personas, and the composer
+    #     draft store (/api/composer) already rides `workflows`.
+    #   · saved chat threads are the same durable chat-session content that
+    #     /api/exports serves as markdown.
+    "/api/provenance": "workflows",
+    "/api/agents": "workflows",
+    "/api/conversations": "exports",
     "/api/keys": "keys",  # master key bypasses this before scope check
     "/a2a": "a2a",  # A2A JSON-RPC dispatch
 }
@@ -192,7 +214,33 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
                     },
                 )
             request.state.api_key_meta = meta
-            return await call_next(request)
+
+            response = await call_next(request)
+
+            # ── Usage tracking ─────────────────────────────────────────
+            # `update_usage` has existed on APIKeyService since the keystore
+            # landed but nothing ever called it, so `total_requests` sat at 0
+            # and `last_used_at` at null for the life of every key — the
+            # /api/keys/{id}/usage surface reported dead numbers. Count here,
+            # where every authenticated request already passes through.
+            #
+            # Counted regardless of response status: a 4xx/5xx still consumed
+            # the key, and "last used" means last presented, not last
+            # succeeded. Token counts are opt-in — an endpoint that knows its
+            # token spend sets `X-Tokens-Used` on the response; everything
+            # else records the request only.
+            try:
+                tokens_used = int(response.headers.get("X-Tokens-Used") or 0)
+            except (TypeError, ValueError):
+                tokens_used = 0
+            try:
+                svc.update_usage(meta["id"], tokens_used=tokens_used)
+            except Exception:  # pragma: no cover - never fail a served request
+                logger.warning(
+                    "usage tracking failed for key %s", meta.get("id"), exc_info=True
+                )
+
+            return response
 
         return JSONResponse(
             status_code=401,

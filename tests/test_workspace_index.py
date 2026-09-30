@@ -114,3 +114,27 @@ def test_concurrent_next_pending_no_double_claim(tmp_path):
     for t in ts: t.start()
     for t in ts: t.join()
     assert len(claimed) == len(set(claimed)) == 20, f"double-claim: {len(claimed)} vs {len(set(claimed))}"
+
+
+def test_requeue_errors_flips_only_errored_items(tmp_path):
+    """requeue_stale leaves `error` alone (no hot-loop on a broken node);
+    requeue_errors is the explicit operator retry for exactly those."""
+    idx = WorkspaceIndex(_ws(tmp_path), "walk")
+    idx.add_items([{"title": "ok"}, {"title": "broken"}, {"title": "later"}])
+    a = idx.next_pending()
+    idx.set_status(a.id, "done")
+    b = idx.next_pending()
+    idx.set_status(b.id, "error", note="model down")
+    c = idx.next_pending()  # claimed → in_progress
+    assert idx.counts()["error"] == 1
+
+    assert idx.requeue_stale() == 1  # only the in_progress one
+    assert idx.counts()["error"] == 1
+    assert idx.requeue_errors() == 1
+    counts = idx.counts()
+    assert counts["error"] == 0 and counts["pending"] == 2 and counts["done"] == 1
+    assert idx.requeue_errors() == 0  # idempotent
+    # Persisted across reload.
+    again = WorkspaceIndex(_ws(tmp_path), "walk")
+    assert again.counts()["pending"] == 2
+    assert {i.id for i in again.items("pending")} == {b.id, c.id}

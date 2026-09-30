@@ -105,7 +105,11 @@ export function renderMarkdown(text, opts) {
   html = html.replace(/`([^`\n]+)`/g, '<code class="md-inline-code">$1</code>');
   html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, u) => {
     if (!/^https?:\/\//.test(u) && !u.startsWith('/')) return m; // safety: only allow http(s) or root-relative
-    return `<a href="${esc(u)}" rel="noopener" target="_blank">${t}</a>`;
+    // Belt AND braces: the allowlist above already rejects every dangerous
+    // scheme, so safeUrl is a no-op for anything that reaches here — but it
+    // makes "no esc() into an href, ever" an invariant with no exception,
+    // which is what the source scan in tests/ui/test_safeurl_sweep.py pins.
+    return `<a href="${safeUrl(u)}" rel="noopener" target="_blank">${t}</a>`;
   });
   html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');

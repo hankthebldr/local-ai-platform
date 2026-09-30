@@ -112,6 +112,12 @@ export const ResearchNodeRail = (function () {
     if (window.Toast) Toast.info('Build upon', 'Seeded a follow-up from this node.', { ttl: 1500 });
   }
 
+  // Set when the previous walk step failed (model/search outage → the server
+  // marks that node `error`, never `done`). The NEXT click passes
+  // retry_errors so the errored node is requeued and retried — operator-
+  // initiated, so a persistently broken node can't hot-loop on its own.
+  let _retryErrors = false;
+
   async function graphWalk() {
     // Seed from the current research graph's node labels (best-effort) then step
     // once. Resumable server-side via the workspace worklist — clicking again
@@ -129,17 +135,19 @@ export const ResearchNodeRail = (function () {
         init: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nodes }),
+          body: JSON.stringify({ nodes, retry_errors: _retryErrors }),
         },
       });
       const data = resp.data && typeof resp.data === 'object' ? resp.data : {};
       if (!resp.ok) throw new Error(data.detail || resp.error || `HTTP ${resp.status}`);
+      _retryErrors = false;
       const c = data.counts || {};
       const item = data.item;
       const r = _result();
       const progress =
         `<div class="rnr-walk-progress">walked ${c.done || 0}/${c.total || 0}` +
         (data.complete ? ' · complete' : ` · ${c.pending || 0} pending`) +
+        (c.error ? ` · ${c.error} errored` : '') +
         `</div>`;
       const body = item
         ? `<div class="rnr-section-h">${esc(item.label || '')}</div>${_sectionsHtml(data.sections)}`
@@ -151,8 +159,9 @@ export const ResearchNodeRail = (function () {
         : '';
       r.innerHTML = progress + body + more;
     } catch (e) {
+      _retryErrors = true;
       if (window.Toast) Toast.danger('Graph walk failed', String(e));
-      _busy('Walk failed.');
+      _busy('Walk failed — click Walk graph again to retry this node.');
     }
   }
 

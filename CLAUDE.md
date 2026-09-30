@@ -10,9 +10,19 @@ Mac M4 Pro 48GB (dev) · MS-01 64GB (API) · BD790i 96GB (flagship). Authoritati
 ## Core workflow
 
 1. **Always activate venv first:** `source venv/bin/activate`
-2. Edit code → auto-formatter runs (`.claude/hooks/format-python.sh`) → commit (secret scanner runs).
-3. Run API: `python api/main.py` (port 8000). Ollama: `ollama serve` (11434). Mac app: `python desktop/app.py`.
-4. Run tests: `pytest tests/ --ignore=tests/e2e -v`
+2. **Branch from `dev`, never from `main`.** `dev` is the default branch and the
+   integration trunk; `main` is the release surface and a merge into it
+   publishes a release. Name the branch `feature/{X.Y}-{slug}` or
+   `issue/{GH#}-{slug}` and open a **draft PR against `dev` on day one** — an
+   orphaned branch with no PR is invisible, which is how this repo accumulated
+   seven stale branches. Full model: [docs/BRANCHING.md](./docs/BRANCHING.md).
+3. Edit code → auto-formatter runs (`.claude/hooks/format-python.sh`) → commit (secret scanner runs).
+4. Run API: `python api/main.py` (port 8000). Ollama: `ollama serve` (11434). Mac app: `python desktop/app.py`.
+5. Run tests: `pytest tests/ --ignore=tests/e2e -v`
+
+Working several branches at once? Use worktrees — one directory per branch,
+each with **its own venv** (a venv hardcodes absolute paths, so a copied one
+imports from the wrong tree). See [docs/BRANCHING.md §6](./docs/BRANCHING.md#6-worktrees).
 
 ## Architecture
 
@@ -84,6 +94,7 @@ Roadmap (single-operator-appliance track):
 
 ## Pointers
 
+- **Branching, releases, worktrees: [docs/BRANCHING.md](./docs/BRANCHING.md)** · day-to-day commands in [CONTRIBUTING.md](./CONTRIBUTING.md)
 - Enterprise gaps: [ENTERPRISE_DEPLOYMENT_GAPS.md](./ENTERPRISE_DEPLOYMENT_GAPS.md)
 - Workflow engine design: `docs/plans/2026-04-06-multi-agent-workflow-engine-design.md`
 - Prompt framework plan: `docs/superpowers/plans/2026-04-20-workflow-prompt-framework.md`
@@ -104,4 +115,9 @@ Roadmap (single-operator-appliance track):
 - **CORS / Auth defaults:** CORS to `["*"]` only if `CORS_ORIGINS` unset (startup warning fires); auth off by default (`ENABLE_API_AUTH=false`) — set both before non-localhost exposure.
 - **Ollama version pinned to `0.23.4`** (see `docs/deployment/ollama-version.md`). The architecture-aware orchestration code (1.3.0+) requires this floor. Detector at `api/services/architecture.py` enforces it at startup.
 - **NVIDIA introspection:** `nvidia-ml-py` is a core dependency (in `setup/requirements-core.txt`). Imports cleanly on non-NVIDIA hosts; `pynvml.nvmlInit()` raises `NVMLError("Shared Library Not Found")` which the detector catches and treats as `cpu_x86` / `apple_unified` per platform.
+- **Fail-safe persistence:** never write a model-failure sentinel (an `_… unavailable — …_` string) to a durable store, and never return HTTP 200 on a local-model exception. Surface a `503` with `X-Enclave-Error: model_unavailable` (see `_chat_or_503` in `api/routers/research.py`); mark worklist items `error`, not `done`; resolve everything a resume needs *before* flipping a persisted status, and restore the pre-flip snapshot if the resume blows up (`_load_resume_definition` / `_resume_or_restore` in `api/routers/workflows.py`).
+- **No background egress:** a `GET` must never reach the network. A freshness TTL is evaluated on an explicit refresh (a `POST …/refresh`, an install, or `?force=true`), never on a read — reads serve cache and report staleness honestly (`_fetch_remote_catalog(allow_fetch=…)` in `skills.py`/`mcp.py`). In the console the fetch belongs in the operator-triggered path; a LibraryShell `adapter.load()` is a read.
+- **Trust loopback, not the LAN:** `ip.is_private` spans RFC1918 + link-local + the `100.64.0.0/10` CGNAT range Tailscale uses, so it is never the gate for a credential. Master-key handoff is loopback-only, widened only by an explicit `ENCLAVE_TRUST_PRIVATE_NET` opt-in (`_is_local_client` in `api/routers/setup.py`).
+- **Scope every data surface:** a path with no `SCOPE_MAP` prefix is reachable by any valid key. New surfaces ride their nearest gated sibling's scope — a name outside `ALL_SCOPES` would 403 every key already in the field.
+- **Untrusted URLs go through `safeUrl()`**, never `esc()` — `esc()` leaves quotes and schemes intact. Enforced by a source scan in `tests/ui/test_safeurl_sweep.py`.
 - **No telemetry by default. No cloud inference. All data local.** Error reporting is **opt-in and off by default** (`ENABLE_ERROR_REPORTING=false`); when enabled it is **operator-owned** (reports go to *your* sink) and **redaction is mandatory**. Optional vendor phone-home is separate, explicit, and disabled by default. See `docs/superpowers/specs/2026-05-31-failure-auto-triage-design.md` and `docs/deployment/error-reporting.md`.

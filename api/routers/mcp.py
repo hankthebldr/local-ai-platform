@@ -54,7 +54,15 @@ def _load_catalog() -> Dict[str, Any]:
         return {"servers": []}
 
 
-def _fetch_remote_catalog() -> List[Dict[str, Any]]:
+def _fetch_remote_catalog(allow_fetch: bool = False) -> List[Dict[str, Any]]:
+    """Return the remote MCP catalog. Never raises — degrades to local-only.
+
+    Theme B (no background egress): the TTL used to be evaluated ON READ, so
+    opening the MCP marketplace with a stale cache silently egressed to the
+    configured catalog. ``allow_fetch=False`` (the default, and every GET) is
+    now a pure cache read; only the explicit ⟳ refresh and the install path
+    (both operator-initiated POSTs) may touch the network.
+    """
     url = os.getenv("ENCLAVE_MCP_CATALOG_URL", "").strip()
     if not url:
         return []
@@ -64,6 +72,8 @@ def _fetch_remote_catalog() -> List[Dict[str, Any]]:
         and (now - _remote_cache["ts"]) < _REMOTE_TTL_SECONDS
     ):
         return _remote_cache["servers"]
+    if not allow_fetch:
+        return _remote_cache["servers"] if _remote_cache["url"] == url else []
     try:
         resp = requests.get(url, timeout=8)
         resp.raise_for_status()
@@ -123,6 +133,22 @@ async def discover_mcp() -> Dict[str, Any]:
     }
 
 
+@router.post("/discover/refresh")
+async def refresh_mcp_catalog() -> Dict[str, Any]:
+    """Explicit ⟳ — the ONLY way a read of the MCP marketplace reaches the
+    network. GET /discover serves the cache (Theme B: no background egress)."""
+    url = os.getenv("ENCLAVE_MCP_CATALOG_URL", "").strip()
+    if not url:
+        return {
+            "refreshed": False,
+            "reason": "no ENCLAVE_MCP_CATALOG_URL configured",
+            "remote_count": 0,
+        }
+    _remote_cache["ts"] = 0.0  # force past the TTL
+    servers = _fetch_remote_catalog(allow_fetch=True)
+    return {"refreshed": True, "url": url, "remote_count": len(servers)}
+
+
 @router.post("/discover/{catalog_id}/install")
 async def install_mcp(catalog_id: str, req: InstallMcpReq) -> Dict[str, Any]:
     """Register a catalog MCP server. Builds an MCPServerCreate from the
@@ -133,8 +159,14 @@ async def install_mcp(catalog_id: str, req: InstallMcpReq) -> Dict[str, Any]:
         None,
     )
     if entry is None:
+        # An install is an explicit operator action, so it MAY refresh a
+        # cold/stale catalog cache to resolve the entry. Reads never do.
         entry = next(
-            (s for s in _fetch_remote_catalog() if s.get("id") == catalog_id),
+            (
+                s
+                for s in _fetch_remote_catalog(allow_fetch=True)
+                if s.get("id") == catalog_id
+            ),
             None,
         )
     if entry is None:

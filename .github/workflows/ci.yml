@@ -1,10 +1,13 @@
 name: CI
 
 on:
+  # `master` is transitional: it keeps CI running on this PR and on the trunk
+  # until scripts/migrate-branches.sh renames master -> main and creates dev.
+  # The migration script removes it as its last step.
   push:
-    branches: [master]
+    branches: [dev, main, master]
   pull_request:
-    branches: [master]
+    branches: [dev, main, master]
 
 jobs:
   test:
@@ -55,8 +58,9 @@ jobs:
           exit 0
 
       # Auto-triage: annotations + run-summary on every run; deduped issues ONLY
-      # on master pushes (PR failures are expected during iteration). Fork PRs get
-      # a read-only token, so issue creation is detected + skipped by the CLI.
+      # on trunk pushes -- dev (integration) and main (release). PR failures are
+      # expected during iteration. Fork PRs get a read-only token, so issue
+      # creation is detected + skipped by the CLI.
       # Uses built-in $GITHUB_EVENT_NAME / $GITHUB_REF (no ${{ }} in the shell).
       - name: Auto-triage failures
         if: always()
@@ -66,7 +70,8 @@ jobs:
           TRIAGE_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           EMIT="annotations,summary"
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/master" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && \
+             { [ "$GITHUB_REF" = "refs/heads/dev" ] || [ "$GITHUB_REF" = "refs/heads/main" ]; }; then
             EMIT="annotations,summary,issues"
           fi
           echo "Triage emit set: $EMIT"
@@ -109,8 +114,42 @@ jobs:
         run: flake8 api/ cli/ models/ --max-line-length=120 --extend-ignore=E501,W503 || echo "::warning::Flake8 issues (non-blocking)"
         continue-on-error: true
 
+  release-readiness:
+    # Guards the one shape the branch model cannot recover from silently: a
+    # `dev -> main` release PR opened while `main` carries commits `dev` has
+    # never seen. That happens after a hotfix merges into `main` and the
+    # merge-forward back into `dev` is skipped -- merging the release PR would
+    # then revert the hotfix. Fails the PR until `main` is merged into `dev`.
+    #
+    # Only runs on PRs targeting `main`; every other PR skips it entirely.
+    name: Release readiness (dev is caught up with main)
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check main has no commits missing from the PR head
+        run: |
+          git fetch --no-tags origin main
+          # Commits on main that are not reachable from this PR's head.
+          missing="$(git rev-list --count HEAD..origin/main)"
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::main has $missing commit(s) this branch has not merged." \
+                 "Merge main into ${GITHUB_HEAD_REF} (a plain merge, not a squash)" \
+                 "before releasing, or the merge will revert them."
+            echo "### Missing from this branch" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            git log --oneline HEAD..origin/main >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "main is fully contained in ${GITHUB_HEAD_REF}."
+
   dmg-smoke:
-    # Build the .app bundle on every PR + master push and verify it boots.
+    # Build the .app bundle on every PR + trunk push and verify it boots.
     # Skips final DMG packaging (saves ~1m); release.yml does the full DMG.
     # Catches regressions in scripts/build_mac.sh, desktop/app.py, and
     # api/main.py startup before they ship in a tagged release.
@@ -167,19 +206,41 @@ jobs:
           API_PID=$!
           trap "kill $API_PID 2>/dev/null || true" EXIT
 
-          for _ in $(seq 1 30); do
-              if curl -sf -m 2 http://127.0.0.1:8765/health >/dev/null; then
+          # Wait for readiness, and say so explicitly when it never arrives.
+          # The old loop fell through silently after 15s, so a slow or dead
+          # boot surfaced later as an opaque curl timeout instead of a
+          # diagnosis. 60s: the bundle is ~1.5G and cold-starts off a fresh
+          # runner disk, and this step has been observed at 20s on a good day.
+          ready=""
+          for _ in $(seq 1 120); do
+              if curl -sf -m 2 http://127.0.0.1:8765/health >/dev/null 2>&1; then
+                  ready=1
                   break
+              fi
+              if ! kill -0 "$API_PID" 2>/dev/null; then
+                  echo "::error::Bundled API exited during startup"
+                  echo "--- api log ---"; tail -80 api.log
+                  exit 1
               fi
               sleep 0.5
           done
 
+          if [ -z "$ready" ]; then
+              echo "::error::Bundled API never became healthy within 60s"
+              echo "--- api log ---"; tail -80 api.log
+              exit 1
+          fi
+
           # Hard-fail if any of the user-facing surfaces 404 or refuse.
+          # `code=$(curl ...) || true` matters: under `set -e` a curl timeout
+          # (exit 28) would abort the step before the diagnostic below ever
+          # ran, which is exactly how the previous failure reported nothing
+          # but "exit code 28". Capture it, then report it.
           for path in /health / /static/index.html /setup /api/info; do
-              code=$(curl -s -o /dev/null -w '%{http_code}' \
-                  -m 5 "http://127.0.0.1:8765${path}")
+              code="$(curl -s -o /dev/null -w '%{http_code}' \
+                  -m 15 "http://127.0.0.1:8765${path}")" || code="curl-exit-$?"
               if [ "$code" != "200" ]; then
-                  echo "::error::UX route ${path} returned HTTP ${code}"
+                  echo "::error::UX route ${path} returned ${code}"
                   echo "--- api log ---"; tail -80 api.log
                   exit 1
               fi

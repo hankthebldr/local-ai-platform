@@ -79,6 +79,7 @@ def _rag_ground(question: str) -> Dict[str, Any]:
         # heals here too — not just on the Documents tab. Returns None while
         # the embedding backend stays down (best-effort grounding).
         from ..routers.documents import _ensure_rag
+
         rag_service = _ensure_rag()
     except Exception as exc:  # noqa: BLE001 — RAG optional
         logger.debug("research followup RAG unavailable: %s", exc)
@@ -118,8 +119,33 @@ async def get_research_session(session_id: str) -> Dict[str, Any]:
     """One research session — full topic/model/turns/source_ids/MOC path."""
     session = research_session.get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail=f"research session '{session_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"research session '{session_id}' not found"
+        )
     return session.model_dump()
+
+
+def _chat_or_503(what: str, **chat_kwargs: Any) -> str:
+    """Run the local model or raise 503 ``model_unavailable``.
+
+    The research surfaces used to swallow a model exception and hand back a
+    ``_… unavailable — …_`` sentinel with HTTP 200, which every caller then
+    persisted as durable success (a session turn + MOC + ConversationStore
+    mirror; a store note + RAG ingest; a graph-walk item marked ``done`` that
+    ``requeue_stale`` could never retry). Convention (CLAUDE.md): never write
+    a failure sentinel to a durable store, never return 200 on a local-model
+    exception. Callers get the answer text or the exception — no third state.
+    """
+    try:
+        result = _ollama.chat(**chat_kwargs)
+    except Exception as exc:  # noqa: BLE001 — surfaced, never persisted
+        logger.error("research %s model call failed: %s", what, exc)
+        raise HTTPException(
+            status_code=503,
+            detail=f"local model call failed while producing the {what}: {exc}",
+            headers={"X-Enclave-Error": "model_unavailable"},
+        )
+    return (result or {}).get("content", "") or ""
 
 
 @router.post("/followup")
@@ -169,21 +195,18 @@ async def research_followup(req: FollowupRequest) -> Dict[str, Any]:
     user_prompt = "\n\n".join(prompt_parts)
 
     model = req.model or session.model or "dolphin3:latest"
-    answer = ""
-    try:
-        result = _ollama.chat(
-            model=model,
-            messages=[
-                {"role": "system", "content": _FOLLOWUP_SYSTEM},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.6,
-            max_tokens=1536,
-        )
-        answer = (result or {}).get("content", "") or ""
-    except Exception as exc:  # noqa: BLE001 — model failure surfaces as a turn
-        logger.error("research followup model call failed: %s", exc)
-        answer = f"_Answer unavailable — the local model call failed: {exc}_"
+    # A model failure is a 503 — never a fake turn. Nothing below this line
+    # runs on failure, so no sentinel reaches the session / MOC / mirror.
+    answer = _chat_or_503(
+        "follow-up answer",
+        model=model,
+        messages=[
+            {"role": "system", "content": _FOLLOWUP_SYSTEM},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.6,
+        max_tokens=1536,
+    )
 
     # Attach the RAG hits (as reference rows) + any web sources to the turn.
     turn_sources: List[Dict[str, Any]] = []
@@ -207,7 +230,9 @@ async def research_followup(req: FollowupRequest) -> Dict[str, Any]:
         grounded=grounded,
     )
     if session is None:  # deleted mid-flight
-        raise HTTPException(status_code=404, detail="research session vanished mid-turn")
+        raise HTTPException(
+            status_code=404, detail="research session vanished mid-turn"
+        )
 
     return {
         "session_id": session.id,
@@ -295,7 +320,9 @@ class SaveSourceRequest(BaseModel):
     # Which store area to write into. sources = saved research results,
     # notes = operator/agent notes. Constrained to the store layout.
     area: str = Field("sources", description="Store subdir: sources|notes")
-    slug: Optional[str] = Field(None, description="Explicit slug (else derived from title)")
+    slug: Optional[str] = Field(
+        None, description="Explicit slug (else derived from title)"
+    )
 
 
 @router.post("/save-source")
@@ -398,21 +425,18 @@ async def compare_node(req: CompareNodeRequest) -> Dict[str, Any]:
         parts.append(f"FRESH WEB RESULTS:\n{web_ctx}")
     user_prompt = "\n\n".join(parts)
 
-    answer = ""
-    try:
-        result = _ollama.chat(
-            model=req.model or "dolphin3:latest",
-            messages=[
-                {"role": "system", "content": _COMPARE_SYSTEM},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.5,
-            max_tokens=1280,
-        )
-        answer = (result or {}).get("content", "") or ""
-    except Exception as exc:  # noqa: BLE001
-        logger.error("research compare model call failed: %s", exc)
-        answer = f"_Comparison unavailable — the local model call failed: {exc}_"
+    # 503 on model failure — a comparison is never saved / ingested / walked
+    # over as a sentinel string.
+    answer = _chat_or_503(
+        "comparison",
+        model=req.model or "dolphin3:latest",
+        messages=[
+            {"role": "system", "content": _COMPARE_SYSTEM},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.5,
+        max_tokens=1280,
+    )
 
     sections = _split_sections(answer)
     saved_path: Optional[str] = None
@@ -422,7 +446,10 @@ async def compare_node(req: CompareNodeRequest) -> Dict[str, Any]:
         try:
             saved_path = _write_store_note("notes", slug, md)
             rag_ingest.ingest_markdown(
-                title=f"Comparison: {req.focus}", body=answer, tags=["research", "compare"], doc_id=slug
+                title=f"Comparison: {req.focus}",
+                body=answer,
+                tags=["research", "compare"],
+                doc_id=slug,
             )
         except HTTPException:
             saved_path = None
@@ -447,6 +474,9 @@ class GraphWalkRequest(BaseModel):
     model: Optional[str] = None
     # requeue interrupted items at the start of a walk (resume prep).
     requeue_stale: bool = False
+    # also requeue items that ERRORED (model/search outage) on a prior step so
+    # the walk retries them once the box is healthy again.
+    retry_errors: bool = False
 
 
 @router.post("/graph-walk")
@@ -458,7 +488,11 @@ async def graph_walk(req: GraphWalkRequest) -> Dict[str, Any]:
     claims the next pending node, runs a structured compare on it, records the
     result as a store note + appends to a MOC report, and marks the item done.
     Returns the item just processed + live counts; when the worklist is drained
-    the walk is complete. Egress is the operator-ticked web search only."""
+    the walk is complete. Egress is the operator-ticked web search only.
+
+    A model failure marks the claimed item ``error`` (never ``done``), writes
+    nothing durable, and surfaces as the model's 503 — pass ``retry_errors``
+    on a later walk to requeue errored items."""
     from ..services.workspace_index import WorkspaceIndex
 
     ws = research_session.ensure_research_workspace()
@@ -470,6 +504,8 @@ async def graph_walk(req: GraphWalkRequest) -> Dict[str, Any]:
         idx.add_items([{"id": _derive_slug(n), "title": n} for n in req.nodes if n])
     if req.requeue_stale:
         idx.requeue_stale()
+    if req.retry_errors:
+        idx.requeue_errors()
 
     nxt = idx.next_pending(claim=True)
     if nxt is None:
@@ -482,9 +518,26 @@ async def graph_walk(req: GraphWalkRequest) -> Dict[str, Any]:
         }
 
     label = nxt.title or nxt.id or ""
-    result = await compare_node(
-        CompareNodeRequest(focus=label, web_search=req.web_search, model=req.model)
-    )
+    item_id = nxt.id
+    try:
+        result = await compare_node(
+            CompareNodeRequest(focus=label, web_search=req.web_search, model=req.model)
+        )
+    except HTTPException as exc:
+        # The claimed item must NOT be marked done (it was), and the failure
+        # text must NOT become a note / MOC section / RAG document (it did).
+        # Record ``error`` so the worklist stays honest and resumable:
+        # ``retry_errors`` on a later walk requeues it.
+        try:
+            idx.set_status(item_id, "error", note=str(exc.detail)[:500])
+        except Exception as inner:  # noqa: BLE001 — status is best-effort
+            logger.warning("graph-walk could not mark %s error: %s", item_id, inner)
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=f"graph-walk step '{label}' failed and was marked error "
+            f"(retry with retry_errors=true): {exc.detail}",
+            headers=exc.headers,
+        )
     answer = result.get("answer", "")
     slug = _derive_slug(f"{req.index}-{label}")
     note_path: Optional[str] = None
@@ -507,7 +560,6 @@ async def graph_walk(req: GraphWalkRequest) -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 — MOC is additive
         logger.debug("graph-walk report write skipped: %s", exc)
 
-    item_id = nxt.id
     idx.set_status(item_id, "done", artifact=note_path or "")
     return {
         "item": {"id": item_id, "label": label, "note_path": note_path},

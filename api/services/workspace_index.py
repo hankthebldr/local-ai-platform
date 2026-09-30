@@ -109,9 +109,7 @@ class WorkspaceIndex:
             iid = str(raw.get("id") or _slug(raw.get("url") or title))
             if iid in self._items:
                 continue
-            self._items[iid] = IndexItem(
-                id=iid, title=title, url=raw.get("url")
-            )
+            self._items[iid] = IndexItem(id=iid, title=title, url=raw.get("url"))
             self._order.append(iid)
             added += 1
         if added:
@@ -126,7 +124,9 @@ class WorkspaceIndex:
         note: Optional[str] = None,
     ) -> IndexItem:
         if status not in _VALID_STATUS:
-            raise WorkspaceError(f"invalid status {status!r} (allowed: {_VALID_STATUS})")
+            raise WorkspaceError(
+                f"invalid status {status!r} (allowed: {_VALID_STATUS})"
+            )
         if item_id not in self._items:
             raise WorkspaceError(f"index item {item_id!r} not found")
         it = self._items[item_id]
@@ -191,6 +191,21 @@ class WorkspaceIndex:
             self._save()
         return n
 
+    def requeue_errors(self) -> int:
+        """Flip any errored item back to pending so a later walk retries it —
+        the operator-explicit retry for items a model/search outage failed
+        (``requeue_stale`` deliberately leaves ``error`` alone so a walk never
+        hot-loops on a persistently failing node)."""
+        n = 0
+        for it in self._items.values():
+            if it.status == "error":
+                it.status = "pending"
+                it.updated_at = time.time()
+                n += 1
+        if n:
+            self._save()
+        return n
+
     # ── queries ───
     def items(self, status: Optional[str] = None) -> List[IndexItem]:
         ordered = [self._items[i] for i in self._order]
@@ -204,9 +219,12 @@ class WorkspaceIndex:
         return c
 
     def is_complete(self) -> bool:
-        return all(
-            it.status in ("done", "skipped", "error") for it in self._items.values()
-        ) and len(self._items) > 0
+        return (
+            all(
+                it.status in ("done", "skipped", "error") for it in self._items.values()
+            )
+            and len(self._items) > 0
+        )
 
     # ── render ───
     def render_markdown(self, path: Optional[str] = None) -> str:

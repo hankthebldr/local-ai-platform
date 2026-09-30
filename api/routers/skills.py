@@ -34,22 +34,40 @@ router = APIRouter(prefix="/api/skills", tags=["skills"])
 # bundled installs. Works with ANY marketplace that publishes JSON — no
 # per-site scraping. Cached so discovery doesn't hit the network every call;
 # fails soft (local-only) on any error.
+#
+# Theme B (no background egress): a GET must NEVER reach the network. The TTL
+# used to be evaluated ON READ, so merely opening the Skills tab with a stale
+# cache egressed to the operator's configured marketplace — the platform-wide
+# "every fetch is operator-initiated" posture was false. Reads now serve the
+# in-memory cache and nothing else; the network is touched only when a caller
+# passes allow_fetch=True, which is exactly the explicit ⟳ refresh route and
+# the install path (both POSTs, both operator actions). The TTL still guards
+# those so a refresh storm can't hammer the marketplace.
 _REMOTE_TTL_SECONDS = 600
 _remote_cache: Dict[str, Any] = {"ts": 0.0, "url": None, "skills": []}
 
 
-def _fetch_remote_catalog() -> List[Dict[str, Any]]:
-    """Fetch + cache the remote skills catalog. Never raises — returns the last
-    good cache (or []) on any error so discovery degrades to local-only."""
+def _fetch_remote_catalog(allow_fetch: bool = False) -> List[Dict[str, Any]]:
+    """Return the remote skills catalog. Never raises — degrades to local-only.
+
+    ``allow_fetch=False`` (the default, and every GET) is a pure cache read:
+    no network, ever. ``allow_fetch=True`` may refresh when the TTL has
+    lapsed.
+    """
     url = os.getenv("ENCLAVE_SKILLS_CATALOG_URL", "").strip()
     if not url:
         return []
     now = time.monotonic()
-    if (
+    cache_valid = (
         _remote_cache["url"] == url
         and (now - _remote_cache["ts"]) < _REMOTE_TTL_SECONDS
-    ):
+    )
+    if cache_valid:
         return _remote_cache["skills"]
+    if not allow_fetch:
+        # Stale or cold, and this is a read — serve what we have (possibly
+        # nothing) rather than egressing behind the operator's back.
+        return _remote_cache["skills"] if _remote_cache["url"] == url else []
     skills: List[Dict[str, Any]] = []
     try:
         resp = requests.get(url, timeout=6)
@@ -298,14 +316,39 @@ async def discover() -> Dict[str, Any]:
     }
 
 
-def _find_skill_full(skill_id: str) -> Optional[Dict[str, Any]]:
+@router.post("/discover/refresh", dependencies=[Depends(require_master_key)])
+async def refresh_remote_catalog() -> Dict[str, Any]:
+    """Explicit ⟳ — the ONLY read-path way to reach the skills marketplace.
+
+    GET /discover serves the cache and never egresses (Theme B: no background
+    egress). This route is the operator's deliberate refresh; it forces past
+    the TTL so a click always fetches. No configured catalog URL is a no-op,
+    not an error — the local curated catalog is the whole story then."""
+    url = os.getenv("ENCLAVE_SKILLS_CATALOG_URL", "").strip()
+    if not url:
+        return {
+            "refreshed": False,
+            "reason": "no ENCLAVE_SKILLS_CATALOG_URL configured",
+            "remote_count": 0,
+        }
+    _remote_cache["ts"] = 0.0  # force past the TTL
+    skills = _fetch_remote_catalog(allow_fetch=True)
+    return {"refreshed": True, "url": url, "remote_count": len(skills)}
+
+
+def _find_skill_full(
+    skill_id: str, allow_fetch: bool = False
+) -> Optional[Dict[str, Any]]:
     """Full skill record (incl. skill_md body) from the local catalog first,
     then the remote marketplace catalog — so remote skills are installable too
-    when the marketplace publishes bodies. None if in neither."""
+    when the marketplace publishes bodies. None if in neither.
+
+    ``allow_fetch`` is passed through to the remote catalog: False on read
+    paths (no egress), True on the operator-initiated install."""
     for s in _load_catalog().get("skills") or []:
         if s.get("id") == skill_id:
             return s
-    for s in _fetch_remote_catalog():
+    for s in _fetch_remote_catalog(allow_fetch=allow_fetch):
         if s.get("id") == skill_id:
             return s
     return None
@@ -340,7 +383,9 @@ async def install(skill_id: str, req: InstallReq) -> Dict[str, Any]:
     if not _ID_RE.match(req.plugin_id):
         raise HTTPException(status_code=400, detail="invalid plugin id")
 
-    skill = _find_skill_full(skill_id)
+    # allow_fetch: an install is an explicit operator action, so it MAY
+    # refresh a cold/stale marketplace cache to resolve the body. Reads never do.
+    skill = _find_skill_full(skill_id, allow_fetch=True)
     if not skill:
         raise HTTPException(status_code=404, detail="skill not in catalog")
     body = skill.get("skill_md")

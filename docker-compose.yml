@@ -42,6 +42,14 @@ services:
       # `docker compose logs api | grep "FIRST-RUN"` to retrieve it.
       - ENABLE_API_AUTH=${ENABLE_API_AUTH:-true}
       - API_KEY=${API_KEY:-}
+      # GET /api/setup/local-license hands the SPA the first-run MASTER key,
+      # so it trusts LOOPBACK only by default. Under Compose the browser sits
+      # behind the Docker bridge, so the container sees an RFC1918 peer and
+      # first-run auto-sign-in would 403 without this opt-in. That is safe
+      # HERE because the bridge is an operator-controlled local topology.
+      # Set it to false if you publish port 8000 to an untrusted LAN or a
+      # tailnet — otherwise any peer on those networks can fetch the key.
+      - ENCLAVE_TRUST_PRIVATE_NET=${ENCLAVE_TRUST_PRIVATE_NET:-true}
       # SPA boot fires ~10 parallel fetches and the system poller adds more
       # every few seconds — 60 RPM throttled normal interactive use AND
       # caused the Playwright E2E suite to 429-storm. 600 is a sensible

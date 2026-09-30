@@ -27,7 +27,7 @@ Five supported install paths. Pick by audience:
 
 ## Docker compose
 
-The repo ships [`docker-compose.yml`](https://github.com/hankthebldr/local-ai-platform/blob/master/docker-compose.yml) with two services (`ollama` + `api`). The wrapper script:
+The repo ships [`docker-compose.yml`](https://github.com/hankthebldr/local-ai-platform/blob/main/docker-compose.yml) with two services (`ollama` + `api`). The wrapper script:
 
 ```bash
 ./run.sh
@@ -63,7 +63,7 @@ docker tag ghcr.io/hankthebldr/enclave:<version> hankthebldrr/local-ai-platfrom:
 docker compose up -d   # docker-compose.yml references the Hub image name
 ```
 
-Same digest, same Trivy scan, same release cycle. Both registries published by [`.github/workflows/docker-publish.yml`](https://github.com/hankthebldr/local-ai-platform/blob/master/.github/workflows/docker-publish.yml).
+Same digest, same Trivy scan, same release cycle. Both registries published by [`.github/workflows/docker-publish.yml`](https://github.com/hankthebldr/local-ai-platform/blob/main/.github/workflows/docker-publish.yml).
 
 ## pip wheel
 

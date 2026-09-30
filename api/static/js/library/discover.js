@@ -1,5 +1,5 @@
 // library/discover.js — Extension + Skills discovery (phase-2 U8 straggler).
-import { esc } from '../core/dom.js';
+import { esc, safeUrl } from '../core/dom.js';
 import { Net } from '../core/net.js';
 import { Toast, Confirm } from '../core/ui.js';
 import { Actions } from '../shell/actions.js';
@@ -109,7 +109,7 @@ export const ExtDiscover = (function () {
         <code class="ext-item-id">${esc(it.id)}</code>
         ${cmdChip}
         ${toolCount ? `<span class="ext-item-toolcount">${toolCount} tools</span>` : ''}
-        ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" class="ext-item-link">↗</a>` : ''}
+        ${it.url ? `<a href="${safeUrl(it.url)}" target="_blank" rel="noopener" class="ext-item-link">↗</a>` : ''}
       </div>
     </div>`;
   }
