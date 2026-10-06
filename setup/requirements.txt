@@ -26,7 +26,7 @@ datasets==2.16.1
 # langchain 0.2 (the splitter moved to langchain-text-splitters).
 chromadb==0.4.22
 langchain>=0.1.4,<0.2
-sentence-transformers==2.2.2
+sentence-transformers==5.6.0
 
 # API & Web
 requests==2.31.0
